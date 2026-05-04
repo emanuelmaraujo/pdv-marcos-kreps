@@ -301,10 +301,10 @@ export default function CardapioPage() {
   // ─── Loading ─────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex flex-col h-full bg-slate-50">
+      <div className="flex flex-col h-full bg-background">
         <PageHeader title="Cardápio" />
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+          <Loader2 className="w-8 h-8 animate-spin text-brand-red" />
         </div>
       </div>
     );
@@ -313,7 +313,7 @@ export default function CardapioPage() {
   // ─── Error ───────────────────────────────────────────
   if (error) {
     return (
-      <div className="flex flex-col h-full bg-slate-50">
+      <div className="flex flex-col h-full bg-background">
         <PageHeader title="Cardápio" />
         <div className="p-4">
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3">
@@ -322,7 +322,7 @@ export default function CardapioPage() {
           </div>
           <button
             onClick={loadMenu}
-            className="mt-4 w-full py-3 bg-white border border-slate-200 rounded-xl font-medium text-slate-700 hover:bg-slate-50 active:scale-[0.98] transition-transform"
+            className="mt-4 w-full py-3 bg-white border border-zinc-200 rounded-xl font-medium text-zinc-700 hover:bg-zinc-50 active:scale-[0.97] transition-transform"
           >
             Tentar Novamente
           </button>
@@ -339,7 +339,7 @@ export default function CardapioPage() {
 
   // ─── Render ──────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       <PageHeader title="Gestão do Cardápio" />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
@@ -355,7 +355,7 @@ export default function CardapioPage() {
       )}
 
       {/* Category Tabs */}
-      <div className="bg-white border-b border-slate-200 overflow-x-auto hide-scrollbar">
+      <div className="bg-white border-b border-zinc-200 overflow-x-auto hide-scrollbar">
         <div className="flex p-3 gap-2 min-w-max">
           {menuData.categories.map((category) => (
             <button
@@ -363,8 +363,8 @@ export default function CardapioPage() {
               onClick={() => setActiveCategory(category.id)}
               className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${
                 activeCategory === category.id
-                  ? "bg-slate-800 text-white shadow-sm"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95"
+                  ? "bg-brand-charcoal text-white shadow-sm"
+                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 active:scale-95"
               }`}
             >
               {category.name}
@@ -374,8 +374,8 @@ export default function CardapioPage() {
             onClick={() => setActiveCategory("addons")}
             className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${
               activeCategory === "addons"
-                ? "bg-slate-800 text-white shadow-sm"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95"
+                ? "bg-brand-charcoal text-white shadow-sm"
+                : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 active:scale-95"
             }`}
           >
             Adicionais
@@ -452,7 +452,7 @@ function ProductList({
 }: ProductListProps) {
   if (products.length === 0) {
     return (
-      <div className="text-center text-slate-400 py-16">
+      <div className="text-center text-zinc-400 py-16">
         <PackageX className="w-10 h-10 mx-auto mb-3 opacity-50" />
         <p className="font-medium">Nenhum produto nesta categoria.</p>
       </div>
@@ -484,7 +484,7 @@ function ProductList({
             className={`bg-white border rounded-2xl p-4 transition-all ${
               isInactive
                 ? "border-red-200 bg-red-50/60"
-                : "border-slate-200 hover:border-slate-300"
+                : "border-zinc-200 hover:border-zinc-300"
             } ${isSaving ? "opacity-70 pointer-events-none" : ""}`}
           >
             {/* Top row */}
@@ -506,8 +506,8 @@ function ProductList({
                     <h3
                       className={`font-bold text-lg leading-snug ${
                         isInactive
-                          ? "text-slate-400 line-through decoration-slate-300"
-                          : "text-slate-800"
+                          ? "text-zinc-400 line-through decoration-zinc-300"
+                          : "text-brand-charcoal"
                       }`}
                     >
                       {product.name}
@@ -517,7 +517,7 @@ function ProductList({
                         onClick={() =>
                           onStartEdit(product.id, "name", product.name)
                         }
-                        className="p-1 rounded-md text-slate-300 hover:text-slate-600 hover:bg-slate-100 opacity-0 group-hover:opacity-100 transition-all"
+                        className="p-1 rounded-md text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 opacity-0 group-hover:opacity-100 transition-all"
                         title="Editar nome"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -555,7 +555,7 @@ function ProductList({
                             product.price.toFixed(2)
                           )
                         }
-                        className="p-1 rounded-md text-slate-300 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
+                        className="p-1 rounded-md text-zinc-300 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
                         title="Editar preço"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -566,7 +566,7 @@ function ProductList({
 
                 {/* Sector + Status badges */}
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <span className="text-[11px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md font-medium">
+                  <span className="text-[11px] px-2 py-0.5 bg-zinc-100 text-zinc-500 rounded-md font-medium">
                     {sectorLabel(product.sector)}
                   </span>
                   {isInactive && (
@@ -587,7 +587,7 @@ function ProductList({
                     isSaving ? "opacity-50 cursor-not-allowed" : ""
                   } ${
                     product.active
-                      ? "bg-white border-slate-200 text-red-500 hover:bg-red-50 hover:border-red-200"
+                      ? "bg-white border-zinc-200 text-red-500 hover:bg-red-50 hover:border-red-200"
                       : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
                   }`}
                   title={
@@ -609,11 +609,11 @@ function ProductList({
 
             {/* Ingredients */}
             {myIngredientNames.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
+              <div className="mt-3 pt-3 border-t border-zinc-100">
+                <p className="text-[10px] font-bold text-zinc-400 mb-1 uppercase tracking-wider">
                   Ingredientes
                 </p>
-                <p className="text-sm text-slate-500 leading-snug">
+                <p className="text-sm text-zinc-500 leading-snug">
                   {myIngredientNames.join(", ")}
                 </p>
               </div>
@@ -651,7 +651,7 @@ function AddonList({
 }: AddonListProps) {
   if (addons.length === 0) {
     return (
-      <div className="text-center text-slate-400 py-16">
+      <div className="text-center text-zinc-400 py-16">
         <PackageX className="w-10 h-10 mx-auto mb-3 opacity-50" />
         <p className="font-medium">Nenhum adicional cadastrado.</p>
       </div>
@@ -672,15 +672,15 @@ function AddonList({
             className={`bg-white border rounded-2xl p-4 flex items-center justify-between gap-3 transition-all ${
               isInactive
                 ? "border-red-200 bg-red-50/60"
-                : "border-slate-200 hover:border-slate-300"
+                : "border-zinc-200 hover:border-zinc-300"
             } ${isSaving ? "opacity-70 pointer-events-none" : ""}`}
           >
             <div className="flex-1 min-w-0">
               <h3
                 className={`font-bold ${
                   isInactive
-                    ? "text-slate-400 line-through decoration-slate-300"
-                    : "text-slate-800"
+                    ? "text-zinc-400 line-through decoration-zinc-300"
+                    : "text-brand-charcoal"
                 }`}
               >
                 {addon.name}
@@ -709,7 +709,7 @@ function AddonList({
                       onClick={() =>
                         onStartEdit(addon.id, addon.price.toFixed(2))
                       }
-                      className="p-1 rounded-md text-slate-300 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
+                      className="p-1 rounded-md text-zinc-300 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
                       title="Editar preço"
                     >
                       <Pencil className="w-3.5 h-3.5" />
@@ -735,7 +735,7 @@ function AddonList({
                   isSaving ? "opacity-50 cursor-not-allowed" : ""
                 } ${
                   addon.active
-                    ? "bg-white border-slate-200 text-red-500 hover:bg-red-50 hover:border-red-200"
+                    ? "bg-white border-zinc-200 text-red-500 hover:bg-red-50 hover:border-red-200"
                     : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
                 }`}
                 title={
@@ -802,7 +802,7 @@ function InlineInput({
   return (
     <div className="flex items-center gap-2">
       {prefix && (
-        <span className="text-sm font-medium text-slate-500">{prefix}</span>
+        <span className="text-sm font-medium text-zinc-500">{prefix}</span>
       )}
       <input
         ref={ref}

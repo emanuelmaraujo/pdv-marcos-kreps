@@ -4,15 +4,20 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
+  Banknote,
   Clock,
   CreditCard,
   Gift,
   Loader2,
   Package,
   Percent,
+  QrCode,
   ReceiptText,
   RefreshCw,
   ShoppingBag,
+  TrendingUp,
+  Trophy,
   Wallet,
 } from "lucide-react";
 import { EmptyState } from "@/components/feedback/EmptyState";
@@ -30,7 +35,9 @@ import {
   TopProduct,
   cashApi,
 } from "@/lib/api/cash-api";
-import { OrderStatus } from "@/types/pdv";
+import { OrderStatus, PaymentMethod } from "@/types/pdv";
+
+/* ─── Formatters ─────────────────────────────────────── */
 
 const currency = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -41,6 +48,8 @@ const timeFormatter = new Intl.DateTimeFormat("pt-BR", {
   hour: "2-digit",
   minute: "2-digit",
 });
+
+/* ─── Page ───────────────────────────────────────────── */
 
 export default function CaixaPage() {
   const [data, setData] = useState<CaixaData | null>(null);
@@ -99,9 +108,10 @@ export default function CaixaPage() {
     : null;
 
   return (
-    <div className="flex h-full flex-col bg-slate-50">
+    <div className="flex h-full flex-col bg-background">
       <PageHeader
         title="Caixa"
+        subtitle="Resumo do dia"
         action={
           <Button
             type="button"
@@ -109,7 +119,7 @@ export default function CaixaPage() {
             size="sm"
             onClick={() => loadCash(true)}
             disabled={isLoading || isRefreshing}
-            className="gap-2 bg-white"
+            className="gap-2"
           >
             {isRefreshing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -142,81 +152,111 @@ export default function CaixaPage() {
           <div className="space-y-4">
             <CashNote role={data.role} lastUpdate={lastUpdate} />
 
+            {/* ─── Hero Card: Recebido Hoje ─── */}
+            <Card className="overflow-hidden border-0 bg-gradient-to-br from-brand-charcoal to-brand-black shadow-lg">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                      Recebido hoje
+                    </p>
+                    <p className="mt-1 text-3xl font-black tracking-tight text-white">
+                      {currency.format(data.summary.totalRecebido)}
+                    </p>
+                    <p className="mt-1.5 text-xs text-zinc-400">
+                      {data.summary.pedidosPagos} pedidos pagos
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-brand-amber/20 p-2.5">
+                    <TrendingUp className="h-6 w-6 text-brand-yellow" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ─── Metrics Grid ─── */}
             <section className="grid grid-cols-2 gap-3">
-              <SummaryCard
-                title="Total bruto"
+              <MetricCard
+                label="Total bruto"
                 value={currency.format(data.summary.totalBruto)}
-                description="Não cancelados"
+                sub="Não cancelados"
                 icon={ReceiptText}
-                accent="text-slate-900"
-                className="col-span-2"
+                iconBg="bg-zinc-100"
+                iconColor="text-brand-charcoal"
               />
-              <SummaryCard
-                title="Recebido"
-                value={currency.format(data.summary.totalRecebido)}
-                description="Pedidos pagos"
-                icon={Wallet}
-                accent="text-emerald-700"
-              />
-              <SummaryCard
-                title="Pendente"
+              <MetricCard
+                label="Pendente"
                 value={currency.format(data.summary.totalPendente)}
-                description={`${data.summary.pedidosPendentes} pedidos`}
+                sub={`${data.summary.pedidosPendentes} pedidos`}
                 icon={Clock}
-                accent="text-amber-700"
+                iconBg="bg-amber-50"
+                iconColor="text-brand-amber"
               />
-              <SummaryCard
-                title="Pedidos"
+              <MetricCard
+                label="Pedidos"
                 value={String(data.summary.totalPedidos)}
-                description={`${data.summary.pedidosPagos} pagos`}
+                sub={`${data.summary.pedidosPagos} pagos`}
                 icon={ShoppingBag}
-                accent="text-slate-900"
+                iconBg="bg-zinc-100"
+                iconColor="text-brand-charcoal"
               />
-              <SummaryCard
-                title="Ticket médio"
+              <MetricCard
+                label="Ticket médio"
                 value={currency.format(data.summary.ticketMedio)}
-                description="Recebido / pagos"
+                sub="Recebido / pagos"
                 icon={CreditCard}
-                accent="text-slate-900"
+                iconBg="bg-emerald-50"
+                iconColor="text-emerald-600"
               />
-              <SummaryCard
-                title="Embalagem"
+              <MetricCard
+                label="Embalagem"
                 value={currency.format(data.summary.totalEmbalagem)}
-                description="Taxas do dia"
+                sub="Taxas do dia"
                 icon={Package}
-                accent="text-orange-700"
+                iconBg="bg-amber-50"
+                iconColor="text-amber-600"
               />
-              <SummaryCard
-                title="Cancelados"
+              <MetricCard
+                label="Cancelados"
                 value={String(data.summary.pedidosCancelados)}
-                description={currency.format(data.summary.totalCancelado)}
+                sub={currency.format(data.summary.totalCancelado)}
                 icon={AlertTriangle}
-                accent="text-red-700"
+                iconBg="bg-red-50"
+                iconColor="text-red-500"
               />
             </section>
 
-            <PendingOrdersCard orders={data.pendingOrders} />
+            {/* ─── Pending Orders ─── */}
+            <PendingOrdersSection orders={data.pendingOrders} />
 
+            {/* ─── Discounts & Courtesy ─── */}
             <section className="grid grid-cols-2 gap-3">
-              <SummaryCard
-                title="Descontos"
+              <MetricCard
+                label="Descontos"
                 value={currency.format(data.summary.totalDescontos)}
-                description={`${data.summary.pedidosComDesconto} pedidos`}
+                sub={`${data.summary.pedidosComDesconto} pedidos`}
                 icon={Percent}
-                accent="text-red-700"
+                iconBg="bg-red-50"
+                iconColor="text-red-500"
               />
-              <SummaryCard
-                title="Cortesias"
+              <MetricCard
+                label="Cortesias"
                 value={currency.format(data.summary.totalCortesia)}
-                description={`${data.summary.pedidosCortesia} pedidos`}
+                sub={`${data.summary.pedidosCortesia} pedidos`}
                 icon={Gift}
-                accent="text-violet-700"
+                iconBg="bg-violet-50"
+                iconColor="text-violet-600"
               />
             </section>
 
-            <PaymentBreakdownCard items={data.paymentBreakdown} />
-            <StatusBreakdownCard items={data.statusBreakdown} />
-            <TopProductsCard products={data.topProducts} />
+            {/* ─── Payment Breakdown ─── */}
+            <PaymentBreakdownSection items={data.paymentBreakdown} />
+
+            {/* ─── Order Status ─── */}
+            <StatusBreakdownSection items={data.statusBreakdown} />
+
+            {/* ─── Top Products ─── */}
+            <TopProductsSection products={data.topProducts} />
           </div>
         )}
       </div>
@@ -224,136 +264,145 @@ export default function CaixaPage() {
   );
 }
 
+/* ─── Sub-components ─────────────────────────────────── */
+
 function CashNote({ role, lastUpdate }: { role: CaixaData["role"]; lastUpdate: string | null }) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900">
-      <p className="font-semibold">Resumo financeiro do dia</p>
-      <p>
-        Fonte principal: pedidos de hoje em <span className="font-semibold">orders</span>.
-        {role === "ATTENDANT"
-          ? " Seu perfil pode ver apenas o que a RLS permitir."
-          : " Valores respeitam a RLS do usuário logado."}
-      </p>
-      {lastUpdate && <p className="mt-1 text-amber-800">Atualizado às {lastUpdate}.</p>}
+    <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+      <div className="text-xs leading-relaxed text-amber-900">
+        <p className="font-semibold">Resumo financeiro do dia</p>
+        <p>
+          Fonte: pedidos de hoje.
+          {role === "ATTENDANT"
+            ? " Seu perfil pode ver apenas o que a RLS permitir."
+            : " Valores respeitam a RLS do usuário logado."}
+        </p>
+        {lastUpdate && <p className="mt-1 text-amber-700">Atualizado às {lastUpdate}.</p>}
+      </div>
     </div>
   );
 }
 
-function SummaryCard({
-  title,
+function MetricCard({
+  label,
   value,
-  description,
+  sub,
   icon: Icon,
-  accent,
-  className = "",
+  iconBg,
+  iconColor,
 }: {
-  title: string;
+  label: string;
   value: string;
-  description: string;
+  sub: string;
   icon: React.ElementType;
-  accent: string;
-  className?: string;
+  iconBg: string;
+  iconColor: string;
 }) {
   return (
-    <Card className={`rounded-xl border-slate-200 bg-white shadow-sm ${className}`}>
-      <CardContent className="p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {title}
+    <Card>
+      <CardContent className="p-3.5">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+            {label}
           </span>
-          <span className="rounded-lg bg-orange-50 p-2 text-orange-600">
-            <Icon className="h-4 w-4" />
+          <span className={`rounded-lg p-1.5 ${iconBg}`}>
+            <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
           </span>
         </div>
-        <p className={`text-2xl font-black leading-tight ${accent}`}>{value}</p>
-        <p className="mt-1 text-xs text-slate-500">{description}</p>
+        <p className="text-xl font-black leading-tight text-brand-charcoal">{value}</p>
+        <p className="mt-0.5 text-[11px] text-zinc-400">{sub}</p>
       </CardContent>
     </Card>
   );
 }
 
-function PaymentBreakdownCard({ items }: { items: PaymentBreakdown[] }) {
-  return (
-    <Card className="rounded-xl border-slate-200 bg-white shadow-sm">
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="text-base">Vendas por pagamento</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 p-4 pt-0">
-        {items.map((item) => (
-          <BreakdownRow
-            key={item.method}
-            label={item.label}
-            count={item.count}
-            value={currency.format(item.total)}
-            tone={item.method === "PENDING" ? "warning" : item.method === "COURTESY" ? "soft" : "normal"}
-          />
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
+const PAYMENT_ICONS: Record<PaymentMethod, React.ElementType> = {
+  PIX: QrCode,
+  CASH: Banknote,
+  DEBIT_CARD: CreditCard,
+  CREDIT_CARD: CreditCard,
+  COURTESY: Gift,
+  PENDING: Clock,
+};
 
-function StatusBreakdownCard({ items }: { items: StatusBreakdown[] }) {
-  return (
-    <Card className="rounded-xl border-slate-200 bg-white shadow-sm">
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="text-base">Status dos pedidos</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-2 p-4 pt-0">
-        {items.map((item) => (
-          <div key={item.status} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-            <p className="text-[11px] font-semibold uppercase leading-snug text-slate-500">
-              {item.label}
-            </p>
-            <p className="mt-1 text-2xl font-black text-slate-900">{item.count}</p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
+const PAYMENT_COLORS: Record<PaymentMethod, string> = {
+  PIX: "text-teal-600 bg-teal-50",
+  CASH: "text-emerald-600 bg-emerald-50",
+  DEBIT_CARD: "text-blue-600 bg-blue-50",
+  CREDIT_CARD: "text-violet-600 bg-violet-50",
+  COURTESY: "text-pink-600 bg-pink-50",
+  PENDING: "text-amber-600 bg-amber-50",
+};
 
-function PendingOrdersCard({ orders }: { orders: PendingOrder[] }) {
+function PaymentBreakdownSection({ items }: { items: PaymentBreakdown[] }) {
+  const nonEmpty = items.filter((i) => i.count > 0);
+
   return (
-    <Card className="rounded-xl border-amber-200 bg-amber-50 shadow-sm">
+    <Card>
       <CardHeader className="p-4 pb-2">
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base text-amber-950">Pedidos pendentes</CardTitle>
-          <Badge variant={orders.length > 0 ? "destructive" : "outline"}>
-            {orders.length}
-          </Badge>
-        </div>
+        <CardTitle className="text-sm">Vendas por pagamento</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 p-4 pt-0">
-        {orders.length === 0 ? (
-          <p className="rounded-lg bg-white/70 p-3 text-sm font-medium text-amber-900">
-            Nenhum pedido com pagamento pendente.
+      <CardContent className="space-y-2 p-4 pt-0">
+        {nonEmpty.length === 0 ? (
+          <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-400">
+            Nenhuma venda registrada.
           </p>
         ) : (
-          orders.map((order) => (
-            <div
-              key={order.id}
-              className="rounded-xl border border-amber-200 bg-white p-3 shadow-sm"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-black text-slate-900">
-                    Pedido #{order.daily_number}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {statusLabel(order.status)} · {timeFormatter.format(new Date(order.created_at))}
-                  </p>
-                </div>
-                <p className="text-base font-black text-amber-700">
-                  {currency.format(order.total_amount)}
-                </p>
-              </div>
-              <Link
-                href="/app/pedidos"
-                className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-md border border-amber-300 bg-amber-100 text-sm font-bold text-amber-950 transition-colors hover:bg-amber-200"
+          nonEmpty.map((item) => {
+            const Icon = PAYMENT_ICONS[item.method] ?? Wallet;
+            const colorClass = PAYMENT_COLORS[item.method] ?? "text-zinc-600 bg-zinc-100";
+            const [textColor, bgColor] = colorClass.split(" ");
+
+            return (
+              <div
+                key={item.method}
+                className="flex items-center justify-between rounded-xl border border-zinc-100 bg-white px-3 py-2.5"
               >
-                Ver em Pedidos
-              </Link>
+                <div className="flex items-center gap-3">
+                  <span className={`rounded-lg p-2 ${bgColor}`}>
+                    <Icon className={`h-4 w-4 ${textColor}`} />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-brand-charcoal">{item.label}</p>
+                    <p className="text-[11px] text-zinc-400">{item.count} pedidos</p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-brand-charcoal">
+                  {currency.format(item.total)}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusBreakdownSection({ items }: { items: StatusBreakdown[] }) {
+  const nonEmpty = items.filter((i) => i.count > 0);
+
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="text-sm">Status dos pedidos</CardTitle>
+      </CardHeader>
+      <CardContent className="grid grid-cols-2 gap-2 p-4 pt-0">
+        {nonEmpty.length === 0 ? (
+          <p className="col-span-2 rounded-lg bg-zinc-50 p-3 text-sm text-zinc-400">
+            Nenhum pedido registrado.
+          </p>
+        ) : (
+          nonEmpty.map((item) => (
+            <div
+              key={item.status}
+              className={`rounded-xl border p-3 ${statusColor(item.status)}`}
+            >
+              <p className="text-[11px] font-semibold uppercase leading-snug text-zinc-500">
+                {item.label}
+              </p>
+              <p className="mt-1 text-2xl font-black text-brand-charcoal">{item.count}</p>
             </div>
           ))
         )}
@@ -362,30 +411,85 @@ function PendingOrdersCard({ orders }: { orders: PendingOrder[] }) {
   );
 }
 
-function TopProductsCard({ products }: { products: TopProduct[] }) {
+function PendingOrdersSection({ orders }: { orders: PendingOrder[] }) {
   return (
-    <Card className="rounded-xl border-slate-200 bg-white shadow-sm">
+    <Card className={orders.length > 0 ? "border-amber-200 bg-amber-50/50" : ""}>
       <CardHeader className="p-4 pb-2">
-        <CardTitle className="text-base">Produtos mais vendidos</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-sm">Pedidos pendentes</CardTitle>
+          <Badge variant={orders.length > 0 ? "warning" : "secondary"}>
+            {orders.length}
+          </Badge>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-3 p-4 pt-0">
+      <CardContent className="space-y-2.5 p-4 pt-0">
+        {orders.length === 0 ? (
+          <p className="rounded-xl bg-white/70 p-3 text-sm font-medium text-zinc-500">
+            Nenhum pedido com pagamento pendente.
+          </p>
+        ) : (
+          <>
+            {orders.map((order) => (
+              <div
+                key={order.id}
+                className="rounded-xl border border-amber-200 bg-white p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-brand-charcoal">
+                      Pedido #{order.daily_number}
+                    </p>
+                    <p className="mt-0.5 text-xs text-zinc-400">
+                      {statusLabel(order.status)} · {timeFormatter.format(new Date(order.created_at))}
+                    </p>
+                  </div>
+                  <p className="text-base font-black text-brand-amber">
+                    {currency.format(order.total_amount)}
+                  </p>
+                </div>
+              </div>
+            ))}
+            <Link
+              href="/app/pedidos"
+              className="mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-100 text-sm font-bold text-amber-900 transition-colors hover:bg-amber-200 active:scale-[0.97]"
+            >
+              Ver em Pedidos
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TopProductsSection({ products }: { products: TopProduct[] }) {
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <div className="flex items-center gap-2">
+          <Trophy className="h-4 w-4 text-brand-amber" />
+          <CardTitle className="text-sm">Mais vendidos</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2.5 p-4 pt-0">
         {products.length === 0 ? (
-          <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+          <p className="rounded-lg bg-zinc-50 p-3 text-sm text-zinc-400">
             Sem itens vendidos em pedidos não cancelados.
           </p>
         ) : (
           products.map((product, index) => (
             <div key={product.name} className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-black text-slate-700">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-charcoal text-sm font-black text-white">
                   {index + 1}
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-slate-900">{product.name}</p>
-                  <p className="text-xs text-slate-500">{product.quantity} unidades</p>
+                  <p className="truncate text-sm font-bold text-brand-charcoal">{product.name}</p>
+                  <p className="text-[11px] text-zinc-400">{product.quantity} unidades</p>
                 </div>
               </div>
-              <p className="shrink-0 text-sm font-black text-slate-900">
+              <p className="shrink-0 text-sm font-black text-brand-charcoal">
                 {currency.format(product.revenue)}
               </p>
             </div>
@@ -396,34 +500,7 @@ function TopProductsCard({ products }: { products: TopProduct[] }) {
   );
 }
 
-function BreakdownRow({
-  label,
-  count,
-  value,
-  tone,
-}: {
-  label: string;
-  count: number;
-  value: string;
-  tone: "normal" | "warning" | "soft";
-}) {
-  const toneClass =
-    tone === "warning"
-      ? "bg-amber-50 text-amber-800"
-      : tone === "soft"
-        ? "bg-violet-50 text-violet-800"
-        : "bg-slate-50 text-slate-700";
-
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-white py-2">
-      <div className="min-w-0">
-        <p className="text-sm font-bold text-slate-900">{label}</p>
-        <p className="text-xs text-slate-500">{count} pedidos</p>
-      </div>
-      <span className={`rounded-lg px-3 py-2 text-sm font-black ${toneClass}`}>{value}</span>
-    </div>
-  );
-}
+/* ─── Helpers ────────────────────────────────────────── */
 
 function statusLabel(status: OrderStatus): string {
   const labels: Record<OrderStatus, string> = {
@@ -435,6 +512,18 @@ function statusLabel(status: OrderStatus): string {
     CANCELADO: "Cancelado",
     EXPIRADO: "Expirado",
   };
-
   return labels[status] ?? status;
+}
+
+function statusColor(status: OrderStatus): string {
+  const colors: Record<OrderStatus, string> = {
+    AGUARDANDO_CONFIRMACAO: "border-amber-200 bg-amber-50",
+    AGUARDANDO_PAGAMENTO: "border-amber-200 bg-amber-50",
+    NA_FILA: "border-blue-200 bg-blue-50",
+    PRONTO: "border-emerald-200 bg-emerald-50",
+    ENTREGUE: "border-zinc-200 bg-zinc-50",
+    CANCELADO: "border-red-200 bg-red-50",
+    EXPIRADO: "border-zinc-200 bg-zinc-50",
+  };
+  return colors[status] ?? "border-zinc-100 bg-zinc-50";
 }

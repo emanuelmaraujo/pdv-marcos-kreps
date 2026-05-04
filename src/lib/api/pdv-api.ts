@@ -55,7 +55,26 @@ export const pdvApi = {
     const { data, error } = await supabase.functions.invoke('create-attendant-order', {
       body: payload,
     });
-    if (error) throw error;
+    if (error) {
+       console.error("Edge function error object:", error);
+       let backendMessage = error.message;
+       
+       // Handle FunctionsHttpError which may contain the Response object in context
+       if (error.name === 'FunctionsHttpError' && error.context && typeof error.context.json === 'function') {
+          try {
+             const errData = await error.context.json();
+             backendMessage = errData.error || errData.message || backendMessage;
+          } catch (e) {
+             try {
+                backendMessage = await error.context.text() || backendMessage;
+             } catch (textErr) {}
+          }
+       } else if (error.context?.error) {
+          backendMessage = error.context.error;
+       }
+
+       throw new Error(backendMessage);
+    }
     return data;
   },
 

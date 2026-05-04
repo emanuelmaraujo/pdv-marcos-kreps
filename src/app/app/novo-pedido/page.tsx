@@ -136,7 +136,7 @@ export default function NovoPedidoPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-zinc-50">
+    <div className="flex flex-col h-full bg-background">
       <OrderSummarySheet 
         isOpen={isCheckoutOpen} 
         onClose={() => setIsCheckoutOpen(false)} 
@@ -149,14 +149,14 @@ export default function NovoPedidoPage() {
         </div>
         <div className="flex bg-zinc-100 p-1 rounded-lg">
           <button 
-            className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${orderType === 'BALCAO' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${orderType === 'BALCAO' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
             onClick={() => handleOrderTypeToggle('BALCAO')}
           >
             <Utensils className="inline-block w-4 h-4 mr-2" />
             Balcão
           </button>
           <button 
-            className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${orderType === 'VIAGEM' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${orderType === 'VIAGEM' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
             onClick={() => handleOrderTypeToggle('VIAGEM')}
           >
             <ShoppingBag className="inline-block w-4 h-4 mr-2" />
@@ -175,7 +175,7 @@ export default function NovoPedidoPage() {
                 onClick={() => setSelectedCategoryId(category.id)}
                 className={`whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-semibold transition-colors ${
                   selectedCategoryId === category.id 
-                    ? 'bg-zinc-900 text-white' 
+                    ? 'bg-brand-charcoal text-white' 
                     : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
                 }`}
               >
@@ -198,14 +198,14 @@ export default function NovoPedidoPage() {
                 <div 
                   key={product.id} 
                   onClick={() => openCustomization(product)}
-                  className="bg-white border border-zinc-200 p-4 rounded-xl shadow-sm active:border-orange-500 active:ring-1 active:ring-orange-500 transition-all flex justify-between items-center cursor-pointer"
+                  className="bg-white border border-zinc-200 p-4 rounded-xl shadow-sm active:border-brand-red active:ring-1 active:ring-brand-red transition-all flex justify-between items-center cursor-pointer"
                 >
                   <div className="pr-4">
                     <h3 className="text-zinc-900 font-bold text-lg leading-tight">{product.name}</h3>
                     {product.description && (
                       <p className="text-zinc-500 text-sm mt-1 line-clamp-2">{product.description}</p>
                     )}
-                    <p className="text-orange-600 font-bold mt-2">R$ {product.price.toFixed(2)}</p>
+                    <p className="text-brand-red font-bold mt-2">R$ {product.price.toFixed(2)}</p>
                   </div>
                   <div className="bg-zinc-100 text-zinc-600 p-2 rounded-full h-10 w-10 flex items-center justify-center shrink-0">
                     <Plus size={20} />
@@ -226,8 +226,8 @@ export default function NovoPedidoPage() {
             <span className="text-zinc-900 font-bold text-xl leading-none">R$ {getEstimatedSubtotal().toFixed(2)}</span>
           </div>
         </div>
-        <Button 
-          className="w-full h-14 text-lg font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl" 
+        <Button
+          className="w-full h-14 text-lg font-bold rounded-xl"
           disabled={items.length === 0}
           onClick={() => setIsCheckoutOpen(true)}
         >
@@ -247,7 +247,7 @@ export default function NovoPedidoPage() {
             {/* Header / Basic Info */}
             <div>
               <h3 className="text-2xl font-bold text-zinc-900 tracking-tight">{selectedProduct.name}</h3>
-              <p className="text-xl font-bold text-orange-600 mt-1">R$ {selectedProduct.price.toFixed(2)}</p>
+              <p className="text-xl font-bold text-brand-red mt-1">R$ {selectedProduct.price.toFixed(2)}</p>
             </div>
 
             {/* Ingredients Selection */}
@@ -257,9 +257,9 @@ export default function NovoPedidoPage() {
                 <div className="space-y-2">
                   {productDefaultIngredients.map(ing => (
                     <label key={ing.id} className="flex items-center space-x-3 p-3 bg-zinc-50 rounded-lg border border-zinc-200 cursor-pointer active:bg-zinc-100">
-                      <input 
-                        type="checkbox" 
-                        className="w-5 h-5 rounded border-zinc-300 text-orange-500 focus:ring-orange-500 accent-orange-500"
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded border-zinc-300 text-brand-red focus:ring-brand-red accent-brand-red"
                         checked={!removedIngredientIds.has(ing.id)}
                         onChange={() => toggleIngredient(ing.id)}
                       />
@@ -283,7 +283,7 @@ export default function NovoPedidoPage() {
                       <div key={addon.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-200">
                         <div>
                           <span className="text-base font-medium text-zinc-800 block">{addon.name}</span>
-                          <span className="text-sm text-orange-600 font-bold">+ R$ {addon.price.toFixed(2)}</span>
+                          <span className="text-sm text-brand-red font-bold">+ R$ {addon.price.toFixed(2)}</span>
                         </div>
                         <div className="flex items-center space-x-3 bg-white border border-zinc-200 rounded-full p-1">
                           <button 
@@ -312,7 +312,7 @@ export default function NovoPedidoPage() {
             <div className="space-y-3">
               <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Observações</h4>
               <textarea 
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-zinc-900 placeholder-zinc-400 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 resize-none"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-zinc-900 placeholder-zinc-400 focus:border-brand-red focus:ring-1 focus:ring-brand-red resize-none"
                 rows={2}
                 placeholder="Ex: Ponto da carne, sem sal..."
                 value={notes}
@@ -342,7 +342,7 @@ export default function NovoPedidoPage() {
 
               <Button 
                 onClick={handleAddToCart}
-                className="flex-1 h-14 text-lg font-bold bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-md"
+                className="flex-1 h-14 text-lg font-bold rounded-xl shadow-md"
               >
                 <div className="flex flex-col items-center leading-none space-y-1">
                   <span>Adicionar</span>

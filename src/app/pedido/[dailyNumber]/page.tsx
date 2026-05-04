@@ -13,7 +13,7 @@ export default function PedidoStatusPage({ params }: { params: { dailyNumber: st
             <Package className="h-10 w-10 text-primary" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Pedido #{params.dailyNumber}</h1>
-          <Badge variant="outline" className="text-base py-1 px-4 border-orange-200 bg-orange-50 text-orange-600">
+          <Badge variant="warning" className="text-base py-1 px-4">
             Na Fila de Preparo
           </Badge>
           <p className="text-muted-foreground text-sm mt-2">Aguarde, seu pedido já está sendo preparado.</p>

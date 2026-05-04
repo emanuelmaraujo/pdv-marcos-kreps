@@ -12,8 +12,14 @@ serve(async (req) => {
   }
 
   try {
+    console.error("[create-attendant-order] Inicio da execucao");
+    
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) throw new Error('Usuário não autenticado. Envie o JWT no Authorization header.');
+    if (!authHeader) {
+      console.error("[create-attendant-order] Erro: Authorization header ausente");
+      throw new Error('Usuário não autenticado. Envie o JWT no Authorization header.');
+    }
+    console.error(`[create-attendant-order] Authorization header presente. Valido? ${authHeader.startsWith('Bearer ') ? 'Sim (Bearer)' : 'Nao'}`);
 
     const supabaseClientAuth = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -21,8 +27,32 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: userErr } = await supabaseClientAuth.auth.getUser();
-    if (userErr || !user) throw new Error('Usuário não autenticado ou token inválido.');
+    console.error("[create-attendant-order] Chamando supabaseClientAuth.auth.getUser()...");
+    let { data: { user }, error: userErr } = await supabaseClientAuth.auth.getUser();
+    
+    if (userErr || !user) {
+      console.error("[create-attendant-order] Erro no getUser():", userErr?.message || "User null");
+      console.error("[create-attendant-order] Detalhes do erro Auth:", JSON.stringify(userErr));
+      
+      // Attempt alternative method if getUser fails due to missing session
+      if (userErr?.message?.includes("session missing")) {
+         console.error("[create-attendant-order] Tentando fallback getUser(jwt)...");
+         const jwt = authHeader.replace('Bearer ', '');
+         const { data: fallbackData, error: fallbackErr } = await supabaseClientAuth.auth.getUser(jwt);
+         if (fallbackErr || !fallbackData.user) {
+            console.error("[create-attendant-order] Fallback getUser(jwt) tambem falhou:", fallbackErr?.message);
+            throw new Error('Usuário não autenticado ou token inválido (fallback). Detalhes: ' + JSON.stringify(fallbackErr));
+         } else {
+            console.error("[create-attendant-order] Fallback getUser(jwt) teve SUCESSO. User ID:", fallbackData.user.id);
+            // Re-assign user for the rest of the flow
+            user = fallbackData.user;
+         }
+      } else {
+         throw new Error('Usuário não autenticado ou token inválido. Detalhes: ' + JSON.stringify(userErr));
+      }
+    } else {
+      console.error("[create-attendant-order] getUser() com sucesso via headers globais. User ID:", user.id);
+    }
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -191,7 +221,6 @@ serve(async (req) => {
         customer_name: customer_name || null,
         customer_phone: customer_phone || null,
         notes: notes || null,
-        subtotal_amount: subtotalAmount,
         discount_amount: discountAmount,
         packing_fee: packingFee,
         total_amount: totalAmount,
@@ -408,6 +437,11 @@ serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
   } catch (error: any) {
+    console.error("[create-attendant-order] Failed to create order", {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+    });
     return new Response(JSON.stringify({ success: false, error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,

@@ -35,17 +35,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [router, supabase]);
 
   if (isLoading) {
-    return <div className="h-screen w-screen"><LoadingState message="Verificando sessão..." /></div>;
+    return <div className="h-screen w-screen bg-background"><LoadingState message="Verificando sessão..." /></div>;
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 pb-20">
-      <main className="mx-auto max-w-md w-full h-full bg-background min-h-screen relative shadow-sm">
+    <div className="min-h-screen bg-background pb-20">
+      <main className="mx-auto w-full max-w-md min-h-screen relative">
         {children}
       </main>
-      <div className="mx-auto max-w-md">
-        <BottomNav />
-      </div>
+      <BottomNav />
     </div>
   );
 }
