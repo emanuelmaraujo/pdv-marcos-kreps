@@ -1,89 +1,205 @@
 import { createClient } from '../supabase/client';
-import { PaymentMethod, OrderStatus } from '@/types/pdv';
+import { PaymentMethod, OrderStatus, Order } from '@/types/pdv';
 
 // Note: Ensure the client is only initialized when needed or properly passed to these functions
 // For client components, this works fine.
 
-export const pdvApi = {
-  createPublicOrder: async (payload: Record<string, unknown>) => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke('create-public-order', {
-      body: payload,
-    });
-    if (error) throw error;
-    return data;
-  },
+/**
+ * Extracts a clear, debug-friendly error message from a Supabase Edge Function error.
+ *
+ * Strategy:
+ *  1. Try `error.context.json()` to parse the JSON body returned by the function.
+ *  2. If that fails, try `error.context.text()` to get the raw body.
+ *  3. Extract common diagnostic fields: error, message, details, hint, code.
+ *  4. Build a composite message for easy debugging.
+ *  5. Fallback to the generic `error.message` if nothing else is available.
+ */
+async function extractEdgeFunctionError(
+  error: { name?: string; message?: string; context?: Response | Record<string, unknown> },
+  functionName: string,
+): Promise<Error> {
+  console.error(`[${functionName}] Edge function error object:`, error);
 
-  getPublicOrderStatus: async (payload: { daily_number: number; public_token: string }) => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke('get-public-order-status', {
-      body: payload,
-    });
-    if (error) throw error;
-    return data;
-  },
+  let parsedBody: Record<string, unknown> | null = null;
+  let rawText: string | null = null;
 
-  confirmOrder: async (orderId: string) => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke('confirm-order', {
-      body: { orderId },
-    });
-    if (error) throw error;
-    return data;
-  },
+  // --- Step 1 & 2: Try to read the response body ---
+  const ctx = error.context as Response | undefined;
 
-  markPayment: async (payload: { orderId: string; paymentMethod: PaymentMethod; status: string }) => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke('mark-payment', {
-      body: payload,
-    });
-    if (error) throw error;
-    return data;
-  },
-
-  updateOrderStatus: async (payload: { orderId: string; newStatus: OrderStatus; reason?: string; forceDelivery?: boolean }) => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke('update-order-status', {
-      body: payload,
-    });
-    if (error) throw error;
-    return data;
-  },
-
-  createAttendantOrder: async (payload: Record<string, unknown>) => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke('create-attendant-order', {
-      body: payload,
-    });
-    if (error) {
-       console.error("Edge function error object:", error);
-       let backendMessage = error.message;
-       
-       // Handle FunctionsHttpError which may contain the Response object in context
-       if (error.name === 'FunctionsHttpError' && error.context && typeof error.context.json === 'function') {
-          try {
-             const errData = await error.context.json();
-             backendMessage = errData.error || errData.message || backendMessage;
-          } catch (e) {
-             try {
-                backendMessage = await error.context.text() || backendMessage;
-             } catch (textErr) {}
-          }
-       } else if (error.context?.error) {
-          backendMessage = error.context.error;
-       }
-
-       throw new Error(backendMessage);
+  if (ctx && typeof ctx.json === 'function') {
+    try {
+      parsedBody = await ctx.json();
+    } catch {
+      try {
+        rawText = await ctx.text();
+      } catch {
+        // body unreadable – will use fallback
+      }
     }
-    return data;
+  }
+
+  // If context is a plain object (not a Response), use it directly
+  if (!parsedBody && error.context && typeof error.context === 'object' && !(error.context instanceof Response)) {
+    parsedBody = error.context as Record<string, unknown>;
+  }
+
+  // --- Step 3: Extract diagnostic fields ---
+  if (parsedBody) {
+    const fields: { label: string; key: string }[] = [
+      { label: 'Error', key: 'error' },
+      { label: 'Message', key: 'message' },
+      { label: 'Details', key: 'details' },
+      { label: 'Hint', key: 'hint' },
+      { label: 'Code', key: 'code' },
+    ];
+
+    const parts: string[] = [];
+    for (const { label, key } of fields) {
+      const value = parsedBody[key];
+      if (value !== undefined && value !== null && value !== '') {
+        parts.push(`${label}: ${value}`);
+      }
+    }
+
+    if (parts.length > 0) {
+      const debugMessage = `[${functionName}] ${parts.join(' | ')}`;
+      console.error(debugMessage);
+      return new Error(debugMessage);
+    }
+
+    // parsedBody exists but has no known fields – stringify it
+    const fallbackJson = JSON.stringify(parsedBody);
+    if (fallbackJson && fallbackJson !== '{}') {
+      const msg = `[${functionName}] ${fallbackJson}`;
+      console.error(msg);
+      return new Error(msg);
+    }
+  }
+
+  // --- Step 4: raw text fallback ---
+  if (rawText) {
+    const msg = `[${functionName}] ${rawText}`;
+    console.error(msg);
+    return new Error(msg);
+  }
+
+  // --- Step 5: generic fallback ---
+  const generic = error.message || 'Erro desconhecido na Edge Function';
+  const msg = `[${functionName}] ${generic}`;
+  console.error(msg);
+  return new Error(msg);
+}
+
+/** Shared invoke helper — calls the Edge Function and handles errors uniformly. */
+async function invokeEdgeFunction<T = unknown>(
+  functionName: string,
+  payload: Record<string, unknown>,
+): Promise<T> {
+  const supabase = createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  const { data, error } = await supabase.functions.invoke(functionName, {
+    body: payload,
+    headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+  });
+
+  if (error) {
+    throw await extractEdgeFunctionError(error, functionName);
+  }
+
+  return data as T;
+}
+
+export type CreateAttendantOrderResponse = {
+  success: boolean;
+  order: {
+    order_id: string;
+    daily_number: number;
+    status: string;
+    payment_status: string;
+    payment_method: string;
+    subtotal_amount?: number;
+    discount_amount?: number;
+    packaging_fee?: number;
+    total_amount: number;
+  };
+  printer_jobs?: { type: string; id: string }[];
+};
+
+export type AddItemsToOrderPayload = {
+  order_id: string;
+  items: Array<{
+    product_id: string;
+    quantity: number;
+    removed_ingredient_ids?: string[];
+    addons?: Array<{
+      addon_id: string;
+      quantity?: number;
+    }>;
+    notes?: string;
+  }>;
+};
+
+export type AddItemsToOrderResponse = {
+  success: boolean;
+  order: {
+    id: string;
+    total_amount: number;
+  };
+  printer_jobs?: { type: string; id: string }[];
+};
+
+export const pdvApi = {
+  getOrder: async (id: string) => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*, items:order_items(*, product:products(*), addons:order_item_addons(*, addon:addons(*)), removed_ingredients:order_item_removed_ingredients(*, ingredient:ingredients(*)))')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw error;
+    return data as Order;
   },
 
-  reprintOrder: async (payload: { orderId: string; copies?: ('CUSTOMER' | 'KITCHEN' | 'JUICE_POTATO')[] }) => {
-    const supabase = createClient();
-    const { data, error } = await supabase.functions.invoke('reprint-order', {
-      body: payload,
-    });
-    if (error) throw error;
-    return data;
-  }
+  createPublicOrder: (payload: Record<string, unknown>) =>
+    invokeEdgeFunction('create-public-order', payload),
+
+  getPublicOrderStatus: (payload: { daily_number: number; public_token: string }) =>
+    invokeEdgeFunction('get-public-order-status', payload),
+
+  confirmOrder: (orderId: string) =>
+    invokeEdgeFunction('confirm-order', { order_id: orderId }),
+
+  markPayment: (payload: { orderId: string; paymentMethod: PaymentMethod; status: string; amount?: number; notes?: string }) =>
+    invokeEdgeFunction('mark-payment', {
+      order_id: payload.orderId,
+      payment_method: payload.paymentMethod,
+      payment_status: payload.status,
+      amount: payload.amount,
+      notes: payload.notes
+    }),
+
+  updateOrderStatus: (payload: { orderId: string; newStatus: OrderStatus; reason?: string; forceDelivery?: boolean }) =>
+    invokeEdgeFunction('update-order-status', {
+      order_id: payload.orderId,
+      status: payload.newStatus,
+      reason: payload.reason,
+      force_delivery: payload.forceDelivery
+    }),
+
+  createAttendantOrder: (payload: Record<string, unknown>) =>
+    invokeEdgeFunction<CreateAttendantOrderResponse>('create-attendant-order', payload),
+
+  reprintOrder: (payload: { orderId: string; copies?: ('CUSTOMER' | 'KITCHEN' | 'JUICE_POTATO')[] }) =>
+    invokeEdgeFunction('reprint-order', {
+      order_id: payload.orderId,
+      copies: payload.copies
+    }),
+
+  addItemsToOrder: (payload: AddItemsToOrderPayload) =>
+    invokeEdgeFunction<AddItemsToOrderResponse>('add-items-to-order', {
+      order_id: payload.order_id,
+      items: payload.items
+    }),
 };

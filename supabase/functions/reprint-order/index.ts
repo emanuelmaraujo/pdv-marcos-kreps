@@ -14,15 +14,20 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Usuário não autenticado. Envie o JWT no Authorization header.');
+    console.error(`[reprint-order] Authorization header presente. Valido? ${authHeader.startsWith('Bearer ') ? 'Sim (Bearer)' : 'Nao'}`);
 
+    const jwt = authHeader.replace('Bearer ', '');
     const supabaseClientAuth = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
 
-    const { data: { user }, error: userErr } = await supabaseClientAuth.auth.getUser();
-    if (userErr || !user) throw new Error('Usuário não autenticado ou token inválido.');
+    const { data: { user }, error: userErr } = await supabaseClientAuth.auth.getUser(jwt);
+    if (userErr || !user) {
+      console.error("[reprint-order] Erro no getUser(jwt):", userErr?.message);
+      throw new Error('Usuário não autenticado ou token inválido.');
+    }
+    console.error(`[reprint-order] getUser() com sucesso. User ID: ${user.id}`);
 
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

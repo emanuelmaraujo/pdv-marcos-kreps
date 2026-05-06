@@ -23,15 +23,15 @@ export function BottomSheet({ isOpen, onClose, title, children }: DialogProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-[40] flex items-end justify-center sm:items-center pb-16 sm:pb-0">
+      {/* Backdrop - Only covers area above menu */}
       <div 
         className="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm transition-opacity" 
         onClick={onClose} 
       />
 
       {/* Sheet Content */}
-      <div className="relative z-50 w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl transform transition-transform animate-in slide-in-from-bottom sm:slide-in-from-bottom-10">
+      <div className="relative z-[45] w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl transform transition-transform animate-in slide-in-from-bottom duration-300">
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
           <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
           <button 

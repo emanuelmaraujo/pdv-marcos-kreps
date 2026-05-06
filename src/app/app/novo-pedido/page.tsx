@@ -2,24 +2,41 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/feedback/EmptyState";
+
 import { useCart } from "@/features/cart/useCart";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
-import { Product, OrderType, Ingredient } from "@/types/pdv";
+import { pdvApi } from "@/lib/api/pdv-api";
+import { Product, OrderType, Ingredient, Order } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
-import { Minus, Plus, ShoppingBag, Utensils } from "lucide-react";
+import { Minus, Plus, ShoppingBag, Utensils, ShoppingCart, Info, AlertCircle, RefreshCw } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 export default function NovoPedidoPage() {
-  const { items, getEstimatedSubtotal, orderType, setOrderType, addItem } = useCart();
+  const searchParams = useSearchParams();
+  const addToId = searchParams.get("add_to");
+  
+  const { 
+    items, 
+    getEstimatedSubtotal, 
+    orderType, 
+    setOrderType, 
+    addItem, 
+    updateItem,
+    setTargetOrderId, 
+    targetOrderId, 
+    clearCart 
+  } = useCart();
   
   const [menuData, setMenuData] = useState<MenuData | null>(null);
+  const [targetOrder, setTargetOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   
   // Customization Sheet State
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [removedIngredientIds, setRemovedIngredientIds] = useState<Set<string>>(new Set());
   const [selectedAddons, setSelectedAddons] = useState<Map<string, number>>(new Map()); // AddonID -> quantity
   const [quantity, setQuantity] = useState(1);
@@ -49,21 +66,55 @@ export default function NovoPedidoPage() {
     loadMenu();
   }, []);
 
+  useEffect(() => {
+    if (addToId) {
+      clearCart();
+      setTargetOrderId(addToId);
+      
+      pdvApi.getOrder(addToId)
+        .then(order => {
+          const isAllowed = ['NA_FILA', 'AGUARDANDO_PAGAMENTO'].includes(order.status) && order.payment_status === 'PENDING';
+          if (!isAllowed) {
+            setError("Este pedido não está aberto para adições.");
+          } else {
+            setTargetOrder(order);
+          }
+        })
+        .catch(() => setError("Erro ao carregar dados do pedido alvo."));
+    }
+
+    return () => {
+      setTargetOrderId(null);
+    };
+  }, [addToId, clearCart, setTargetOrderId]);
+
   const filteredProducts = useMemo(() => {
     if (!menuData || !selectedCategoryId) return [];
     return menuData.products.filter(p => p.category_id === selectedCategoryId);
   }, [menuData, selectedCategoryId]);
 
-  const openCustomization = (product: Product) => {
+  const openCustomization = (product: Product, existingItem?: import("@/features/cart/useCart").CartItem) => {
     setSelectedProduct(product);
-    setRemovedIngredientIds(new Set());
-    setSelectedAddons(new Map());
-    setQuantity(1);
-    setNotes("");
+    if (existingItem) {
+      setEditingCartItemId(existingItem.id);
+      setRemovedIngredientIds(new Set(existingItem.removed_ingredients));
+      const addonsMap = new Map();
+      existingItem.addons.forEach((a: { addon_id: string; quantity: number }) => addonsMap.set(a.addon_id, a.quantity));
+      setSelectedAddons(addonsMap);
+      setQuantity(existingItem.quantity);
+      setNotes(existingItem.notes || "");
+    } else {
+      setEditingCartItemId(null);
+      setRemovedIngredientIds(new Set());
+      setSelectedAddons(new Map());
+      setQuantity(1);
+      setNotes("");
+    }
   };
 
   const closeCustomization = () => {
     setSelectedProduct(null);
+    setEditingCartItemId(null);
   };
 
   const toggleIngredient = (ingredientId: string) => {
@@ -95,13 +146,19 @@ export default function NovoPedidoPage() {
       return { addon_id: addonId, quantity: qty, price: addonData?.price || 0 };
     });
 
-    addItem({
+    const itemData = {
       product: selectedProduct,
       quantity,
       removed_ingredients: Array.from(removedIngredientIds),
       addons: addonsArray,
       notes: notes.trim() ? notes : undefined
-    });
+    };
+
+    if (editingCartItemId) {
+      updateItem(editingCartItemId, itemData);
+    } else {
+      addItem(itemData);
+    }
 
     closeCustomization();
   };
@@ -128,87 +185,147 @@ export default function NovoPedidoPage() {
   }, [selectedProduct, selectedAddons, quantity, menuData]);
 
   if (loading) {
-    return <div className="flex-1 flex items-center justify-center h-full text-zinc-500">Carregando cardápio...</div>;
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#F4F4F5] space-y-4">
+        <RefreshCw className="animate-spin text-brand-red w-8 h-8" />
+        <p className="text-zinc-400 font-black text-xs uppercase tracking-widest">Sincronizando Cardápio...</p>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="flex-1 flex items-center justify-center h-full text-red-500">{error}</div>;
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#F4F4F5] p-6 text-center">
+        <AlertCircle className="text-red-500 w-12 h-12 mb-4" />
+        <h2 className="text-lg font-black text-zinc-900 uppercase tracking-tight mb-2">Ops! Algo deu errado</h2>
+        <p className="text-zinc-500 text-sm font-medium mb-6">{error}</p>
+        <Button onClick={() => window.location.reload()} className="h-12 px-8 rounded-xl bg-zinc-900">
+          Tentar Novamente
+        </Button>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      <OrderSummarySheet 
-        isOpen={isCheckoutOpen} 
-        onClose={() => setIsCheckoutOpen(false)} 
-      />
+    <div className="flex flex-col h-full bg-[#F8F9FA]">
+        <OrderSummarySheet 
+          isOpen={isCheckoutOpen} 
+          onClose={() => setIsCheckoutOpen(false)} 
+          onEditItem={(item: import("@/features/cart/useCart").CartItem) => {
+            setIsCheckoutOpen(false);
+            openCustomization(item.product, item);
+          }}
+        />
 
-      {/* Header Compacto com Controle de Segmento */}
-      <div className="bg-white border-b border-zinc-200 px-4 pt-4 pb-2 sticky top-0 z-10">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Novo Pedido</h1>
-        </div>
-        <div className="flex bg-zinc-100 p-1 rounded-lg">
-          <button 
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${orderType === 'BALCAO' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-            onClick={() => handleOrderTypeToggle('BALCAO')}
-          >
-            <Utensils className="inline-block w-4 h-4 mr-2" />
-            Balcão
-          </button>
-          <button 
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${orderType === 'VIAGEM' ? 'bg-white text-brand-charcoal shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-            onClick={() => handleOrderTypeToggle('VIAGEM')}
-          >
-            <ShoppingBag className="inline-block w-4 h-4 mr-2" />
-            Viagem
-          </button>
-        </div>
-      </div>
-      
-      <div className="flex-1 overflow-y-auto pb-32">
-        {/* Categorias (Chips Horizontais) */}
-        <div className="bg-white pt-2 pb-3 px-4 border-b border-zinc-200">
-          <div className="flex space-x-2 overflow-x-auto hide-scrollbar">
-            {menuData?.categories.map(category => (
-              <button
-                key={category.id}
-                onClick={() => setSelectedCategoryId(category.id)}
-                className={`whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-semibold transition-colors ${
-                  selectedCategoryId === category.id 
-                    ? 'bg-brand-charcoal text-white' 
-                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
-                }`}
+      {/* Sticky Header Container */}
+      {!isCheckoutOpen && !selectedProduct && (
+        <div className="sticky top-0 z-40 bg-white border-b border-zinc-200 animate-in fade-in duration-300">
+          {/* Main Title & Context */}
+          <div className="px-4 pt-6 pb-2">
+            <div className="flex items-center space-x-2">
+              <div className="w-1.5 h-6 bg-brand-red rounded-full" />
+              <h1 className="text-xl font-black text-zinc-900 tracking-tight uppercase">
+                {targetOrderId ? "Adicionar Itens" : "Novo Pedido"}
+              </h1>
+            </div>
+            <p className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mt-0.5 ml-3.5">
+              {targetOrder 
+                ? `Pedido #${String(targetOrder.daily_number).padStart(3, '0')}`
+                : "Marcos Krep's Operational"}
+            </p>
+          </div>
+
+          {/* Order Type Toggle */}
+          <div className="px-4 pb-4">
+            <div className="flex bg-zinc-100 p-1 rounded-xl">
+              <button 
+                className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all duration-200 tracking-wider uppercase flex items-center justify-center ${orderType === 'BALCAO' ? 'bg-white text-brand-red shadow-sm' : 'text-zinc-500 hover:text-zinc-600'}`}
+                onClick={() => handleOrderTypeToggle('BALCAO')}
               >
-                {category.name}
+                <Utensils className="w-3.5 h-3.5 mr-2" />
+                BALCÃO
               </button>
-            ))}
+              <button 
+                className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all duration-200 tracking-wider uppercase flex items-center justify-center ${orderType === 'VIAGEM' ? 'bg-white text-brand-red shadow-sm' : 'text-zinc-500 hover:text-zinc-600'}`}
+                onClick={() => handleOrderTypeToggle('VIAGEM')}
+              >
+                <ShoppingBag className="w-3.5 h-3.5 mr-2" />
+                VIAGEM
+              </button>
+            </div>
+          </div>
+
+          {/* Categorias - Now part of the same sticky container */}
+          <div className="px-4 pb-3 border-t border-zinc-50 pt-3">
+            <div className="flex space-x-2 overflow-x-auto hide-scrollbar">
+              {menuData?.categories.map(category => {
+                const isSelected = selectedCategoryId === category.id;
+                const isDoces = category.name.toLowerCase().includes('doce');
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => setSelectedCategoryId(category.id)}
+                    className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center ${
+                      isSelected 
+                        ? 'bg-brand-red text-white shadow-md shadow-brand-red/20' 
+                        : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-300 active:bg-zinc-50'
+                    }`}
+                  >
+                    {isDoces ? "🍩 " : "🍕 "}
+                    {category.name}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
-
-        {/* Produtos Grid */}
+      )}
+      
+      <div className="flex-1 overflow-y-auto pb-64">
+        {/* Produtos Grid - Improved Cards */}
         <div className="p-4">
           {filteredProducts.length === 0 ? (
-            <EmptyState 
-              title="Nenhum produto" 
-              description="Não há produtos disponíveis nesta categoria." 
-            />
+            <div className="py-20 text-center">
+              <div className="bg-zinc-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Info className="w-8 h-8 text-zinc-300" />
+              </div>
+              <p className="text-zinc-400 font-black text-[10px] uppercase tracking-[0.2em]">Sem produtos disponíveis</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-4">
               {filteredProducts.map(product => (
                 <div 
                   key={product.id} 
                   onClick={() => openCustomization(product)}
-                  className="bg-white border border-zinc-200 p-4 rounded-xl shadow-sm active:border-brand-red active:ring-1 active:ring-brand-red transition-all flex justify-between items-center cursor-pointer"
+                  className="bg-white border border-zinc-200 p-4 rounded-2xl shadow-sm active:scale-[0.98] transition-all flex items-center space-x-4 cursor-pointer relative group"
                 >
-                  <div className="pr-4">
-                    <h3 className="text-zinc-900 font-bold text-lg leading-tight">{product.name}</h3>
-                    {product.description && (
-                      <p className="text-zinc-500 text-sm mt-1 line-clamp-2">{product.description}</p>
-                    )}
-                    <p className="text-brand-red font-bold mt-2">R$ {product.price.toFixed(2)}</p>
+                  {/* Thumbnail Placeholder / Icon */}
+                  <div className="w-16 h-16 bg-zinc-50 rounded-xl flex items-center justify-center shrink-0 border border-zinc-100 text-zinc-300">
+                    <Utensils className="w-8 h-8 opacity-20" />
                   </div>
-                  <div className="bg-zinc-100 text-zinc-600 p-2 rounded-full h-10 w-10 flex items-center justify-center shrink-0">
-                    <Plus size={20} />
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start">
+                      <h3 className="text-zinc-900 font-black text-sm uppercase leading-tight truncate mr-2">{product.name}</h3>
+                      <div className="text-right shrink-0">
+                        <p className="text-brand-red font-black text-base leading-none">
+                          <span className="text-[10px] mr-0.5 opacity-50">R$</span>
+                          {product.price.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                    {product.description && (
+                      <p className="text-zinc-400 text-[9px] mt-1 line-clamp-1 font-bold uppercase tracking-wide">{product.description}</p>
+                    )}
+                    <div className="flex items-center mt-2.5">
+                      <span className="bg-emerald-50 text-emerald-600 text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest border border-emerald-100/50">
+                        Disponível
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-brand-red text-white p-2.5 rounded-xl shadow-lg shadow-brand-red/10 group-active:bg-brand-red/80 transition-colors">
+                    <Plus size={18} strokeWidth={4} />
                   </div>
                 </div>
               ))}
@@ -217,53 +334,77 @@ export default function NovoPedidoPage() {
         </div>
       </div>
 
-      {/* Cart Preview (Fixed Bottom) */}
-      <div className="absolute bottom-[64px] left-0 right-0 p-4 bg-white border-t border-zinc-200 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-10">
-        <div className="flex justify-between items-center mb-3">
-          <span className="text-zinc-600 font-medium">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
-          <div className="text-right">
-            <span className="text-xs text-zinc-500 block">Subtotal estimado</span>
-            <span className="text-zinc-900 font-bold text-xl leading-none">R$ {getEstimatedSubtotal().toFixed(2)}</span>
-          </div>
+      {/* Floating Cart - Fixed bottom offset for Nav Bar */}
+      {items.length > 0 && !isCheckoutOpen && !selectedProduct && (
+        <div className="fixed bottom-24 left-4 right-4 z-[60] animate-in slide-in-from-bottom-8">
+          <button
+            onClick={() => setIsCheckoutOpen(true)}
+            className="w-full bg-brand-charcoal text-white rounded-2xl p-1 shadow-2xl shadow-black/40 flex items-center active:scale-[0.98] transition-all group"
+          >
+            <div className="bg-brand-red p-3.5 rounded-xl flex items-center justify-center min-w-[60px] shadow-lg shadow-brand-red/20">
+              <ShoppingCart size={22} className="text-white" />
+              <span className="absolute -top-1 -right-1 bg-brand-amber text-brand-charcoal text-[9px] font-black h-5 w-5 rounded-full flex items-center justify-center border-2 border-brand-charcoal">
+                {items.length}
+              </span>
+            </div>
+            <div className="flex-1 px-4 text-left">
+              <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest leading-none mb-1">Ver Carrinho</p>
+              <div className="flex items-baseline space-x-1">
+                <span className="text-[10px] font-bold text-zinc-500">R$</span>
+                <p className="font-black text-xl leading-none">{getEstimatedSubtotal().toFixed(2).replace('.', ',')}</p>
+              </div>
+            </div>
+            <div className="pr-4">
+              <div className="bg-white/10 p-1.5 rounded-full">
+                <Plus size={16} className="text-white" strokeWidth={3} />
+              </div>
+            </div>
+          </button>
         </div>
-        <Button
-          className="w-full h-14 text-lg font-bold rounded-xl"
-          disabled={items.length === 0}
-          onClick={() => setIsCheckoutOpen(true)}
-        >
-          {items.length === 0 ? 'Carrinho Vazio' : 'Continuar'}
-        </Button>
-      </div>
+      )}
+
 
       {/* Product Customization Bottom Sheet */}
       <BottomSheet 
         isOpen={!!selectedProduct} 
         onClose={closeCustomization}
-        title="Personalizar Item"
+        title={editingCartItemId ? "EDITAR ITEM" : "PERSONALIZAR ITEM"}
       >
         {selectedProduct && (
-          <div className="p-6 pt-2 flex flex-col space-y-6">
+          <div className="p-6 pt-2 flex flex-col space-y-8 pb-10">
             
             {/* Header / Basic Info */}
-            <div>
-              <h3 className="text-2xl font-bold text-zinc-900 tracking-tight">{selectedProduct.name}</h3>
-              <p className="text-xl font-bold text-brand-red mt-1">R$ {selectedProduct.price.toFixed(2)}</p>
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-2xl font-black text-zinc-900 tracking-tight uppercase">{selectedProduct.name}</h3>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className="bg-zinc-100 text-zinc-500 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest">Base</span>
+                  <p className="text-xl font-black text-brand-red">R$ {selectedProduct.price.toFixed(2)}</p>
+                </div>
+              </div>
+              {editingCartItemId && (
+                <span className="bg-brand-charcoal text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest shadow-sm">
+                  Editando
+                </span>
+              )}
             </div>
 
             {/* Ingredients Selection */}
             {productDefaultIngredients.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Ingredientes Padrão</h4>
-                <div className="space-y-2">
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] px-1">Ingredientes Padrão</h4>
+                <div className="grid grid-cols-1 gap-3">
                   {productDefaultIngredients.map(ing => (
-                    <label key={ing.id} className="flex items-center space-x-3 p-3 bg-zinc-50 rounded-lg border border-zinc-200 cursor-pointer active:bg-zinc-100">
-                      <input
-                        type="checkbox"
-                        className="w-5 h-5 rounded border-zinc-300 text-brand-red focus:ring-brand-red accent-brand-red"
-                        checked={!removedIngredientIds.has(ing.id)}
-                        onChange={() => toggleIngredient(ing.id)}
-                      />
-                      <span className={`text-base font-medium ${removedIngredientIds.has(ing.id) ? 'text-zinc-400 line-through' : 'text-zinc-800'}`}>
+                    <label key={ing.id} className="flex items-center space-x-4 p-4 bg-white rounded-2xl border-2 border-zinc-100 cursor-pointer active:bg-zinc-50 transition-all select-none">
+                      <div className="relative flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          className="peer w-6 h-6 rounded-lg border-2 border-zinc-200 text-brand-red focus:ring-brand-red accent-brand-red"
+                          checked={!removedIngredientIds.has(ing.id)}
+                          onChange={() => toggleIngredient(ing.id)}
+                        />
+                      </div>
+                      <span className={`text-base font-black uppercase tracking-tight transition-all ${removedIngredientIds.has(ing.id) ? 'text-zinc-300 line-through' : 'text-zinc-800'}`}>
                         {ing.name}
                       </span>
                     </label>
@@ -274,31 +415,31 @@ export default function NovoPedidoPage() {
 
             {/* Addons Selection */}
             {menuData && menuData.addons.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Adicionais</h4>
-                <div className="space-y-2">
+              <div className="space-y-4">
+                <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] px-1">Adicionais Extras</h4>
+                <div className="space-y-3">
                   {menuData.addons.map(addon => {
                     const qty = selectedAddons.get(addon.id) || 0;
                     return (
-                      <div key={addon.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg border border-zinc-200">
-                        <div>
-                          <span className="text-base font-medium text-zinc-800 block">{addon.name}</span>
-                          <span className="text-sm text-brand-red font-bold">+ R$ {addon.price.toFixed(2)}</span>
+                      <div key={addon.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-zinc-100 group active:border-zinc-200 transition-all">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-black text-zinc-800 uppercase tracking-tight">{addon.name}</span>
+                          <span className="text-[11px] text-brand-red font-black">+ R$ {addon.price.toFixed(2)}</span>
                         </div>
-                        <div className="flex items-center space-x-3 bg-white border border-zinc-200 rounded-full p-1">
+                        <div className="flex items-center space-x-4 bg-zinc-50 border border-zinc-100 rounded-2xl p-1.5">
                           <button 
                             onClick={() => updateAddonQty(addon.id, -1)}
-                            className={`p-2 rounded-full transition-colors ${qty > 0 ? 'text-zinc-700 bg-zinc-100 hover:bg-zinc-200' : 'text-zinc-300'}`}
+                            className={`p-2.5 rounded-xl transition-all ${qty > 0 ? 'bg-white text-brand-charcoal shadow-sm active:scale-90' : 'text-zinc-300'}`}
                             disabled={qty === 0}
                           >
-                            <Minus size={16} strokeWidth={3} />
+                            <Minus size={18} strokeWidth={4} />
                           </button>
-                          <span className="w-4 text-center font-bold text-zinc-900">{qty}</span>
+                          <span className="w-5 text-center font-black text-zinc-900 text-lg">{qty}</span>
                           <button 
                             onClick={() => updateAddonQty(addon.id, 1)}
-                            className="p-2 rounded-full text-zinc-700 bg-zinc-100 hover:bg-zinc-200 transition-colors"
+                            className="p-2.5 bg-white text-brand-red shadow-sm rounded-xl active:scale-90 transition-all"
                           >
-                            <Plus size={16} strokeWidth={3} />
+                            <Plus size={18} strokeWidth={4} />
                           </button>
                         </div>
                       </div>
@@ -309,44 +450,43 @@ export default function NovoPedidoPage() {
             )}
 
             {/* Notes */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Observações</h4>
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] px-1">Observações Operacionais</h4>
               <textarea 
-                className="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-zinc-900 placeholder-zinc-400 focus:border-brand-red focus:ring-1 focus:ring-brand-red resize-none"
-                rows={2}
-                placeholder="Ex: Ponto da carne, sem sal..."
+                className="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-zinc-900 font-bold placeholder:text-zinc-300 focus:border-brand-red focus:ring-0 focus:bg-white transition-all resize-none h-24"
+                placeholder="Ex: Sem sal, carne bem passada, etc..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
 
-            {/* Quantity & Add to Cart */}
-            <div className="pt-4 border-t border-zinc-200 flex items-center space-x-4">
+            {/* Quantity & Add to Cart - Sticky at Bottom */}
+            <div className="sticky bottom-0 left-0 right-0 pt-4 pb-6 bg-white border-t border-zinc-100 flex items-center space-x-4 mt-auto z-10">
               {/* Main Item Quantity Control */}
-              <div className="flex items-center space-x-3 bg-zinc-100 rounded-full p-1 border border-zinc-200 h-14">
+              <div className="flex items-center space-x-3 bg-zinc-100 rounded-xl p-1 border border-zinc-200 h-14">
                 <button 
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="p-3 rounded-full text-zinc-700 bg-white shadow-sm disabled:opacity-50"
+                  className="p-2.5 rounded-lg text-zinc-400 bg-white shadow-sm disabled:opacity-30 active:scale-90 transition-all"
                   disabled={quantity <= 1}
                 >
-                  <Minus size={20} strokeWidth={3} />
+                  <Minus size={18} strokeWidth={4} />
                 </button>
-                <span className="w-6 text-center font-bold text-xl text-zinc-900">{quantity}</span>
+                <span className="w-6 text-center font-black text-xl text-zinc-900">{quantity}</span>
                 <button 
                   onClick={() => setQuantity(quantity + 1)}
-                  className="p-3 rounded-full text-zinc-700 bg-white shadow-sm"
+                  className="p-2.5 rounded-lg text-brand-red bg-white shadow-sm active:scale-90 transition-all"
                 >
-                  <Plus size={20} strokeWidth={3} />
+                  <Plus size={18} strokeWidth={4} />
                 </button>
               </div>
 
               <Button 
                 onClick={handleAddToCart}
-                className="flex-1 h-14 text-lg font-bold rounded-xl shadow-md"
+                className={`flex-1 h-14 text-base font-black rounded-xl shadow-lg transition-all active:scale-[0.98] ${editingCartItemId ? 'bg-brand-charcoal shadow-black/10' : 'bg-brand-red shadow-brand-red/20'}`}
               >
-                <div className="flex flex-col items-center leading-none space-y-1">
-                  <span>Adicionar</span>
-                  <span className="text-xs font-semibold opacity-90">R$ {sheetSubtotal.toFixed(2)}</span>
+                <div className="flex flex-col items-center leading-none space-y-0.5">
+                  <span className="uppercase tracking-widest text-xs">{editingCartItemId ? 'SALVAR' : 'ADICIONAR'}</span>
+                  <span className="text-[10px] font-black opacity-80">R$ {sheetSubtotal.toFixed(2).replace('.', ',')}</span>
                 </div>
               </Button>
             </div>

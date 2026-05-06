@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/Badge";
 import { OrderStatus } from "@/types/pdv";
 
 interface Props {
@@ -6,17 +5,43 @@ interface Props {
   className?: string;
 }
 
-export function OrderStatusBadge({ status, className }: Props) {
-  const map: Record<OrderStatus, { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" }> = {
-    AGUARDANDO_CONFIRMACAO: { label: "Aguardando", variant: "secondary" },
-    AGUARDANDO_PAGAMENTO: { label: "Aguard. Pgto", variant: "secondary" },
-    NA_FILA: { label: "Na Fila", variant: "default" },
-    PRONTO: { label: "Pronto", variant: "success" },
-    ENTREGUE: { label: "Entregue", variant: "outline" },
-    CANCELADO: { label: "Cancelado", variant: "destructive" },
-    EXPIRADO: { label: "Expirado", variant: "outline" },
+export function OrderStatusBadge({ status, className = "" }: Props) {
+  const map: Record<OrderStatus, { label: string; classes: string }> = {
+    AGUARDANDO_CONFIRMACAO: { 
+      label: "Aguardando", 
+      classes: "bg-blue-50 text-blue-600 border-blue-100" 
+    },
+    AGUARDANDO_PAGAMENTO: { 
+      label: "Pendente", 
+      classes: "bg-brand-amber/10 text-brand-amber border-brand-amber/20" 
+    },
+    NA_FILA: { 
+      label: "Na Fila", 
+      classes: "bg-brand-red/10 text-brand-red border-brand-red/20" 
+    },
+    PRONTO: { 
+      label: "Pronto", 
+      classes: "bg-emerald-50 text-emerald-600 border-emerald-100" 
+    },
+    ENTREGUE: { 
+      label: "Entregue", 
+      classes: "bg-zinc-100 text-zinc-500 border-zinc-200" 
+    },
+    CANCELADO: { 
+      label: "Cancelado", 
+      classes: "bg-red-50 text-red-500 border-red-100" 
+    },
+    EXPIRADO: { 
+      label: "Expirado", 
+      classes: "bg-zinc-100 text-zinc-400 border-zinc-200" 
+    },
   };
 
-  const config = map[status] || { label: status, variant: "outline" };
-  return <Badge variant={config.variant} className={className}>{config.label}</Badge>;
+  const config = map[status] || { label: status, classes: "bg-zinc-100 text-zinc-500 border-zinc-200" };
+  
+  return (
+    <span className={`px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider inline-flex items-center justify-center ${config.classes} ${className}`}>
+      {config.label}
+    </span>
+  );
 }

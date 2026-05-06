@@ -3,26 +3,32 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { useCart } from "@/features/cart/useCart";
 import { pdvApi } from "@/lib/api/pdv-api";
-import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Edit2, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface OrderSummarySheetProps {
   isOpen: boolean;
   onClose: () => void;
+  onEditItem?: (item: import("@/features/cart/useCart").CartItem) => void;
 }
 
-export function OrderSummarySheet({ isOpen, onClose }: OrderSummarySheetProps) {
-  const { 
-    items, 
-    orderType, 
-    customerName, 
-    customerPhone, 
-    orderNotes, 
-    setCustomerInfo, 
-    setOrderNotes, 
+export function OrderSummarySheet({ isOpen, onClose, onEditItem }: OrderSummarySheetProps) {
+  const {
+    items,
+    customerName,
+    customerPhone,
+    orderType,
+    setCustomerInfo,
+    orderNotes,
+    setOrderNotes,
     getEstimatedSubtotal,
-    clearCart
+    removeItem,
+    clearCart,
+    targetOrderId
   } = useCart();
-  
+
+  const router = useRouter();
+
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("PIX");
   const [hasDiscount, setHasDiscount] = useState(false);
   const [discountType, setDiscountType] = useState<"AMOUNT" | "PERCENT">("AMOUNT");
@@ -76,7 +82,7 @@ export function OrderSummarySheet({ isOpen, onClose }: OrderSummarySheetProps) {
         items: items.map(item => ({
           product_id: item.product.id,
           quantity: item.quantity,
-          removed_ingredient_ids: item.removed_ingredients, // exactly as in CartItem
+          removed_ingredient_ids: item.removed_ingredients,
           addons: item.addons.map(add => ({
             addon_id: add.addon_id,
             quantity: add.quantity
@@ -84,6 +90,30 @@ export function OrderSummarySheet({ isOpen, onClose }: OrderSummarySheetProps) {
           notes: item.notes
         }))
       };
+
+      if (targetOrderId) {
+        const addPayload = {
+          order_id: targetOrderId,
+          items: items.map(item => ({
+            product_id: item.product.id,
+            quantity: item.quantity,
+            removed_ingredient_ids: item.removed_ingredients,
+            addons: item.addons.map(add => ({
+              addon_id: add.addon_id,
+              quantity: add.quantity
+            })),
+            notes: item.notes
+          }))
+        };
+        
+        const response = await pdvApi.addItemsToOrder(addPayload);
+        if (response && response.success) {
+          alert("Itens adicionados com sucesso!");
+          clearCart();
+          router.push("/app/pedidos");
+        }
+        return;
+      }
 
       const response = await pdvApi.createAttendantOrder(payload);
       
@@ -110,7 +140,7 @@ export function OrderSummarySheet({ isOpen, onClose }: OrderSummarySheetProps) {
 
   const handleClose = () => {
     if (successData) {
-      setSuccessData(null); // Reset for next time if they don't unmount
+      setSuccessData(null);
     }
     setError(null);
     onClose();
@@ -145,147 +175,196 @@ export function OrderSummarySheet({ isOpen, onClose }: OrderSummarySheetProps) {
   return (
     <BottomSheet isOpen={isOpen} onClose={handleClose} title="Resumo do Pedido">
       <div className="flex flex-col min-h-[50vh]">
-        <div className="flex-1 flex flex-col space-y-6 pb-6 pt-4 px-4">
+        <div className="flex-1 flex flex-col space-y-8 pb-10 pt-4 px-4">
           
-          {/* Resumo dos Itens */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-zinc-900 px-1">Itens ({items.length})</h3>
-            <div className="bg-white border border-zinc-200 rounded-xl p-4 space-y-3">
-              {items.map((item) => (
-                <div key={item.id} className="flex justify-between text-sm border-b border-zinc-100 pb-2 last:border-0 last:pb-0">
-                  <div className="flex-1">
-                    <p className="font-medium text-zinc-800">{item.quantity}x {item.product.name}</p>
-                    
-                    {item.removed_ingredients.length > 0 && (
-                      <p className="text-xs text-red-500 mt-0.5">
-                        - {item.removed_ingredients.length} ingrediente(s) removido(s)
-                      </p>
-                    )}
-                    
-                    {item.addons.length > 0 && (
-                      <p className="text-xs text-emerald-600 mt-0.5">
-                        + {item.addons.reduce((acc, add) => acc + add.quantity, 0)} adicional(is)
-                      </p>
-                    )}
-                    
-                    {item.notes && (
-                      <p className="text-xs text-zinc-500 italic mt-0.5">Obs: {item.notes}</p>
-                    )}
+          <button 
+            onClick={onClose}
+            className="flex items-center text-zinc-500 font-black text-[10px] uppercase tracking-widest hover:text-zinc-700 transition-colors"
+          >
+            <ChevronDown size={16} className="mr-1" />
+            Voltar para as opções
+          </button>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-sm font-black text-zinc-400 uppercase tracking-widest">Itens no Carrinho</h3>
+              <span className="bg-zinc-100 text-zinc-600 text-[10px] font-black px-2 py-1 rounded-md">
+                {items.length} {items.length === 1 ? 'ITEM' : 'ITENS'}
+              </span>
+            </div>
+            <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
+              <div className="divide-y divide-zinc-100">
+                {items.map((item) => (
+                  <div key={item.id} className="p-4 flex flex-col space-y-2 group active:bg-zinc-50 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="font-extrabold text-zinc-900 leading-tight">
+                          {item.quantity}x {item.product.name}
+                        </p>
+                        
+                        {item.removed_ingredients.length > 0 && (
+                          <p className="text-[11px] text-brand-red font-bold uppercase mt-1">
+                            REMOVER: {item.removed_ingredients.join(", ")}
+                          </p>
+                        )}
+                        
+                        {item.addons.length > 0 && (
+                          <p className="text-[11px] text-emerald-600 font-bold uppercase mt-0.5">
+                            ADICIONAIS: {item.addons.map(a => `${a.quantity}x ${a.addon_id.split('-').pop()}`).join(", ")}
+                          </p>
+                        )}
+                        
+                        {item.notes && (
+                          <div className="bg-zinc-50 border-l-4 border-zinc-200 p-2 mt-2 rounded-r-lg">
+                            <p className="text-[11px] text-zinc-500 italic font-medium">&quot;{item.notes}&quot;</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex space-x-2 ml-4">
+                        <button 
+                          onClick={() => onEditItem?.(item)}
+                          className="p-3 bg-zinc-100 text-zinc-500 rounded-xl active:bg-brand-charcoal active:text-white transition-all border border-zinc-200"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button 
+                          onClick={() => removeItem(item.id)}
+                          className="p-3 bg-red-50 text-red-500 rounded-xl active:bg-brand-red active:text-white transition-all border border-red-100"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="p-5 bg-zinc-50 border-t border-zinc-100 flex justify-between items-center">
+                <span className="font-bold text-zinc-400 text-xs uppercase tracking-widest">Subtotal Estimado</span>
+                <span className="text-2xl font-black text-brand-red">
+                  <span className="text-sm mr-1">R$</span>
+                  {estimatedSubtotal.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {!targetOrderId && (
+            <>
+              {/* Identificação do Cliente */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-zinc-400 uppercase tracking-widest px-1">Identificação</h3>
+                <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-5 shadow-sm">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Nome do Cliente</label>
+                    <input 
+                      type="text" 
+                      placeholder="Ex: Marcos Silva" 
+                      value={customerName}
+                      onChange={(e) => setCustomerInfo(e.target.value, customerPhone)}
+                      className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red focus:bg-white transition-all font-bold text-zinc-900"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">WhatsApp</label>
+                    <input 
+                      type="tel" 
+                      placeholder="(00) 00000-0000" 
+                      value={customerPhone}
+                      onChange={(e) => setCustomerInfo(customerName, e.target.value)}
+                      className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red focus:bg-white transition-all font-bold text-zinc-900"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Observações Gerais</label>
+                    <textarea 
+                      placeholder="Algum detalhe importante para a produção?" 
+                      value={orderNotes}
+                      onChange={(e) => setOrderNotes(e.target.value)}
+                      className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red focus:bg-white transition-all font-bold text-zinc-900 resize-none h-24"
+                    />
                   </div>
                 </div>
-              ))}
-              
-              <div className="pt-2 flex justify-between font-bold text-zinc-900 border-t border-zinc-200">
-                <span>Subtotal Estimado</span>
-                <span>R$ {estimatedSubtotal.toFixed(2).replace(".", ",")}</span>
               </div>
-            </div>
-          </div>
 
-          {/* Dados do Cliente (Opcional) */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-zinc-900 px-1">Cliente (Opcional)</h3>
-            <div className="space-y-3">
-              <input 
-                type="text" 
-                placeholder="Nome do cliente" 
-                value={customerName}
-                onChange={(e) => setCustomerInfo(e.target.value, customerPhone)}
-                className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red"
-              />
-              <input 
-                type="tel" 
-                placeholder="Telefone (WhatsApp)" 
-                value={customerPhone}
-                onChange={(e) => setCustomerInfo(customerName, e.target.value)}
-                className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red"
-              />
-              <textarea 
-                placeholder="Observação geral do pedido" 
-                value={orderNotes}
-                onChange={(e) => setOrderNotes(e.target.value)}
-                className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red resize-none h-20"
-              />
-            </div>
-          </div>
-
-          {/* Desconto */}
-          <div className="space-y-3">
-            <button 
-              onClick={() => setHasDiscount(!hasDiscount)}
-              className="w-full flex items-center justify-between font-semibold text-zinc-900 px-1"
-            >
-              <span>Desconto</span>
-              {hasDiscount ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-            </button>
-            
-            {hasDiscount && (
-              <div className="bg-white border border-zinc-200 rounded-xl p-4 space-y-3">
-                <div className="flex space-x-2">
-                  <select 
-                    value={discountType}
-                    onChange={(e) => setDiscountType(e.target.value as "AMOUNT" | "PERCENT")}
-                    className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red"
-                  >
-                    <option value="AMOUNT">R$</option>
-                    <option value="PERCENT">%</option>
-                  </select>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    placeholder="Valor" 
-                    value={discountValue}
-                    onChange={(e) => setDiscountValue(e.target.value)}
-                    className="flex-1 p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red"
-                  />
-                </div>
-                <input 
-                  type="text" 
-                  placeholder="Motivo do desconto (Obrigatório)" 
-                  value={discountReason}
-                  onChange={(e) => setDiscountReason(e.target.value)}
-                  className="w-full p-3 bg-white border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Forma de Pagamento */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-zinc-900 px-1">Pagamento</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {paymentMethods.map(method => (
-                <button
-                  key={method.value}
-                  onClick={() => setSelectedPaymentMethod(method.value)}
-                  className={`p-3 text-sm font-medium rounded-xl border transition-colors ${
-                    selectedPaymentMethod === method.value 
-                      ? 'bg-brand-red text-white border-brand-red' 
-                      : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-50'
-                  }`}
+              {/* Desconto Especial */}
+              <div className="space-y-4">
+                <button 
+                  onClick={() => setHasDiscount(!hasDiscount)}
+                  className="w-full flex items-center justify-between px-1"
                 >
-                  {method.label}
+                  <h3 className="text-sm font-black text-zinc-400 uppercase tracking-widest">Desconto Especial</h3>
+                  {hasDiscount ? <ChevronUp className="w-5 h-5 text-zinc-400" /> : <ChevronDown className="w-5 h-5 text-zinc-400" />}
                 </button>
-              ))}
-            </div>
-          </div>
+                
+                {hasDiscount && (
+                  <div className="bg-white border border-zinc-200 rounded-2xl p-5 space-y-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+                    <div className="flex space-x-3">
+                      <select 
+                        value={discountType}
+                        onChange={(e) => setDiscountType(e.target.value as "AMOUNT" | "PERCENT")}
+                        className="p-4 bg-zinc-50 border border-zinc-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red font-black text-zinc-700"
+                      >
+                        <option value="AMOUNT">R$</option>
+                        <option value="PERCENT">%</option>
+                      </select>
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        placeholder="Valor" 
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(e.target.value)}
+                        className="flex-1 p-4 bg-zinc-50 border border-zinc-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red font-black text-zinc-900"
+                      />
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="Motivo (Obrigatório para desconto)" 
+                      value={discountReason}
+                      onChange={(e) => setDiscountReason(e.target.value)}
+                      className="w-full p-4 bg-zinc-50 border border-zinc-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red font-bold text-zinc-900"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Forma de Pagamento */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-zinc-400 uppercase tracking-widest px-1">Forma de Pagamento</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {paymentMethods.map(method => (
+                    <button
+                      key={method.value}
+                      onClick={() => setSelectedPaymentMethod(method.value)}
+                      className={`p-4 text-xs font-black rounded-2xl border-2 transition-all uppercase tracking-widest ${
+                        selectedPaymentMethod === method.value 
+                          ? 'bg-brand-red/5 text-brand-red border-brand-red shadow-sm' 
+                          : 'bg-white text-zinc-400 border-zinc-100 hover:border-zinc-200'
+                      }`}
+                    >
+                      {method.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm mt-4">
-              {error}
+            <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-sm font-bold animate-pulse">
+              ⚠️ {error}
             </div>
           )}
 
         </div>
 
-        {/* Botão Sticky no Rodapé */}
-        <div className="sticky bottom-0 left-0 right-0 p-4 bg-white border-t border-zinc-200 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] mt-auto">
+        {/* Botão de Ação Sticky */}
+        <div className="sticky bottom-0 left-0 right-0 p-4 bg-white border-t border-zinc-200 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.05)] mt-auto">
           <Button 
-            className="w-full h-14 text-lg bg-brand-red hover:bg-brand-red/90 text-white" 
+            className="w-full h-14 text-lg font-black bg-brand-red hover:bg-brand-red/90 text-white shadow-lg shadow-brand-red/20 rounded-xl active:scale-[0.98] transition-transform" 
             onClick={handleCheckout}
             disabled={isSubmitting || items.length === 0}
           >
-            {isSubmitting ? "Criando pedido..." : "Finalizar pedido"}
+            {isSubmitting ? (targetOrderId ? "ADICIONANDO..." : "PROCESSANDO...") : (targetOrderId ? "CONFIRMAR ADIÇÃO" : "FINALIZAR PEDIDO")}
           </Button>
         </div>
       </div>

@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/feedback/EmptyState";
-import { Badge } from "@/components/ui/Badge";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
+import { RefreshCw, Search } from "lucide-react";
 
 type TabStatus = "TODOS" | "AGUARDANDO_CONFIRMACAO" | "NA_FILA" | "PRONTO" | "ENTREGUE" | "CANCELADO";
 
@@ -16,11 +16,12 @@ export default function PedidosPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<TabStatus>("NA_FILA");
+  const [searchQuery, setSearchQuery] = useState("");
   
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-  const fetchOrders = useCallback(async () => {
-    setIsLoading(true);
+  const fetchOrders = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     setError("");
     try {
       const data = await ordersApi.getTodayOrders();
@@ -45,81 +46,124 @@ export default function PedidosPage() {
   }, [selectedOrder]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      setIsLoading(true);
-      setError("");
-      try {
-        const data = await ordersApi.getTodayOrders();
-        if (!cancelled) {
-          setOrders(data || []);
-        }
-      } catch (err: unknown) {
-        if (!cancelled) {
-          if (err instanceof Error) {
-            setError(err.message);
-          } else {
-            setError("Erro ao carregar pedidos");
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    })();
+    let isMounted = true;
+    
+    const initialFetch = async () => {
+      if (isMounted) await fetchOrders();
+    };
+    
+    initialFetch();
+    
+    const interval = setInterval(() => {
+      if (isMounted) fetchOrders(false);
+    }, 30000);
 
     return () => {
-      cancelled = true;
+      isMounted = false;
+      clearInterval(interval);
     };
-    // Initial load only; fetchOrders is used for manual refresh
-  }, []);
+  }, [fetchOrders]);
 
   const filteredOrders = orders.filter((o) => {
-    if (activeTab === "TODOS") return true;
-    return o.status === activeTab;
+    const matchesTab = activeTab === "TODOS" || o.status === activeTab;
+    const matchesSearch = !searchQuery || 
+      String(o.daily_number).includes(searchQuery) || 
+      o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesTab && matchesSearch;
   });
 
   const getCount = (status: OrderStatus) => orders.filter(o => o.status === status).length;
 
-  const tabs: { id: TabStatus; label: string }[] = [
-    { id: "AGUARDANDO_CONFIRMACAO", label: `Aguardando (${getCount('AGUARDANDO_CONFIRMACAO')})` },
-    { id: "NA_FILA", label: `Na Fila (${getCount('NA_FILA')})` },
-    { id: "PRONTO", label: `Prontos (${getCount('PRONTO')})` },
-    { id: "ENTREGUE", label: `Entregues (${getCount('ENTREGUE')})` },
-    { id: "CANCELADO", label: `Cancelados (${getCount('CANCELADO')})` },
+  const tabs: { id: TabStatus; label: string; count?: number }[] = [
+    { id: "NA_FILA", label: "Na Fila", count: getCount('NA_FILA') },
+    { id: "PRONTO", label: "Prontos", count: getCount('PRONTO') },
+    { id: "AGUARDANDO_CONFIRMACAO", label: "Aguardando", count: getCount('AGUARDANDO_CONFIRMACAO') },
+    { id: "ENTREGUE", label: "Entregues", count: getCount('ENTREGUE') },
+    { id: "CANCELADO", label: "Cancelados", count: getCount('CANCELADO') },
   ];
 
   return (
-    <div className="flex flex-col h-full bg-muted/10">
-      <PageHeader title="Pedidos do Dia" />
-      
-      <div className="flex space-x-2 p-4 overflow-x-auto border-b border-border hide-scrollbar bg-white">
-        {tabs.map(tab => (
-          <Badge 
-            key={tab.id}
-            variant={activeTab === tab.id ? "default" : "outline"} 
-            className="whitespace-nowrap cursor-pointer text-sm py-1.5 px-3"
-            onClick={() => setActiveTab(tab.id)}
+    <div className="flex flex-col h-full bg-[#F4F4F5]">
+      <PageHeader 
+        title="Pedidos do Dia" 
+        action={
+          <button 
+            onClick={() => fetchOrders()}
+            className="p-2 bg-white rounded-lg border border-zinc-200 text-zinc-600 active:rotate-180 transition-transform duration-500"
           >
-            {tab.label}
-          </Badge>
-        ))}
+            <RefreshCw size={18} />
+          </button>
+        }
+      />
+      
+      {/* Search & Tabs */}
+      <div className="bg-white border-b border-zinc-200 sticky top-0 z-10 shadow-sm">
+        <div className="px-4 py-3">
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <input 
+              type="text"
+              placeholder="Buscar por número ou cliente..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-zinc-100 border border-zinc-100 rounded-xl text-sm font-bold placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-red focus:bg-white transition-all"
+            />
+          </div>
+        </div>
+        
+        <div className="flex space-x-2 px-4 pb-4 overflow-x-auto hide-scrollbar">
+          <button
+            onClick={() => setActiveTab("TODOS")}
+            className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase transition-all ${
+              activeTab === "TODOS" 
+                ? 'bg-brand-charcoal text-white' 
+                : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+            }`}
+          >
+            TODOS ({orders.length})
+          </button>
+          {tabs.map(tab => (
+            <button 
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase transition-all flex items-center space-x-2 ${
+                activeTab === tab.id 
+                  ? 'bg-brand-red text-white shadow-md shadow-brand-red/20' 
+                  : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+              }`}
+            >
+              <span>{tab.label}</span>
+              {tab.count !== undefined && tab.count > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-600'}`}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex-1 p-4 overflow-y-auto">
         {isLoading && orders.length === 0 ? (
-          <div className="flex justify-center p-8 text-muted-foreground text-sm">Carregando pedidos...</div>
+          <div className="flex flex-col items-center justify-center p-12 text-zinc-400 space-y-4">
+            <RefreshCw size={32} className="animate-spin text-brand-red" />
+            <p className="text-sm font-bold uppercase tracking-widest">Sincronizando Pedidos...</p>
+          </div>
         ) : error ? (
-          <div className="text-red-500 text-center p-4 bg-red-50 rounded-md border border-red-200 text-sm font-medium">{error}</div>
+          <div className="bg-red-50 border border-red-200 p-4 rounded-2xl text-center">
+            <p className="text-red-700 text-sm font-bold">⚠️ {error}</p>
+            <button onClick={() => fetchOrders()} className="mt-2 text-xs font-black text-red-500 uppercase tracking-widest">Tentar Novamente</button>
+          </div>
         ) : filteredOrders.length === 0 ? (
-          <EmptyState 
-            title="Nenhum pedido aqui" 
-            description="Não há pedidos para o status selecionado."
-          />
+          <div className="py-12">
+            <EmptyState 
+              title={searchQuery ? "Nenhum resultado" : "Tudo limpo por aqui"} 
+              description={searchQuery ? "Tente buscar por outro termo." : "Não há pedidos para o status selecionado."}
+            />
+          </div>
         ) : (
-          <div className="space-y-3 pb-20">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
             {filteredOrders.map(order => (
               <OrderCard 
                 key={order.id} 
@@ -136,7 +180,7 @@ export default function PedidosPage() {
         order={selectedOrder}
         isOpen={!!selectedOrder}
         onClose={() => setSelectedOrder(null)}
-        onOrderUpdated={fetchOrders}
+        onOrderUpdated={() => fetchOrders(false)}
       />
     </div>
   );

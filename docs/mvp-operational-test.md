@@ -104,7 +104,21 @@ Este documento contém um roteiro de teste manual para validar o fluxo completo 
   - Criação do pedido com campo `source` = `QR_CODE`.
   - Ao confirmar, geração instantânea de `printer_jobs`.
 
-### 9. Segurança básica
+### 9. Comanda Aberta (Adicionar itens)
+- **Objetivo**: Validar o acréscimo de itens a pedidos existentes sem duplicar o pedido ou comprometer o financeiro.
+- **Passos**:
+  1. Localizar um pedido com pagamento `PENDING` em `/app/pedidos`.
+  2. Abrir os detalhes e clicar em "Adicionar à comanda".
+  3. Adicionar novos produtos e observar o modo "Adicionar Itens" no cabeçalho.
+  4. Finalizar no checkout simplificado clicando em "Confirmar adição".
+- **Resultado Esperado**: O pedido original mantém o mesmo ID e número diário, mas o `total_amount` aumenta. Novos `printer_jobs` são criados apenas para os itens adicionados, com o cabeçalho "ADICIONAL DE COMANDA".
+- **Verificação no Banco**:
+  - `orders`: `total_amount` deve ser a soma exata dos itens antigos e novos.
+  - `order_items`: contém os novos itens vinculados ao mesmo `order_id`.
+  - `printer_jobs`: apenas os novos itens foram enviados para a fila de impressão.
+  - `audit_logs`: deve haver um log de `ORDER_ITEMS_ADDED`.
+
+### 10. Segurança básica
 - **Objetivo**: Verificar que o ambiente está blindado contra acessos e manipulações indevidas.
 - **Passos**:
   1. Abrir aba anônima e acessar `/app`.

@@ -17,8 +17,10 @@ interface CartState {
   customerPhone: string;
   orderNotes: string;
   source: OrderSource;
+  targetOrderId: string | null;
   
   addItem: (item: Omit<CartItem, 'id'>) => void;
+  updateItem: (id: string, updates: Partial<CartItem>) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   setOrderType: (type: OrderType) => void;
@@ -26,6 +28,7 @@ interface CartState {
   setOrderNotes: (notes: string) => void;
   clearCart: () => void;
   setSource: (source: OrderSource) => void;
+  setTargetOrderId: (id: string | null) => void;
   
   // Computed (estimation only, backend is authority)
   getEstimatedSubtotal: () => number;
@@ -38,9 +41,16 @@ export const useCart = create<CartState>((set, get) => ({
   customerPhone: '',
   orderNotes: '',
   source: 'ATTENDANT',
+  targetOrderId: null,
+
+  setTargetOrderId: (targetOrderId) => set({ targetOrderId }),
 
   addItem: (item) => set((state) => ({ 
     items: [...state.items, { ...item, id: crypto.randomUUID() }] 
+  })),
+
+  updateItem: (id, updates) => set((state) => ({
+    items: state.items.map((i) => i.id === id ? { ...i, ...updates } : i)
   })),
   
   removeItem: (id) => set((state) => ({ 
@@ -59,7 +69,13 @@ export const useCart = create<CartState>((set, get) => ({
   
   setSource: (source) => set({ source }),
 
-  clearCart: () => set({ items: [], customerName: '', customerPhone: '', orderNotes: '' }),
+  clearCart: () => set({ 
+    items: [], 
+    customerName: '', 
+    customerPhone: '', 
+    orderNotes: '', 
+    targetOrderId: null 
+  }),
   
   getEstimatedSubtotal: () => {
     // Estimativa visual simples. O cálculo real de total_amount é feito pelas Edge Functions.
