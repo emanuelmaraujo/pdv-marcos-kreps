@@ -30,6 +30,7 @@ export interface Product {
   price: number;
   sector: ProductionSector;
   active: boolean;
+  sort_order: number;
   created_at?: string;
 }
 
@@ -47,11 +48,20 @@ export interface ProductIngredient {
   created_at?: string;
 }
 
+export interface ProductAddon {
+  product_id: string;
+  addon_id: string;
+  is_required: boolean;
+  max_quantity: number;
+  created_at?: string;
+}
+
 export interface Addon {
   id: string;
   name: string;
   price: number;
   active: boolean;
+  sort_order: number;
   created_at?: string;
 }
 
@@ -116,7 +126,7 @@ export interface PrinterJob {
   id: string;
   order_id: string;
   printer_id?: string;
-  target_sector: 'KITCHEN' | 'JUICE_POTATO' | 'CUSTOMER';
+  sector: 'KITCHEN' | 'JUICE_POTATO' | 'CUSTOMER';
   status: 'PENDING' | 'PRINTED' | 'FAILED';
   content: Record<string, unknown>; // Using Record for JSONB structure placeholder
   created_at: string;

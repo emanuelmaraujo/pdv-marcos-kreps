@@ -18,7 +18,7 @@ export function PrinterJobCard({ job, onJobUpdated }: Props) {
     try {
       await pdvApi.reprintOrder({
         orderId: job.order_id,
-        copies: [job.target_sector]
+        copies: [job.sector]
       });
       alert('Reimpressão solicitada! Novo job foi gerado na fila.');
       onJobUpdated();
@@ -38,7 +38,7 @@ export function PrinterJobCard({ job, onJobUpdated }: Props) {
       <div className="flex justify-between items-start mb-2">
         <div>
           <span className="font-bold text-lg">Pedido #{job.order?.daily_number}</span>
-          <span className="text-xs text-muted-foreground ml-2">Via: {job.target_sector}</span>
+          <span className="text-xs text-muted-foreground ml-2">Via: {job.sector}</span>
         </div>
         <PrintStatusBadge status={job.status} />
       </div>

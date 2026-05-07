@@ -87,12 +87,18 @@ serve(async (req) => {
     const kitchenItems = items.filter(i => i.production_sector === 'KITCHEN');
     const juicePotatoItems = items.filter(i => i.production_sector === 'JUICE_POTATO');
 
-    // Validações rigorosas de emissão coerente
+    // Validações rigorosas de emissão coerente - Agora apenas filtra o que é possível
     if (copies.includes('KITCHEN') && kitchenItems.length === 0) {
-       throw new Error('Tentativa de reimprimir KITCHEN em pedido sem itens de cozinha.');
+       console.error("[reprint-order] Removendo via KITCHEN pois não há itens deste setor.");
+       copies = copies.filter((c: string) => c !== 'KITCHEN');
     }
     if (copies.includes('JUICE_POTATO') && juicePotatoItems.length === 0) {
-       throw new Error('Tentativa de reimprimir JUICE_POTATO em pedido sem suco ou batata.');
+       console.error("[reprint-order] Removendo via JUICE_POTATO pois não há itens deste setor.");
+       copies = copies.filter((c: string) => c !== 'JUICE_POTATO');
+    }
+
+    if (copies.length === 0) {
+       throw new Error('Nenhuma via válida para impressão encontrada (ex: pedido sem itens de cozinha solicitado via cozinha).');
     }
 
     const printerJobsToInsert = [];

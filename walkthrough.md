@@ -26,14 +26,21 @@ Todas as mutações e regras de negócio passam por **Edge Functions** via `pdv-
 Foi elaborada uma arquitetura com separação clara de responsabilidades onde o PWA móvel nunca interage com o hardware diretamente. Todo o processo de impressão ocorre através de um projeto autônomo (na pasta `/print-worker`) construído em Node.js. 
 
 Essa estratégia funciona da seguinte forma:
-- O PWA ou a própria rotina do backend insere _jobs_ na tabela `printer_jobs` com status `PENDING`.
-- O Print Worker (conectado via USB/Rede num PC Windows do caixa) utiliza WebSockets (Supabase Realtime) e captura instantaneamente o insert da tabela.
-- O Worker transforma os dados crus contidos no `printer_jobs.content` em comandos nativos `ESC/POS` via TCP e dispara a impressão física de Ethernet na porta 9100.
-- Posteriormente, atualiza o status de `printer_jobs` para `PRINTED` (ou `FAILED`).
+- O PWA ou a própria rotina do backend (Edge Functions) insere _jobs_ na tabela `printer_jobs` com status `PENDING`.
+- O **Print Worker** local (Node.js) monitora a tabela utilizando uma abordagem híbrida:
+    - **Supabase Realtime**: Captura instantaneamente novos inserts para impressão imediata.
+    - **Polling (3s)**: Executa checagem periódica como contingência em caso de queda na conexão do socket.
+- O Worker transforma os dados crus contidos no `printer_jobs.content` em comandos nativos `ESC/POS` via TCP e dispara a impressão física na impressora térmica de rede (Porta 9100).
+- Após o processamento, o Worker atualiza o job com:
+    - `status`: `PRINTED` ou `FAILED`.
+    - `printed_at`: Timestamp exato da impressão bem-sucedida.
+    - `error_message`: Motivo técnico caso a impressão falhe (ex: impressora offline).
 
-Para monitoramento desse fluxo, foi criada a tela **Fila de Impressão** (`/app/impressao`), acessível no menu inferior. Nela, o atendimento consegue visualizar de forma agrupada (`PENDING`, `FAILED`, `PRINTED`) todas as vias de impressão do dia. É possível analisar o status individual, a mensagem de erro (caso exista) e executar a ação de **Reimprimir** (que gera um novo job na fila via Edge Function). O componente implementa _auto-refresh_ nativo a cada 10 segundos, não permitindo manipulação direta do status pelo garçom e blindando a segurança.
+Para monitoramento desse fluxo, foi criada a tela **Fila de Impressão** (`/app/app/impressao`), acessível no menu inferior. Nela, o atendimento consegue visualizar de forma agrupada (`PENDING`, `FAILED`, `PRINTED`) todas as vias de impressão do dia. É possível analisar o status individual, a mensagem de erro detalhada e executar a ação de **Reimprimir** (que gera um novo job na fila via Edge Function). O componente implementa _auto-refresh_ nativo a cada 10 segundos.
 
-Isso evita sobrecarga em iOS e garante liberdade para os garçons circularem pela loja criando pedidos a qualquer momento.
+Isso evita sobrecarga em dispositivos móveis e garante liberdade para os garçons circularem pela loja criando pedidos a qualquer momento, sem depender de janelas de impressão do navegador ou cabos.
+
+Para validação técnica sem hardware, existe um script em `scratch/test-printing.ts` que simula o ciclo de vida completo de um job (criação, falha simulada, sucesso simulado e reimpressão).
 
 ### 5. Testes e Validação do MVP
 Um plano de testes detalhado foi documentado em [`docs/mvp-operational-test.md`](docs/mvp-operational-test.md). Esse documento funciona como um roteiro de checklist para os atendentes cobrindo desde a confecção básica de pedidos (balcão e viagem) até o tratamento de cancelamentos, re-impressão e auditoria de pagamentos pendentes e segurança da API.
@@ -60,8 +67,10 @@ A tela de gestão do cardápio permite que o administrador visualize, edite e co
 - **Addons:** Listagem com edição inline de preço e toggle ativo/inativo para o ADMIN.
 
 **Permissões por Role (RLS):**
-- **ADMIN:** Vê todos os produtos (ativos e inativos) e pode editar nome, preço e disponibilidade. A RLS policy `Admin control products` com `FOR ALL` garante acesso completo.
-- **ATTENDANT:** A RLS possui apenas uma policy pública `FOR SELECT WHERE (active = true)`. Isso significa que o atendente **não consegue ver produtos inativos nem fazer atualizações**. A tela exibe um banner claro: _"Seu perfil permite visualizar apenas itens disponíveis. Alterações no cardápio são restritas ao administrador."_
+- **ADMIN:** Vê todos os produtos (ativos e inativos) e pode editar nome, preço, disponibilidade e vínculos. A RLS policy `Admin control products` com `FOR ALL` garante acesso completo. Pode vincular adicionais específicos a cada produto e gerenciar ingredientes removíveis.
+- **ATTENDANT:** A RLS possui apenas uma policy pública `FOR SELECT`. Isso significa que o atendente **não consegue fazer atualizações**, apenas visualizar. A tela exibe um banner claro e os botões de ação administrativa ficam ocultos. Tentativas de escrita via console são bloqueadas diretamente pelo banco (RLS).
+- **Vínculo de Adicionais:** Implementado via tabela `product_addons`. O administrador define quais adicionais aparecem para cada produto, evitando que adicionais de krep apareçam em sucos, por exemplo.
+- **Vínculo de Ingredientes:** Implementado via tabela `product_ingredients`. Define quais itens podem ser removidos do produto original.
 - O frontend **não** tenta contornar a RLS nem usa service role.
 
 > **Simplificação temporária (MVP):** O schema atual não possui campo `is_sold_out` separado. No MVP, usamos `active = false` como equivalente a "Esgotado/Indisponível" na interface. Na prática, quando o ADMIN marca um produto como indisponível, ele desativa o campo `active`, o que também remove o produto da tela de novo pedido.
@@ -108,11 +117,18 @@ A tela de caixa foi implementada como um resumo operacional simples do dia, sem 
 - Criar sessões reais de caixa (`cash_sessions`) somente quando a regra operacional de abertura/fechamento estiver definida.
 - Adicionar exportação e relatórios depois do piloto.
 
-### 9. Próximos Passos
+### 9. Segurança Backend (Trust-no-client)
+Para garantir a integridade total do sistema, o backend (Edge Functions) revalida cada centavo e cada regra de negócio:
+- **Cálculo de Preço:** O preço final é recalculado no servidor buscando os valores atuais das tabelas `products` e `addons`. O payload do cliente pode enviar preços, mas eles são ignorados para a persistência final.
+- **Validação de Adicionais:** As funções `create-attendant-order`, `add-items-to-order` e `create-public-order` verificam se cada `addon_id` enviado está vinculado ao `product_id` na tabela `product_addons`. Se um cliente tentar burlar a UI e enviar um adicional não permitido, a requisição é rejeitada com erro 400.
+- **Validação de Ingredientes:** Verifica se o ingrediente a ser removido realmente faz parte da composição do produto via `product_ingredients`.
+- **Permissões de Role:** As Edge Functions administrativas validam o JWT e consultam o perfil do usuário para garantir que apenas `ADMIN` ou `ATTENDANT` (conforme o caso) executem ações.
+
+### 10. Próximos Passos
 - Evoluir o Caixa para controlar sessões reais (`cash_sessions`) quando essa etapa for aprovada.
 - Finalizar as telas públicas `/pedir` e `/pedido/[dailyNumber]`.
 - Rodar validação operacional completa (`docs/mvp-operational-test.md`).
-- Testar impressão real com o print-worker.
+- Validar impressão real com o print-worker (requer Service Role Key configurada no `.env` do worker).
 - Testar WhatsApp real com template aprovado na Meta.
 - Deploy controlado.
 - Mercado Pago / Pix Automático fica para depois do piloto.

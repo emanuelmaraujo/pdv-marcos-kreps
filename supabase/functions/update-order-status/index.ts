@@ -47,6 +47,7 @@ serve(async (req) => {
     }
 
     const { order_id, status, reason, force_delivery } = await req.json();
+    console.error(`[update-order-status] Solicitando transição para "${status}" no pedido ${order_id}. User role: ${profile.role}`);
 
     if (!order_id) throw new Error('order_id ausente ou inválido.');
     

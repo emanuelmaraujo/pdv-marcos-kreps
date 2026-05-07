@@ -139,6 +139,18 @@ serve(async (req) => {
           if (addErr || !addonDB) throw new Error(`Adicional inexistente (ID: ${add.addon_id}).`);
           if (!addonDB.active) throw new Error(`Adicional ${addonDB.name} não está ativo.`);
 
+          // Validar vínculo entre produto e adicional
+          const { data: prodAddon, error: paErr } = await supabaseAdmin
+            .from('product_addons')
+            .select('product_id')
+            .eq('product_id', product.id)
+            .eq('addon_id', add.addon_id)
+            .single();
+
+          if (paErr || !prodAddon) {
+            throw new Error(`O adicional "${addonDB.name}" não é permitido para o produto "${product.name}".`);
+          }
+
           const addonTotal = Number(addonDB.price) * addonQty * item.quantity;
           itemTotalPrice += addonTotal;
 

@@ -130,8 +130,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               {order.items?.map(item => (
                 <div key={item.id} className="p-4">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="font-extrabold text-zinc-900">{item.quantity}x {item.product?.name}</span>
-                    <span className="font-black text-zinc-900 text-sm italic">R$ {item.total_price.toFixed(2)}</span>
+                    <span className="font-black text-sm text-zinc-900">{item.quantity}x {item.product?.name}</span>
+                    <span className="font-black text-zinc-900 text-xs italic opacity-80">R$ {item.total_price.toFixed(2)}</span>
                   </div>
                   
                   {item.removed_ingredients && item.removed_ingredients.length > 0 && (

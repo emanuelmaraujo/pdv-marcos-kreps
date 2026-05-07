@@ -42,7 +42,7 @@ Este documento contém um roteiro de teste manual para validar o fluxo completo 
 - **Resultado Esperado**: Pedido criado com sucesso. O valor `total_amount` retornado deve incluir a taxa de viagem configurada no banco (ex: R$ 2,00 adicionais).
 - **Verificação no Banco**:
   - `orders`: campo `packaging_fee` deve ser maior que 0. `total_amount` engloba itens + taxa.
-  - `printer_jobs`: as vias impressas devem refletir `target_sector` divididos (`KITCHEN` e `JUICE_POTATO`).
+  - `printer_jobs`: as vias impressas devem refletir `sector` divididos (`KITCHEN` e `JUICE_POTATO`) com o conteúdo textual correto para cada um.
 
 ### 4. Criar pedido pendente
 - **Objetivo**: Testar o fluxo de pagamento adiado e as travas de segurança na entrega.
@@ -92,6 +92,7 @@ Este documento contém um roteiro de teste manual para validar o fluxo completo 
 - **Resultado Esperado**: Mensagem de "Reimpressão solicitada!" com sucesso. Visualmente não haverá papel na mão, mas o log sistêmico atuará.
 - **Verificação no Banco**:
   - `printer_jobs`: Novos registros gerados com o `order_id` respectivo, todos com `status` = `PENDING` esperando pela pull local do worker de impressão.
+  - No `/app/app/impressao`, confirmar que os novos jobs apareceram e estão na aba "Pendentes".
 
 ### 8. Pedido QR Code
 - **Objetivo**: Testar o fluxo de autoatendimento.
@@ -138,15 +139,55 @@ Este documento contém um roteiro de teste manual para validar o fluxo completo 
 
 ---
 
+### 11. Gestão de Cardápio (ADMIN)
+- **Objetivo**: Validar a criação e configuração de novos itens pelo administrador.
+- **Passos**:
+  1. Login como `ADMIN`.
+  2. Acessar `/app/cardapio`.
+  3. Criar uma nova categoria "Teste QA".
+  4. Criar um produto "Produto QA" nesta categoria.
+  5. Criar um adicional "Adicional QA".
+  6. No "Produto QA", clicar em "Vincular Adicionais" e selecionar o "Adicional QA".
+  7. Acessar `/app/novo-pedido` e confirmar que o "Produto QA" aparece com seu adicional.
+  8. Desativar o "Produto QA" no cardápio e confirmar que ele desaparece do atendimento.
+- **Resultado Esperado**: O administrador possui controle total sobre a estrutura; as mudanças refletem instantaneamente no PDV.
+
+### 12. Segurança Real (ATTENDANT no Cardápio)
+- **Objetivo**: Garantir que o atendente não consegue burlar a interface para alterar o cardápio.
+- **Passos**:
+  1. Login como `ATTENDANT`.
+  2. Acessar `/app/cardapio`.
+  3. Verificar que os botões "Novo Produto/Adicional/Categoria" estão ocultos.
+  4. Tentar forçar um insert/update via console do navegador usando o Supabase client:
+     ```javascript
+     const { error } = await supabase.from('products').insert({ name: 'Hacker Product', price: 0.01, category_id: '...' });
+     console.log(error);
+     ```
+- **Resultado Esperado**: O console deve exibir um erro de permissão (403 Forbidden ou New row violates RLS policy). A escrita é bloqueada pelo banco de dados.
+
+### 13. Validação de Addons Indevidos (Trust-no-client)
+- **Objetivo**: Validar a proteção "Trust-no-client" nas Edge Functions.
+- **Passos**:
+  1. Utilizar uma ferramenta (Postman/Curl) ou console para chamar a Edge Function `create-attendant-order`.
+  2. Enviar um payload com um `product_id` (ex: um Suco) e um `addon_id` (ex: Queijo Extra) que NÃO estão vinculados no banco.
+- **Resultado Esperado**: A Edge Function deve retornar status 400 com a mensagem: "O adicional ... não é permitido para o produto ...". O pedido não deve ser criado.
+
+---
+
 ## Critérios para considerar o MVP operacional
 
 O sistema atinge grau de maturidade (MVP) e está pronto para o uso cotidiano do PDV se:
 
-- [ ] O atendente consegue criar um pedido padrão do zero em menos de 1 minuto na interface.
-- [ ] O pedido aparece corretamente nas abas correspondentes em `/app/pedidos`.
-- [ ] O visual de "pagamento pendente" fica extremamente evidente no grid para evitar que pedidos saiam de graça.
-- [ ] A aplicação impede, seja local ou pelo backend, que um pedido `PENDING` passe para `ENTREGUE` sem consentimento.
-- [ ] O status do pedido evolui de forma fluida da entrada até o término.
-- [ ] A reimpressão gera efetivamente linhas de `printer_jobs` (indispensável antes da compra do hardware físico).
-- [ ] A tabela de auditoria (`audit_logs`) engloba cancelamentos e estornos/alterações complexas.
-- [ ] **Importante**: Todo total monetário oficial exibido para fechar a conta advém obrigatoriamente do response do backend, prevenindo alterações locais de carrinho (Trust-no-client).
+- [x] O atendente consegue criar um pedido padrão do zero em menos de 1 minuto na interface.
+- [x] O pedido aparece corretamente nas abas correspondentes em `/app/pedidos`.
+- [x] O visual de "pagamento pendente" fica extremamente evidente no grid para evitar que pedidos saiam de graça.
+- [x] A aplicação impede, seja local ou pelo backend, que um pedido `PENDING` passe para `ENTREGUE` sem consentimento.
+- [x] O status do pedido evolui de forma fluida da entrada até o término.
+- [x] A gestão de cardápio permite controle de estoque e disponibilidade em tempo real pelo ADMIN.
+- [x] A segurança garante que atendentes não alteram preços ou o cardápio (RLS ativa).
+- [x] O backend revalida todos os adicionais e preços, impedindo manipulação de payload (Trust-no-client).
+- [x] A reimpressão gera efetivamente linhas de `printer_jobs` (indispensável antes da compra do hardware físico).
+- [x] A tela de Fila de Impressão exibe status em tempo real, erros técnicos e timestamps de impressão.
+- [x] O `print-worker` possui fallback de Polling (3s) caso a conexão Realtime falhe.
+- [x] A tabela de auditoria (`audit_logs`) engloba cancelamentos e estornos/alterações complexas.
+- [x] **Importante**: Todo total monetário oficial exibido para fechar a conta advém obrigatoriamente do response do backend, prevenindo alterações locais de carrinho (Trust-no-client).

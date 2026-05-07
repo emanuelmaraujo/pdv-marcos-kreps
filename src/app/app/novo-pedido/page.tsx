@@ -3,10 +3,10 @@
 import { useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/Button";
 
-import { useCart } from "@/features/cart/useCart";
+import { useCart, CartItem } from "@/features/cart/useCart";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi } from "@/lib/api/pdv-api";
-import { Product, OrderType, Ingredient, Order } from "@/types/pdv";
+import { Product, OrderType, Ingredient, Order, Addon } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
 import { Minus, Plus, ShoppingBag, Utensils, ShoppingCart, Info, AlertCircle, RefreshCw } from "lucide-react";
@@ -93,7 +93,7 @@ export default function NovoPedidoPage() {
     return menuData.products.filter(p => p.category_id === selectedCategoryId);
   }, [menuData, selectedCategoryId]);
 
-  const openCustomization = (product: Product, existingItem?: import("@/features/cart/useCart").CartItem) => {
+  const openCustomization = (product: Product, existingItem?: CartItem) => {
     setSelectedProduct(product);
     if (existingItem) {
       setEditingCartItemId(existingItem.id);
@@ -174,6 +174,12 @@ export default function NovoPedidoPage() {
     return rels.map(rel => menuData.ingredients.find(i => i.id === rel.ingredient_id)).filter(Boolean) as Ingredient[];
   }, [selectedProduct, menuData]);
 
+  const productAddons = useMemo(() => {
+    if (!selectedProduct || !menuData) return [];
+    const rels = menuData.productAddons.filter(pa => pa.product_id === selectedProduct.id);
+    return rels.map(rel => menuData.addons.find(a => a.id === rel.addon_id)).filter(Boolean) as Addon[];
+  }, [selectedProduct, menuData]);
+
   const sheetSubtotal = useMemo(() => {
     if (!selectedProduct) return 0;
     let total = selectedProduct.price;
@@ -211,7 +217,7 @@ export default function NovoPedidoPage() {
         <OrderSummarySheet 
           isOpen={isCheckoutOpen} 
           onClose={() => setIsCheckoutOpen(false)} 
-          onEditItem={(item: import("@/features/cart/useCart").CartItem) => {
+          onEditItem={(item: CartItem) => {
             setIsCheckoutOpen(false);
             openCustomization(item.product, item);
           }}
@@ -306,7 +312,7 @@ export default function NovoPedidoPage() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                      <h3 className="text-zinc-900 font-black text-sm uppercase leading-tight truncate mr-2">{product.name}</h3>
+                      <h3 className="text-zinc-900 font-black text-[10px] uppercase leading-tight mr-2">{product.name}</h3>
                       <div className="text-right shrink-0">
                         <p className="text-brand-red font-black text-base leading-none">
                           <span className="text-[10px] mr-0.5 opacity-50">R$</span>
@@ -376,7 +382,7 @@ export default function NovoPedidoPage() {
             {/* Header / Basic Info */}
             <div className="flex justify-between items-start">
               <div>
-                <h3 className="text-2xl font-black text-zinc-900 tracking-tight uppercase">{selectedProduct.name}</h3>
+                <h3 className="text-lg font-black text-zinc-900 tracking-tight uppercase">{selectedProduct.name}</h3>
                 <div className="flex items-center space-x-2 mt-1">
                   <span className="bg-zinc-100 text-zinc-500 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest">Base</span>
                   <p className="text-xl font-black text-brand-red">R$ {selectedProduct.price.toFixed(2)}</p>
@@ -414,11 +420,11 @@ export default function NovoPedidoPage() {
             )}
 
             {/* Addons Selection */}
-            {menuData && menuData.addons.length > 0 && (
+            {productAddons.length > 0 && (
               <div className="space-y-4">
                 <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] px-1">Adicionais Extras</h4>
                 <div className="space-y-3">
-                  {menuData.addons.map(addon => {
+                  {productAddons.map(addon => {
                     const qty = selectedAddons.get(addon.id) || 0;
                     return (
                       <div key={addon.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-zinc-100 group active:border-zinc-200 transition-all">

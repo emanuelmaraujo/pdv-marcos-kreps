@@ -58,7 +58,7 @@ export function OrderCard({ order, onClick }: Props) {
               </div>
             )}
             
-            <div className="text-sm text-zinc-500 font-medium line-clamp-1 px-1">
+            <div className="text-[11px] text-zinc-500 font-medium line-clamp-1 px-1">
               {order.items?.map(item => `${item.quantity}x ${item.product?.name}`).join(' • ')}
             </div>
           </div>

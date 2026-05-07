@@ -18,22 +18,26 @@ async function extractEdgeFunctionError(
   error: { name?: string; message?: string; context?: Response | Record<string, unknown> },
   functionName: string,
 ): Promise<Error> {
-  console.error(`[${functionName}] Edge function error object:`, error);
+  console.error(`[${functionName}] Raw Error:`, error);
 
   let parsedBody: Record<string, unknown> | null = null;
   let rawText: string | null = null;
+  let status: number | null = null;
 
   // --- Step 1 & 2: Try to read the response body ---
   const ctx = error.context as Response | undefined;
 
   if (ctx && typeof ctx.json === 'function') {
+    status = ctx.status;
     try {
-      parsedBody = await ctx.json();
+      // Clonamos o body para não dar erro se alguém já leu (embora improvável aqui)
+      const clone = ctx.clone();
+      parsedBody = await clone.json();
     } catch {
       try {
         rawText = await ctx.text();
       } catch {
-        // body unreadable – will use fallback
+        // body unreadable
       }
     }
   }
@@ -43,17 +47,18 @@ async function extractEdgeFunctionError(
     parsedBody = error.context as Record<string, unknown>;
   }
 
+  const parts: string[] = [];
+  if (status) parts.push(`Status: ${status}`);
+
   // --- Step 3: Extract diagnostic fields ---
   if (parsedBody) {
     const fields: { label: string; key: string }[] = [
       { label: 'Error', key: 'error' },
       { label: 'Message', key: 'message' },
       { label: 'Details', key: 'details' },
-      { label: 'Hint', key: 'hint' },
       { label: 'Code', key: 'code' },
     ];
 
-    const parts: string[] = [];
     for (const { label, key } of fields) {
       const value = parsedBody[key];
       if (value !== undefined && value !== null && value !== '') {
@@ -67,7 +72,6 @@ async function extractEdgeFunctionError(
       return new Error(debugMessage);
     }
 
-    // parsedBody exists but has no known fields – stringify it
     const fallbackJson = JSON.stringify(parsedBody);
     if (fallbackJson && fallbackJson !== '{}') {
       const msg = `[${functionName}] ${fallbackJson}`;
@@ -76,16 +80,14 @@ async function extractEdgeFunctionError(
     }
   }
 
-  // --- Step 4: raw text fallback ---
   if (rawText) {
     const msg = `[${functionName}] ${rawText}`;
     console.error(msg);
     return new Error(msg);
   }
 
-  // --- Step 5: generic fallback ---
   const generic = error.message || 'Erro desconhecido na Edge Function';
-  const msg = `[${functionName}] ${generic}`;
+  const msg = `[${functionName}] ${generic}${status ? ` (Status ${status})` : ''}`;
   console.error(msg);
   return new Error(msg);
 }

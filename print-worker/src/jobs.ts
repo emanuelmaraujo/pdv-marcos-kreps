@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { printJobContent } from './printer';
 
 export async function processJob(job: any) {
-  console.log(`[JOBS] Processando job ${job.id} (target: ${job.target_sector})`);
+  console.log(`[JOBS] Processando job ${job.id} (setor: ${job.sector})`);
   try {
     await printJobContent(job.content);
     

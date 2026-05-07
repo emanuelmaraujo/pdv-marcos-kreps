@@ -59,6 +59,13 @@ serve(async (req) => {
       .in('id', productIds);
       
     if (prodErr) throw new Error('Erro ao buscar produtos.');
+    
+    const { data: productAddons, error: paErr } = await supabaseClient
+      .from('product_addons')
+      .select('product_id, addon_id')
+      .in('product_id', productIds);
+      
+    if (paErr) throw new Error('Erro ao buscar vínculos de adicionais.');
 
     const allAddonIds = items.flatMap((i:any) => (i.addons || []).map((a:any) => a.addon_id));
     const { data: addons, error: addonErr } = await supabaseClient
@@ -104,6 +111,13 @@ serve(async (req) => {
         const addon = addons?.find(a => a.id === itemAddon.addon_id);
         if (!addon) throw new Error(`Addon inexistente: ${itemAddon.addon_id}`);
         if (!addon.active) throw new Error(`Addon inativo: ${addon.name}`);
+        
+        // Valida se o adicional é permitido para este produto
+        const isAllowed = productAddons?.some(pa => pa.product_id === product.id && pa.addon_id === itemAddon.addon_id);
+        if (!isAllowed) {
+          throw new Error(`O adicional "${addon.name}" não é permitido para o produto "${product.name}".`);
+        }
+
         if (!itemAddon.quantity || itemAddon.quantity < 1) throw new Error(`Quantidade inválida para o addon: ${addon.name}`);
         
         // Multiplica o valor do addon pela qtd dele E pela qtd do produto na linha

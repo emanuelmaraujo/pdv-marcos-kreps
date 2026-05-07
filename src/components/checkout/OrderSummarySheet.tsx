@@ -197,7 +197,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: OrderSummaryS
                   <div key={item.id} className="p-4 flex flex-col space-y-2 group active:bg-zinc-50 transition-colors">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <p className="font-extrabold text-zinc-900 leading-tight">
+                        <p className="font-extrabold text-zinc-900 leading-tight text-[13px]">
                           {item.quantity}x {item.product.name}
                         </p>
                         

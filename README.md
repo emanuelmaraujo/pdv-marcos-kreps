@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PDV Marcos Krep's
 
-## Getting Started
+Sistema de Ponto de Venda (PDV) mobile-first desenvolvido para a Marcos Krep's, focado em agilidade no atendimento e gestão de produção (cozinha/sucos).
 
-First, run the development server:
+## 🚀 Tecnologias
+- **Frontend**: Next.js 15 (App Router), TailwindCSS, Shadcn/UI.
+- **Backend**: Supabase (Auth, Database, Edge Functions, Realtime).
+- **Impressão**: Node.js Local Worker (ESC/POS via TCP/IP).
+- **Notificações**: WhatsApp Cloud API (Meta).
 
+## 📁 Estrutura do Projeto
+- `/src`: Aplicação principal Next.js.
+- `/supabase`: Configurações de banco, RLS e Edge Functions.
+- `/print-worker`: Worker local para comunicação com impressoras térmicas.
+- `/docs`: Documentação operacional e guias de setup.
+
+## 🛠️ Como Rodar
+
+### 1. Aplicação Web
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Print Worker (Local)
+1. Configure o `.env` na pasta `print-worker` com as chaves do Supabase.
+2. Execute:
+```bash
+cd print-worker
+npm install
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📖 Documentação Adicional
+- [Walkthrough Geral](walkthrough.md): Detalhes da arquitetura e fluxos.
+- [Plano de Teste Operacional](docs/mvp-operational-test.md): Checklist para validação do MVP.
+- [Guia WhatsApp](docs/whatsapp-cloud-setup.md): Configuração da API de notificações.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🔒 Segurança
+- **RLS (Row Level Security)**: Garantia de que Atendentes não alteram o cardápio e que usuários públicos apenas consultam status.
+- **Trust-no-client**: Toda lógica de precificação e validação de regras de negócio ocorre nas Edge Functions.
