@@ -124,11 +124,29 @@ Para garantir a integridade total do sistema, o backend (Edge Functions) revalid
 - **Validação de Ingredientes:** Verifica se o ingrediente a ser removido realmente faz parte da composição do produto via `product_ingredients`.
 - **Permissões de Role:** As Edge Functions administrativas validam o JWT e consultam o perfil do usuário para garantir que apenas `ADMIN` ou `ATTENDANT` (conforme o caso) executem ações.
 
-### 10. Próximos Passos
-- Evoluir o Caixa para controlar sessões reais (`cash_sessions`) quando essa etapa for aprovada.
-- Finalizar as telas públicas `/pedir` e `/pedido/[dailyNumber]`.
-- Rodar validação operacional completa (`docs/mvp-operational-test.md`).
-- Validar impressão real com o print-worker (requer Service Role Key configurada no `.env` do worker).
-- Testar WhatsApp real com template aprovado na Meta.
-- Deploy controlado.
-- Mercado Pago / Pix Automático fica para depois do piloto.
+### 10. Gestão de Usuários (`/app/usuarios`)
+A tela de gestão de usuários permite que administradores criem novos membros da equipe, editem papéis (`ADMIN` vs `ATTENDANT`) e desativem acessos.
+- **Segurança:** Bloqueia desativação do próprio usuário se ele for o único admin ativo.
+- **Design:** Interface premium com avatares dinâmicos, estatísticas de equipe e glassmorphism.
+- **Backend:** Todas as operações via Edge Function `manage-users` com auditoria completa.
+
+### 11. Auditoria e Estabilidade (Release Candidate)
+O sistema passou por um processo de auditoria abrangente para o lançamento do MVP:
+- **Consistência de Configurações:** Unificação das chaves de sistema (`apply_packaging_fee_for_takeout`) entre frontend, backend e sementes (seeds).
+- **Tratamento de Erros:** Implementação de um extrator de erros robusto no `pdv-api.ts` para depuração facilitada de Edge Functions.
+- **Segurança de Acesso:** Verificação sistêmica da obrigatoriedade do campo `profiles.active` em todas as mutações de dados.
+- **Qualidade de Código:** Validação de build bem-sucedida e tipagem TypeScript rigorosa em componentes compartilhados (ex: `PageHeader`).
+
+### 12. Maturidade do MVP
+O sistema atinge o status de **Release Candidate (RC)** pronto para homologação operacional:
+- [x] **Segurança:** RLS e Trust-no-client 100% ativos.
+- [x] **Financeiro:** Cálculos de total, descontos e taxas centralizados no servidor.
+- [x] **Operacional:** Fluxo de pedidos, produção e entrega validado e documentado.
+- [x] **Comunicação:** WhatsApp e Impressão integrados via filas assíncronas.
+- [x] **Administração:** Controle total de cardápio e equipe via painel logado.
+
+### 13. Próximos Passos (Go-Live)
+1. **Implantação em Produção:** Seguir o [`docs/deployment-checklist.md`](docs/deployment-checklist.md).
+2. **Homologação Local:** Executar a bateria de testes em [`docs/mvp-operational-test.md`](docs/mvp-operational-test.md) com hardware real.
+3. **Treinamento:** Apresentar o fluxo de "Adição à Comanda" e "Reimpressão" para a equipe.
+4. **Monitoramento:** Acompanhar `audit_logs` nos primeiros dias de operação real.

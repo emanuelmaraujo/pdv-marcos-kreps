@@ -4,7 +4,7 @@
 -- Inserir Configurações Globais (Settings)
 INSERT INTO settings (key, value) VALUES
   ('packaging_fee', '1.00'),
-  ('apply_packaging_fee_for_takeaway', 'true'),
+  ('apply_packaging_fee_for_takeout', 'true'),
   ('print_customer_copy', 'true'),
   ('print_kitchen_copy', 'true'),
   ('print_juice_potato_copy', 'true')

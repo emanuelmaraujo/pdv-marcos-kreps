@@ -37,13 +37,13 @@ serve(async (req) => {
     const { data: settingsData, error: settingsErr } = await supabaseClient
       .from('settings')
       .select('key, value')
-      .in('key', ['packaging_fee', 'apply_packaging_fee_for_takeaway']);
+      .in('key', ['packaging_fee', 'apply_packaging_fee_for_takeout']);
     
     if (settingsErr) throw new Error('Erro ao buscar configurações do sistema.');
     
     let packingFeeValue = 0;
     if (order_type === 'VIAGEM') {
-      const applyFeeStr = settingsData?.find(s => s.key === 'apply_packaging_fee_for_takeaway')?.value;
+      const applyFeeStr = settingsData?.find(s => s.key === 'apply_packaging_fee_for_takeout')?.value;
       const applyFee = applyFeeStr === 'true' || applyFeeStr === true;
       if (applyFee) {
         const feeStr = settingsData?.find(s => s.key === 'packaging_fee')?.value;

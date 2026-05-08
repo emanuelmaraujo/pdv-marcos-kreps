@@ -1,9 +1,34 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import Link from "next/link";
-import { PlusCircle, ListOrdered, UtensilsCrossed, Wallet } from "lucide-react";
+import { PlusCircle, ListOrdered, UtensilsCrossed, Wallet, Settings, Users } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function AppDashboard() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const supabase = createClient();
+
+  useEffect(() => {
+    async function checkRole() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile?.role === 'ADMIN') {
+          setIsAdmin(true);
+        }
+      }
+    }
+    checkRole();
+  }, [supabase]);
+
   const shortcuts = [
     {
       title: "Novo Pedido",
@@ -35,6 +60,23 @@ export default function AppDashboard() {
     },
   ];
 
+  const adminShortcuts = [
+    {
+      title: "Usuários",
+      href: "/app/usuarios",
+      icon: Users,
+      color: "text-indigo-600",
+      bg: "bg-indigo-50",
+    },
+    {
+      title: "Configurações",
+      href: "/app/configuracoes",
+      icon: Settings,
+      color: "text-zinc-600",
+      bg: "bg-zinc-100",
+    },
+  ];
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader title="Marcos Krep's" subtitle="Painel do atendente" />
@@ -49,7 +91,7 @@ export default function AppDashboard() {
               const Icon = s.icon;
               return (
                 <Link key={s.href} href={s.href}>
-                  <Card className="hover:border-zinc-200 active:scale-[0.97] transition-all border-zinc-100">
+                  <Card className="hover:border-zinc-200 active:scale-[0.97] transition-all border-zinc-100 h-full">
                     <CardContent className="p-4 flex flex-col items-center justify-center space-y-2.5 aspect-square">
                       <div className={`p-3.5 rounded-2xl ${s.bg}`}>
                         <Icon className={`w-7 h-7 ${s.color}`} />
@@ -64,6 +106,33 @@ export default function AppDashboard() {
             })}
           </div>
         </div>
+
+        {isAdmin && (
+          <div>
+            <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
+              Administração
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              {adminShortcuts.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <Link key={s.href} href={s.href}>
+                    <Card className="hover:border-zinc-200 active:scale-[0.97] transition-all border-zinc-100 h-full">
+                      <CardContent className="p-4 flex flex-col items-center justify-center space-y-2.5 aspect-square">
+                        <div className={`p-3.5 rounded-2xl ${s.bg}`}>
+                          <Icon className={`w-7 h-7 ${s.color}`} />
+                        </div>
+                        <span className="font-semibold text-sm text-brand-charcoal">
+                          {s.title}
+                        </span>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div>
           <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
@@ -90,3 +159,4 @@ export default function AppDashboard() {
     </div>
   );
 }
+

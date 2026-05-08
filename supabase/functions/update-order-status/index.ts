@@ -108,14 +108,49 @@ serve(async (req) => {
       updatePayload.ready_at = nowIso;
       auditAction = 'ORDER_READY';
 
-      // Fila do WhatsApp
-      if (order.customer_phone && order.customer_phone.length >= 8) {
-         await supabaseAdmin.from('whatsapp_messages').insert({
-            order_id: order.id,
-            phone: order.customer_phone,
-            message_type: 'order_ready',
-            status: 'PENDING'
-         });
+      // WhatsApp Integration (Non-blocking)
+      try {
+        // 1. Check if WhatsApp is enabled in settings
+        const { data: whatsappEnabledSetting } = await supabaseAdmin
+          .from('settings')
+          .select('value')
+          .eq('key', 'whatsapp_enabled')
+          .single();
+        
+        const isEnabled = whatsappEnabledSetting?.value === 'true' || whatsappEnabledSetting?.value === '"true"';
+
+        if (isEnabled && order.customer_phone && order.customer_phone.length >= 8) {
+           const templateName = 'pedido_ready'; // Standard for this event
+
+           // 2. Avoid Duplicates (Same order + same template)
+           const { data: existingMsg } = await supabaseAdmin
+             .from('whatsapp_messages')
+             .select('id')
+             .eq('order_id', order.id)
+             .eq('template_name', templateName)
+             .neq('status', 'FAILED')
+             .limit(1);
+
+           if (!existingMsg || existingMsg.length === 0) {
+              await supabaseAdmin.from('whatsapp_messages').insert({
+                 order_id: order.id,
+                 phone: order.customer_phone,
+                 template_name: templateName,
+                 message_type: 'order_ready', // Keep for compatibility
+                 status: 'PENDING',
+                 payload: {
+                    customer_name: order.customer_name || 'Cliente',
+                    daily_number: order.daily_number
+                 }
+              });
+              console.log(`[update-order-status] Fila de WhatsApp criada para pedido ${order.id}`);
+           } else {
+              console.log(`[update-order-status] Notificação de WhatsApp já existe para pedido ${order.id}`);
+           }
+        }
+      } catch (whatsappErr: any) {
+        // Critical: Never block the main flow
+        console.error('[update-order-status] Erro silencioso ao criar fila de WhatsApp:', whatsappErr.message);
       }
 
     } else if (status === 'ENTREGUE') {

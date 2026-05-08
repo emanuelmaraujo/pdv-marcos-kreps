@@ -27,6 +27,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { BarChart3 } from "lucide-react";
 import {
   CaixaData,
   PaymentBreakdown,
@@ -131,6 +132,19 @@ export default function CaixaPage() {
         }
       />
 
+      {/* ─── Admin Shortcut ─── */}
+      {data?.role === "ADMIN" && (
+        <div className="px-4 pt-4">
+          <Link href="/app/caixa/relatorio">
+            <Button className="w-full gap-2 bg-brand-charcoal hover:bg-brand-black">
+              <BarChart3 className="h-4 w-4" />
+              Relatório Gerencial Completo
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-4 pb-24">
         {isLoading && !data ? (
           <LoadingState message="Carregando resumo do dia..." />
@@ -207,6 +221,7 @@ export default function CaixaPage() {
                 icon={CreditCard}
                 iconBg="bg-emerald-50"
                 iconColor="text-emerald-600"
+                hidden={data.role === "ATTENDANT"}
               />
               <MetricCard
                 label="Embalagem"
@@ -256,7 +271,7 @@ export default function CaixaPage() {
             <StatusBreakdownSection items={data.statusBreakdown} />
 
             {/* ─── Top Products ─── */}
-            <TopProductsSection products={data.topProducts} />
+            {data.role === "ADMIN" && <TopProductsSection products={data.topProducts} />}
           </div>
         )}
       </div>
@@ -291,6 +306,7 @@ function MetricCard({
   icon: Icon,
   iconBg,
   iconColor,
+  hidden,
 }: {
   label: string;
   value: string;
@@ -298,7 +314,9 @@ function MetricCard({
   icon: React.ElementType;
   iconBg: string;
   iconColor: string;
+  hidden?: boolean;
 }) {
+  if (hidden) return null;
   return (
     <Card>
       <CardContent className="p-3.5">

@@ -1,10 +1,62 @@
 import { supabase } from './supabase';
-import { printJobContent } from './printer';
+import { printWithConfig } from './printer';
+import { config } from './config';
+
+// Cache simples para configurações remotas
+let remoteConfigCache: any = null;
+let lastFetchTime = 0;
+const CACHE_TTL = 10000; // 10 segundos
+
+async function getRemoteConfig() {
+  const now = Date.now();
+  if (remoteConfigCache && (now - lastFetchTime < CACHE_TTL)) {
+    return remoteConfigCache;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('settings')
+      .select('key, value');
+
+    if (error) throw error;
+
+    const settings = data.reduce((acc, curr) => {
+      acc[curr.key] = curr.value;
+      return acc;
+    }, {} as Record<string, any>);
+
+    remoteConfigCache = {
+      printingEnabled: settings.printing_enabled !== "false", // Default true
+      printerHost: settings.printer_host || config.printerHost,
+      printerPort: settings.printer_port ? parseInt(settings.printer_port, 10) : config.printerPort,
+      printerType: settings.printer_type || config.printerType,
+      printerPaperWidth: settings.printer_paper_width ? parseInt(settings.printer_paper_width, 10) : config.printerPaperWidth
+    };
+    lastFetchTime = now;
+    return remoteConfigCache;
+  } catch (err) {
+    console.warn('[JOBS] Falha ao carregar config remota, usando fallback:', err);
+    return {
+      printingEnabled: true,
+      printerHost: config.printerHost,
+      printerPort: config.printerPort,
+      printerType: config.printerType,
+      printerPaperWidth: config.printerPaperWidth
+    };
+  }
+}
 
 export async function processJob(job: any) {
   console.log(`[JOBS] Processando job ${job.id} (setor: ${job.sector})`);
+  
   try {
-    await printJobContent(job.content);
+    const remoteConfig = await getRemoteConfig();
+    
+    if (!remoteConfig.printingEnabled) {
+      throw new Error('Impressão desativada no painel administrativo');
+    }
+
+    await printWithConfig(job.content, remoteConfig);
     
     // Sucesso - Marcar como impresso
     const { error } = await supabase
@@ -20,20 +72,13 @@ export async function processJob(job: any) {
   } catch (err: any) {
     console.error(`[JOBS] Erro ao processar job ${job.id}:`, err);
     
-    // Falha - Marcar erro
-    // Nota: Estamos usando um update simples apenas mudando status e inserindo erro caso a coluna exista, mas como o prompt indica: error_message = mensagem do erro. 
-    // Vamos inserir se estiver no schema, se der erro porque não tem a coluna, faz fallback sem ela.
-    
     const errorMsg = err.message || String(err);
-    let updatePayload: any = { 
-      status: 'FAILED',
-      // Assuming error_message column exists as per requirements
-      error_message: errorMsg 
-    };
-    
     const { error: failedError } = await supabase
       .from('printer_jobs')
-      .update(updatePayload) // Se error_message for requerido, adicionamos dinâmico
+      .update({ 
+        status: 'FAILED',
+        error_message: errorMsg 
+      })
       .eq('id', job.id);
       
     if (failedError) {
