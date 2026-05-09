@@ -133,6 +133,44 @@ function parseAuthData(buf: Uint8Array): AuthData {
   return result;
 }
 
+// ─── DER → IEEE P1363 raw signature conversion ───────────────────────────────
+// WebAuthn authenticators return ECDSA signatures in DER/ASN.1 format:
+//   SEQUENCE { INTEGER r, INTEGER s }
+// crypto.subtle.verify (ECDSA) requires IEEE P1363 raw format: r(32) || s(32).
+// Without this conversion every verification fails regardless of key/data.
+
+function derToRaw(der: Uint8Array): Uint8Array {
+  // Expect: 0x30 <len> 0x02 <rLen> <r> 0x02 <sLen> <s>
+  if (der[0] !== 0x30) throw new Error("DER: expected SEQUENCE (0x30)");
+  let off = 2; // skip tag + length (assume short form)
+  if (der[1] & 0x80) {
+    // Long-form length: next byte(s) encode the length
+    const extra = der[1] & 0x7f;
+    off = 2 + extra;
+  }
+
+  if (der[off] !== 0x02) throw new Error("DER: expected INTEGER tag for r");
+  const rLen = der[off + 1];
+  let rStart = off + 2;
+  let rBytes = rLen;
+  if (der[rStart] === 0x00) { rStart++; rBytes--; } // strip leading zero padding
+  const r = der.slice(rStart, rStart + rBytes);
+  off = rStart + rBytes;
+
+  if (der[off] !== 0x02) throw new Error("DER: expected INTEGER tag for s");
+  const sLen = der[off + 1];
+  let sStart = off + 2;
+  let sBytes = sLen;
+  if (der[sStart] === 0x00) { sStart++; sBytes--; } // strip leading zero padding
+  const s = der.slice(sStart, sStart + sBytes);
+
+  // Right-align each component into a 32-byte slot (P-256 = 32 bytes per scalar)
+  const raw = new Uint8Array(64);
+  raw.set(r, 32 - r.length);
+  raw.set(s, 64 - s.length);
+  return raw;
+}
+
 // ─── Verify ECDSA assertion signature ────────────────────────────────────────
 
 async function verifyAssertion(
@@ -144,10 +182,15 @@ async function verifyAssertion(
   const key = await crypto.subtle.importKey(
     "jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"],
   );
+  // Convert DER signature → IEEE P1363 raw (r||s) as required by WebCrypto
+  const rawSig = derToRaw(signature);
+  // Signed data = authData || SHA-256(clientDataJSON)
+  // crypto.subtle.verify applies SHA-256 internally, so we pass the pre-image.
   const hash = await crypto.subtle.digest("SHA-256", clientDataJSON);
   const signed = new Uint8Array(authData.length + 32);
-  signed.set(authData); signed.set(new Uint8Array(hash), authData.length);
-  return crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, signature, signed);
+  signed.set(authData);
+  signed.set(new Uint8Array(hash), authData.length);
+  return crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, rawSig, signed);
 }
 
 // ─── HMAC challenge (no DB needed) ───────────────────────────────────────────

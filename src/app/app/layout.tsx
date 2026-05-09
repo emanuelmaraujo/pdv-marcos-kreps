@@ -2,40 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { UserProvider, useUser } from "@/contexts/UserContext";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { LoadingState } from "@/components/feedback/LoadingState";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const [isLoading, setIsLoading] = useState(true);
+/** Inner layout — consumes UserContext (must be inside <UserProvider>) */
+function AppShell({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useUser();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.replace("/login");
-      } else {
-        setIsLoading(false);
-      }
-    };
-
-    checkSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.replace("/login");
-      }
-    });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, [router, supabase]);
+    if (!isLoading && !user) {
+      router.replace("/login");
+    }
+  }, [isLoading, user, router]);
 
   if (isLoading) {
     return (
@@ -44,6 +27,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+
+  if (!user) return null; // redirect is in-flight
 
   return (
     <div className="min-h-screen bg-background">
@@ -61,5 +46,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <BottomNav />
     </div>
+  );
+}
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <UserProvider>
+      <AppShell>{children}</AppShell>
+    </UserProvider>
   );
 }
