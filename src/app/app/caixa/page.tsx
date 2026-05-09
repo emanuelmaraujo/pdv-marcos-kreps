@@ -145,7 +145,7 @@ export default function CaixaPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-24">
         {isLoading && !data ? (
           <LoadingState message="Carregando resumo do dia..." />
         ) : error ? (
@@ -163,7 +163,7 @@ export default function CaixaPage() {
             <CashNote role={data.role} lastUpdate={lastUpdate} />
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 lg:max-w-4xl lg:mx-auto">
             <CashNote role={data.role} lastUpdate={lastUpdate} />
 
             {/* ─── Hero Card: Recebido Hoje ─── */}
@@ -189,7 +189,7 @@ export default function CaixaPage() {
             </Card>
 
             {/* ─── Metrics Grid ─── */}
-            <section className="grid grid-cols-2 gap-3">
+            <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3">
               <MetricCard
                 label="Total bruto"
                 value={currency.format(data.summary.totalBruto)}

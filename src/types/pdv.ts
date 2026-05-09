@@ -181,6 +181,8 @@ export interface PrinterJob {
   content: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  printed_at?: string;
+  error_message?: string;
   order?: {
     daily_number: number;
     status: OrderStatus;

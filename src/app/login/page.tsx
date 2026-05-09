@@ -11,7 +11,8 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent } from "@/components/ui/Card";
-import { ChefHat, Fingerprint } from "lucide-react";
+import { Fingerprint } from "lucide-react";
+import Image from "next/image";
 
 const SESSION_KEY = "pdv_login_time";
 const SESSION_MAX_MS = 24 * 60 * 60 * 1000;
@@ -111,8 +112,15 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Brand Header */}
         <div className="mb-8 flex flex-col items-center space-y-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-red shadow-lg">
-            <ChefHat className="h-9 w-9 text-white" />
+          <div className="rounded-2xl ring-2 ring-zinc-600 shadow-2xl overflow-hidden">
+            <Image
+              src="/logo.png"
+              alt="Marcos Krep's"
+              width={96}
+              height={96}
+              className="block"
+              priority
+            />
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight text-white">Marcos Krep&apos;s</h1>

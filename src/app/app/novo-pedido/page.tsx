@@ -9,7 +9,7 @@ import { pdvApi } from "@/lib/api/pdv-api";
 import { Product, OrderType, Ingredient, Order, Addon } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
-import { Minus, Plus, ShoppingBag, Utensils, ShoppingCart, Info, AlertCircle, RefreshCw } from "lucide-react";
+import { Minus, Plus, ShoppingBag, Utensils, ShoppingCart, Info, AlertCircle, RefreshCw, Sandwich, Cookie, GlassWater, Coffee, Flame, Star, Beer, Beef, Hamburger, type LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 export default function NovoPedidoPage() {
@@ -266,18 +266,20 @@ export default function NovoPedidoPage() {
             <div className="flex space-x-2 overflow-x-auto hide-scrollbar">
               {menuData?.categories.map(category => {
                 const isSelected = selectedCategoryId === category.id;
-                const isDoces = category.name.toLowerCase().includes('doce');
+                const { icon: CatIcon, iconBg, iconColor } = getCategoryMeta(category.name);
                 return (
                   <button
                     key={category.id}
                     onClick={() => setSelectedCategoryId(category.id)}
-                    className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center ${
-                      isSelected 
-                        ? 'bg-brand-red text-white shadow-md shadow-brand-red/20' 
-                        : 'bg-white border border-zinc-200 text-zinc-500 hover:border-zinc-300 active:bg-zinc-50'
+                    className={`whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shrink-0 ${
+                      isSelected
+                        ? 'bg-brand-red text-white shadow-md shadow-brand-red/20'
+                        : 'bg-white border border-zinc-200 text-zinc-600 hover:border-zinc-300 active:bg-zinc-50'
                     }`}
                   >
-                    {isDoces ? "🍩 " : "🍕 "}
+                    <span className={`flex items-center justify-center w-5 h-5 rounded-md ${isSelected ? 'bg-white/20' : iconBg}`}>
+                      <CatIcon className={`w-3 h-3 ${isSelected ? 'text-white' : iconColor}`} strokeWidth={2.5} />
+                    </span>
                     {category.name}
                   </button>
                 );
@@ -298,7 +300,7 @@ export default function NovoPedidoPage() {
               <p className="text-zinc-400 font-black text-[10px] uppercase tracking-[0.2em]">Sem produtos disponíveis</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProducts.map(product => (
                 <div 
                   key={product.id} 
@@ -340,9 +342,9 @@ export default function NovoPedidoPage() {
         </div>
       </div>
 
-      {/* Floating Cart - Fixed bottom offset for Nav Bar */}
+      {/* Floating Cart - Fixed bottom offset for Nav Bar, shifts right on desktop */}
       {items.length > 0 && !isCheckoutOpen && !selectedProduct && (
-        <div className="fixed bottom-24 left-4 right-4 z-[60] animate-in slide-in-from-bottom-8">
+        <div className="fixed bottom-24 md:bottom-8 left-4 right-4 lg:left-[calc(240px+1rem)] z-[60] animate-in slide-in-from-bottom-8 lg:max-w-md">
           <button
             onClick={() => setIsCheckoutOpen(true)}
             className="w-full bg-brand-charcoal text-white rounded-2xl p-1 shadow-2xl shadow-black/40 flex items-center active:scale-[0.98] transition-all group"
@@ -503,3 +505,31 @@ export default function NovoPedidoPage() {
     </div>
   );
 }
+
+function getCategoryMeta(name: string): {
+  icon: LucideIcon;
+  iconBg: string;
+  iconColor: string;
+} {
+  const n = name.toLowerCase();
+  if (n.includes('salgado') || n.includes('savory') || n.includes('tradicional'))
+    return { icon: Sandwich, iconBg: 'bg-orange-100', iconColor: 'text-orange-600' };
+  if (n.includes('doce') || n.includes('sweet') || n.includes('sobremesa'))
+    return { icon: Cookie, iconBg: 'bg-pink-100', iconColor: 'text-pink-500' };
+  if (n.includes('suco') || n.includes('juice') || n.includes('vitamina') || n.includes('água'))
+    return { icon: GlassWater, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-500' };
+  if (n.includes('café') || n.includes('coffee') || n.includes('quente') || n.includes('chá'))
+    return { icon: Coffee, iconBg: 'bg-amber-100', iconColor: 'text-amber-600' };
+  if (n.includes('batata') || n.includes('frit') || n.includes('porcao') || n.includes('porção'))
+    return { icon: Flame, iconBg: 'bg-yellow-100', iconColor: 'text-yellow-600' };
+  if (n.includes('especial') || n.includes('premium') || n.includes('gourmet'))
+    return { icon: Star, iconBg: 'bg-violet-100', iconColor: 'text-violet-500' };
+  if (n.includes('bebida') || n.includes('drink') || n.includes('refri'))
+    return { icon: Beer, iconBg: 'bg-blue-100', iconColor: 'text-blue-500' };
+  if (n.includes('carne') || n.includes('beef'))
+    return { icon: Beef, iconBg: 'bg-red-100', iconColor: 'text-red-600' };
+  if (n.includes('lanche') || n.includes('hamburguer') || n.includes('burger'))
+    return { icon: Hamburger, iconBg: 'bg-amber-100', iconColor: 'text-amber-700' };
+  return { icon: Utensils, iconBg: 'bg-zinc-100', iconColor: 'text-zinc-500' };
+}
+

@@ -2,30 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Home,
-  ListOrdered,
-  PlusCircle,
-  Printer,
-  UtensilsCrossed,
-  Wallet,
-} from "lucide-react";
+import { navItems } from "@/lib/nav-items";
 
 export function BottomNav() {
   const pathname = usePathname();
 
-  const navItems = [
-    { name: "Início", href: "/app", icon: Home },
-    { name: "Pedidos", href: "/app/pedidos", icon: ListOrdered },
-    { name: "Novo", href: "/app/novo-pedido", icon: PlusCircle },
-    { name: "Caixa", href: "/app/caixa", icon: Wallet },
-    { name: "Impresso", href: "/app/impressao", icon: Printer },
-    { name: "Cardápio", href: "/app/cardapio", icon: UtensilsCrossed },
-  ];
-
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white pb-safe shadow-[0_-2px_12px_-2px_rgba(0,0,0,0.08)]">
-      <div className="mx-auto flex h-16 max-w-md items-stretch px-1">
+    <nav
+      aria-label="Navegação principal"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white pb-safe shadow-[0_-2px_12px_-2px_rgba(0,0,0,0.08)]"
+    >
+      <div className="flex h-16 items-stretch px-1">
         {navItems.map((item) => {
           const isActive =
             item.href === "/app"
@@ -37,6 +24,7 @@ export function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? "page" : undefined}
               className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors ${
                 isActive
                   ? "text-brand-red"
