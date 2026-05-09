@@ -100,6 +100,18 @@ export interface CashReportResponse {
   };
 }
 
+export interface OrderRecord {
+  id: string;
+  daily_number: number;
+  status: string;
+  payment_status: string;
+  payment_method: string;
+  total_amount: number;
+  discount_amount: number | null;
+  packing_fee: number | null;
+  created_at: string;
+}
+
 export const reportsApi = {
   async getCashReport(filters: CashReportFilters): Promise<CashReportResponse> {
     const { data, error } = await supabase.functions.invoke('cash-report', {
@@ -108,6 +120,22 @@ export const reportsApi = {
 
     if (error) throw error;
     return data;
+  },
+
+  async getOrdersForDateRange(startISO: string, endISO: string): Promise<OrderRecord[]> {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, daily_number, status, payment_status, payment_method, total_amount, discount_amount, packing_fee, created_at")
+      .gte("created_at", startISO)
+      .lte("created_at", endISO)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => ({
+      ...row,
+      total_amount: Number(row.total_amount ?? 0),
+      discount_amount: row.discount_amount != null ? Number(row.discount_amount) : null,
+      packing_fee: row.packing_fee != null ? Number(row.packing_fee) : null,
+    }));
   },
 
   async getCategories() {
