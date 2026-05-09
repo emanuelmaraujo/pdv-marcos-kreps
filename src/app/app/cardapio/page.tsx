@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { menuApi, MenuData, CreateProductInput, CreateAddonInput, CreateCategoryInput } from "@/lib/api/menu-api";
 import {
   Loader2,
@@ -278,8 +277,7 @@ export default function CardapioPage() {
   if (loading) {
     return (
       <div className="flex flex-col h-full bg-background">
-        <PageHeader title="Cardápio" />
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex min-h-[50vh] flex-1 items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-brand-red" />
         </div>
       </div>
@@ -290,8 +288,7 @@ export default function CardapioPage() {
   if (error) {
     return (
       <div className="flex flex-col h-full bg-background">
-        <PageHeader title="Cardápio" />
-        <div className="p-4">
+        <div className="p-4 md:p-6">
           <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <p className="text-sm font-medium">{error}</p>
@@ -316,12 +313,11 @@ export default function CardapioPage() {
   // ─── Render ──────────────────────────────────────────
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
-      <PageHeader title="Gestão do Cardápio" />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* Role Banner */}
       {!isAdmin && (
-        <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 text-amber-800 text-xs font-medium flex items-start gap-2">
+        <div className="flex items-start gap-2 border-b border-amber-100 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800 md:px-6">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>
             Seu perfil permite visualizar apenas itens disponíveis. Alterações no
@@ -332,7 +328,7 @@ export default function CardapioPage() {
 
       {/* ADMIN Action Buttons */}
       {isAdmin && (
-        <div className="px-4 py-3 bg-white border-b border-zinc-100 flex gap-2 overflow-x-auto hide-scrollbar">
+        <div className="flex gap-2 overflow-x-auto border-b border-zinc-100 bg-white px-4 py-3 md:flex-wrap md:px-6 hide-scrollbar">
           <button
             onClick={() => {
               setSelectedProduct(null);
@@ -367,8 +363,8 @@ export default function CardapioPage() {
       )}
 
       {/* Main Tabs */}
-      <div className="bg-white border-b border-zinc-200">
-        <div className="flex p-1 m-3 bg-zinc-100 rounded-xl">
+      <div className="sticky top-14 z-20 border-b border-zinc-200 bg-white">
+        <div className="m-3 flex rounded-xl bg-zinc-100 p-1 md:mx-6 md:max-w-xl">
           <button
             onClick={() => setMainTab("products")}
             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
@@ -404,8 +400,8 @@ export default function CardapioPage() {
 
       {/* Sub-Tabs (only for products) */}
       {mainTab === "products" && (
-        <div className="bg-white border-b border-zinc-200 overflow-x-auto hide-scrollbar">
-          <div className="flex px-4 py-3 gap-2 min-w-max">
+        <div className="overflow-x-auto border-b border-zinc-200 bg-white hide-scrollbar">
+          <div className="flex min-w-max gap-2 px-4 py-3 md:px-6">
             {menuData.categories.map((category) => (
               <button
                 key={category.id}
@@ -423,7 +419,7 @@ export default function CardapioPage() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
+      <div className="flex-1 overflow-y-auto p-4 pb-24 md:p-6">
         {mainTab === "products" && (
           <ProductList
             products={currentProducts}
@@ -664,7 +660,7 @@ function ProductList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       {products.map((product) => {
         const isSaving = savingId === product.id;
         const isInactive = !product.active;
@@ -896,7 +892,7 @@ function AddonList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
       {addons.map((addon) => {
         const isSaving = savingId === addon.id;
         const isInactive = !addon.active;
@@ -1097,7 +1093,7 @@ function CategoryList({
   onEditCategory: (cat: Category) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
       {categories.map((cat) => (
         <div
           key={cat.id}

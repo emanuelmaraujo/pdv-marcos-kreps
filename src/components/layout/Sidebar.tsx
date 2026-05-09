@@ -28,8 +28,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         aria-label="Navegação lateral"
         className={[
           "hidden md:flex flex-col",
-          "fixed left-0 top-11 z-40",
-          "h-[calc(100vh-2.75rem)] w-[220px] lg:w-60",
+          "fixed left-0 top-14 z-40",
+          "h-[calc(100vh-3.5rem)] w-[220px] lg:w-60",
           "bg-brand-charcoal border-r border-zinc-700/60",
           "transition-transform duration-300",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",

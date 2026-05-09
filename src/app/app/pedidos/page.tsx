@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
@@ -23,6 +22,7 @@ export default function PedidosPage() {
   // Keep a ref to selectedOrder so the realtime callback can access the latest value
   // without capturing a stale closure.
   const selectedOrderRef = useRef<Order | null>(null);
+
   useEffect(() => {
     selectedOrderRef.current = selectedOrder;
   }, [selectedOrder]);
@@ -107,22 +107,10 @@ export default function PedidosPage() {
 
   return (
     <div className="flex flex-col h-full bg-[#F4F4F5]">
-      <PageHeader
-        title="Pedidos do Dia"
-        action={
-          <button
-            onClick={() => fetchOrders()}
-            className="p-2 bg-white rounded-lg border border-zinc-200 text-zinc-600 active:rotate-180 transition-transform duration-500"
-          >
-            <RefreshCw size={18} />
-          </button>
-        }
-      />
-
       {/* Search & Tabs */}
-      <div className="bg-white border-b border-zinc-200 sticky top-0 z-10 shadow-sm">
-        <div className="px-4 py-3">
-          <div className="relative">
+      <div className="sticky top-14 z-20 border-b border-zinc-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:px-6">
+          <div className="relative flex-1">
             <Search
               size={16}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
@@ -132,12 +120,20 @@ export default function PedidosPage() {
               placeholder="Buscar por número ou cliente..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-zinc-100 border border-zinc-100 rounded-xl text-sm font-bold placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-red focus:bg-white transition-all"
+              className="w-full rounded-xl border border-zinc-100 bg-zinc-100 py-2.5 pl-10 pr-4 text-sm font-bold transition-all placeholder:text-zinc-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-red"
             />
           </div>
+          <button
+            onClick={() => fetchOrders()}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 transition-all hover:bg-zinc-50 active:rotate-180"
+            aria-label="Atualizar pedidos"
+          >
+            <RefreshCw size={16} />
+            <span>Atualizar</span>
+          </button>
         </div>
 
-        <div className="flex space-x-2 px-4 pb-4 overflow-x-auto hide-scrollbar">
+        <div className="flex space-x-2 overflow-x-auto px-4 pb-4 md:px-6 hide-scrollbar">
           <button
             onClick={() => setActiveTab("TODOS")}
             className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase transition-all ${

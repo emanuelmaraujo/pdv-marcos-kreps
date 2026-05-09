@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent } from "@/components/ui/Card";
 import Link from "next/link";
-import { CirclePlus, ClipboardList, BookOpen, Banknote, SlidersHorizontal, Users } from "lucide-react";
+import {
+  Banknote,
+  BookOpen,
+  CirclePlus,
+  ClipboardList,
+  SlidersHorizontal,
+  Users,
+} from "lucide-react";
+import { Card, CardContent } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AppDashboard() {
@@ -13,15 +19,17 @@ export default function AppDashboard() {
 
   useEffect(() => {
     async function checkRole() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
           .single();
-        
-        if (profile?.role === 'ADMIN') {
+
+        if (profile?.role === "ADMIN") {
           setIsAdmin(true);
         }
       }
@@ -78,29 +86,26 @@ export default function AppDashboard() {
   ];
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Marcos Krep's" subtitle="Painel do atendente" />
-      <div className="p-4 md:p-6 lg:p-8 space-y-5 flex-1 overflow-y-auto">
-
-        <div className="lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start">
-          {/* Left column — shortcuts */}
-          <div className="lg:col-span-2 space-y-5">
-            <div>
-              <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
+    <div className="flex h-full flex-col">
+      <div className="flex-1 space-y-5 p-4 md:p-6 lg:p-8">
+        <div className="lg:grid lg:grid-cols-3 lg:items-start lg:gap-8">
+          <div className="space-y-5 lg:col-span-2">
+            <section>
+              <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
                 Atalhos
               </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3">
-                {shortcuts.map((s) => {
-                  const Icon = s.icon;
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                {shortcuts.map((shortcut) => {
+                  const Icon = shortcut.icon;
                   return (
-                    <Link key={s.href} href={s.href}>
-                      <Card className="hover:border-zinc-200 active:scale-[0.97] transition-all border-zinc-100 h-full">
-                        <CardContent className="p-4 flex flex-col items-center justify-center space-y-2.5 aspect-square">
-                          <div className={`p-3.5 rounded-2xl ${s.bg}`}>
-                            <Icon className={`w-7 h-7 ${s.color}`} />
+                    <Link key={shortcut.href} href={shortcut.href}>
+                      <Card className="h-full border-zinc-100 transition-all hover:border-zinc-200 active:scale-[0.97]">
+                        <CardContent className="flex aspect-square flex-col items-center justify-center space-y-2.5 p-4">
+                          <div className={`rounded-2xl p-3.5 ${shortcut.bg}`}>
+                            <Icon className={`h-7 w-7 ${shortcut.color}`} />
                           </div>
-                          <span className="font-semibold text-sm text-brand-charcoal text-center">
-                            {s.title}
+                          <span className="text-center text-sm font-semibold text-brand-charcoal">
+                            {shortcut.title}
                           </span>
                         </CardContent>
                       </Card>
@@ -108,25 +113,25 @@ export default function AppDashboard() {
                   );
                 })}
               </div>
-            </div>
+            </section>
 
             {isAdmin && (
-              <div>
-                <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
+              <section>
+                <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
                   Administração
                 </h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3">
-                  {adminShortcuts.map((s) => {
-                    const Icon = s.icon;
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {adminShortcuts.map((shortcut) => {
+                    const Icon = shortcut.icon;
                     return (
-                      <Link key={s.href} href={s.href}>
-                        <Card className="hover:border-zinc-200 active:scale-[0.97] transition-all border-zinc-100 h-full">
-                          <CardContent className="p-4 flex flex-col items-center justify-center space-y-2.5 aspect-square">
-                            <div className={`p-3.5 rounded-2xl ${s.bg}`}>
-                              <Icon className={`w-7 h-7 ${s.color}`} />
+                      <Link key={shortcut.href} href={shortcut.href}>
+                        <Card className="h-full border-zinc-100 transition-all hover:border-zinc-200 active:scale-[0.97]">
+                          <CardContent className="flex aspect-square flex-col items-center justify-center space-y-2.5 p-4">
+                            <div className={`rounded-2xl p-3.5 ${shortcut.bg}`}>
+                              <Icon className={`h-7 w-7 ${shortcut.color}`} />
                             </div>
-                            <span className="font-semibold text-sm text-brand-charcoal text-center">
-                              {s.title}
+                            <span className="text-center text-sm font-semibold text-brand-charcoal">
+                              {shortcut.title}
                             </span>
                           </CardContent>
                         </Card>
@@ -134,35 +139,33 @@ export default function AppDashboard() {
                     );
                   })}
                 </div>
-              </div>
+              </section>
             )}
           </div>
 
-          {/* Right column — quick summary (full-width on mobile, sidebar on desktop) */}
-          <div className="mt-5 lg:mt-0">
-            <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3">
+          <section className="mt-5 lg:mt-0">
+            <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
               Resumo Rápido
             </h2>
             <Card>
-              <CardContent className="p-4 space-y-1">
-                <div className="flex justify-between items-center py-2.5 border-b border-zinc-100">
+              <CardContent className="space-y-1 p-4">
+                <div className="flex items-center justify-between border-b border-zinc-100 py-2.5">
                   <span className="text-sm text-zinc-600">Aguardando Confirmação</span>
                   <span className="font-bold text-brand-amber">0</span>
                 </div>
-                <div className="flex justify-between items-center py-2.5 border-b border-zinc-100">
+                <div className="flex items-center justify-between border-b border-zinc-100 py-2.5">
                   <span className="text-sm text-zinc-600">Na Fila</span>
                   <span className="font-bold text-brand-charcoal">0</span>
                 </div>
-                <div className="flex justify-between items-center py-2.5">
+                <div className="flex items-center justify-between py-2.5">
                   <span className="text-sm text-zinc-600">Prontos</span>
                   <span className="font-bold text-emerald-600">0</span>
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </section>
         </div>
       </div>
     </div>
   );
 }
-

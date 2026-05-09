@@ -8,7 +8,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { LoadingState } from "@/components/feedback/LoadingState";
 
-/** Inner layout — consumes UserContext (must be inside <UserProvider>) */
+/** Inner layout - consumes UserContext (must be inside <UserProvider>) */
 function AppShell({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useUser();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -28,20 +28,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return null; // redirect is in-flight
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-background">
       <TopBar
         sidebarOpen={sidebarOpen}
-        onSidebarToggle={() => setSidebarOpen((o) => !o)}
+        onSidebarToggle={() => setSidebarOpen((open) => !open)}
       />
-
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      {/* Main content — shifts right on desktop to clear the fixed sidebar */}
-      <main className="pt-11 pb-20 md:pb-6 lg:ml-60 overflow-y-auto min-h-[calc(100vh-2.75rem)]">
-        {children}
+      <main className="min-h-[calc(100vh-3.5rem)] overflow-y-auto pb-20 pt-14 md:pb-6 lg:ml-60">
+        <div className="mx-auto w-full max-w-7xl">{children}</div>
       </main>
 
       <BottomNav />
