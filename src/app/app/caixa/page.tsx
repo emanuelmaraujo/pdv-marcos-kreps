@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -19,9 +19,11 @@ import {
   RefreshCw,
   ShoppingBag,
   Target,
+  TrendingDown,
   TrendingUp,
   Trophy,
   Wallet,
+  Zap,
 } from "lucide-react";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -122,7 +124,7 @@ export default function CaixaPage() {
     };
   }, []);
 
-  const insights = useMemo(() => (data ? buildCashInsights(data) : []), [data]);
+  // insights are computed inline inside InsightGrid using data directly
   const lastUpdate = data?.generatedAt
     ? timeFormatter.format(new Date(data.generatedAt))
     : null;
@@ -197,7 +199,7 @@ export default function CaixaPage() {
                   <MetricCard label="Ticket médio" value={currency.format(data.summary.ticketMedio)} sub="Recebido / pagos" icon={CreditCard} tone="blue" hidden={data.role === "ATTENDANT"} />
                   <MetricCard label="Pedidos" value={String(data.summary.totalPedidos)} sub={`${data.summary.pedidosCancelados} cancelados`} icon={ShoppingBag} tone="zinc" />
                 </section>
-                <InsightGrid insights={insights} />
+                <InsightGrid data={data} />
                 <PendingOrdersSection orders={data.pendingOrders} />
               </div>
             )}
@@ -597,19 +599,105 @@ function MetricCard({
   );
 }
 
-function InsightGrid({ insights }: { insights: CashInsight[] }) {
+interface CashInsightCard {
+  title: string;
+  value: string;
+  description: string;
+  icon: React.ElementType;
+  tone: "teal" | "amber" | "red" | "emerald" | "blue" | "violet";
+}
+
+function InsightGrid({ data }: { data: CaixaData }) {
+  const bestPayment = data.paymentBreakdown
+    .filter((i) => i.method !== "PENDING" && i.method !== "COURTESY")
+    .sort((a, b) => b.total - a.total)[0];
+
+  const topProduct = data.topProducts[0];
+
+  const peakHourLabel = data.summary.horaDePico !== null
+    ? `${String(data.summary.horaDePico).padStart(2, "0")}h–${String((data.summary.horaDePico + 1) % 24).padStart(2, "0")}h`
+    : null;
+
+  const cards: CashInsightCard[] = [
+    {
+      title: "Pagamento líder",
+      value: bestPayment ? bestPayment.label : "—",
+      description: bestPayment
+        ? `${currency.format(bestPayment.total)} em ${bestPayment.count} pedidos`
+        : "Nenhum pagamento recebido ainda",
+      icon: TrendingUp,
+      tone: "teal",
+    },
+    {
+      title: "Produto motor",
+      value: topProduct ? `${topProduct.quantity} un.` : "—",
+      description: topProduct
+        ? `${topProduct.name} · ${currency.format(topProduct.revenue)}`
+        : "Sem produto líder ainda",
+      icon: Trophy,
+      tone: "amber",
+    },
+    {
+      title: "Taxa de cancelamento",
+      value: `${data.summary.taxaCancelamento}%`,
+      description: `${data.summary.pedidosCancelados} de ${data.summary.totalPedidos} pedidos cancelados`,
+      icon: data.summary.taxaCancelamento > 10 ? TrendingDown : CheckCircle2,
+      tone: data.summary.taxaCancelamento > 10 ? "red" : "emerald",
+    },
+    {
+      title: "Hora de pico",
+      value: peakHourLabel ?? "—",
+      description: peakHourLabel
+        ? "Período com maior concentração de pedidos"
+        : "Dados insuficientes para calcular",
+      icon: Zap,
+      tone: "violet",
+    },
+    {
+      title: "Risco de caixa",
+      value: currency.format(data.summary.totalPendente),
+      description: `${data.summary.pedidosPendentes} ${data.summary.pedidosPendentes === 1 ? "pedido pendente" : "pedidos pendentes"} sem baixa`,
+      icon: AlertTriangle,
+      tone: data.summary.pedidosPendentes > 0 ? "red" : "emerald",
+    },
+    {
+      title: "Ticket médio",
+      value: currency.format(data.summary.ticketMedio),
+      description: `Calculado sobre ${data.summary.pedidosPagos} pedidos pagos`,
+      icon: CreditCard,
+      tone: "blue",
+    },
+  ];
+
+  const toneStyles: Record<string, string> = {
+    teal:    "border-teal-100 bg-teal-50/70 text-teal-600",
+    amber:   "border-amber-100 bg-amber-50/70 text-amber-600",
+    red:     "border-red-100 bg-red-50/70 text-red-600",
+    emerald: "border-emerald-100 bg-emerald-50/70 text-emerald-600",
+    blue:    "border-blue-100 bg-blue-50/70 text-blue-600",
+    violet:  "border-violet-100 bg-violet-50/70 text-violet-600",
+  };
+
   return (
-    <section className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-      {insights.map((insight) => (
-        <Card key={insight.title} className={insight.className}>
-          <CardContent className="p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-zinc-500">{insight.title}</p>
-            <p className="mt-2 text-sm font-semibold leading-relaxed text-brand-charcoal">
-              {insight.description}
-            </p>
-          </CardContent>
-        </Card>
-      ))}
+    <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {cards.map((card) => {
+        const Icon = card.icon;
+        const style = toneStyles[card.tone];
+        return (
+          <Card key={card.title} className={`border ${style.split(" ").slice(0, 2).join(" ")}`}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{card.title}</p>
+                <span className={`rounded-lg p-1.5 ${style.split(" ").slice(0, 2).join(" ")}`}>
+                  <Icon className={`h-3.5 w-3.5 ${style.split(" ")[2]}`} />
+                </span>
+              </div>
+              <p className={`text-2xl font-black leading-tight ${style.split(" ")[2]}`}>{card.value}</p>
+              <p className="mt-1.5 text-xs font-semibold text-zinc-500 leading-snug">{card.description}</p>
+            </CardContent>
+          </Card>
+        );
+      })}
     </section>
   );
 }
@@ -817,47 +905,6 @@ function AttentionRow({
   );
 }
 
-interface CashInsight {
-  title: string;
-  description: string;
-  className: string;
-}
-
-function buildCashInsights(data: CaixaData): CashInsight[] {
-  const bestPayment = data.paymentBreakdown
-    .filter((item) => item.method !== "PENDING" && item.method !== "COURTESY")
-    .sort((a, b) => b.total - a.total)[0];
-  const topProduct = data.topProducts[0];
-  const pendingRate =
-    data.summary.totalPedidos > 0
-      ? Math.round((data.summary.pedidosPendentes / data.summary.totalPedidos) * 100)
-      : 0;
-
-  return [
-    {
-      title: "Pagamento líder",
-      description: bestPayment
-        ? `${bestPayment.label} é o meio mais usado hoje, com ${currency.format(bestPayment.total)} em ${bestPayment.count} pedidos.`
-        : "Ainda não há pagamento recebido para identificar o canal principal.",
-      className: "border-teal-100 bg-teal-50/70",
-    },
-    {
-      title: "Produto motor",
-      description: topProduct
-        ? `${topProduct.name} lidera o dia com ${topProduct.quantity} unidades e ${currency.format(topProduct.revenue)}.`
-        : "Sem produto líder por enquanto.",
-      className: "border-amber-100 bg-amber-50/70",
-    },
-    {
-      title: "Risco de caixa",
-      description:
-        pendingRate > 0
-          ? `${pendingRate}% dos pedidos ainda têm pagamento pendente. Priorize a baixa antes do fechamento.`
-          : "Nenhum pagamento pendente no momento.",
-      className: pendingRate > 0 ? "border-red-100 bg-red-50/70" : "border-emerald-100 bg-emerald-50/70",
-    },
-  ];
-}
 
 function statusLabel(status: OrderStatus): string {
   const labels: Record<OrderStatus, string> = {

@@ -38,6 +38,8 @@ export interface DaySummary {
   pedidosCancelados: number;
   pedidosCortesia: number;
   pedidosComDesconto: number;
+  taxaCancelamento: number;   // percentage 0–100
+  horaDePico: number | null;  // hour 0–23, null if no orders
 }
 
 export interface PaymentBreakdown {
@@ -189,6 +191,19 @@ export const cashApi = {
 
     const totalRecebido = sumOrders(paid);
 
+    // Peak hour: hour with most orders created
+    let horaDePico: number | null = null;
+    if (orders.length > 0) {
+      const hourCounts: Record<number, number> = {};
+      for (const o of orders) {
+        const h = new Date(o.created_at).getHours();
+        hourCounts[h] = (hourCounts[h] ?? 0) + 1;
+      }
+      horaDePico = Number(
+        Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0][0]
+      );
+    }
+
     const summary: DaySummary = {
       totalBruto: sumOrders(nonCancelled),
       totalRecebido,
@@ -211,6 +226,10 @@ export const cashApi = {
       pedidosCortesia: courtesy.length,
       pedidosComDesconto: nonCancelled.filter((order) => money(order.discount_amount) > 0)
         .length,
+      taxaCancelamento: orders.length > 0
+        ? Math.round((cancelled.length / orders.length) * 100)
+        : 0,
+      horaDePico,
     };
 
     const paymentBreakdown: PaymentBreakdown[] = PAYMENT_METHODS.map((method) => {

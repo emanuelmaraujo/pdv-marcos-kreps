@@ -25,10 +25,18 @@ type TabStatus =
   | "ENTREGUE"
   | "CANCELADO";
 
-const currency = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
+const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+// Order for "TODOS" tab: NA_FILA → PRONTO → AGUARDANDO_CONFIRMACAO → ENTREGUE → rest
+const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
+  NA_FILA: 0,
+  AGUARDANDO_CONFIRMACAO: 1,
+  AGUARDANDO_PAGAMENTO: 2,
+  PRONTO: 3,
+  ENTREGUE: 4,
+  CANCELADO: 5,
+  EXPIRADO: 6,
+};
 
 export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -37,20 +45,25 @@ export default function PedidosPage() {
   const [activeTab, setActiveTab] = useState<TabStatus>("NA_FILA");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const selectedOrderRef = useRef<Order | null>(null);
 
   useEffect(() => {
     selectedOrderRef.current = selectedOrder;
   }, [selectedOrder]);
 
+  // Tick every 30s to refresh timers on cards
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const fetchOrders = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     setError("");
-
     try {
       const data = await ordersApi.getTodayOrders();
       setOrders(data || []);
-
       const current = selectedOrderRef.current;
       if (current) {
         const updated = data.find((order) => order.id === current.id);
@@ -64,28 +77,16 @@ export default function PedidosPage() {
   }, []);
 
   useEffect(() => {
-    const initialLoadTimer = window.setTimeout(() => {
-      fetchOrders();
-    }, 0);
-
+    const timer = window.setTimeout(() => fetchOrders(), 0);
     const supabase = createClient();
     const channel = supabase
       .channel("orders-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-        },
-        () => {
-          fetchOrders(false);
-        },
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+        fetchOrders(false);
+      })
       .subscribe();
-
     return () => {
-      window.clearTimeout(initialLoadTimer);
+      window.clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [fetchOrders]);
@@ -98,34 +99,41 @@ export default function PedidosPage() {
   const waitingCount = getCount("AGUARDANDO_CONFIRMACAO");
   const pendingPaymentCount = orders.filter((order) => order.payment_status === "PENDING").length;
   const receivedTotal = orders
-    .filter((order) => order.payment_status === "PAID" || order.payment_status === "COURTESY")
-    .reduce((sum, order) => sum + order.total_amount, 0);
+    .filter((o) => o.payment_status === "PAID" || o.payment_status === "COURTESY")
+    .reduce((sum, o) => sum + o.total_amount, 0);
 
   const tabs: { id: TabStatus; label: string; count?: number }[] = [
     { id: "NA_FILA", label: "Na fila", count: queueCount },
     { id: "PRONTO", label: "Prontos", count: readyCount },
-    {
-      id: "AGUARDANDO_CONFIRMACAO",
-      label: "Aguardando",
-      count: waitingCount,
-    },
+    { id: "AGUARDANDO_CONFIRMACAO", label: "Aguardando", count: waitingCount },
     { id: "ENTREGUE", label: "Entregues", count: getCount("ENTREGUE") },
     { id: "CANCELADO", label: "Cancelados", count: getCount("CANCELADO") },
   ];
 
-  const filteredOrders = orders.filter((order) => {
-    const normalizedSearch = searchQuery.toLowerCase().trim();
-    const matchesTab = activeTab === "TODOS" || order.status === activeTab;
-    const matchesSearch =
-      !normalizedSearch ||
-      String(order.daily_number).includes(normalizedSearch) ||
-      order.customer_name?.toLowerCase().includes(normalizedSearch);
-
-    return matchesTab && matchesSearch;
-  });
+  const filteredOrders = orders
+    .filter((order) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesTab = activeTab === "TODOS" || order.status === activeTab;
+      const matchesSearch =
+        !q ||
+        String(order.daily_number).includes(q) ||
+        order.customer_name?.toLowerCase().includes(q);
+      return matchesTab && matchesSearch;
+    })
+    .sort((a, b) => {
+      if (activeTab !== "TODOS") {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      // TODOS: sort by status group first, then by created_at ascending within group
+      const statusDiff =
+        (STATUS_SORT_ORDER[a.status] ?? 99) - (STATUS_SORT_ORDER[b.status] ?? 99);
+      if (statusDiff !== 0) return statusDiff;
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
 
   return (
     <div className="flex min-h-full flex-col bg-[#F5F7FA] px-3 pb-6 pt-0 md:px-6 md:pt-4 lg:px-8">
+      {/* Header */}
       <section className="z-20 -mx-3 border-b border-zinc-200 bg-white/95 px-3 py-3 shadow-sm backdrop-blur md:sticky md:top-14 md:mx-0 md:rounded-2xl md:border md:p-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <div className="relative flex-1">
@@ -134,7 +142,7 @@ export default function PedidosPage() {
               type="text"
               placeholder="Buscar por número ou cliente..."
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="h-12 w-full rounded-2xl border border-zinc-100 bg-zinc-100 pl-11 pr-4 text-sm font-bold text-zinc-800 transition-all placeholder:text-zinc-400 focus:border-brand-red/30 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-red/10"
             />
           </div>
@@ -147,7 +155,6 @@ export default function PedidosPage() {
             <button
               onClick={() => fetchOrders()}
               className="col-span-2 inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-xs font-black uppercase text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 active:scale-[0.98] sm:col-span-1"
-              aria-label="Atualizar pedidos"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin text-brand-red" : ""}`} />
               <span>Atualizar</span>
@@ -155,13 +162,9 @@ export default function PedidosPage() {
           </div>
         </div>
 
+        {/* Tabs */}
         <div className="mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-zinc-100 p-1 hide-scrollbar">
-          <OrderTab
-            active={activeTab === "TODOS"}
-            label="Todos"
-            count={orders.length}
-            onClick={() => setActiveTab("TODOS")}
-          />
+          <OrderTab active={activeTab === "TODOS"} label="Todos" count={orders.length} onClick={() => setActiveTab("TODOS")} />
           {tabs.map((tab) => (
             <OrderTab
               key={tab.id}
@@ -174,21 +177,17 @@ export default function PedidosPage() {
         </div>
       </section>
 
-      <div className="flex-1 overflow-y-auto py-4 md:py-6">
+      {/* Cards */}
+      <div className="flex-1 overflow-y-auto pt-5 md:pt-6">
         {isLoading && orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center space-y-4 rounded-2xl border border-dashed border-zinc-200 bg-white p-12 text-zinc-400">
             <RefreshCw size={32} className="animate-spin text-brand-red" />
-            <p className="text-sm font-bold uppercase tracking-widest">
-              Sincronizando pedidos...
-            </p>
+            <p className="text-sm font-bold uppercase tracking-widest">Sincronizando pedidos...</p>
           </div>
         ) : error ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-center">
             <p className="text-sm font-bold text-red-700">{error}</p>
-            <button
-              onClick={() => fetchOrders()}
-              className="mt-2 text-xs font-black uppercase tracking-widest text-red-500"
-            >
+            <button onClick={() => fetchOrders()} className="mt-2 text-xs font-black uppercase tracking-widest text-red-500">
               Tentar novamente
             </button>
           </div>
@@ -196,19 +195,16 @@ export default function PedidosPage() {
           <div className="py-12">
             <EmptyState
               title={searchQuery ? "Nenhum resultado" : "Tudo limpo por aqui"}
-              description={
-                searchQuery
-                  ? "Tente buscar por outro termo."
-                  : "Não há pedidos para o status selecionado."
-              }
+              description={searchQuery ? "Tente buscar por outro termo." : "Não há pedidos para o status selecionado."}
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 pb-24 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 pb-24 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {filteredOrders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
+                now={now}
                 onClick={(item) => setSelectedOrder(item)}
               />
             ))}
@@ -246,7 +242,6 @@ function QuickMetric({
     emerald: "bg-emerald-50 text-emerald-700",
     blue: "bg-blue-50 text-blue-700",
   };
-
   return (
     <div className={`flex h-12 min-w-0 items-center gap-2 rounded-2xl px-3 ${toneClass[tone]}`}>
       <Icon className="h-4 w-4 shrink-0" />
@@ -261,33 +256,17 @@ function QuickMetric({
   );
 }
 
-function OrderTab({
-  active,
-  label,
-  count,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  count?: number;
-  onClick: () => void;
-}) {
+function OrderTab({ active, label, count, onClick }: { active: boolean; label: string; count?: number; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-xs font-black uppercase tracking-wide transition-all ${
-        active
-          ? "bg-brand-red text-white shadow-sm"
-          : "text-zinc-500 hover:bg-white hover:text-zinc-700"
+        active ? "bg-brand-red text-white shadow-sm" : "text-zinc-500 hover:bg-white hover:text-zinc-700"
       }`}
     >
       <span>{label}</span>
       {count !== undefined && (
-        <span
-          className={`rounded-lg px-1.5 py-0.5 text-[10px] ${
-            active ? "bg-white/20 text-white" : "bg-white text-zinc-500"
-          }`}
-        >
+        <span className={`rounded-lg px-1.5 py-0.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-white text-zinc-500"}`}>
           {count}
         </span>
       )}
