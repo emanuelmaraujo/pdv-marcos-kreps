@@ -78,6 +78,9 @@ export default function GestaoUsuarios() {
   const [resetUser, setResetUser] = useState<UserProfile | null>(null);
   const [saving, setSaving] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [biometricPassword, setBiometricPassword] = useState("");
+  const [biometricSaving, setBiometricSaving] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -94,7 +97,10 @@ export default function GestaoUsuarios() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setCurrentUserId(user.id);
+      if (user) {
+        setCurrentUserId(user.id);
+        setCurrentUserEmail(user.email ?? null);
+      }
     });
   }, [supabase]);
 
@@ -189,13 +195,43 @@ export default function GestaoUsuarios() {
     }
   }
 
-  async function handleBiometricSetup() {
+  async function handleBiometricSetup(e: React.FormEvent) {
+    e.preventDefault();
+    if (!currentUserEmail) return;
     if (!("credentials" in navigator) || !("PasswordCredential" in window)) {
       addToast("error", "Seu dispositivo não suporta acesso com digital.");
       return;
     }
-    setIsBiometricModalOpen(false);
-    addToast("success", "Para configurar a digital, faça logout e login novamente — o sistema salvará suas credenciais automaticamente.");
+    if (biometricPassword.length < 6) {
+      addToast("error", "Digite sua senha atual para confirmar o vínculo.");
+      return;
+    }
+
+    setBiometricSaving(true);
+    try {
+      // Verify password before storing by signing in
+      const { error: authErr } = await supabase.auth.signInWithPassword({
+        email: currentUserEmail,
+        password: biometricPassword,
+      });
+      if (authErr) {
+        addToast("error", "Senha incorreta. Verifique e tente novamente.");
+        return;
+      }
+
+      // Store credential — OS will prompt biometric enrollment
+      const PasswordCredential = (window as unknown as Record<string, unknown>).PasswordCredential as new (init: { id: string; password: string }) => Credential;
+      const cred = new PasswordCredential({ id: currentUserEmail, password: biometricPassword });
+      await navigator.credentials.store(cred);
+
+      addToast("success", "Digital vinculada com sucesso! Use-a no próximo login.");
+      setIsBiometricModalOpen(false);
+      setBiometricPassword("");
+    } catch {
+      addToast("error", "Não foi possível vincular a digital. Tente novamente.");
+    } finally {
+      setBiometricSaving(false);
+    }
   }
 
   const filteredUsers = users.filter(
@@ -548,35 +584,40 @@ export default function GestaoUsuarios() {
       </BottomSheet>
 
       {/* Biometric modal */}
-      <BottomSheet isOpen={isBiometricModalOpen} onClose={() => setIsBiometricModalOpen(false)} title="Acesso com Digital / Face ID">
-        <div className="p-8 space-y-6">
-          <div className="flex flex-col items-center gap-4 py-4">
+      <BottomSheet isOpen={isBiometricModalOpen} onClose={() => { setIsBiometricModalOpen(false); setBiometricPassword(""); }} title="Vincular Digital / Face ID">
+        <form onSubmit={handleBiometricSetup} className="p-8 space-y-6">
+          <div className="flex flex-col items-center gap-3 py-2">
             <div className="w-20 h-20 rounded-full bg-indigo-50 flex items-center justify-center">
               <Fingerprint size={40} className="text-indigo-500" />
             </div>
-            <div className="text-center space-y-2">
-              <p className="font-bold text-zinc-800">Como funciona o acesso com digital?</p>
+            <div className="text-center space-y-1">
+              <p className="font-bold text-zinc-800">Confirme sua identidade</p>
               <p className="text-sm text-zinc-500 leading-relaxed">
-                Ao fazer login com e-mail e senha, o sistema oferecerá salvar suas credenciais no dispositivo. Em acessos futuros, basta usar sua digital, Face ID ou PIN do dispositivo para entrar automaticamente.
+                Digite sua senha para vincular sua digital ou Face ID a esta conta. O dispositivo pedirá confirmação biométrica.
               </p>
             </div>
           </div>
 
-          <div className="bg-indigo-50 rounded-2xl p-4 space-y-2">
-            <p className="text-xs font-black text-indigo-700 uppercase tracking-wider">Passos para configurar:</p>
-            <ol className="text-sm text-indigo-600 space-y-1 list-decimal list-inside">
-              <li>Faça logout da conta atual</li>
-              <li>Entre com e-mail e senha normalmente</li>
-              <li>Aceite o prompt para salvar credenciais no dispositivo</li>
-              <li>No próximo acesso, use digital ou Face ID</li>
-            </ol>
+          <div className="space-y-2">
+            <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Senha atual</label>
+            <div className="relative group">
+              <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />
+              <Input
+                required
+                type="password"
+                placeholder="Digite sua senha"
+                className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-indigo-500/10 transition-all text-base font-medium"
+                value={biometricPassword}
+                onChange={(e) => setBiometricPassword(e.target.value)}
+              />
+            </div>
           </div>
 
-          <Button onClick={handleBiometricSetup} className="w-full h-14 font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl">
+          <Button type="submit" loading={biometricSaving} className="w-full h-14 font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl">
             <Fingerprint size={20} className="mr-2" />
-            Entendido
+            Vincular digital agora
           </Button>
-        </div>
+        </form>
       </BottomSheet>
     </div>
   );

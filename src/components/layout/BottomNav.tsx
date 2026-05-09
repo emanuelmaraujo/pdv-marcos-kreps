@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
   ListOrdered,
@@ -9,10 +9,16 @@ import {
   Printer,
   UtensilsCrossed,
   Wallet,
+  LogOut,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+
+const SESSION_KEY = "pdv_login_time";
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const supabase = createClient();
 
   const navItems = [
     { name: "Início", href: "/app", icon: Home },
@@ -22,6 +28,12 @@ export function BottomNav() {
     { name: "Impresso", href: "/app/impressao", icon: Printer },
     { name: "Cardápio", href: "/app/cardapio", icon: UtensilsCrossed },
   ];
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    localStorage.removeItem(SESSION_KEY);
+    router.push("/login");
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white pb-safe shadow-[0_-2px_12px_-2px_rgba(0,0,0,0.08)]">
@@ -57,6 +69,14 @@ export function BottomNav() {
             </Link>
           );
         })}
+
+        <button
+          onClick={handleLogout}
+          className="relative flex flex-1 flex-col items-center justify-center gap-0.5 text-zinc-400 active:text-red-500 transition-colors"
+        >
+          <LogOut className="h-[22px] w-[22px]" />
+          <span className="text-[10px] leading-none font-medium">Sair</span>
+        </button>
       </div>
     </nav>
   );
