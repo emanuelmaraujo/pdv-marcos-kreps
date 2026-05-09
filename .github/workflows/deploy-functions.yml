@@ -20,6 +20,12 @@ jobs:
         with:
           version: latest
 
+      - name: Validate project ref
+        run: |
+          PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
+          echo "Ref length: ${#PROJECT_REF}"
+          echo "Ref matches format: $(echo "$PROJECT_REF" | grep -cP '^[a-z0-9]{20}$' || echo 0)"
+
       - name: Deploy all Edge Functions
         run: |
           PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
