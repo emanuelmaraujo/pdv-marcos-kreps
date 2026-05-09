@@ -22,36 +22,28 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log(`[manage-users] Autenticando usuário...`);
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
     if (authError || !user) {
-      console.error("[manage-users] Erro de autenticação:", authError);
       throw new Error(`Não autorizado: ${authError?.message || 'Token inválido ou expirado'}`);
     }
 
-    console.log(`[manage-users] Verificando permissões para usuário: ${user.id}`);
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('role, active')
       .eq('id', user.id)
       .single();
 
-    if (profileError) {
-      console.error("[manage-users] Erro ao buscar perfil:", profileError);
-      throw new Error(`Erro ao validar permissões: ${profileError.message}`);
-    }
+    if (profileError) throw new Error(`Erro ao validar permissões: ${profileError.message}`);
 
     if (!profile || profile.role !== 'ADMIN' || !profile.active) {
-      console.warn(`[manage-users] Acesso negado para usuário ${user.id}: Role=${profile?.role}, Active=${profile?.active}`);
       throw new Error('Acesso negado: Apenas administradores ativos podem realizar esta ação.');
     }
 
     const body = await req.json();
     action = body.action;
     const data = body.data;
-    console.log(`[manage-users] Ação: ${action} | Dados:`, JSON.stringify(data));
 
     let responseData: any = {};
 
@@ -64,7 +56,7 @@ serve(async (req) => {
           .from('profiles')
           .select('*')
           .order('created_at', { ascending: false });
-        
+
         if (pErr) throw pErr;
 
         responseData = users.map(u => {
@@ -84,7 +76,7 @@ serve(async (req) => {
 
       case 'create_user': {
         const { email, password, name, role, active } = data;
-        
+
         if (!email || !password || !name || !role) {
           throw new Error('Campos obrigatórios ausentes (email, senha, nome, perfil).');
         }
@@ -95,18 +87,13 @@ serve(async (req) => {
           email_confirm: true,
           user_metadata: { name }
         });
-        
+
         if (createErr) throw createErr;
 
         const { error: insErr } = await supabaseAdmin
           .from('profiles')
-          .upsert({
-            id: newUser.user.id,
-            name,
-            role,
-            active: active ?? true
-          });
-        
+          .upsert({ id: newUser.user.id, name, role, active: active ?? true });
+
         if (insErr) throw insErr;
 
         await supabaseAdmin.from('audit_logs').insert({
@@ -129,7 +116,7 @@ serve(async (req) => {
           .from('profiles')
           .update({ name, role })
           .eq('id', id);
-        
+
         if (updErr) throw updErr;
 
         await supabaseAdmin.from('audit_logs').insert({
@@ -138,6 +125,23 @@ serve(async (req) => {
           table_name: 'profiles',
           record_id: id,
           new_data: { name, role }
+        });
+        break;
+      }
+
+      case 'reset_password': {
+        const { id, password } = data;
+        if (!id || !password) throw new Error('ID e nova senha são obrigatórios.');
+        if (password.length < 6) throw new Error('A senha deve ter pelo menos 6 caracteres.');
+
+        const { error: resetErr } = await supabaseAdmin.auth.admin.updateUserById(id, { password });
+        if (resetErr) throw resetErr;
+
+        await supabaseAdmin.from('audit_logs').insert({
+          user_id: user.id,
+          action: 'USER_PASSWORD_RESET',
+          table_name: 'profiles',
+          record_id: id
         });
         break;
       }
@@ -152,23 +156,19 @@ serve(async (req) => {
             .select('*', { count: 'exact', head: true })
             .eq('role', 'ADMIN')
             .eq('active', true);
-          
+
           if (countErr) throw countErr;
           if (count && count <= 1) {
             throw new Error('Você é o único administrador ativo. Não pode desativar seu próprio acesso.');
           }
         }
 
-        console.log(`[manage-users] Atualizando status do usuário ${id} para ${active}`);
         const { error: tglErr } = await supabaseAdmin
           .from('profiles')
           .update({ active })
           .eq('id', id);
-        
-        if (tglErr) {
-          console.error(`[manage-users] Erro ao atualizar status:`, tglErr);
-          throw tglErr;
-        }
+
+        if (tglErr) throw tglErr;
 
         await supabaseAdmin.from('audit_logs').insert({
           user_id: user.id,
@@ -190,8 +190,8 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error(`[manage-users] Erro na ação ${action}:`, error);
-    return new Response(JSON.stringify({ 
-      success: false, 
+    return new Response(JSON.stringify({
+      success: false,
       error: error.message,
       details: error.details || error.hint || null
     }), {
