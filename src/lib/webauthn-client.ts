@@ -37,19 +37,31 @@ async function callFn(
   payload: Record<string, unknown>,
   accessToken?: string,
 ): Promise<Record<string, unknown>> {
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    "apikey": anonKey,
+    // Always send Authorization — unauthenticated calls use anon key as bearer
+    "Authorization": `Bearer ${accessToken ?? anonKey}`,
   };
-  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
 
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/webauthn`,
     { method: "POST", headers, body: JSON.stringify({ action, ...payload }) },
   );
-  const json: { data?: Record<string, unknown>; error?: string } = await res.json();
-  if (json.error) throw new Error(json.error);
-  return json.data!;
+
+  // Gateway may return { message, code } on auth failure instead of { error }
+  const json = await res.json().catch(() => ({})) as {
+    data?: Record<string, unknown>;
+    error?: string;
+    message?: string;
+  };
+
+  if (!res.ok || json.error || json.message) {
+    throw new Error(json.error ?? json.message ?? `Erro ${res.status}`);
+  }
+  if (!json.data) throw new Error("Resposta inválida do servidor");
+  return json.data;
 }
 
 function getDeviceName(): string {
@@ -172,6 +184,8 @@ export async function authenticateWithPasskey(): Promise<{
 
   // 1. Get auth options (challenge + allowed credential IDs)
   const opts = await callFn("auth_begin", { userId: stored.userId });
+
+  if (!opts.allowCredentials) throw new Error("Sem credenciais registradas para este usuário");
 
   const allowCredentials = (
     opts.allowCredentials as Array<{ type: string; id: string }>
