@@ -79,10 +79,11 @@ function Section({
 
   return (
     <Card className="border-zinc-100 shadow-sm overflow-hidden">
+      {/* Header: clickable only on mobile */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 p-4 text-left md:cursor-default md:pointer-events-none"
+        className="flex w-full items-center gap-3 p-4 text-left md:cursor-default"
       >
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${iconBg}`}>
           <Icon className={`h-4 w-4 ${iconColor}`} />
@@ -91,13 +92,14 @@ function Section({
           <p className="font-bold text-brand-charcoal leading-tight">{title}</p>
           <p className="text-xs text-zinc-400 mt-0.5 truncate">{description}</p>
         </div>
+        {/* Chevron visible only on mobile */}
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform md:hidden ${open ? "rotate-180" : ""}`}
+          className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200 md:hidden ${open ? "rotate-180" : ""}`}
         />
       </button>
 
-      {/* Always visible on desktop, toggle on mobile */}
-      <div className={`md:block ${open ? "block" : "hidden"}`}>
+      {/* Content: always visible on md+, toggle on mobile */}
+      <div className={open ? "block" : "hidden md:block"}>
         <div className="border-t border-zinc-100 p-4 space-y-4">{children}</div>
       </div>
     </Card>
