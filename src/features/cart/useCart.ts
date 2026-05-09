@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Product, OrderType, OrderSource } from '@/types/pdv';
 
 export interface CartItem {
@@ -34,7 +35,9 @@ interface CartState {
   getEstimatedSubtotal: () => number;
 }
 
-export const useCart = create<CartState>((set, get) => ({
+export const useCart = create<CartState>()(
+  persist(
+    (set, get) => ({
   items: [],
   orderType: 'BALCAO',
   customerName: '',
@@ -81,12 +84,28 @@ export const useCart = create<CartState>((set, get) => ({
     // Estimativa visual simples. O cálculo real de total_amount é feito pelas Edge Functions.
     return get().items.reduce((total, item) => {
       let itemTotal = item.product.price;
-      
+
       // Calculate addons cost
       const addonsTotal = item.addons.reduce((acc, addon) => acc + (addon.price * addon.quantity), 0);
       itemTotal += addonsTotal;
-      
+
       return total + (itemTotal * item.quantity);
     }, 0);
   }
-}));
+    }),
+    {
+      name: 'pdv-cart',
+      storage: createJSONStorage(() => sessionStorage), // session-scoped: cleared on tab close
+      // Only persist the data fields, not the action functions
+      partialize: (state) => ({
+        items:         state.items,
+        orderType:     state.orderType,
+        customerName:  state.customerName,
+        customerPhone: state.customerPhone,
+        orderNotes:    state.orderNotes,
+        source:        state.source,
+        targetOrderId: state.targetOrderId,
+      }),
+    },
+  ),
+);
