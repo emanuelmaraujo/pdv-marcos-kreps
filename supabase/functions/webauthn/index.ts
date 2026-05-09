@@ -233,12 +233,16 @@ function arrayEq(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 function isAllowedOrigin(origin: string): boolean {
-  if (origin === `https://${RP_ID}`) return true;
-  if (origin === "https://marcoskreps.com.br") return true;
-  if (origin === "https://pdv-marcos-kreps.vercel.app") return true;
-  if (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")) return true;
-  if (origin.endsWith(".vercel.app")) return true;
-  return false;
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+    if (protocol !== "https:") return false;
+    if (hostname === RP_ID || hostname.endsWith(`.${RP_ID}`)) return true;
+    if (hostname.endsWith(".vercel.app")) return true;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /** Derives the WebAuthn rpId from the request Origin header.
