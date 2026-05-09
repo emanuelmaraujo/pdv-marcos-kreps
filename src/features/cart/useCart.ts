@@ -3,12 +3,13 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Product, OrderType, OrderSource } from '@/types/pdv';
 
 export interface CartItem {
-  id: string; // unique id for cart item
+  id: string;
   product: Product;
   quantity: number;
-  removed_ingredients: string[]; // array of ingredient IDs
-  addons: { addon_id: string; quantity: number; price: number }[];
+  removed_ingredients: string[];
+  addons: { addon_id: string; addon_name?: string; quantity: number; price: number }[];
   notes?: string;
+  is_takeout?: boolean;
 }
 
 interface CartState {

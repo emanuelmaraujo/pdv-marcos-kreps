@@ -160,7 +160,9 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
           quantity: item.quantity,
           removed_ingredient_ids: item.removed_ingredients,
           addons: item.addons.map((a) => ({ addon_id: a.addon_id, quantity: a.quantity })),
-          notes: item.notes,
+          notes: item.is_takeout
+            ? `[VIAGEM] ${item.notes || ""}`.trim()
+            : item.notes,
         })),
       };
 
@@ -284,9 +286,17 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                   <div key={item.id} className="p-4 flex flex-col gap-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className="font-black text-zinc-900 text-[13px]">
-                          {item.quantity}× {item.product.name}
-                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-black text-zinc-900 text-[13px]">
+                            {item.quantity}× {item.product.name}
+                          </p>
+                          {item.is_takeout && (
+                            <span className="flex items-center gap-1 bg-amber-50 border border-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide">
+                              <ShoppingBag size={10} />
+                              Para Levar
+                            </span>
+                          )}
+                        </div>
                         {item.removed_ingredients.length > 0 && (
                           <p className="text-[11px] text-brand-red font-bold mt-0.5 uppercase">
                             SEM: {item.removed_ingredients.join(", ")}
@@ -294,7 +304,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                         )}
                         {item.addons.length > 0 && (
                           <p className="text-[11px] text-emerald-600 font-bold mt-0.5 uppercase">
-                            +{item.addons.map((a) => `${a.quantity}× ${a.addon_id}`).join(", ")}
+                            +{item.addons.map((a) => `${a.quantity}× ${a.addon_name || a.addon_id}`).join(", ")}
                           </p>
                         )}
                         {item.notes && (
