@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -157,7 +156,6 @@ export default function ConfiguracoesSistema() {
   return (
     <div className="flex flex-col h-full bg-zinc-50/50">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <PageHeader title="Configurações" subtitle="Gerencie as regras do sistema" />
 
       <div className="p-4 md:p-6 lg:p-8 space-y-6 flex-1 overflow-y-auto pb-20">
         <div className="max-w-2xl lg:mx-auto">

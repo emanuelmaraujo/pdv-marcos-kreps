@@ -125,10 +125,10 @@ export default function PedidosPage() {
           </div>
           <button
             onClick={() => fetchOrders()}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 transition-all hover:bg-zinc-50 active:rotate-180"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 transition-all hover:bg-zinc-50 active:scale-[0.98]"
             aria-label="Atualizar pedidos"
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
             <span>Atualizar</span>
           </button>
         </div>

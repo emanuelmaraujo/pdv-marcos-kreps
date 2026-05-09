@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -239,11 +238,6 @@ export default function GestaoUsuarios() {
   return (
     <div className="flex flex-col h-full bg-zinc-50/50">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <PageHeader
-        title="Gestão de Usuários"
-        subtitle="Administre acessos e permissões da equipe"
-        className="px-6 pt-8 pb-4"
-      />
 
       <div className="p-6 space-y-8 flex-1 overflow-y-auto pb-32">
         {/* Stats */}

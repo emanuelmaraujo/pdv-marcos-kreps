@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Banknote,
   BarChart3,
+  CheckCircle2,
   Clock,
   CreditCard,
   Gift,
@@ -17,6 +18,7 @@ import {
   ReceiptText,
   RefreshCw,
   ShoppingBag,
+  Target,
   TrendingUp,
   Trophy,
   Wallet,
@@ -127,8 +129,8 @@ export default function CaixaPage() {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <div className="sticky top-14 z-20 border-b border-zinc-200 bg-white">
-        <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
+      <div className="border-b border-zinc-200 bg-background px-4 pt-4 md:px-6">
+        <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
             <CashTabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")} label="Visão" />
             <CashTabButton active={activeTab === "payments"} onClick={() => setActiveTab("payments")} label="Pagamentos" />
@@ -188,6 +190,7 @@ export default function CaixaPage() {
 
             {activeTab === "overview" && (
               <div className="space-y-5">
+                <ManagementOverview data={data} />
                 <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <MetricCard label="Recebido" value={currency.format(data.summary.totalRecebido)} sub={`${data.summary.pedidosPagos} pedidos pagos`} icon={TrendingUp} tone="emerald" />
                   <MetricCard label="Pendente" value={currency.format(data.summary.totalPendente)} sub={`${data.summary.pedidosPendentes} pedidos`} icon={Clock} tone="amber" />
@@ -212,23 +215,19 @@ export default function CaixaPage() {
             )}
 
             {activeTab === "sales" && (
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
-                <TopProductsSection products={data.topProducts} />
-                <StatusBreakdownSection items={data.statusBreakdown} />
+              <div className="space-y-5">
+                <SalesManagementSection data={data} />
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
+                  <TopProductsSection products={data.topProducts} />
+                  <StatusBreakdownSection items={data.statusBreakdown} />
+                </div>
               </div>
             )}
 
             {activeTab === "attention" && (
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.95fr_1.05fr]">
                 <PendingOrdersSection orders={data.pendingOrders} />
-                <Card>
-                  <CardContent className="space-y-3 p-4">
-                    <AttentionRow label="Pagamentos pendentes" value={currency.format(data.summary.totalPendente)} count={data.summary.pedidosPendentes} tone="amber" />
-                    <AttentionRow label="Cancelamentos" value={currency.format(data.summary.totalCancelado)} count={data.summary.pedidosCancelados} tone="red" />
-                    <AttentionRow label="Descontos aplicados" value={currency.format(data.summary.totalDescontos)} count={data.summary.pedidosComDesconto} tone="zinc" />
-                    <AttentionRow label="Cortesias" value={currency.format(data.summary.totalCortesia)} count={data.summary.pedidosCortesia} tone="violet" />
-                  </CardContent>
-                </Card>
+                <ClosingChecklist data={data} />
               </div>
             )}
           </div>
@@ -279,6 +278,237 @@ function HeroMini({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl bg-white/10 p-3">
       <p className="text-[10px] font-bold uppercase text-zinc-400">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-white">{value}</p>
+    </div>
+  );
+}
+
+function ManagementOverview({ data }: { data: CaixaData }) {
+  const totalOrders = data.summary.totalPedidos || 1;
+  const nonCancelled = Math.max(data.summary.totalPedidos - data.summary.pedidosCancelados, 1);
+  const paidRate = Math.round((data.summary.pedidosPagos / totalOrders) * 100);
+  const cancelRate = Math.round((data.summary.pedidosCancelados / totalOrders) * 100);
+  const pendingRisk = data.summary.totalPendente + data.summary.totalCancelado;
+  const bestPayment = data.paymentBreakdown
+    .filter((item) => item.method !== "PENDING" && item.method !== "COURTESY")
+    .sort((a, b) => b.total - a.total)[0];
+  const paymentShare =
+    bestPayment && data.summary.totalRecebido > 0
+      ? Math.round((bestPayment.total / data.summary.totalRecebido) * 100)
+      : 0;
+  const topProduct = data.topProducts[0];
+  const topProductShare =
+    topProduct && data.summary.totalBruto > 0
+      ? Math.round((topProduct.revenue / data.summary.totalBruto) * 100)
+      : 0;
+
+  return (
+    <Card className="border-zinc-200">
+      <CardContent className="space-y-4 p-4 md:p-5">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-zinc-400">
+              Painel gerencial
+            </p>
+            <h2 className="text-lg font-black text-brand-charcoal">
+              Leituras rápidas para decidir agora
+            </h2>
+          </div>
+          <p className="text-xs font-semibold text-zinc-400">
+            {data.summary.totalPedidos} pedidos · {nonCancelled} válidos
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <ManagementKpi
+            icon={CheckCircle2}
+            label="Saúde do caixa"
+            value={`${paidRate}% pagos`}
+            detail={`${data.summary.pedidosPendentes} pendentes · ${cancelRate}% cancelados`}
+            tone={paidRate >= 90 ? "emerald" : "amber"}
+          />
+          <ManagementKpi
+            icon={AlertTriangle}
+            label="Receita em risco"
+            value={currency.format(pendingRisk)}
+            detail="Pendente + cancelado no dia"
+            tone={pendingRisk > 0 ? "red" : "emerald"}
+          />
+          <ManagementKpi
+            icon={CreditCard}
+            label="Dependência de pagamento"
+            value={bestPayment ? `${bestPayment.label} ${paymentShare}%` : "Sem dados"}
+            detail={
+              paymentShare >= 70
+                ? "Alta concentração em um meio"
+                : "Distribuição saudável"
+            }
+            tone={paymentShare >= 70 ? "amber" : "blue"}
+          />
+          <ManagementKpi
+            icon={Target}
+            label="Produto líder"
+            value={topProduct ? `${topProduct.quantity} un.` : "Sem vendas"}
+            detail={
+              topProduct
+                ? `${topProduct.name} · ${topProductShare}% do bruto`
+                : "Aguardando vendas"
+            }
+            tone="zinc"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ManagementKpi({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "amber" | "blue" | "emerald" | "red" | "zinc";
+}) {
+  const tones = {
+    amber: "bg-amber-50 text-amber-700 border-amber-100",
+    blue: "bg-blue-50 text-blue-700 border-blue-100",
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    red: "bg-red-50 text-red-700 border-red-100",
+    zinc: "bg-zinc-50 text-zinc-700 border-zinc-100",
+  };
+
+  return (
+    <div className={`rounded-xl border p-4 ${tones[tone]}`}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-black uppercase tracking-wide opacity-75">
+          {label}
+        </p>
+        <Icon className="h-4 w-4 shrink-0" />
+      </div>
+      <p className="text-xl font-black text-brand-charcoal">{value}</p>
+      <p className="mt-1 line-clamp-2 text-xs font-semibold opacity-80">{detail}</p>
+    </div>
+  );
+}
+
+function SalesManagementSection({ data }: { data: CaixaData }) {
+  const topProductsQuantity = data.topProducts.reduce(
+    (total, product) => total + product.quantity,
+    0,
+  );
+  const topProductsRevenue = data.topProducts.reduce(
+    (total, product) => total + product.revenue,
+    0,
+  );
+  const validOrders = Math.max(data.summary.totalPedidos - data.summary.pedidosCancelados, 1);
+  const avgItemsPerOrder = topProductsQuantity / validOrders;
+  const top5Share =
+    data.summary.totalBruto > 0
+      ? Math.round((topProductsRevenue / data.summary.totalBruto) * 100)
+      : 0;
+
+  return (
+    <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <MetricCard
+        label="Itens no top 5"
+        value={String(topProductsQuantity)}
+        sub={`${avgItemsPerOrder.toFixed(1)} itens por pedido válido`}
+        icon={ShoppingBag}
+        tone="zinc"
+      />
+      <MetricCard
+        label="Concentração top 5"
+        value={`${top5Share}%`}
+        sub={`${currency.format(topProductsRevenue)} do bruto`}
+        icon={Target}
+        tone={top5Share >= 70 ? "amber" : "blue"}
+      />
+      <MetricCard
+        label="Produtos com saída"
+        value={String(data.topProducts.length)}
+        sub="Ranking exibido no caixa do dia"
+        icon={Trophy}
+        tone="emerald"
+      />
+    </section>
+  );
+}
+
+function ClosingChecklist({ data }: { data: CaixaData }) {
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div>
+            <h2 className="text-sm font-black text-brand-charcoal">
+              Checklist de fechamento
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Pontos que merecem conferência antes de encerrar o caixa.
+            </p>
+          </div>
+          <ChecklistItem
+            ok={data.summary.pedidosPendentes === 0}
+            label="Baixar pagamentos pendentes"
+            detail={`${data.summary.pedidosPendentes} pedidos · ${currency.format(data.summary.totalPendente)}`}
+          />
+          <ChecklistItem
+            ok={data.summary.pedidosCancelados === 0}
+            label="Revisar cancelamentos"
+            detail={`${data.summary.pedidosCancelados} pedidos · ${currency.format(data.summary.totalCancelado)}`}
+          />
+          <ChecklistItem
+            ok={data.summary.pedidosComDesconto === 0}
+            label="Conferir descontos"
+            detail={`${data.summary.pedidosComDesconto} pedidos · ${currency.format(data.summary.totalDescontos)}`}
+          />
+          <ChecklistItem
+            ok={data.summary.pedidosCortesia === 0}
+            label="Validar cortesias"
+            detail={`${data.summary.pedidosCortesia} pedidos · ${currency.format(data.summary.totalCortesia)}`}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <AttentionRow label="Pagamentos pendentes" value={currency.format(data.summary.totalPendente)} count={data.summary.pedidosPendentes} tone="amber" />
+          <AttentionRow label="Cancelamentos" value={currency.format(data.summary.totalCancelado)} count={data.summary.pedidosCancelados} tone="red" />
+          <AttentionRow label="Descontos aplicados" value={currency.format(data.summary.totalDescontos)} count={data.summary.pedidosComDesconto} tone="zinc" />
+          <AttentionRow label="Cortesias" value={currency.format(data.summary.totalCortesia)} count={data.summary.pedidosCortesia} tone="violet" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ChecklistItem({
+  ok,
+  label,
+  detail,
+}: {
+  ok: boolean;
+  label: string;
+  detail: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-zinc-50 p-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-black text-brand-charcoal">{label}</p>
+        <p className="text-xs font-semibold text-zinc-400">{detail}</p>
+      </div>
+      <span
+        className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${
+          ok ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
+        }`}
+      >
+        {ok ? "OK" : "Verificar"}
+      </span>
     </div>
   );
 }
