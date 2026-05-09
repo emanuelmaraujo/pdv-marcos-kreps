@@ -169,7 +169,7 @@ export default function ConfiguracoesSistema() {
           
           <CardContent className="p-4 space-y-5">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase">Cobrar em pedidos "Para Viagem"?</label>
+              <label className="text-xs font-bold text-zinc-500 uppercase">Cobrar em pedidos &quot;Para Viagem&quot;?</label>
               <Select
                 value={settings.apply_packaging_fee_for_takeout}
                 onChange={(e) => setSettings({ ...settings, apply_packaging_fee_for_takeout: e.target.value })}

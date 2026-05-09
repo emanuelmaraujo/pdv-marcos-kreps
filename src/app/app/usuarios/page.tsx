@@ -10,21 +10,18 @@ import { Badge } from "@/components/ui/Badge";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { usersApi, UserProfile } from "@/lib/api/users-api";
 import { useToast, ToastContainer } from "@/components/ui/Toast";
-import { 
-  UserPlus, 
-  UserCog, 
-  UserCheck, 
-  Loader2, 
-  Mail, 
-  Search, 
-  Users, 
-  ShieldCheck, 
-  UserMinus, 
+import {
+  UserPlus,
+  UserCog,
+  UserCheck,
+  Mail,
+  Search,
+  Users,
+  ShieldCheck,
+  UserMinus,
   Clock,
   User as UserIcon,
-  ChevronRight,
   Filter,
-  MoreVertical,
   Activity
 } from "lucide-react";
 
@@ -114,7 +111,8 @@ export default function GestaoUsuarios() {
   }, [addToast]);
 
   useEffect(() => {
-    loadUsers();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadUsers();
   }, [loadUsers]);
 
   function handleAdd() {
@@ -365,7 +363,7 @@ export default function GestaoUsuarios() {
                 </div>
                 <div className="space-y-2 max-w-xs mx-auto">
                   <h3 className="font-black text-xl text-zinc-800 tracking-tight">Nenhum resultado</h3>
-                  <p className="text-zinc-500 font-medium">Não encontramos nenhum usuário com os termos "<b>{searchTerm}</b>".</p>
+                  <p className="text-zinc-500 font-medium">Não encontramos nenhum usuário com os termos &quot;<b>{searchTerm}</b>&quot;.</p>
                   <Button variant="outline" onClick={() => setSearchTerm("")} className="mt-4 rounded-xl font-bold">Limpar Busca</Button>
                 </div>
               </div>
