@@ -144,7 +144,7 @@ export default function PedidosPage() {
         </div>
       </div>
 
-      <div className="flex-1 p-4 overflow-y-auto">
+      <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
         {isLoading && orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-zinc-400 space-y-4">
             <RefreshCw size={32} className="animate-spin text-brand-red" />
@@ -157,18 +157,18 @@ export default function PedidosPage() {
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="py-12">
-            <EmptyState 
-              title={searchQuery ? "Nenhum resultado" : "Tudo limpo por aqui"} 
+            <EmptyState
+              title={searchQuery ? "Nenhum resultado" : "Tudo limpo por aqui"}
               description={searchQuery ? "Tente buscar por outro termo." : "Não há pedidos para o status selecionado."}
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-6">
             {filteredOrders.map(order => (
-              <OrderCard 
-                key={order.id} 
-                order={order} 
-                onClick={(o) => setSelectedOrder(o)} 
+              <OrderCard
+                key={order.id}
+                order={order}
+                onClick={(o) => setSelectedOrder(o)}
               />
             ))}
           </div>

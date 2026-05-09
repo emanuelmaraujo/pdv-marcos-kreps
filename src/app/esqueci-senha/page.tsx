@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent } from "@/components/ui/Card";
-import { ChefHat, ArrowLeft, Mail, CheckCircle } from "lucide-react";
+import { ArrowLeft, Mail, CheckCircle } from "lucide-react";
+import Image from "next/image";
 
 export default function EsqueciSenhaPage() {
   const [email, setEmail] = useState("");
@@ -38,8 +39,8 @@ export default function EsqueciSenhaPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-brand-charcoal p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center space-y-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-red shadow-lg">
-            <ChefHat className="h-9 w-9 text-white" />
+          <div className="rounded-2xl ring-2 ring-zinc-600 shadow-2xl overflow-hidden">
+            <Image src="/logo.png" alt="Marcos Krep's" width={64} height={64} className="block" priority />
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight text-white">Marcos Krep&apos;s</h1>

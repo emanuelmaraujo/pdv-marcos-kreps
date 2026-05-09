@@ -159,7 +159,8 @@ export default function ConfiguracoesSistema() {
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <PageHeader title="Configurações" subtitle="Gerencie as regras do sistema" />
 
-      <div className="p-4 space-y-6 flex-1 overflow-y-auto pb-20">
+      <div className="p-4 md:p-6 lg:p-8 space-y-6 flex-1 overflow-y-auto pb-20">
+        <div className="max-w-2xl lg:mx-auto">
         {/* Taxa de Embalagem */}
         <Card className="border-zinc-100 shadow-sm overflow-hidden">
           <div className="p-4 bg-zinc-50 border-b border-zinc-100 flex items-center gap-2">
@@ -403,6 +404,7 @@ export default function ConfiguracoesSistema() {
             </p>
           </div>
         </div>
+        </div>{/* end max-w-2xl */}
       </div>
     </div>
   );
