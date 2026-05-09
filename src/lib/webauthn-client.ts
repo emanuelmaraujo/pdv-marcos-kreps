@@ -1,14 +1,21 @@
 /**
  * WebAuthn (Passkey) client utilities.
  * Works in Chrome, Firefox, Safari — triggers Touch ID, Face ID, Windows Hello.
+ * Supports up to 3 credentials per user.
  */
 
-const LS_KEY = "pdv_webauthn_cred";
+const LS_KEY = "pdv_webauthn_user";
 
-interface StoredCred {
+interface StoredUser {
   userId: string;
   email: string;
-  credentialId: string;
+}
+
+export interface ServerCredential {
+  id: string;           // UUID row id
+  credential_id: string;
+  device_name: string;
+  created_at: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -26,7 +33,6 @@ function b64uToBuf(s: string): Uint8Array {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 }
 
-/** Returns a guaranteed ArrayBuffer (not ArrayBufferLike) for use in WebAuthn APIs. */
 function b64uToAB(s: string): ArrayBuffer {
   const u8 = b64uToBuf(s);
   return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
@@ -41,22 +47,17 @@ async function callFn(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "apikey": anonKey,
-    // Always send Authorization — unauthenticated calls use anon key as bearer
     "Authorization": `Bearer ${accessToken ?? anonKey}`,
   };
-
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/webauthn`,
     { method: "POST", headers, body: JSON.stringify({ action, ...payload }) },
   );
-
-  // Gateway may return { message, code } on auth failure instead of { error }
   const json = await res.json().catch(() => ({})) as {
     data?: Record<string, unknown>;
     error?: string;
     message?: string;
   };
-
   if (!res.ok || json.error || json.message) {
     throw new Error(json.error ?? json.message ?? `Erro ${res.status}`);
   }
@@ -73,9 +74,8 @@ function getDeviceName(): string {
   return "Dispositivo";
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Local storage ────────────────────────────────────────────────────────────
 
-/** True if this browser supports platform biometrics (WebAuthn PublicKeyCredential). */
 export function isWebAuthnSupported(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -84,31 +84,37 @@ export function isWebAuthnSupported(): boolean {
   );
 }
 
-/** True if this device has a previously enrolled passkey stored in localStorage. */
 export function hasEnrolledPasskey(): boolean {
   if (typeof localStorage === "undefined") return false;
   return !!localStorage.getItem(LS_KEY);
 }
 
-/** Read the stored credential info. */
-export function getStoredCred(): StoredCred | null {
+export function getStoredUser(): StoredUser | null {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    return raw ? (JSON.parse(raw) as StoredCred) : null;
+    if (!raw) return null;
+    // Support legacy format that also had credentialId field
+    return JSON.parse(raw) as StoredUser;
   } catch {
     return null;
   }
 }
 
-/** Remove the stored passkey from localStorage (does not revoke from server). */
+/** @deprecated use getStoredUser() */
+export function getStoredCred() {
+  return getStoredUser();
+}
+
 export function clearStoredPasskey(): void {
   localStorage.removeItem(LS_KEY);
 }
 
+// ─── Enrollment ───────────────────────────────────────────────────────────────
+
 /**
- * Enroll the current user's device biometric as a passkey.
- * Must be called while the user is logged in.
- * Triggers the OS biometric prompt (Touch ID / Face ID / Windows Hello).
+ * Enroll a new biometric credential for the currently logged-in user.
+ * Does NOT invalidate the current session.
+ * Throws if the user already has 3 credentials (enforced server-side).
  */
 export async function enrollPasskey(
   userId: string,
@@ -117,7 +123,6 @@ export async function enrollPasskey(
 ): Promise<void> {
   if (!isWebAuthnSupported()) throw new Error("WebAuthn não suportado neste navegador");
 
-  // 1. Get registration options from server
   const opts = await callFn("register_begin", {}, accessToken);
 
   const rp = opts.rp as { id: string; name: string };
@@ -125,13 +130,12 @@ export async function enrollPasskey(
   const pubKeyCredParams = opts.pubKeyCredParams as PublicKeyCredentialParameters[];
   const authenticatorSelection = opts.authenticatorSelection as AuthenticatorSelectionCriteria;
 
-  // 2. Ask OS to create a credential (triggers biometric prompt)
   const cred = (await navigator.credentials.create({
     publicKey: {
       challenge: new TextEncoder().encode(opts.challenge as string),
       rp,
       user: {
-        id: b64uToAB(user.id), // ArrayBuffer required by WebAuthn API
+        id: b64uToAB(user.id),
         name: user.name,
         displayName: user.displayName,
       },
@@ -145,7 +149,6 @@ export async function enrollPasskey(
   if (!cred) throw new Error("Cadastro cancelado pelo usuário");
   const response = cred.response as AuthenticatorAttestationResponse;
 
-  // 3. Send to server for verification & storage
   await callFn(
     "register_complete",
     {
@@ -162,29 +165,23 @@ export async function enrollPasskey(
     accessToken,
   );
 
-  // 4. Persist locally so login page knows to show biometric button
-  localStorage.setItem(
-    LS_KEY,
-    JSON.stringify({ userId, email, credentialId: cred.id } satisfies StoredCred),
-  );
+  // Persist userId so the login page knows to show the biometric button.
+  // We don't store the credentialId here — the server tracks all enrolled credentials.
+  localStorage.setItem(LS_KEY, JSON.stringify({ userId, email } satisfies StoredUser));
 }
 
-/**
- * Authenticate using a previously enrolled passkey.
- * Returns { token_hash, email } — use with supabase.auth.verifyOtp() to create a session.
- */
+// ─── Authentication ───────────────────────────────────────────────────────────
+
 export async function authenticateWithPasskey(): Promise<{
   token_hash: string;
   email: string;
 }> {
   if (!isWebAuthnSupported()) throw new Error("WebAuthn não suportado neste navegador");
 
-  const stored = getStoredCred();
+  const stored = getStoredUser();
   if (!stored) throw new Error("Nenhuma digital registrada. Faça login e cadastre primeiro.");
 
-  // 1. Get auth options (challenge + allowed credential IDs)
   const opts = await callFn("auth_begin", { userId: stored.userId });
-
   if (!opts.allowCredentials) throw new Error("Sem credenciais registradas para este usuário");
 
   const allowCredentials = (
@@ -194,7 +191,6 @@ export async function authenticateWithPasskey(): Promise<{
     id: b64uToAB(c.id),
   }));
 
-  // 2. Ask OS to sign the challenge (triggers biometric prompt)
   const assertion = (await navigator.credentials.get({
     publicKey: {
       challenge: new TextEncoder().encode(opts.challenge as string),
@@ -208,7 +204,6 @@ export async function authenticateWithPasskey(): Promise<{
   if (!assertion) throw new Error("Autenticação cancelada pelo usuário");
   const response = assertion.response as AuthenticatorAssertionResponse;
 
-  // 3. Verify assertion on server and get session token
   const result = await callFn("auth_complete", {
     userId: stored.userId,
     challenge: opts.challenge,
@@ -223,4 +218,20 @@ export async function authenticateWithPasskey(): Promise<{
   });
 
   return result as { token_hash: string; email: string };
+}
+
+// ─── Management ───────────────────────────────────────────────────────────────
+
+/** Lists all enrolled credentials from the server. Requires an active session token. */
+export async function listServerCredentials(accessToken: string): Promise<ServerCredential[]> {
+  const result = await callFn("list_credentials", {}, accessToken);
+  return (result.credentials as ServerCredential[]) ?? [];
+}
+
+/** Deletes a specific credential by its DB row UUID. Requires an active session token. */
+export async function deleteServerCredential(
+  credentialRowId: string,
+  accessToken: string,
+): Promise<void> {
+  await callFn("delete_credential", { credentialRowId }, accessToken);
 }

@@ -218,6 +218,7 @@ serve(async (req) => {
          status: 'NA_FILA',
          confirmed_by: user.id,
          confirmed_at: nowIso,
+         queue_entered_at: nowIso,
          updated_at: nowIso
       })
       .eq('id', order.id);

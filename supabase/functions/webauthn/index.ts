@@ -417,8 +417,9 @@ Deno.serve(async (req) => {
 
     let result: unknown;
 
-    if (action === "register_begin" || action === "register_complete") {
-      // Requires authenticated user — validate the Bearer JWT using the admin client
+    const AUTHENTICATED_ACTIONS = ["register_begin", "register_complete", "list_credentials", "delete_credential"];
+
+    if (AUTHENTICATED_ACTIONS.includes(action)) {
       const authHeader = req.headers.get("authorization") ?? "";
       const token = authHeader.replace(/^Bearer\s+/i, "").trim();
       const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
@@ -426,8 +427,25 @@ Deno.serve(async (req) => {
 
       if (action === "register_begin") {
         result = await registerBegin(user.id);
-      } else {
+      } else if (action === "register_complete") {
         result = await registerComplete(user.id, data.challenge, data.credential, data.deviceName);
+      } else if (action === "list_credentials") {
+        const { data: creds, error: listErr } = await supabaseAdmin
+          .from("webauthn_credentials")
+          .select("id, credential_id, device_name, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: true });
+        if (listErr) throw listErr;
+        result = { credentials: creds ?? [] };
+      } else if (action === "delete_credential") {
+        if (!data.credentialRowId) throw new Error("credentialRowId ausente");
+        const { error: delErr } = await supabaseAdmin
+          .from("webauthn_credentials")
+          .delete()
+          .eq("id", data.credentialRowId)
+          .eq("user_id", user.id); // ensures users can only delete their own
+        if (delErr) throw delErr;
+        result = { deleted: true };
       }
     } else if (action === "auth_begin") {
       result = await authBegin(data.userId);

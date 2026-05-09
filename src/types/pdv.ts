@@ -131,6 +131,9 @@ export interface Order {
   paid_at?: string;
   cancelled_at?: string;
   cancelled_by?: string;
+  queue_entered_at?: string;
+  preparation_started_at?: string;
+  preparation_finished_at?: string;
   created_at: string;
   updated_at: string;
   items?: OrderItem[];

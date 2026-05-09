@@ -6,7 +6,22 @@ import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { useState } from "react";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
-import { PlusCircle, Printer, CheckCircle2, Package, XCircle, AlertTriangle, ArrowLeft, Utensils, ShoppingBag, Clock } from "lucide-react";
+import {
+  PlusCircle,
+  Printer,
+  CheckCircle2,
+  Package,
+  XCircle,
+  AlertTriangle,
+  ArrowLeft,
+  Utensils,
+  ShoppingBag,
+  Clock,
+  QrCode,
+  Banknote,
+  CreditCard,
+  Gift,
+} from "lucide-react";
 
 interface Props {
   order: Order | null;
@@ -14,6 +29,60 @@ interface Props {
   onClose: () => void;
   onOrderUpdated: () => void;
 }
+
+const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+function fmt(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function TimelineStep({
+  label,
+  time,
+  active,
+  done,
+}: {
+  label: string;
+  time?: string;
+  active?: boolean;
+  done?: boolean;
+}) {
+  return (
+    <div className={`flex flex-col items-center gap-1 ${done ? "opacity-100" : active ? "opacity-100" : "opacity-30"}`}>
+      <div
+        className={`h-2.5 w-2.5 rounded-full border-2 transition-all ${
+          done
+            ? "border-emerald-500 bg-emerald-500"
+            : active
+            ? "border-brand-red bg-brand-red ring-4 ring-brand-red/20"
+            : "border-zinc-300 bg-white"
+        }`}
+      />
+      <p className="text-[9px] font-black uppercase tracking-wide text-zinc-500 text-center leading-tight whitespace-nowrap">
+        {label}
+      </p>
+      {time && <p className="text-[9px] font-bold text-zinc-400">{time}</p>}
+    </div>
+  );
+}
+
+function TimelineConnector({ done }: { done: boolean }) {
+  return (
+    <div className={`flex-1 h-0.5 rounded-full transition-colors ${done ? "bg-emerald-300" : "bg-zinc-200"}`} />
+  );
+}
+
+const PAYMENT_METHOD_CONFIG: Record<
+  PaymentMethod,
+  { label: string; Icon: React.ElementType; colors: string }
+> = {
+  PIX:         { label: "PIX",          Icon: QrCode,      colors: "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100" },
+  CASH:        { label: "Dinheiro",     Icon: Banknote,    colors: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
+  DEBIT_CARD:  { label: "Débito",       Icon: CreditCard,  colors: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" },
+  CREDIT_CARD: { label: "Crédito",      Icon: CreditCard,  colors: "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" },
+  COURTESY:    { label: "Cortesia",     Icon: Gift,        colors: "border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100" },
+  PENDING:     { label: "Pendente",     Icon: Clock,       colors: "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100" },
+};
 
 export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Props) {
   const router = useRouter();
@@ -33,229 +102,317 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
       onOrderUpdated();
       onClose();
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg("Ocorreu um erro na ação.");
-      }
+      setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro na ação.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const onConfirm = () => handleAction(() => pdvApi.confirmOrder(order.id));
-  const onReady = () => handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
+  const onReady   = () => handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
   const onDeliver = () => {
     if (order.payment_status === "PENDING") {
-      const confirm = window.confirm("ATENÇÃO: Pagamento PENDENTE. Confirmar entrega?");
-      if (!confirm) return;
+      if (!window.confirm("ATENÇÃO: Pagamento PENDENTE. Confirmar entrega mesmo assim?")) return;
     }
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" }));
   };
-  
   const onCancel = () => {
-    if (!cancelReason.trim()) {
-      setErrorMsg("Motivo obrigatório.");
-      return;
-    }
+    if (!cancelReason.trim()) { setErrorMsg("Motivo obrigatório."); return; }
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }));
   };
-
-  const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) => {
+  const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
     handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: order.total_amount }));
-  };
+  const onReprint = () =>
+    handleAction(() => pdvApi.reprintOrder({ orderId: order.id, copies: ["CUSTOMER", "KITCHEN", "JUICE_POTATO"] }));
 
-  const onReprint = () => {
-    handleAction(() => pdvApi.reprintOrder({ orderId: order.id, copies: ['CUSTOMER', 'KITCHEN', 'JUICE_POTATO'] }));
-  };
-  const orderTypeIcon = order.type === 'BALCAO'
-    ? <Utensils size={12} className="inline mr-1" />
-    : <ShoppingBag size={12} className="inline mr-1" />;
+  // Timeline logic
+  const isNA_FILA = order.status === "NA_FILA";
+  const isPRONTO  = order.status === "PRONTO";
+  const isENTREGUE = order.status === "ENTREGUE";
+  const isCANCELADO = order.status === "CANCELADO";
 
-  const renderPaymentSelection = () => (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-      <div className="flex items-center space-x-2 mb-2">
-        <button onClick={() => setShowPaymentSelection(false)} className="p-2 -ml-2 text-zinc-400">
-          <ArrowLeft size={20} />
-        </button>
-        <h4 className="font-black text-zinc-900 uppercase tracking-widest text-sm">Forma de Pagamento</h4>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Button variant="outline" className="h-14 font-black border-2 text-xs" onClick={() => onMarkPayment('PIX', 'PAID')} disabled={isLoading}>PIX</Button>
-        <Button variant="outline" className="h-14 font-black border-2 text-xs" onClick={() => onMarkPayment('DEBIT_CARD', 'PAID')} disabled={isLoading}>DÉBITO</Button>
-        <Button variant="outline" className="h-14 font-black border-2 text-xs" onClick={() => onMarkPayment('CREDIT_CARD', 'PAID')} disabled={isLoading}>CRÉDITO</Button>
-        <Button variant="outline" className="h-14 font-black border-2 text-xs" onClick={() => onMarkPayment('CASH', 'PAID')} disabled={isLoading}>DINHEIRO</Button>
-        <Button variant="outline" className="h-14 font-black border-2 text-xs col-span-2" onClick={() => onMarkPayment('COURTESY', 'COURTESY')} disabled={isLoading}>CORTESIA</Button>
-      </div>
-    </div>
-  );
+  const hasDiscount = order.discount_amount > 0;
+  const hasPacking  = order.packing_fee > 0;
+  const subtotal = order.total_amount + order.discount_amount - order.packing_fee;
 
   return (
-    <BottomSheet isOpen={isOpen} onClose={onClose} title={`DETALHES DO PEDIDO #${order.daily_number}`}>
-      <div className="flex flex-col space-y-6 pb-10">
-        
-        {/* Error Alert */}
+    <BottomSheet isOpen={isOpen} onClose={onClose} title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}>
+      <div className="flex flex-col gap-5 pb-10">
+
+        {/* Error */}
         {errorMsg && (
-          <div className="bg-red-50 border border-red-200 p-4 rounded-2xl flex items-center space-x-3 animate-pulse">
-            <AlertTriangle className="text-red-500 shrink-0" size={20} />
-            <p className="text-red-700 text-sm font-bold">{errorMsg}</p>
+          <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
+            <AlertTriangle className="shrink-0 text-red-500" size={18} />
+            <p className="text-sm font-bold text-red-700">{errorMsg}</p>
           </div>
         )}
 
-        {/* Header Info */}
-        <div className="flex items-start justify-between bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2 text-zinc-400 mb-1">
-              <Clock size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest">
-                {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-            <h3 className="font-black text-zinc-900 text-lg uppercase leading-none">
-              {order.customer_name || "Cliente Final"}
-            </h3>
-            <p className="text-xs font-bold text-zinc-500">
-              {orderTypeIcon}
-              {order.type} • {order.source}
-            </p>
+        {/* Hero Header */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-charcoal to-zinc-700 p-5 text-white shadow-lg">
+          <div className="absolute right-4 top-4 opacity-10">
+            {order.type === "BALCAO" ? (
+              <Utensils size={64} />
+            ) : (
+              <ShoppingBag size={64} />
+            )}
           </div>
-          <div className="flex flex-col items-end space-y-2">
-            <OrderStatusBadge status={order.status} />
-            <PaymentStatusBadge status={order.payment_status} />
+          <div className="relative space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                  {order.type === "BALCAO" ? "Balcão" : "Para Viagem"} · {order.source}
+                </p>
+                <h2 className="mt-0.5 text-2xl font-black leading-tight">
+                  {order.customer_name || "Cliente Final"}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-300">
+                  <Clock size={12} className="inline mr-1 opacity-70" />
+                  Criado às {fmt(order.created_at)}
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <OrderStatusBadge status={order.status} />
+                <PaymentStatusBadge status={order.payment_status} />
+              </div>
+            </div>
+
+            {/* Timeline */}
+            {!isCANCELADO && (
+              <div className="flex items-center gap-2 pt-1">
+                <TimelineStep label="Criado"    time={fmt(order.created_at)}           done={true} />
+                <TimelineConnector done={!!order.confirmed_at} />
+                <TimelineStep label="Na Fila"   time={order.confirmed_at ? fmt(order.confirmed_at) : undefined} active={isNA_FILA}   done={!!order.ready_at || isPRONTO || isENTREGUE} />
+                <TimelineConnector done={!!order.ready_at} />
+                <TimelineStep label="Pronto"    time={order.ready_at ? fmt(order.ready_at) : undefined}         active={isPRONTO}    done={isENTREGUE} />
+                <TimelineConnector done={isENTREGUE} />
+                <TimelineStep label="Entregue"  time={order.delivered_at ? fmt(order.delivered_at) : undefined} active={isENTREGUE}  done={isENTREGUE} />
+              </div>
+            )}
+            {isCANCELADO && (
+              <p className="text-xs font-bold text-red-300 uppercase tracking-widest">
+                Cancelado às {order.cancelled_at ? fmt(order.cancelled_at) : "—"}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Items Section */}
-        <div className="space-y-4">
-          <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Itens do Pedido</h4>
-          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
-            <div className="divide-y divide-zinc-100 max-h-60 overflow-y-auto">
-              {order.items?.map(item => (
+        {/* Items */}
+        <div className="space-y-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Itens do Pedido</p>
+          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <div className="divide-y divide-zinc-100 max-h-64 overflow-y-auto">
+              {order.items?.map((item) => (
                 <div key={item.id} className="p-4">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-black text-sm text-zinc-900">{item.quantity}x {item.product?.name ?? item.product_name_snapshot}</span>
-                    <span className="font-black text-zinc-900 text-xs italic opacity-80">R$ {item.total_price.toFixed(2)}</span>
-                  </div>
-                  
-                  {item.removed_ingredients && item.removed_ingredients.length > 0 && (
-                    <p className="text-[10px] text-brand-red font-black uppercase mt-1">
-                      - SEM: {item.removed_ingredients.map(ri => ri.ingredient?.name).join(', ')}
-                    </p>
-                  )}
-                  {item.addons && item.addons.length > 0 && (
-                    <p className="text-[10px] text-emerald-600 font-black uppercase mt-0.5">
-                      + ADD: {item.addons.map(a => a.addon?.name).join(', ')}
-                    </p>
-                  )}
-                  {item.observation && (
-                    <div className="mt-2 bg-zinc-50 p-2 rounded-lg border-l-4 border-zinc-200">
-                      <p className="text-[11px] text-zinc-500 font-bold italic leading-tight">&quot;{item.observation}&quot;</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-black text-sm text-zinc-900">
+                        {item.quantity}× {item.product?.name ?? item.product_name_snapshot}
+                      </p>
+                      {item.removed_ingredients && item.removed_ingredients.length > 0 && (
+                        <p className="mt-0.5 text-[11px] font-bold text-brand-red uppercase">
+                          − SEM: {item.removed_ingredients.map((ri) => ri.ingredient?.name ?? ri.ingredient_name_snapshot).join(", ")}
+                        </p>
+                      )}
+                      {item.addons && item.addons.length > 0 && (
+                        <p className="mt-0.5 text-[11px] font-bold text-emerald-600 uppercase">
+                          + {item.addons.map((a) => `${a.quantity}× ${a.addon?.name ?? a.addon_name_snapshot}`).join(", ")}
+                        </p>
+                      )}
+                      {item.observation && (
+                        <div className="mt-2 rounded-lg border-l-4 border-zinc-200 bg-zinc-50 px-3 py-1.5">
+                          <p className="text-[11px] italic font-medium text-zinc-500">&quot;{item.observation}&quot;</p>
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <p className="shrink-0 text-sm font-black text-zinc-700">
+                      {currency.format(item.total_price)}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
-            <div className="p-4 bg-zinc-50 border-t border-zinc-100 flex justify-between items-center">
-              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Total Geral</span>
-              <span className="text-2xl font-black text-brand-red">
-                <span className="text-sm mr-1">R$</span>
-                {order.total_amount.toFixed(2).replace('.', ',')}
-              </span>
+
+            {/* Financial summary */}
+            <div className="border-t border-zinc-100 bg-zinc-50/80 p-4 space-y-2">
+              {hasDiscount && (
+                <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                  <span>Subtotal</span>
+                  <span>{currency.format(subtotal)}</span>
+                </div>
+              )}
+              {hasPacking && (
+                <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                  <span>Embalagem</span>
+                  <span>{currency.format(order.packing_fee)}</span>
+                </div>
+              )}
+              {hasDiscount && (
+                <div className="flex justify-between text-xs font-bold text-emerald-600">
+                  <span>Desconto</span>
+                  <span>- {currency.format(order.discount_amount)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between border-t border-zinc-200 pt-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Geral</span>
+                <span className={`text-2xl font-black ${order.payment_status === "PAID" ? "text-emerald-600" : "text-brand-red"}`}>
+                  {currency.format(order.total_amount)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Action Center */}
-        <div className="space-y-3 pt-2">
-          
-          {/* Main Contextual Actions */}
+        {/* Actions */}
+        <div className="space-y-3">
           {!showPaymentSelection && !showCancelReason && (
-            <div className="grid grid-cols-1 gap-3">
-              
-              {/* Ready to process actions */}
-              {order.status === 'AGUARDANDO_CONFIRMACAO' && (
-                <Button className="h-16 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-lg rounded-2xl shadow-lg shadow-emerald-200" onClick={onConfirm} disabled={isLoading}>
-                  <CheckCircle2 className="mr-2" /> CONFIRMAR PEDIDO
+            <>
+              {/* Primary status action */}
+              {order.status === "AGUARDANDO_CONFIRMACAO" && (
+                <Button
+                  className="h-14 w-full rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
+                  onClick={onConfirm}
+                  disabled={isLoading}
+                >
+                  <CheckCircle2 size={20} /> CONFIRMAR PEDIDO
                 </Button>
               )}
-              
-              {order.status === 'NA_FILA' && (
-                <Button className="h-16 bg-brand-amber hover:bg-brand-amber/90 text-brand-charcoal font-black text-lg rounded-2xl shadow-lg shadow-brand-amber/20" onClick={onReady} disabled={isLoading}>
-                  <Package className="mr-2" /> MARCAR PRONTO
+              {order.status === "NA_FILA" && (
+                <Button
+                  className="h-14 w-full rounded-2xl bg-brand-amber text-lg font-black text-brand-charcoal shadow-lg shadow-brand-amber/20 hover:bg-brand-amber/90 gap-2"
+                  onClick={onReady}
+                  disabled={isLoading}
+                >
+                  <Package size={20} /> MARCAR PRONTO
                 </Button>
               )}
-              
-              {order.status === 'PRONTO' && (
-                <Button className="h-16 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-lg rounded-2xl shadow-lg shadow-emerald-200" onClick={onDeliver} disabled={isLoading}>
-                  <CheckCircle2 className="mr-2" /> ENTREGAR PEDIDO
+              {order.status === "PRONTO" && (
+                <Button
+                  className="h-14 w-full rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
+                  onClick={onDeliver}
+                  disabled={isLoading}
+                >
+                  <CheckCircle2 size={20} /> ENTREGAR PEDIDO
                 </Button>
               )}
 
-              {/* Payment Alert & Action */}
-              {order.payment_status === 'PENDING' && order.status !== 'CANCELADO' && (
-                <div className="bg-brand-amber/5 border-2 border-brand-amber/30 p-4 rounded-2xl flex flex-col space-y-3">
-                  <div className="flex items-center space-x-2 text-brand-amber">
-                    <AlertTriangle size={18} />
+              {/* Payment pending alert */}
+              {order.payment_status === "PENDING" && order.status !== "CANCELADO" && (
+                <div className="rounded-2xl border-2 border-brand-amber/30 bg-brand-amber/5 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-brand-amber">
+                    <AlertTriangle size={16} />
                     <span className="text-xs font-black uppercase tracking-widest">Pagamento Pendente</span>
                   </div>
-                  <Button className="bg-brand-amber text-brand-charcoal font-black hover:bg-brand-amber/80 h-12" onClick={() => setShowPaymentSelection(true)} disabled={isLoading}>
+                  <Button
+                    className="h-12 w-full bg-brand-amber font-black text-brand-charcoal hover:bg-brand-amber/80"
+                    onClick={() => setShowPaymentSelection(true)}
+                    disabled={isLoading}
+                  >
                     RECEBER AGORA
                   </Button>
                 </div>
               )}
 
-              {/* Add items to open order */}
-              {order.payment_status === 'PENDING' && ['NA_FILA', 'AGUARDANDO_PAGAMENTO'].includes(order.status) && (
-                <Button 
-                  variant="outline" 
-                  className="h-14 border-2 border-zinc-900 text-zinc-900 font-black rounded-2xl active:bg-zinc-900 active:text-white transition-all" 
+              {/* Add to order */}
+              {order.payment_status === "PENDING" && ["NA_FILA", "AGUARDANDO_PAGAMENTO"].includes(order.status) && (
+                <Button
+                  variant="outline"
+                  className="h-12 w-full rounded-2xl border-2 border-zinc-900 font-black gap-2"
                   onClick={() => router.push(`/app/novo-pedido?add_to=${order.id}`)}
                   disabled={isLoading}
                 >
-                  <PlusCircle className="mr-2" size={20} />
-                  ADICIONAR À COMANDA
+                  <PlusCircle size={18} /> ADICIONAR À COMANDA
                 </Button>
               )}
 
-              {/* Secondary Actions Row */}
+              {/* Secondary actions */}
               <div className="grid grid-cols-2 gap-3">
-                {['NA_FILA', 'PRONTO', 'ENTREGUE'].includes(order.status) && (
-                  <Button variant="outline" className="h-14 border-2 font-black text-xs text-zinc-500" onClick={onReprint} disabled={isLoading}>
-                    <Printer className="mr-2" size={16} /> REIMPRIMIR
+                {["NA_FILA", "PRONTO", "ENTREGUE"].includes(order.status) && (
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl border-2 font-black text-xs text-zinc-600 gap-2"
+                    onClick={onReprint}
+                    disabled={isLoading}
+                  >
+                    <Printer size={14} /> REIMPRIMIR
                   </Button>
                 )}
-                
-                {['AGUARDANDO_CONFIRMACAO', 'NA_FILA', 'PRONTO'].includes(order.status) && (
-                  <Button variant="outline" className="h-14 border-2 font-black text-xs text-red-500 border-red-100 hover:bg-red-50" onClick={() => setShowCancelReason(true)} disabled={isLoading}>
-                    <XCircle className="mr-2" size={16} /> CANCELAR
+                {["AGUARDANDO_CONFIRMACAO", "NA_FILA", "PRONTO"].includes(order.status) && (
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl border-2 border-red-100 font-black text-xs text-red-500 hover:bg-red-50 gap-2"
+                    onClick={() => setShowCancelReason(true)}
+                    disabled={isLoading}
+                  >
+                    <XCircle size={14} /> CANCELAR
                   </Button>
                 )}
+              </div>
+            </>
+          )}
+
+          {/* Payment selection */}
+          {showPaymentSelection && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowPaymentSelection(false)} className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100">
+                  <ArrowLeft size={18} />
+                </button>
+                <h4 className="text-sm font-black uppercase tracking-widest text-zinc-900">Forma de Pagamento</h4>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {(["PIX", "DEBIT_CARD", "CREDIT_CARD", "CASH"] as PaymentMethod[]).map((method) => {
+                  const { label, Icon, colors } = PAYMENT_METHOD_CONFIG[method];
+                  return (
+                    <button
+                      key={method}
+                      onClick={() => onMarkPayment(method, "PAID")}
+                      disabled={isLoading}
+                      className={`flex items-center justify-center gap-2 h-14 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${colors}`}
+                    >
+                      <Icon size={16} /> {label}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => onMarkPayment("COURTESY", "COURTESY")}
+                  disabled={isLoading}
+                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${PAYMENT_METHOD_CONFIG.COURTESY.colors}`}
+                >
+                  <Gift size={16} /> CORTESIA
+                </button>
               </div>
             </div>
           )}
 
-          {/* Payment Selection Mode */}
-          {showPaymentSelection && renderPaymentSelection()}
-
-          {/* Cancellation Reason Mode */}
+          {/* Cancel reason */}
           {showCancelReason && (
-            <div className="space-y-4 p-5 bg-red-50 border-2 border-red-100 rounded-2xl animate-in fade-in zoom-in-95">
-              <div className="flex items-center space-x-2 text-red-600 mb-2">
-                <XCircle size={20} />
-                <h4 className="font-black text-sm uppercase tracking-widest">Cancelar Pedido</h4>
+            <div className="space-y-4 rounded-2xl border-2 border-red-100 bg-red-50 p-5 animate-in fade-in zoom-in-95">
+              <div className="flex items-center gap-2 text-red-600">
+                <XCircle size={18} />
+                <h4 className="text-sm font-black uppercase tracking-widest">Cancelar Pedido</h4>
               </div>
-              <input 
-                type="text" 
-                className="w-full p-4 bg-white border border-red-100 rounded-xl font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-red-500" 
-                placeholder="Qual o motivo?" 
+              <input
+                type="text"
+                className="w-full rounded-xl border border-red-100 bg-white p-4 font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-300"
+                placeholder="Qual o motivo?"
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
               />
-              <div className="flex space-x-3 pt-2">
-                <Button variant="destructive" className="flex-1 h-14 font-black rounded-xl shadow-lg shadow-red-200" onClick={onCancel} disabled={isLoading}>
+              <div className="flex gap-3">
+                <Button
+                  variant="destructive"
+                  className="flex-1 h-12 rounded-xl font-black shadow-lg shadow-red-200"
+                  onClick={onCancel}
+                  disabled={isLoading}
+                >
                   CONFIRMAR
                 </Button>
-                <Button variant="outline" className="h-14 font-black rounded-xl border-2" onClick={() => setShowCancelReason(false)} disabled={isLoading}>
+                <Button
+                  variant="outline"
+                  className="h-12 rounded-xl border-2 font-black"
+                  onClick={() => { setShowCancelReason(false); setErrorMsg(""); }}
+                  disabled={isLoading}
+                >
                   VOLTAR
                 </Button>
               </div>
