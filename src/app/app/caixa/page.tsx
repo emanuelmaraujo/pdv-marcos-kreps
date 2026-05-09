@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight,
-  Banknote,
   BarChart3,
+  Banknote,
   Clock,
   CreditCard,
   Gift,
+  Info,
   Loader2,
   QrCode,
   RefreshCw,
@@ -18,6 +18,9 @@ import {
   Wallet,
   XCircle,
   Zap,
+  AlertTriangle,
+  CheckCircle2,
+  ArrowRight,
 } from "lucide-react";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -26,23 +29,118 @@ import { Card, CardContent } from "@/components/ui/Card";
 import {
   CaixaData,
   PaymentBreakdown,
-  PendingOrder,
   TopProduct,
   cashApi,
 } from "@/lib/api/cash-api";
 import { PaymentMethod } from "@/types/pdv";
 
+// ── Formatters ────────────────────────────────────────────────────────────────
+
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const timeFormatter = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-const PAYMENT_META: Record<PaymentMethod, { icon: React.ElementType; color: string; bar: string }> = {
-  PIX:         { icon: QrCode,     color: "text-teal-600 bg-teal-50 ring-teal-200",    bar: "bg-teal-500" },
-  CASH:        { icon: Banknote,   color: "text-emerald-600 bg-emerald-50 ring-emerald-200", bar: "bg-emerald-500" },
-  DEBIT_CARD:  { icon: CreditCard, color: "text-blue-600 bg-blue-50 ring-blue-200",    bar: "bg-blue-500" },
-  CREDIT_CARD: { icon: CreditCard, color: "text-violet-600 bg-violet-50 ring-violet-200", bar: "bg-violet-500" },
-  COURTESY:    { icon: Gift,       color: "text-pink-600 bg-pink-50 ring-pink-200",    bar: "bg-pink-400" },
-  PENDING:     { icon: Clock,      color: "text-amber-600 bg-amber-50 ring-amber-200", bar: "bg-amber-400" },
+// ── Payment config ────────────────────────────────────────────────────────────
+
+const PAYMENT_META: Record<PaymentMethod, { icon: React.ElementType; label: string; iconCls: string; barCls: string }> = {
+  PIX:         { icon: QrCode,     label: "PIX",     iconCls: "bg-teal-50 text-teal-600",     barCls: "bg-teal-500" },
+  CASH:        { icon: Banknote,   label: "Dinheiro", iconCls: "bg-emerald-50 text-emerald-600", barCls: "bg-emerald-500" },
+  DEBIT_CARD:  { icon: CreditCard, label: "Débito",  iconCls: "bg-blue-50 text-blue-600",     barCls: "bg-blue-500" },
+  CREDIT_CARD: { icon: CreditCard, label: "Crédito", iconCls: "bg-violet-50 text-violet-600", barCls: "bg-violet-500" },
+  COURTESY:    { icon: Gift,       label: "Cortesia", iconCls: "bg-pink-50 text-pink-600",     barCls: "bg-pink-400" },
+  PENDING:     { icon: Clock,      label: "Pendente", iconCls: "bg-amber-50 text-amber-600",   barCls: "bg-amber-400" },
 };
+
+// ── Insight generation ────────────────────────────────────────────────────────
+
+type InsightSeverity = "positive" | "info" | "warning";
+
+interface DayInsight {
+  icon: React.ElementType;
+  text: string;
+  severity: InsightSeverity;
+}
+
+function buildInsights(data: CaixaData): DayInsight[] {
+  const { summary, paymentBreakdown, topProducts } = data;
+  const insights: DayInsight[] = [];
+
+  // Pending payments alert
+  if (summary.pedidosPendentes > 0) {
+    insights.push({
+      icon: AlertTriangle,
+      severity: "warning",
+      text: `${summary.pedidosPendentes} pedido${summary.pedidosPendentes > 1 ? "s" : ""} ainda sem pagamento — total de ${currency.format(summary.totalPendente)}.`,
+    });
+  }
+
+  // Dominant payment method
+  const topPayment = paymentBreakdown
+    .filter((p) => p.method !== "PENDING" && p.method !== "COURTESY" && p.count > 0)
+    .sort((a, b) => b.total - a.total)[0];
+  if (topPayment && summary.totalRecebido > 0) {
+    const pct = Math.round((topPayment.total / summary.totalRecebido) * 100);
+    if (pct >= 50) {
+      const label = PAYMENT_META[topPayment.method]?.label ?? topPayment.label;
+      insights.push({
+        icon: TrendingUp,
+        severity: "info",
+        text: `${label} concentra ${pct}% das vendas hoje (${currency.format(topPayment.total)}).`,
+      });
+    }
+  }
+
+  // Peak hour
+  if (summary.horaDePico != null) {
+    const h = summary.horaDePico;
+    const end = (h + 1) % 24;
+    insights.push({
+      icon: Zap,
+      severity: "info",
+      text: `Hora de pico: ${String(h).padStart(2, "0")}h–${String(end).padStart(2, "0")}h. Prepare-se para o rush.`,
+    });
+  }
+
+  // Star product
+  if (topProducts.length > 0) {
+    const star = topProducts[0];
+    insights.push({
+      icon: Trophy,
+      severity: "positive",
+      text: `Mais pedido hoje: ${star.name} — ${star.quantity} unidades (${currency.format(star.revenue)}).`,
+    });
+  }
+
+  // High cancellation
+  if (summary.taxaCancelamento > 8 && summary.pedidosCancelados > 1) {
+    insights.push({
+      icon: XCircle,
+      severity: "warning",
+      text: `Taxa de cancelamento alta: ${summary.taxaCancelamento.toFixed(1)}% (${summary.pedidosCancelados} pedidos cancelados).`,
+    });
+  }
+
+  // Courtesies
+  if (summary.pedidosCortesia > 0) {
+    insights.push({
+      icon: Gift,
+      severity: "info",
+      text: `${summary.pedidosCortesia} cortesia${summary.pedidosCortesia > 1 ? "s" : ""} concedida${summary.pedidosCortesia > 1 ? "s" : ""} hoje — ${currency.format(summary.totalCortesia)}.`,
+    });
+  }
+
+  // Good day message
+  if (insights.length === 0 && summary.totalPedidos > 0) {
+    insights.push({
+      icon: CheckCircle2,
+      severity: "positive",
+      text: "Tudo certo! Nenhum alerta operacional no momento.",
+    });
+  }
+
+  return insights.slice(0, 3);
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CaixaPage() {
   const [data, setData] = useState<CaixaData | null>(null);
@@ -68,7 +166,6 @@ export default function CaixaPage() {
     let cancelled = false;
     (async () => {
       setIsLoading(true);
-      setError("");
       try {
         const next = await cashApi.getDaySummary();
         if (!cancelled) setData(next);
@@ -82,49 +179,49 @@ export default function CaixaPage() {
   }, []);
 
   const lastUpdate = data?.generatedAt ? timeFormatter.format(new Date(data.generatedAt)) : null;
-  const isEmpty = data?.summary.totalPedidos === 0;
+  const insights = useMemo(() => (data ? buildInsights(data) : []), [data]);
 
   return (
     <div className="flex h-full flex-col bg-zinc-50">
-      {/* ── Top bar ── */}
-      <header className="border-b border-zinc-200 bg-white px-4 py-3 md:px-8">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+      {/* Header */}
+      <header className="border-b border-zinc-200 bg-white px-4 py-3 md:px-6">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-base font-black tracking-tight text-brand-charcoal sm:text-lg">
               Caixa do dia
             </h1>
             {lastUpdate && (
-              <p className="text-[11px] font-medium text-zinc-400">Atualizado às {lastUpdate}</p>
+              <p className="text-[11px] font-medium text-zinc-400">
+                Atualizado às {lastUpdate}
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2">
             {data?.role === "ADMIN" && (
               <Link href="/app/caixa/relatorio">
-                <button className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand-charcoal px-3 text-xs font-black text-white shadow-sm transition-all hover:bg-brand-charcoal/90 active:scale-[0.97] sm:px-4 sm:text-sm">
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand-charcoal px-3 text-xs font-black text-white transition-all hover:bg-brand-charcoal/90 active:scale-[0.97] sm:px-4">
                   <BarChart3 className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Relatório</span>
-                </button>
+                </span>
               </Link>
             )}
             <button
               onClick={() => loadCash(true)}
               disabled={isLoading || isRefreshing}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 shadow-sm transition-all hover:bg-zinc-50 active:scale-[0.97] disabled:opacity-50 sm:px-4 sm:text-sm"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 transition-all hover:bg-zinc-50 active:scale-[0.97] disabled:opacity-50 sm:px-4"
             >
-              {isRefreshing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
+              {isRefreshing
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RefreshCw className="h-3.5 w-3.5" />}
               <span className="hidden sm:inline">Atualizar</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* ── Content ── */}
+      {/* Main */}
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl px-4 pb-28 pt-5 md:px-8 md:pt-7">
+        <div className="mx-auto max-w-5xl space-y-4 px-4 pb-28 pt-5 md:px-6 md:pt-6">
           {isLoading && !data ? (
             <LoadingState message="Carregando resumo do dia..." />
           ) : error ? (
@@ -133,38 +230,31 @@ export default function CaixaPage() {
               message={error}
               onRetry={() => loadCash(false)}
             />
-          ) : !data ? null : isEmpty ? (
+          ) : !data ? null : data.summary.totalPedidos === 0 ? (
             <EmptyState
               title="Sem vendas hoje"
               description="Os pedidos do dia aparecerão aqui assim que forem criados."
             />
           ) : (
-            <div className="space-y-5">
-              {/* Hero + KPIs side-by-side on xl */}
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_340px]">
-                <CashHero data={data} />
-                <KpiStack data={data} />
+            <>
+              {/* Hero */}
+              <DayHero data={data} />
+
+              {/* Status chips */}
+              <StatusStrip data={data} />
+
+              {/* Insights */}
+              {insights.length > 0 && <InsightsSection insights={insights} />}
+
+              {/* Products + Payments */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <TopProductsCard products={data.topProducts.slice(0, 5)} />
+                <PaymentsCard items={data.paymentBreakdown} received={data.summary.totalRecebido} />
               </div>
 
-              {/* Pending alert */}
-              {data.pendingOrders.length > 0 && (
-                <PendingOrdersSection orders={data.pendingOrders} />
-              )}
-
-              {/* Main content grid */}
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
-                <div className="space-y-5">
-                  <TopProductsSection products={data.topProducts.slice(0, 5)} />
-                </div>
-                <div className="space-y-5">
-                  <PaymentBreakdownSection items={data.paymentBreakdown} received={data.summary.totalRecebido} />
-                  <FinancialAttentionSection data={data} />
-                </div>
-              </div>
-
-              {/* Quick navigation */}
-              <QuickLinks role={data.role} />
-            </div>
+              {/* Admin CTA */}
+              {data.role === "ADMIN" && <AdminCTA />}
+            </>
           )}
         </div>
       </main>
@@ -172,222 +262,133 @@ export default function CaixaPage() {
   );
 }
 
-// ── Hero ─────────────────────────────────────────────────────────────────────
+// ── Day Hero ──────────────────────────────────────────────────────────────────
 
-function CashHero({ data }: { data: CaixaData }) {
+function DayHero({ data }: { data: CaixaData }) {
   const { summary } = data;
-  const paidRate = summary.totalPedidos > 0
+  const paidPct = summary.totalPedidos > 0
     ? Math.round((summary.pedidosPagos / summary.totalPedidos) * 100)
     : 0;
-  const peakLabel = summary.horaDePico != null
-    ? `${String(summary.horaDePico).padStart(2, "0")}h–${String(summary.horaDePico + 1).padStart(2, "0")}h`
-    : null;
 
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-brand-charcoal shadow-xl">
-      {/* Decorative glow */}
-      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-red/20 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-white/5 blur-2xl" />
+    <div className="relative overflow-hidden rounded-2xl bg-brand-charcoal px-6 py-7 shadow-lg md:px-8 md:py-8">
+      {/* Background glow */}
+      <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-brand-red/25 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-16 left-0 h-40 w-40 rounded-full bg-white/5 blur-2xl" />
 
-      <div className="relative p-6 md:p-8">
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">
-              Movimento de hoje
-            </p>
-            <p className="mt-2 text-4xl font-black tracking-tight text-white sm:text-5xl">
-              {currency.format(summary.totalRecebido)}
-            </p>
-          </div>
-          {/* Paid rate ring */}
-          <div className="flex shrink-0 flex-col items-center gap-1">
-            <PaidRateRing rate={paidRate} />
-            <p className="text-[10px] font-bold text-zinc-400">{paidRate}% pagos</p>
-          </div>
+      <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        {/* Main number */}
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+            Recebido hoje
+          </p>
+          <p className="mt-1.5 text-4xl font-black tracking-tight text-white md:text-5xl">
+            {currency.format(summary.totalRecebido)}
+          </p>
+          <p className="mt-2 text-sm font-medium text-zinc-400">
+            {summary.totalPedidos} pedidos · {paidPct}% pagos
+            {summary.horaDePico != null && (
+              <> · Pico <span className="text-zinc-300">{String(summary.horaDePico).padStart(2, "0")}h</span></>
+            )}
+          </p>
         </div>
 
         {/* Mini stats */}
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <HeroStat label="Bruto" value={currency.format(summary.totalBruto)} />
-          <HeroStat label="Pendente" value={currency.format(summary.totalPendente)} warn={summary.pedidosPendentes > 0} />
-          <HeroStat label="Ticket médio" value={currency.format(summary.ticketMedio)} />
-          <HeroStat
-            label="Hora de pico"
-            value={peakLabel ?? "—"}
-            icon={peakLabel ? Zap : undefined}
+        <div className="grid grid-cols-3 gap-2 sm:min-w-[260px]">
+          <HeroMini label="Bruto" value={currency.format(summary.totalBruto)} />
+          <HeroMini
+            label="Pendente"
+            value={currency.format(summary.totalPendente)}
+            highlight={summary.pedidosPendentes > 0}
+          />
+          <HeroMini label="Ticket" value={currency.format(summary.ticketMedio)} />
+        </div>
+      </div>
+
+      {/* Paid progress bar */}
+      <div className="relative mt-6">
+        <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-white/50 transition-all duration-700"
+            style={{ width: `${paidPct}%` }}
           />
         </div>
-
-        {/* Progress bar */}
-        <div className="mt-5">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-white/60 transition-all duration-700"
-              style={{ width: `${paidRate}%` }}
-            />
-          </div>
-          <div className="mt-1.5 flex justify-between text-[10px] font-medium text-zinc-500">
-            <span>{summary.pedidosPagos} pagos</span>
-            <span>{summary.totalPedidos} total</span>
-          </div>
+        <div className="mt-1.5 flex justify-between text-[10px] font-medium text-zinc-500">
+          <span>{summary.pedidosPagos} pagos</span>
+          <span>{summary.totalPedidos} total</span>
         </div>
       </div>
     </div>
   );
 }
 
-function PaidRateRing({ rate }: { rate: number }) {
-  const r = 22;
-  const circ = 2 * Math.PI * r;
-  const dash = (rate / 100) * circ;
-
+function HeroMini({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <svg width="60" height="60" viewBox="0 0 60 60" className="-rotate-90">
-      <circle cx="30" cy="30" r={r} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="5" />
-      <circle
-        cx="30" cy="30" r={r} fill="none"
-        stroke="rgba(255,255,255,0.7)" strokeWidth="5"
-        strokeDasharray={`${dash} ${circ}`}
-        strokeLinecap="round"
-        style={{ transition: "stroke-dasharray 0.7s ease" }}
-      />
-    </svg>
-  );
-}
-
-function HeroStat({
-  label,
-  value,
-  warn,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  warn?: boolean;
-  icon?: React.ElementType;
-}) {
-  return (
-    <div className="rounded-2xl bg-white/8 p-3 backdrop-blur-sm ring-1 ring-white/10">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">{label}</p>
-      <div className="mt-1 flex items-center gap-1.5">
-        {Icon && <Icon className="h-3 w-3 shrink-0 text-amber-400" />}
-        <p className={`truncate text-sm font-black ${warn ? "text-amber-300" : "text-white"}`}>
-          {value}
-        </p>
-      </div>
+    <div className="rounded-xl bg-white/8 p-2.5 ring-1 ring-white/10">
+      <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className={`mt-0.5 truncate text-xs font-black ${highlight ? "text-amber-300" : "text-white"}`}>
+        {value}
+      </p>
     </div>
   );
 }
 
-// ── KPI Stack ────────────────────────────────────────────────────────────────
+// ── Status strip ──────────────────────────────────────────────────────────────
 
-function KpiStack({ data }: { data: CaixaData }) {
+function StatusStrip({ data }: { data: CaixaData }) {
   const { summary } = data;
+  const chips = [
+    { label: "Pagos",       count: summary.pedidosPagos,       cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
+    { label: "Pendentes",   count: summary.pedidosPendentes,   cls: summary.pedidosPendentes > 0 ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-zinc-50 text-zinc-400 border-zinc-100", dot: summary.pedidosPendentes > 0 ? "bg-amber-400" : "bg-zinc-300" },
+    { label: "Cancelados",  count: summary.pedidosCancelados,  cls: summary.pedidosCancelados > 0 ? "bg-red-50 text-red-700 border-red-200" : "bg-zinc-50 text-zinc-400 border-zinc-100", dot: summary.pedidosCancelados > 0 ? "bg-red-500" : "bg-zinc-300" },
+    { label: "Cortesias",   count: summary.pedidosCortesia,    cls: summary.pedidosCortesia > 0 ? "bg-violet-50 text-violet-700 border-violet-200" : "bg-zinc-50 text-zinc-400 border-zinc-100", dot: summary.pedidosCortesia > 0 ? "bg-violet-500" : "bg-zinc-300" },
+  ];
+
   return (
-    <div className="grid grid-cols-2 gap-3 xl:grid-cols-1 xl:gap-3">
-      <KpiCard
-        icon={ShoppingBag}
-        label="Pedidos"
-        primary={String(summary.totalPedidos)}
-        secondary={`${summary.pedidosPagos} pagos · ${summary.pedidosPendentes} pendentes`}
-        tone="zinc"
-      />
-      <KpiCard
-        icon={TrendingUp}
-        label="Recebido"
-        primary={currency.format(summary.totalRecebido)}
-        secondary={`Ticket médio ${currency.format(summary.ticketMedio)}`}
-        tone="emerald"
-      />
-      <KpiCard
-        icon={XCircle}
-        label="Cancelamentos"
-        primary={String(summary.pedidosCancelados)}
-        secondary={`${summary.taxaCancelamento.toFixed(1)}% dos pedidos`}
-        tone={summary.pedidosCancelados > 0 ? "red" : "zinc"}
-      />
-      <KpiCard
-        icon={Gift}
-        label="Cortesias"
-        primary={String(summary.pedidosCortesia)}
-        secondary={summary.pedidosCortesia > 0 ? currency.format(summary.totalCortesia) : "Nenhuma hoje"}
-        tone={summary.pedidosCortesia > 0 ? "violet" : "zinc"}
-      />
+    <div className="flex gap-2 overflow-x-auto pb-0.5 hide-scrollbar">
+      {chips.map((chip) => (
+        <div
+          key={chip.label}
+          className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold ${chip.cls}`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${chip.dot}`} />
+          {chip.label}
+          <span className="font-black">{chip.count}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
-function KpiCard({
-  icon: Icon,
-  label,
-  primary,
-  secondary,
-  tone,
-}: {
-  icon: React.ElementType;
-  label: string;
-  primary: string;
-  secondary: string;
-  tone: "zinc" | "emerald" | "red" | "violet" | "amber";
-}) {
-  const tones = {
-    zinc:    { wrap: "bg-white border-zinc-100", icon: "bg-zinc-100 text-zinc-600" },
-    emerald: { wrap: "bg-white border-emerald-100", icon: "bg-emerald-50 text-emerald-600" },
-    red:     { wrap: "bg-white border-red-100",    icon: "bg-red-50 text-red-600" },
-    violet:  { wrap: "bg-white border-violet-100", icon: "bg-violet-50 text-violet-600" },
-    amber:   { wrap: "bg-white border-amber-100",  icon: "bg-amber-50 text-amber-600" },
-  };
-  const t = tones[tone];
-  return (
-    <Card className={`border shadow-sm ${t.wrap}`}>
-      <CardContent className="flex items-start gap-4 p-4">
-        <span className={`mt-0.5 shrink-0 rounded-xl p-2.5 ${t.icon}`}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">{label}</p>
-          <p className="mt-0.5 truncate text-xl font-black leading-tight text-brand-charcoal">{primary}</p>
-          <p className="mt-0.5 truncate text-xs font-medium text-zinc-400">{secondary}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// ── Insights ──────────────────────────────────────────────────────────────────
 
-// ── Pending orders ────────────────────────────────────────────────────────────
+const INSIGHT_STYLE: Record<InsightSeverity, { wrap: string; icon: string }> = {
+  positive: { wrap: "border-emerald-100 bg-emerald-50",  icon: "text-emerald-600" },
+  info:     { wrap: "border-blue-100 bg-blue-50",        icon: "text-blue-600" },
+  warning:  { wrap: "border-amber-100 bg-amber-50",      icon: "text-amber-600" },
+};
 
-function PendingOrdersSection({ orders }: { orders: PendingOrder[] }) {
+function InsightsSection({ insights }: { insights: DayInsight[] }) {
   return (
-    <div className="overflow-hidden rounded-3xl border border-amber-200 bg-amber-50 shadow-sm">
-      <div className="flex items-center justify-between gap-3 border-b border-amber-200 px-5 py-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400 text-xs font-black text-white">
-            {orders.length}
-          </span>
-          <h2 className="text-sm font-black text-amber-900">Pedidos pendentes</h2>
-        </div>
-        <Link
-          href="/app/pedidos"
-          className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-900"
-        >
-          Ver todos <ArrowRight className="h-3 w-3" />
-        </Link>
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5 px-0.5">
+        <Info className="h-3.5 w-3.5 text-zinc-400" />
+        <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Insights do dia</p>
       </div>
-      <div className="grid grid-cols-1 gap-px bg-amber-200 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {orders.slice(0, 8).map((order) => (
-          <div key={order.id} className="flex items-center justify-between gap-3 bg-white px-4 py-3">
-            <div>
-              <p className="text-sm font-black text-brand-charcoal">
-                #{String(order.daily_number).padStart(3, "0")}
-              </p>
-              <p className="text-xs font-medium text-zinc-400">
-                {timeFormatter.format(new Date(order.created_at))}
-              </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {insights.map((insight, i) => {
+          const style = INSIGHT_STYLE[insight.severity];
+          const Icon = insight.icon;
+          return (
+            <div
+              key={i}
+              className={`flex items-start gap-3 rounded-2xl border p-4 ${style.wrap}`}
+            >
+              <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${style.icon}`} />
+              <p className="text-sm font-medium leading-snug text-zinc-700">{insight.text}</p>
             </div>
-            <p className="text-sm font-black text-amber-600">{currency.format(order.total_amount)}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -395,229 +396,137 @@ function PendingOrdersSection({ orders }: { orders: PendingOrder[] }) {
 
 // ── Top products ──────────────────────────────────────────────────────────────
 
-function TopProductsSection({ products }: { products: TopProduct[] }) {
+function TopProductsCard({ products }: { products: TopProduct[] }) {
   if (products.length === 0) return null;
-  const maxQty = Math.max(...products.map((p) => p.quantity), 1);
+  const max = Math.max(...products.map((p) => p.quantity), 1);
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-zinc-100 bg-white shadow-sm">
-      <div className="flex items-center gap-2.5 border-b border-zinc-100 px-5 py-4">
+    <Card className="overflow-hidden border-zinc-100 shadow-sm">
+      <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3.5">
         <Trophy className="h-4 w-4 text-brand-amber" />
-        <h2 className="text-sm font-black text-brand-charcoal">Mais vendidos hoje</h2>
+        <h2 className="text-sm font-black text-brand-charcoal">Mais vendidos</h2>
       </div>
-      <div className="divide-y divide-zinc-50">
-        {products.map((product, index) => {
-          const pct = (product.quantity / maxQty) * 100;
+      <CardContent className="divide-y divide-zinc-50 p-0">
+        {products.map((p, i) => {
+          const pct = (p.quantity / max) * 100;
+          const rankCls =
+            i === 0 ? "bg-brand-amber text-white" :
+            i === 1 ? "bg-zinc-300 text-zinc-700" :
+            i === 2 ? "bg-amber-800/20 text-amber-900" :
+                      "bg-zinc-100 text-zinc-500";
           return (
-            <div key={product.name} className="flex items-center gap-4 px-5 py-4">
-              {/* Rank */}
-              <span
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${
-                  index === 0
-                    ? "bg-brand-amber text-white shadow-sm"
-                    : index === 1
-                    ? "bg-zinc-300 text-brand-charcoal"
-                    : index === 2
-                    ? "bg-amber-700/20 text-amber-800"
-                    : "bg-zinc-100 text-zinc-500"
-                }`}
-              >
-                {index + 1}
-              </span>
-
-              {/* Name + bar */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className="truncate text-sm font-bold text-brand-charcoal">{product.name}</p>
-                  <p className="shrink-0 text-sm font-black text-brand-charcoal">
-                    {currency.format(product.revenue)}
-                  </p>
-                </div>
-                <div className="mt-2 flex items-center gap-3">
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                    <div
-                      className="h-full rounded-full bg-brand-red"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="shrink-0 text-xs font-bold text-zinc-400">
-                    {product.quantity} un.
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Payment breakdown ─────────────────────────────────────────────────────────
-
-function PaymentBreakdownSection({
-  items,
-  received,
-}: {
-  items: PaymentBreakdown[];
-  received: number;
-}) {
-  const active = items.filter((i) => i.count > 0 && i.method !== "PENDING" && i.method !== "COURTESY");
-  if (active.length === 0) return null;
-
-  return (
-    <div className="overflow-hidden rounded-3xl border border-zinc-100 bg-white shadow-sm">
-      <div className="flex items-center gap-2.5 border-b border-zinc-100 px-5 py-4">
-        <Wallet className="h-4 w-4 text-brand-charcoal" />
-        <h2 className="text-sm font-black text-brand-charcoal">Meios de pagamento</h2>
-      </div>
-      <div className="divide-y divide-zinc-50">
-        {active.map((item) => {
-          const meta = PAYMENT_META[item.method] ?? { icon: Wallet, color: "text-zinc-600 bg-zinc-100 ring-zinc-200", bar: "bg-zinc-400" };
-          const Icon = meta.icon;
-          const pct = received > 0 ? Math.round((item.total / received) * 100) : 0;
-          return (
-            <div key={item.method} className="px-5 py-4">
+            <div key={p.name} className="px-4 py-3.5">
               <div className="flex items-center gap-3">
-                <span className={`shrink-0 rounded-xl p-2 ring-1 ${meta.color}`}>
-                  <Icon className="h-4 w-4" />
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black ${rankCls}`}>
+                  {i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-sm font-bold text-brand-charcoal">{item.label}</p>
-                    <p className="shrink-0 text-sm font-black text-brand-charcoal">
-                      {currency.format(item.total)}
-                    </p>
+                    <p className="truncate text-sm font-bold text-brand-charcoal">{p.name}</p>
+                    <p className="shrink-0 text-sm font-black text-brand-charcoal">{currency.format(p.revenue)}</p>
                   </div>
                   <div className="mt-1.5 flex items-center gap-2">
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                      <div
-                        className={`h-full rounded-full ${meta.bar} transition-all duration-500`}
-                        style={{ width: `${Math.min(pct, 100)}%` }}
-                      />
+                      <div className="h-full rounded-full bg-brand-red" style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="w-8 shrink-0 text-right text-xs font-bold text-zinc-400">
-                      {pct}%
+                    <span className="w-10 shrink-0 text-right text-[11px] font-bold text-zinc-400">
+                      {p.quantity} un.
                     </span>
                   </div>
                 </div>
               </div>
-              <p className="mt-1 pl-11 text-xs font-medium text-zinc-400">{item.count} pedidos</p>
             </div>
           );
         })}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
-// ── Financial attention ───────────────────────────────────────────────────────
+// ── Payments ──────────────────────────────────────────────────────────────────
 
-function FinancialAttentionSection({ data }: { data: CaixaData }) {
-  const { summary } = data;
-  if (summary.totalDescontos === 0 && summary.totalCortesia === 0 && summary.totalCancelado === 0) {
-    return null;
-  }
+function PaymentsCard({ items, received }: { items: PaymentBreakdown[]; received: number }) {
+  const active = items.filter((i) => i.count > 0 && i.method !== "PENDING" && i.method !== "COURTESY");
+  const pending = items.find((i) => i.method === "PENDING" && i.count > 0);
+
+  if (active.length === 0 && !pending) return null;
+
   return (
-    <div className="overflow-hidden rounded-3xl border border-zinc-100 bg-white shadow-sm">
-      <div className="border-b border-zinc-100 px-5 py-4">
-        <h2 className="text-sm font-black text-brand-charcoal">Ajustes financeiros</h2>
+    <Card className="overflow-hidden border-zinc-100 shadow-sm">
+      <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3.5">
+        <Wallet className="h-4 w-4 text-brand-charcoal" />
+        <h2 className="text-sm font-black text-brand-charcoal">Formas de pagamento</h2>
       </div>
-      <div className="divide-y divide-zinc-50">
-        {summary.totalDescontos > 0 && (
-          <FinancialRow
-            label="Descontos"
-            value={currency.format(summary.totalDescontos)}
-            count={summary.pedidosComDesconto}
-            tone="red"
-          />
-        )}
-        {summary.totalCortesia > 0 && (
-          <FinancialRow
-            label="Cortesias"
-            value={currency.format(summary.totalCortesia)}
-            count={summary.pedidosCortesia}
-            tone="violet"
-          />
-        )}
-        {summary.totalCancelado > 0 && (
-          <FinancialRow
-            label="Cancelados"
-            value={currency.format(summary.totalCancelado)}
-            count={summary.pedidosCancelados}
-            tone="zinc"
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FinancialRow({
-  label,
-  value,
-  count,
-  tone,
-}: {
-  label: string;
-  value: string;
-  count: number;
-  tone: "red" | "violet" | "zinc";
-}) {
-  const tones = {
-    red:    "text-red-600",
-    violet: "text-violet-600",
-    zinc:   "text-zinc-500",
-  };
-  return (
-    <div className="flex items-center justify-between gap-3 px-5 py-3.5">
-      <div>
-        <p className="text-sm font-bold text-brand-charcoal">{label}</p>
-        <p className="text-xs font-medium text-zinc-400">{count} registro{count !== 1 ? "s" : ""}</p>
-      </div>
-      <p className={`text-sm font-black ${tones[tone]}`}>{value}</p>
-    </div>
-  );
-}
-
-// ── Quick links ───────────────────────────────────────────────────────────────
-
-function QuickLinks({ role }: { role: CaixaData["role"] }) {
-  return (
-    <div className={`grid gap-3 ${role === "ADMIN" ? "sm:grid-cols-2" : "grid-cols-1"}`}>
-      <Link
-        href="/app/pedidos"
-        className="group flex items-center justify-between gap-3 rounded-3xl border border-zinc-200 bg-white px-5 py-4 shadow-sm transition-all hover:border-zinc-300 hover:shadow-md active:scale-[0.98]"
-      >
-        <div className="flex items-center gap-3">
-          <span className="rounded-2xl bg-zinc-100 p-2.5 text-brand-charcoal transition-colors group-hover:bg-zinc-200">
-            <ShoppingBag className="h-4 w-4" />
-          </span>
-          <div>
-            <p className="text-sm font-black text-brand-charcoal">Pedidos de hoje</p>
-            <p className="text-xs font-medium text-zinc-400">Ver e gerenciar pedidos</p>
-          </div>
-        </div>
-        <ArrowRight className="h-4 w-4 shrink-0 text-zinc-400 transition-transform group-hover:translate-x-1" />
-      </Link>
-
-      {role === "ADMIN" && (
-        <Link
-          href="/app/caixa/relatorio"
-          className="group flex items-center justify-between gap-3 rounded-3xl border border-brand-charcoal bg-brand-charcoal px-5 py-4 shadow-sm transition-all hover:bg-brand-charcoal/90 hover:shadow-md active:scale-[0.98]"
-        >
-          <div className="flex items-center gap-3">
-            <span className="rounded-2xl bg-white/15 p-2.5 text-white">
-              <BarChart3 className="h-4 w-4" />
-            </span>
-            <div>
-              <p className="text-sm font-black text-white">Relatório gerencial</p>
-              <p className="text-xs font-medium text-zinc-400">Análise completa do período</p>
+      <CardContent className="divide-y divide-zinc-50 p-0">
+        {active.map((item) => {
+          const meta = PAYMENT_META[item.method];
+          const Icon = meta.icon;
+          const pct = received > 0 ? Math.round((item.total / received) * 100) : 0;
+          return (
+            <div key={item.method} className="px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <span className={`shrink-0 rounded-xl p-2 ${meta.iconCls}`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-sm font-bold text-brand-charcoal">{meta.label}</p>
+                    <p className="shrink-0 text-sm font-black text-brand-charcoal">{currency.format(item.total)}</p>
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
+                      <div
+                        className={`h-full rounded-full ${meta.barCls} transition-all duration-500`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="w-8 shrink-0 text-right text-[11px] font-bold text-zinc-400">{pct}%</span>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-0.5 pl-11 text-[11px] font-medium text-zinc-400">{item.count} pedido{item.count !== 1 ? "s" : ""}</p>
             </div>
+          );
+        })}
+
+        {/* Pending row */}
+        {pending && (
+          <div className="flex items-center justify-between gap-3 bg-amber-50/60 px-4 py-3.5">
+            <div className="flex items-center gap-3">
+              <span className="shrink-0 rounded-xl bg-amber-50 p-2 text-amber-600">
+                <Clock className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-sm font-bold text-amber-800">Pendente</p>
+                <p className="text-[11px] font-medium text-amber-600">{pending.count} pedido{pending.count !== 1 ? "s" : ""} aguardando</p>
+              </div>
+            </div>
+            <p className="text-sm font-black text-amber-700">{currency.format(pending.total)}</p>
           </div>
-          <ArrowRight className="h-4 w-4 shrink-0 text-zinc-400 transition-transform group-hover:translate-x-1" />
-        </Link>
-      )}
-    </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Admin CTA ─────────────────────────────────────────────────────────────────
+
+function AdminCTA() {
+  return (
+    <Link
+      href="/app/caixa/relatorio"
+      className="group flex items-center justify-between gap-4 rounded-2xl border border-brand-charcoal bg-brand-charcoal px-5 py-4 shadow-sm transition-all hover:bg-brand-charcoal/90 hover:shadow-md active:scale-[0.98]"
+    >
+      <div className="flex items-center gap-3">
+        <span className="rounded-xl bg-white/15 p-2.5">
+          <BarChart3 className="h-4 w-4 text-white" />
+        </span>
+        <div>
+          <p className="text-sm font-black text-white">Relatório gerencial</p>
+          <p className="text-xs font-medium text-zinc-400">Análise completa de vendas e operação</p>
+        </div>
+      </div>
+      <ArrowRight className="h-4 w-4 shrink-0 text-zinc-400 transition-transform group-hover:translate-x-1" />
+    </Link>
   );
 }
