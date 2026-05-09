@@ -25,7 +25,6 @@ export const usersApi = {
     const { data, error } = await supabase.functions.invoke('manage-users', {
       body: { action: 'list_users' }
     });
-    
     if (error) throw error;
     if (!data.success) throw new Error(data.error || 'Falha ao listar usuários');
     return data.data;
@@ -35,7 +34,6 @@ export const usersApi = {
     const { data, error } = await supabase.functions.invoke('manage-users', {
       body: { action: 'create_user', data: userData }
     });
-    
     if (error) throw error;
     if (!data.success) throw new Error(data.error || 'Falha ao criar usuário');
     return data.data;
@@ -45,9 +43,17 @@ export const usersApi = {
     const { data, error } = await supabase.functions.invoke('manage-users', {
       body: { action: 'update_user', data: userData }
     });
-    
     if (error) throw error;
     if (!data.success) throw new Error(data.error || 'Falha ao atualizar usuário');
+    return data.data;
+  },
+
+  async resetPassword(id: string, password: string) {
+    const { data, error } = await supabase.functions.invoke('manage-users', {
+      body: { action: 'reset_password', data: { id, password } }
+    });
+    if (error) throw error;
+    if (!data.success) throw new Error(data.error || 'Falha ao redefinir senha');
     return data.data;
   },
 
@@ -55,7 +61,6 @@ export const usersApi = {
     const { data, error } = await supabase.functions.invoke('manage-users', {
       body: { action: 'toggle_user_status', data: { id, active } }
     });
-    
     if (error) throw error;
     if (!data.success) throw new Error(data.error || 'Falha ao alterar status do usuário');
     return data.data;

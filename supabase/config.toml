@@ -157,7 +157,7 @@ site_url = "https://pdv-marcos-kreps.vercel.app"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 additional_redirect_urls = ["https://pdv-marcos-kreps.vercel.app/**", "http://localhost:3000/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
-jwt_expiry = 3600
+jwt_expiry = 86400
 # JWT issuer URL. If not set, defaults to auth.external_url.
 # jwt_issuer = ""
 # Path to JWT signing key. DO NOT commit your signing keys file to git.
@@ -185,9 +185,9 @@ password_requirements = ""
 
 # Configure WebAuthn relying party settings (required when passkey is enabled).
 # [auth.webauthn]
-# rp_display_name = "Supabase"
-# rp_id = "localhost"
-# rp_origins = ["http://127.0.0.1:3000"]
+# rp_display_name = "Marcos Krep's PDV"
+# rp_id = "pdv-marcos-kreps.vercel.app"
+# rp_origins = ["https://pdv-marcos-kreps.vercel.app", "http://localhost:3000"]
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
@@ -265,10 +265,7 @@ max_frequency = "5s"
 
 # Configure logged in session timeouts.
 # [auth.sessions]
-# Force log out after the specified duration.
-# timebox = "24h"
-# Force log out if the user has been inactive longer than the specified duration.
-# inactivity_timeout = "8h"
+# timebox = "24h"  (requer Supabase Pro)
 
 # This hook runs before a new user is created and allows developers to reject the request based on the incoming user object.
 # [auth.hook.before_user_created]
