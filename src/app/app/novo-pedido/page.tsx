@@ -9,7 +9,7 @@ import { pdvApi } from "@/lib/api/pdv-api";
 import { Product, Ingredient, Order, Addon } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
-import { Minus, Plus, ShoppingBag, Utensils, ShoppingCart, Info, AlertCircle, RefreshCw, Sandwich, Cookie, GlassWater, Coffee, Flame, Star, Beer, Beef, Hamburger, type LucideIcon } from "lucide-react";
+import { Minus, Plus, Utensils, ShoppingCart, Info, AlertCircle, RefreshCw, Sandwich, Cookie, GlassWater, Coffee, Flame, Star, Beer, Beef, Hamburger, type LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 export default function NovoPedidoPage() {
@@ -39,8 +39,6 @@ export default function NovoPedidoPage() {
   const [selectedAddons, setSelectedAddons] = useState<Map<string, number>>(new Map());
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");
-  const [itemIsTakeout, setItemIsTakeout] = useState(false);
-  
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   useEffect(() => {
@@ -102,14 +100,12 @@ export default function NovoPedidoPage() {
       setSelectedAddons(addonsMap);
       setQuantity(existingItem.quantity);
       setNotes(existingItem.notes || "");
-      setItemIsTakeout(existingItem.is_takeout ?? false);
     } else {
       setEditingCartItemId(null);
       setRemovedIngredientIds(new Set());
       setSelectedAddons(new Map());
       setQuantity(1);
       setNotes("");
-      setItemIsTakeout(false);
     }
   };
 
@@ -152,7 +148,7 @@ export default function NovoPedidoPage() {
       removed_ingredients: Array.from(removedIngredientIds),
       addons: addonsArray,
       notes: notes.trim() ? notes : undefined,
-      is_takeout: itemIsTakeout,
+      is_takeout: false,
     };
 
     if (editingCartItemId) {
@@ -446,29 +442,6 @@ export default function NovoPedidoPage() {
                 </div>
               </div>
             )}
-
-            {/* Item destination toggle */}
-            <div className="space-y-3">
-              <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] px-1">Destino do Item</h4>
-              <div className="flex bg-zinc-100 p-1 rounded-xl">
-                <button
-                  type="button"
-                  className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all duration-200 tracking-wider uppercase flex items-center justify-center gap-2 ${!itemIsTakeout ? 'bg-white text-brand-charcoal shadow-sm' : 'text-zinc-500'}`}
-                  onClick={() => setItemIsTakeout(false)}
-                >
-                  <Utensils className="w-3.5 h-3.5" />
-                  Comer Aqui
-                </button>
-                <button
-                  type="button"
-                  className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all duration-200 tracking-wider uppercase flex items-center justify-center gap-2 ${itemIsTakeout ? 'bg-white text-brand-charcoal shadow-sm' : 'text-zinc-500'}`}
-                  onClick={() => setItemIsTakeout(true)}
-                >
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  Para Levar
-                </button>
-              </div>
-            </div>
 
             {/* Notes */}
             <div className="space-y-4">
