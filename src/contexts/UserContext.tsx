@@ -10,6 +10,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { UserRole } from "@/types/pdv";
 
+const SESSION_TIMEOUT_MS = 10000;
+
 interface UserProfile {
   id: string;
   email: string;
@@ -42,22 +44,31 @@ export function UserProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     async function loadProfile() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        const sessionResult = await withTimeout(
+          supabase.auth.getSession(),
+          SESSION_TIMEOUT_MS,
+        );
+        const session = sessionResult.data.session;
 
-      if (!session) {
-        if (mounted) setIsLoading(false);
-        return;
-      }
+        if (!mounted) return;
 
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("id, name, role, active")
-        .eq("id", session.user.id)
-        .single();
+        if (!session) {
+          setUser(null);
+          return;
+        }
 
-      if (mounted) {
+        const { data: profile, error } = await withTimeout(
+          supabase
+            .from("profiles")
+            .select("id, name, role, active")
+            .eq("id", session.user.id)
+            .maybeSingle(),
+          SESSION_TIMEOUT_MS,
+        );
+
+        if (!mounted) return;
+
         if (!error && profile) {
           setUser({
             id: session.user.id,
@@ -66,8 +77,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
             role: profile.role as UserRole,
             active: profile.active,
           });
+        } else {
+          setUser(null);
         }
-        setIsLoading(false);
+      } catch (error) {
+        console.error("[UserProvider] Failed to load session profile", error);
+        if (mounted) setUser(null);
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -83,21 +102,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Re-fetch profile on token refresh / sign-in
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("id, name, role, active")
-          .eq("id", session.user.id)
-          .single();
+        try {
+          // Re-fetch profile on token refresh / sign-in
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("id, name, role, active")
+            .eq("id", session.user.id)
+            .maybeSingle();
 
-        if (mounted && profile) {
-          setUser({
-            id: session.user.id,
-            email: session.user.email ?? "",
-            name: profile.name,
-            role: profile.role as UserRole,
-            active: profile.active,
-          });
+          if (mounted && profile) {
+            setUser({
+              id: session.user.id,
+              email: session.user.email ?? "",
+              name: profile.name,
+              role: profile.role as UserRole,
+              active: profile.active,
+            });
+          }
+        } finally {
+          if (mounted) setIsLoading(false);
         }
       },
     );
@@ -125,4 +148,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
 /** Hook — throws if used outside <UserProvider> */
 export function useUser(): UserContextValue {
   return useContext(UserContext);
+}
+
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error("Tempo limite ao verificar sessão no Supabase"));
+    }, timeoutMs);
+
+    Promise.resolve(promise)
+      .then(resolve, reject)
+      .finally(() => window.clearTimeout(timeout));
+  });
 }
