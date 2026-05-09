@@ -375,12 +375,10 @@ Deno.serve(async (req) => {
     let result: unknown;
 
     if (action === "register_begin" || action === "register_complete") {
-      // Requires authenticated user
+      // Requires authenticated user — validate the Bearer JWT using the admin client
       const authHeader = req.headers.get("authorization") ?? "";
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user }, error } = await createClient(SUPABASE_URL, token, {
-        auth: { persistSession: false },
-      }).auth.getUser();
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
       if (error || !user) throw new Error("Não autorizado");
 
       if (action === "register_begin") {
