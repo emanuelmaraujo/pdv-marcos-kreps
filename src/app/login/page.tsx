@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import {
+  isWebAuthnSupported,
+  hasEnrolledPasskey,
+  authenticateWithPasskey,
+} from "@/lib/webauthn-client";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -27,40 +32,31 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [error, setError] = useState("");
-  const [hasSavedCredential, setHasSavedCredential] = useState(false);
+  const [showBiometric, setShowBiometric] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
-  // Check for saved credential on mount (for biometric quick-login)
+  // Show biometric button only if WebAuthn is supported AND user has enrolled on this device
   useEffect(() => {
-    if (!("credentials" in navigator)) return;
-    if (typeof (window as unknown as Record<string, unknown>).PasswordCredential === "undefined") return;
-    navigator.credentials
-      .get({ password: true, mediation: "silent" } as CredentialRequestOptions)
-      .then((cred) => {
-        if (cred && "password" in cred) setHasSavedCredential(true);
-      })
-      .catch(() => {});
+    setShowBiometric(isWebAuthnSupported() && hasEnrolledPasskey());
   }, []);
 
-  const signInAndRedirect = useCallback(async (emailVal: string, passwordVal: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email: emailVal, password: passwordVal });
-    if (error) throw error;
+  const redirectAfterLogin = useCallback(() => {
     storeLoginTime();
-
-    // Save credential for biometric quick-login
-    if ("credentials" in navigator && "PasswordCredential" in window) {
-      try {
-        const PasswordCredential = (window as unknown as Record<string, unknown>).PasswordCredential as new (init: { id: string; password: string }) => Credential;
-        const cred = new PasswordCredential({ id: emailVal, password: passwordVal });
-        await navigator.credentials.store(cred);
-      } catch {
-        // Not critical — ignore if browser doesn't support
-      }
-    }
-
     router.push("/app");
-  }, [supabase, router]);
+  }, [router]);
+
+  const signInAndRedirect = useCallback(
+    async (emailVal: string, passwordVal: string) => {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: emailVal,
+        password: passwordVal,
+      });
+      if (error) throw error;
+      redirectAfterLogin();
+    },
+    [supabase, redirectAfterLogin],
+  );
 
   // Enforce 24h client-side session expiry
   useEffect(() => {
@@ -85,22 +81,23 @@ export default function LoginPage() {
   };
 
   const handleBiometricLogin = async () => {
-    if (!("credentials" in navigator)) return;
     setBiometricLoading(true);
     setError("");
     try {
-      const cred = await navigator.credentials.get({
-        password: true,
-        mediation: "required",
-      } as CredentialRequestOptions) as (Credential & { password?: string }) | null;
+      // authenticateWithPasskey triggers OS biometric prompt and returns a session token
+      const { token_hash, email: userEmail } = await authenticateWithPasskey();
 
-      if (!cred || !("password" in cred) || !cred.password) {
-        setError("Nenhuma credencial encontrada. Faça login com e-mail e senha primeiro.");
-        return;
-      }
-      await signInAndRedirect(cred.id, cred.password);
+      // Exchange the token for a Supabase session (no email is sent)
+      const { error: otpErr } = await supabase.auth.verifyOtp({
+        token_hash,
+        type: "magiclink",
+      });
+      if (otpErr) throw otpErr;
+
+      redirectAfterLogin();
     } catch (err: unknown) {
       const e = err as { name?: string; message?: string };
+      // NotAllowedError = user cancelled the biometric prompt — no error message needed
       if (e?.name !== "NotAllowedError") {
         setError(translateError(e.message ?? "Erro desconhecido"));
       }
@@ -173,8 +170,8 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {/* Biometric quick-login */}
-            {"credentials" in navigator && (
+            {/* Biometric quick-login — shown only after user enrolls on this device */}
+            {showBiometric && (
               <div className="mt-3">
                 <div className="relative flex items-center my-3">
                   <div className="flex-1 border-t border-zinc-700" />
@@ -188,7 +185,7 @@ export default function LoginPage() {
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-zinc-600 bg-zinc-700/30 text-zinc-300 hover:bg-zinc-700/60 active:scale-95 transition-all text-sm font-medium disabled:opacity-50"
                 >
                   <Fingerprint className="h-5 w-5 text-brand-red" />
-                  {biometricLoading ? "Verificando..." : hasSavedCredential ? "Entrar com digital / Face ID" : "Acesso rápido com digital"}
+                  {biometricLoading ? "Verificando biometria..." : "Entrar com digital / Face ID"}
                 </button>
               </div>
             )}

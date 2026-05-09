@@ -11,6 +11,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { usersApi, UserProfile } from "@/lib/api/users-api";
 import { useToast, ToastContainer } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { enrollPasskey, isWebAuthnSupported, hasEnrolledPasskey } from "@/lib/webauthn-client";
 import {
   UserPlus,
   UserCog,
@@ -26,6 +27,7 @@ import {
   Activity,
   KeyRound,
   Fingerprint,
+  CheckCircle2,
 } from "lucide-react";
 
 function getInitials(name: string) {
@@ -79,8 +81,8 @@ export default function GestaoUsuarios() {
   const [saving, setSaving] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
-  const [biometricPassword, setBiometricPassword] = useState("");
   const [biometricSaving, setBiometricSaving] = useState(false);
+  const [biometricDone, setBiometricDone] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -92,6 +94,7 @@ export default function GestaoUsuarios() {
   });
 
   const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
+  const webAuthnSupported = typeof window !== "undefined" ? isWebAuthnSupported() : false;
 
   const supabase = createClient();
 
@@ -195,40 +198,18 @@ export default function GestaoUsuarios() {
     }
   }
 
-  async function handleBiometricSetup(e: React.FormEvent) {
-    e.preventDefault();
-    if (!currentUserEmail) return;
-    if (!("credentials" in navigator) || !("PasswordCredential" in window)) {
-      addToast("error", "Seu dispositivo não suporta acesso com digital.");
-      return;
-    }
-    if (biometricPassword.length < 6) {
-      addToast("error", "Digite sua senha atual para confirmar o vínculo.");
-      return;
-    }
-
+  async function handleBiometricSetup() {
+    if (!currentUserId || !currentUserEmail) return;
     setBiometricSaving(true);
+    setBiometricDone(false);
     try {
-      // Verify password before storing by signing in
-      const { error: authErr } = await supabase.auth.signInWithPassword({
-        email: currentUserEmail,
-        password: biometricPassword,
-      });
-      if (authErr) {
-        addToast("error", "Senha incorreta. Verifique e tente novamente.");
-        return;
-      }
-
-      // Store credential — OS will prompt biometric enrollment
-      const PasswordCredential = (window as unknown as Record<string, unknown>).PasswordCredential as new (init: { id: string; password: string }) => Credential;
-      const cred = new PasswordCredential({ id: currentUserEmail, password: biometricPassword });
-      await navigator.credentials.store(cred);
-
-      addToast("success", "Digital vinculada com sucesso! Use-a no próximo login.");
-      setIsBiometricModalOpen(false);
-      setBiometricPassword("");
-    } catch {
-      addToast("error", "Não foi possível vincular a digital. Tente novamente.");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sessão expirada. Faça login novamente.");
+      await enrollPasskey(currentUserId, currentUserEmail, session.access_token);
+      setBiometricDone(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao vincular digital.";
+      addToast("error", msg);
     } finally {
       setBiometricSaving(false);
     }
@@ -387,11 +368,11 @@ export default function GestaoUsuarios() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 ml-auto shrink-0">
-                    {user.id === currentUserId && (
+                    {user.id === currentUserId && webAuthnSupported && (
                       <button
-                        onClick={() => setIsBiometricModalOpen(true)}
+                        onClick={() => { setBiometricDone(false); setIsBiometricModalOpen(true); }}
                         className="p-3 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 active:scale-95 transition-all shadow-sm"
-                        title="Configurar digital"
+                        title={hasEnrolledPasskey() ? "Digital vinculada ✓" : "Vincular digital / Face ID"}
                       >
                         <Fingerprint className="w-5 h-5" />
                       </button>
@@ -584,40 +565,61 @@ export default function GestaoUsuarios() {
       </BottomSheet>
 
       {/* Biometric modal */}
-      <BottomSheet isOpen={isBiometricModalOpen} onClose={() => { setIsBiometricModalOpen(false); setBiometricPassword(""); }} title="Vincular Digital / Face ID">
-        <form onSubmit={handleBiometricSetup} className="p-8 space-y-6">
-          <div className="flex flex-col items-center gap-3 py-2">
-            <div className="w-20 h-20 rounded-full bg-indigo-50 flex items-center justify-center">
-              <Fingerprint size={40} className="text-indigo-500" />
+      <BottomSheet
+        isOpen={isBiometricModalOpen}
+        onClose={() => setIsBiometricModalOpen(false)}
+        title="Vincular Digital / Face ID"
+      >
+        <div className="p-8 space-y-6">
+          {biometricDone ? (
+            <div className="flex flex-col items-center gap-4 py-4 text-center">
+              <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center">
+                <CheckCircle2 size={40} className="text-emerald-500" />
+              </div>
+              <div>
+                <p className="font-bold text-zinc-800">Digital vinculada!</p>
+                <p className="text-sm text-zinc-500 mt-1">
+                  Na próxima vez que acessar, toque no botão de digital na tela de login.
+                </p>
+              </div>
+              <Button
+                onClick={() => setIsBiometricModalOpen(false)}
+                className="w-full h-14 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl"
+              >
+                Concluído
+              </Button>
             </div>
-            <div className="text-center space-y-1">
-              <p className="font-bold text-zinc-800">Confirme sua identidade</p>
-              <p className="text-sm text-zinc-500 leading-relaxed">
-                Digite sua senha para vincular sua digital ou Face ID a esta conta. O dispositivo pedirá confirmação biométrica.
-              </p>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="flex flex-col items-center gap-3 py-2">
+                <div className="w-20 h-20 rounded-full bg-indigo-50 flex items-center justify-center">
+                  <Fingerprint size={40} className="text-indigo-500" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="font-bold text-zinc-800">Vincular digital / Face ID</p>
+                  <p className="text-sm text-zinc-500 leading-relaxed">
+                    Ao clicar no botão abaixo, o navegador pedirá confirmação com sua biometria
+                    (Touch ID, Face ID ou Windows Hello). Nenhuma senha é necessária.
+                  </p>
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Senha atual</label>
-            <div className="relative group">
-              <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" />
-              <Input
-                required
-                type="password"
-                placeholder="Digite sua senha"
-                className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-indigo-500/10 transition-all text-base font-medium"
-                value={biometricPassword}
-                onChange={(e) => setBiometricPassword(e.target.value)}
-              />
-            </div>
-          </div>
+              <div className="bg-indigo-50 rounded-2xl p-4 text-sm text-indigo-700 space-y-1">
+                <p className="font-bold text-xs uppercase tracking-wider text-indigo-500">Como funciona</p>
+                <p>A chave biométrica fica salva <strong>neste dispositivo</strong>. Você precisará repetir em cada aparelho que quiser usar biometria.</p>
+              </div>
 
-          <Button type="submit" loading={biometricSaving} className="w-full h-14 font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl">
-            <Fingerprint size={20} className="mr-2" />
-            Vincular digital agora
-          </Button>
-        </form>
+              <Button
+                onClick={handleBiometricSetup}
+                loading={biometricSaving}
+                className="w-full h-14 font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl"
+              >
+                <Fingerprint size={20} className="mr-2" />
+                {biometricSaving ? "Aguardando biometria..." : "Vincular agora"}
+              </Button>
+            </>
+          )}
+        </div>
       </BottomSheet>
     </div>
   );
