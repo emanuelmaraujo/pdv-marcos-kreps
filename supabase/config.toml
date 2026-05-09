@@ -403,3 +403,12 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# ─── Edge Functions ────────────────────────────────────────────────────────────
+# The webauthn function handles its own auth internally:
+#   - register_begin/complete → validates user Bearer JWT via supabaseAdmin.auth.getUser()
+#   - auth_begin/complete      → intentionally public (user is logging in, has no token yet)
+# Disabling gateway-level JWT verification prevents the 401 "Invalid JWT" for the
+# unauthenticated login flow while keeping the function secure via internal checks.
+[functions.webauthn]
+verify_jwt = false
