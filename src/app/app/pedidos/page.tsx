@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
+import { createClient } from "@/lib/supabase/client";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
 import { RefreshCw, Search } from "lucide-react";
@@ -17,8 +18,12 @@ export default function PedidosPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<TabStatus>("NA_FILA");
   const [searchQuery, setSearchQuery] = useState("");
-  
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  // Keep a ref to selectedOrder so the realtime callback can access the latest value
+  // without capturing a stale closure.
+  const selectedOrderRef = useRef<Order | null>(null);
+  selectedOrderRef.current = selectedOrder;
 
   const fetchOrders = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -26,69 +31,81 @@ export default function PedidosPage() {
     try {
       const data = await ordersApi.getTodayOrders();
       setOrders(data || []);
-      
-      // Update selected order if it's currently open
-      if (selectedOrder) {
-        const updatedOrder = data.find(o => o.id === selectedOrder.id);
-        if (updatedOrder) {
-          setSelectedOrder(updatedOrder);
-        }
+
+      // Keep the open detail-sheet in sync
+      const current = selectedOrderRef.current;
+      if (current) {
+        const updated = data.find((o) => o.id === current.id);
+        if (updated) setSelectedOrder(updated);
       }
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Erro ao carregar pedidos");
-      }
+      setError(err instanceof Error ? err.message : "Erro ao carregar pedidos");
     } finally {
       setIsLoading(false);
     }
-  }, [selectedOrder]);
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    
-    const initialFetch = async () => {
-      if (isMounted) await fetchOrders();
-    };
-    
-    initialFetch();
-    
-    const interval = setInterval(() => {
-      if (isMounted) fetchOrders(false);
-    }, 30000);
+    // Initial load
+    fetchOrders();
+
+    // ── Supabase Realtime ─────────────────────────────────────────────────────
+    // Subscribe to INSERT / UPDATE on the orders table.
+    // We re-fetch the full page rather than merging partial payloads so we always
+    // have consistent nested data (order_items, addons, etc.).
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel("orders-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",        // INSERT, UPDATE, DELETE
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          // Debounce: if multiple rows change in quick succession we only refetch once.
+          fetchOrders(false);
+        },
+      )
+      .subscribe();
 
     return () => {
-      isMounted = false;
-      clearInterval(interval);
+      supabase.removeChannel(channel);
     };
   }, [fetchOrders]);
 
   const filteredOrders = orders.filter((o) => {
     const matchesTab = activeTab === "TODOS" || o.status === activeTab;
-    const matchesSearch = !searchQuery || 
-      String(o.daily_number).includes(searchQuery) || 
+    const matchesSearch =
+      !searchQuery ||
+      String(o.daily_number).includes(searchQuery) ||
       o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    
     return matchesTab && matchesSearch;
   });
 
-  const getCount = (status: OrderStatus) => orders.filter(o => o.status === status).length;
+  const getCount = (status: OrderStatus) =>
+    orders.filter((o) => o.status === status).length;
 
   const tabs: { id: TabStatus; label: string; count?: number }[] = [
-    { id: "NA_FILA", label: "Na Fila", count: getCount('NA_FILA') },
-    { id: "PRONTO", label: "Prontos", count: getCount('PRONTO') },
-    { id: "AGUARDANDO_CONFIRMACAO", label: "Aguardando", count: getCount('AGUARDANDO_CONFIRMACAO') },
-    { id: "ENTREGUE", label: "Entregues", count: getCount('ENTREGUE') },
-    { id: "CANCELADO", label: "Cancelados", count: getCount('CANCELADO') },
+    { id: "NA_FILA", label: "Na Fila", count: getCount("NA_FILA") },
+    { id: "PRONTO", label: "Prontos", count: getCount("PRONTO") },
+    {
+      id: "AGUARDANDO_CONFIRMACAO",
+      label: "Aguardando",
+      count: getCount("AGUARDANDO_CONFIRMACAO"),
+    },
+    { id: "ENTREGUE", label: "Entregues", count: getCount("ENTREGUE") },
+    { id: "CANCELADO", label: "Cancelados", count: getCount("CANCELADO") },
   ];
 
   return (
     <div className="flex flex-col h-full bg-[#F4F4F5]">
-      <PageHeader 
-        title="Pedidos do Dia" 
+      <PageHeader
+        title="Pedidos do Dia"
         action={
-          <button 
+          <button
             onClick={() => fetchOrders()}
             className="p-2 bg-white rounded-lg border border-zinc-200 text-zinc-600 active:rotate-180 transition-transform duration-500"
           >
@@ -96,13 +113,16 @@ export default function PedidosPage() {
           </button>
         }
       />
-      
+
       {/* Search & Tabs */}
       <div className="bg-white border-b border-zinc-200 sticky top-0 z-10 shadow-sm">
         <div className="px-4 py-3">
           <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <input 
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
+            />
+            <input
               type="text"
               placeholder="Buscar por número ou cliente..."
               value={searchQuery}
@@ -111,31 +131,37 @@ export default function PedidosPage() {
             />
           </div>
         </div>
-        
+
         <div className="flex space-x-2 px-4 pb-4 overflow-x-auto hide-scrollbar">
           <button
             onClick={() => setActiveTab("TODOS")}
             className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase transition-all ${
-              activeTab === "TODOS" 
-                ? 'bg-brand-charcoal text-white' 
-                : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+              activeTab === "TODOS"
+                ? "bg-brand-charcoal text-white"
+                : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
             }`}
           >
             TODOS ({orders.length})
           </button>
-          {tabs.map(tab => (
-            <button 
+          {tabs.map((tab) => (
+            <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase transition-all flex items-center space-x-2 ${
-                activeTab === tab.id 
-                  ? 'bg-brand-red text-white shadow-md shadow-brand-red/20' 
-                  : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+                activeTab === tab.id
+                  ? "bg-brand-red text-white shadow-md shadow-brand-red/20"
+                  : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
               }`}
             >
               <span>{tab.label}</span>
               {tab.count !== undefined && tab.count > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-zinc-200 text-zinc-600'}`}>
+                <span
+                  className={`px-1.5 py-0.5 rounded-md text-[10px] ${
+                    activeTab === tab.id
+                      ? "bg-white/20 text-white"
+                      : "bg-zinc-200 text-zinc-600"
+                  }`}
+                >
                   {tab.count}
                 </span>
               )}
@@ -148,27 +174,38 @@ export default function PedidosPage() {
         {isLoading && orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-zinc-400 space-y-4">
             <RefreshCw size={32} className="animate-spin text-brand-red" />
-            <p className="text-sm font-bold uppercase tracking-widest">Sincronizando Pedidos...</p>
+            <p className="text-sm font-bold uppercase tracking-widest">
+              Sincronizando Pedidos...
+            </p>
           </div>
         ) : error ? (
           <div className="bg-red-50 border border-red-200 p-4 rounded-2xl text-center">
             <p className="text-red-700 text-sm font-bold">⚠️ {error}</p>
-            <button onClick={() => fetchOrders()} className="mt-2 text-xs font-black text-red-500 uppercase tracking-widest">Tentar Novamente</button>
+            <button
+              onClick={() => fetchOrders()}
+              className="mt-2 text-xs font-black text-red-500 uppercase tracking-widest"
+            >
+              Tentar Novamente
+            </button>
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="py-12">
-            <EmptyState 
-              title={searchQuery ? "Nenhum resultado" : "Tudo limpo por aqui"} 
-              description={searchQuery ? "Tente buscar por outro termo." : "Não há pedidos para o status selecionado."}
+            <EmptyState
+              title={searchQuery ? "Nenhum resultado" : "Tudo limpo por aqui"}
+              description={
+                searchQuery
+                  ? "Tente buscar por outro termo."
+                  : "Não há pedidos para o status selecionado."
+              }
             />
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
-            {filteredOrders.map(order => (
-              <OrderCard 
-                key={order.id} 
-                order={order} 
-                onClick={(o) => setSelectedOrder(o)} 
+            {filteredOrders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                onClick={(o) => setSelectedOrder(o)}
               />
             ))}
           </div>
