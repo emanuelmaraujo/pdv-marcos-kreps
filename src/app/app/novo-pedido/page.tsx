@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { useCart, CartItem } from "@/features/cart/useCart";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi } from "@/lib/api/pdv-api";
-import { Product, OrderType, Ingredient, Order, Addon } from "@/types/pdv";
+import { Product, Ingredient, Order, Addon } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
 import { Minus, Plus, ShoppingBag, Utensils, ShoppingCart, Info, AlertCircle, RefreshCw, Sandwich, Cookie, GlassWater, Coffee, Flame, Star, Beer, Beef, Hamburger, type LucideIcon } from "lucide-react";
@@ -16,16 +16,14 @@ export default function NovoPedidoPage() {
   const searchParams = useSearchParams();
   const addToId = searchParams.get("add_to");
   
-  const { 
-    items, 
-    getEstimatedSubtotal, 
-    orderType, 
-    setOrderType, 
-    addItem, 
+  const {
+    items,
+    getEstimatedSubtotal,
+    addItem,
     updateItem,
-    setTargetOrderId, 
-    targetOrderId, 
-    clearCart 
+    setTargetOrderId,
+    targetOrderId,
+    clearCart
   } = useCart();
   
   const [menuData, setMenuData] = useState<MenuData | null>(null);
@@ -38,9 +36,10 @@ export default function NovoPedidoPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [removedIngredientIds, setRemovedIngredientIds] = useState<Set<string>>(new Set());
-  const [selectedAddons, setSelectedAddons] = useState<Map<string, number>>(new Map()); // AddonID -> quantity
+  const [selectedAddons, setSelectedAddons] = useState<Map<string, number>>(new Map());
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");
+  const [itemIsTakeout, setItemIsTakeout] = useState(false);
   
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
@@ -103,12 +102,14 @@ export default function NovoPedidoPage() {
       setSelectedAddons(addonsMap);
       setQuantity(existingItem.quantity);
       setNotes(existingItem.notes || "");
+      setItemIsTakeout(existingItem.is_takeout ?? false);
     } else {
       setEditingCartItemId(null);
       setRemovedIngredientIds(new Set());
       setSelectedAddons(new Map());
       setQuantity(1);
       setNotes("");
+      setItemIsTakeout(false);
     }
   };
 
@@ -140,10 +141,9 @@ export default function NovoPedidoPage() {
   const handleAddToCart = () => {
     if (!selectedProduct) return;
 
-    // Convert Set and Map to array format expected by CartItem
     const addonsArray = Array.from(selectedAddons.entries()).map(([addonId, qty]) => {
       const addonData = menuData?.addons.find(a => a.id === addonId);
-      return { addon_id: addonId, quantity: qty, price: addonData?.price || 0 };
+      return { addon_id: addonId, addon_name: addonData?.name, quantity: qty, price: addonData?.price || 0 };
     });
 
     const itemData = {
@@ -151,7 +151,8 @@ export default function NovoPedidoPage() {
       quantity,
       removed_ingredients: Array.from(removedIngredientIds),
       addons: addonsArray,
-      notes: notes.trim() ? notes : undefined
+      notes: notes.trim() ? notes : undefined,
+      is_takeout: itemIsTakeout,
     };
 
     if (editingCartItemId) {
@@ -161,10 +162,6 @@ export default function NovoPedidoPage() {
     }
 
     closeCustomization();
-  };
-
-  const handleOrderTypeToggle = (type: OrderType) => {
-    setOrderType(type);
   };
 
   // Derived state for the customization sheet
@@ -239,26 +236,6 @@ export default function NovoPedidoPage() {
                 ? `Pedido #${String(targetOrder.daily_number).padStart(3, '0')}`
                 : "Marcos Krep's Operational"}
             </p>
-          </div>
-
-          {/* Order Type Toggle */}
-          <div className="px-4 pb-4">
-            <div className="flex bg-zinc-100 p-1 rounded-xl">
-              <button 
-                className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all duration-200 tracking-wider uppercase flex items-center justify-center ${orderType === 'BALCAO' ? 'bg-white text-brand-red shadow-sm' : 'text-zinc-500 hover:text-zinc-600'}`}
-                onClick={() => handleOrderTypeToggle('BALCAO')}
-              >
-                <Utensils className="w-3.5 h-3.5 mr-2" />
-                BALCÃO
-              </button>
-              <button 
-                className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all duration-200 tracking-wider uppercase flex items-center justify-center ${orderType === 'VIAGEM' ? 'bg-white text-brand-red shadow-sm' : 'text-zinc-500 hover:text-zinc-600'}`}
-                onClick={() => handleOrderTypeToggle('VIAGEM')}
-              >
-                <ShoppingBag className="w-3.5 h-3.5 mr-2" />
-                VIAGEM
-              </button>
-            </div>
           </div>
 
           {/* Categorias - Now part of the same sticky container */}
@@ -425,37 +402,73 @@ export default function NovoPedidoPage() {
             {productAddons.length > 0 && (
               <div className="space-y-4">
                 <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] px-1">Adicionais Extras</h4>
-                <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
                   {productAddons.map(addon => {
                     const qty = selectedAddons.get(addon.id) || 0;
+                    const isSelected = qty > 0;
                     return (
-                      <div key={addon.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-2 border-zinc-100 group active:border-zinc-200 transition-all">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-black text-zinc-800 uppercase tracking-tight">{addon.name}</span>
-                          <span className="text-[11px] text-brand-red font-black">+ R$ {addon.price.toFixed(2)}</span>
+                      <div
+                        key={addon.id}
+                        className={`relative rounded-2xl border-2 p-4 cursor-pointer active:scale-[0.96] transition-all select-none ${
+                          isSelected
+                            ? 'bg-emerald-50 border-emerald-300'
+                            : 'bg-white border-zinc-100'
+                        }`}
+                        onClick={() => updateAddonQty(addon.id, 1)}
+                      >
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 text-white rounded-full flex items-center justify-center text-xs font-black">
+                            {qty}
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-1.5">
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-0.5 ${isSelected ? 'bg-emerald-100' : 'bg-zinc-100'}`}>
+                            <Plus size={16} className={isSelected ? 'text-emerald-600' : 'text-zinc-400'} strokeWidth={3} />
+                          </div>
+                          <span className={`text-xs font-black uppercase tracking-tight leading-tight ${isSelected ? 'text-emerald-800' : 'text-zinc-700'}`}>
+                            {addon.name}
+                          </span>
+                          <span className={`text-[11px] font-black ${isSelected ? 'text-emerald-600' : 'text-brand-red'}`}>
+                            +R$ {addon.price.toFixed(2)}
+                          </span>
                         </div>
-                        <div className="flex items-center space-x-4 bg-zinc-50 border border-zinc-100 rounded-2xl p-1.5">
-                          <button 
-                            onClick={() => updateAddonQty(addon.id, -1)}
-                            className={`p-2.5 rounded-xl transition-all ${qty > 0 ? 'bg-white text-brand-charcoal shadow-sm active:scale-90' : 'text-zinc-300'}`}
-                            disabled={qty === 0}
+                        {isSelected && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); updateAddonQty(addon.id, -1); }}
+                            className="absolute bottom-2 right-2 w-7 h-7 bg-white rounded-lg shadow-sm flex items-center justify-center border border-emerald-100 active:scale-90 transition-all"
                           >
-                            <Minus size={18} strokeWidth={4} />
+                            <Minus size={14} className="text-emerald-600" strokeWidth={3} />
                           </button>
-                          <span className="w-5 text-center font-black text-zinc-900 text-lg">{qty}</span>
-                          <button 
-                            onClick={() => updateAddonQty(addon.id, 1)}
-                            className="p-2.5 bg-white text-brand-red shadow-sm rounded-xl active:scale-90 transition-all"
-                          >
-                            <Plus size={18} strokeWidth={4} />
-                          </button>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               </div>
             )}
+
+            {/* Item destination toggle */}
+            <div className="space-y-3">
+              <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] px-1">Destino do Item</h4>
+              <div className="flex bg-zinc-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all duration-200 tracking-wider uppercase flex items-center justify-center gap-2 ${!itemIsTakeout ? 'bg-white text-brand-charcoal shadow-sm' : 'text-zinc-500'}`}
+                  onClick={() => setItemIsTakeout(false)}
+                >
+                  <Utensils className="w-3.5 h-3.5" />
+                  Comer Aqui
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-2.5 text-[11px] font-black rounded-lg transition-all duration-200 tracking-wider uppercase flex items-center justify-center gap-2 ${itemIsTakeout ? 'bg-white text-brand-charcoal shadow-sm' : 'text-zinc-500'}`}
+                  onClick={() => setItemIsTakeout(true)}
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  Para Levar
+                </button>
+              </div>
+            </div>
 
             {/* Notes */}
             <div className="space-y-4">
