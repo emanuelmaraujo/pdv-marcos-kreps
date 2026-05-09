@@ -23,7 +23,9 @@ export default function PedidosPage() {
   // Keep a ref to selectedOrder so the realtime callback can access the latest value
   // without capturing a stale closure.
   const selectedOrderRef = useRef<Order | null>(null);
-  selectedOrderRef.current = selectedOrder;
+  useEffect(() => {
+    selectedOrderRef.current = selectedOrder;
+  }, [selectedOrder]);
 
   const fetchOrders = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -47,7 +49,9 @@ export default function PedidosPage() {
 
   useEffect(() => {
     // Initial load
-    fetchOrders();
+    const initialLoadTimer = window.setTimeout(() => {
+      fetchOrders();
+    }, 0);
 
     // ── Supabase Realtime ─────────────────────────────────────────────────────
     // Subscribe to INSERT / UPDATE on the orders table.
@@ -72,6 +76,7 @@ export default function PedidosPage() {
       .subscribe();
 
     return () => {
+      window.clearTimeout(initialLoadTimer);
       supabase.removeChannel(channel);
     };
   }, [fetchOrders]);

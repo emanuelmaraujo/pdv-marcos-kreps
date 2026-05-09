@@ -68,6 +68,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const onReprint = () => {
     handleAction(() => pdvApi.reprintOrder({ orderId: order.id, copies: ['CUSTOMER', 'KITCHEN', 'JUICE_POTATO'] }));
   };
+  const orderTypeIcon = order.type === 'BALCAO'
+    ? <Utensils size={12} className="inline mr-1" />
+    : <ShoppingBag size={12} className="inline mr-1" />;
 
   const renderPaymentSelection = () => (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
@@ -112,8 +115,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               {order.customer_name || "Cliente Final"}
             </h3>
             <p className="text-xs font-bold text-zinc-500">
-              {order.order_type === 'BALCAO' ? <Utensils size={12} className="inline mr-1" /> : <ShoppingBag size={12} className="inline mr-1" />}
-              {order.order_type} • {order.source}
+              {orderTypeIcon}
+              {order.type} • {order.source}
             </p>
           </div>
           <div className="flex flex-col items-end space-y-2">
@@ -130,7 +133,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               {order.items?.map(item => (
                 <div key={item.id} className="p-4">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="font-black text-sm text-zinc-900">{item.quantity}x {item.product?.name}</span>
+                    <span className="font-black text-sm text-zinc-900">{item.quantity}x {item.product?.name ?? item.product_name_snapshot}</span>
                     <span className="font-black text-zinc-900 text-xs italic opacity-80">R$ {item.total_price.toFixed(2)}</span>
                   </div>
                   
@@ -144,9 +147,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                       + ADD: {item.addons.map(a => a.addon?.name).join(', ')}
                     </p>
                   )}
-                  {item.notes && (
+                  {item.observation && (
                     <div className="mt-2 bg-zinc-50 p-2 rounded-lg border-l-4 border-zinc-200">
-                      <p className="text-[11px] text-zinc-500 font-bold italic leading-tight">&quot;{item.notes}&quot;</p>
+                      <p className="text-[11px] text-zinc-500 font-bold italic leading-tight">&quot;{item.observation}&quot;</p>
                     </div>
                   )}
                 </div>

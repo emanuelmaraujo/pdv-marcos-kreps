@@ -10,8 +10,8 @@ export interface MenuData {
   addons: Addon[];
 }
 
-export type CreateProductInput = Omit<Product, 'id' | 'created_at' | 'sort_order'> & { sort_order?: number };
-export type CreateAddonInput = Omit<Addon, 'id' | 'created_at' | 'sort_order'> & { sort_order?: number };
+export type CreateProductInput = Omit<Product, 'id' | 'created_at'>;
+export type CreateAddonInput = Omit<Addon, 'id' | 'created_at'>;
 export type CreateCategoryInput = Omit<Category, 'id' | 'created_at' | 'sort_order'> & { sort_order?: number };
 
 export const menuApi = {
