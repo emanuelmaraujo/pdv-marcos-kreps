@@ -28,7 +28,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="h-screen w-screen bg-background">
+        <LoadingState message="Redirecionando para o login..." />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

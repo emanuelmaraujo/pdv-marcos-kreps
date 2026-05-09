@@ -7,10 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import type { UserRole } from "@/types/pdv";
-
-const SESSION_TIMEOUT_MS = 10000;
 
 interface UserProfile {
   id: string;
@@ -42,30 +41,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    const timers = new Set<number>();
 
-    async function loadProfile() {
+    async function applySession(session: Session | null) {
       try {
-        const sessionResult = await withTimeout(
-          supabase.auth.getSession(),
-          SESSION_TIMEOUT_MS,
-        );
-        const session = sessionResult.data.session;
-
-        if (!mounted) return;
-
         if (!session) {
-          setUser(null);
+          if (mounted) setUser(null);
           return;
         }
 
-        const { data: profile, error } = await withTimeout(
-          supabase
-            .from("profiles")
-            .select("id, name, role, active")
-            .eq("id", session.user.id)
-            .maybeSingle(),
-          SESSION_TIMEOUT_MS,
-        );
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("id, name, role, active")
+          .eq("id", session.user.id)
+          .maybeSingle();
 
         if (!mounted) return;
 
@@ -78,22 +67,36 @@ export function UserProvider({ children }: { children: ReactNode }) {
             active: profile.active,
           });
         } else {
+          console.error("[UserProvider] Profile lookup failed", error);
           setUser(null);
         }
       } catch (error) {
         console.error("[UserProvider] Failed to load session profile", error);
         if (mounted) setUser(null);
       } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+
+    async function loadInitialSession() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        await applySession(session);
+      } catch (error) {
+        console.error("[UserProvider] Failed to restore Supabase session", error);
         if (mounted) {
+          setUser(null);
           setIsLoading(false);
         }
       }
     }
 
-    loadProfile();
+    loadInitialSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         if (!session) {
           if (mounted) {
             setUser(null);
@@ -102,31 +105,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        try {
-          // Re-fetch profile on token refresh / sign-in
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id, name, role, active")
-            .eq("id", session.user.id)
-            .maybeSingle();
-
-          if (mounted && profile) {
-            setUser({
-              id: session.user.id,
-              email: session.user.email ?? "",
-              name: profile.name,
-              role: profile.role as UserRole,
-              active: profile.active,
-            });
-          }
-        } finally {
-          if (mounted) setIsLoading(false);
-        }
+        const timer = window.setTimeout(() => {
+          timers.delete(timer);
+          applySession(session);
+        }, 0);
+        timers.add(timer);
       },
     );
 
     return () => {
       mounted = false;
+      timers.forEach((timer) => window.clearTimeout(timer));
       authListener.subscription.unsubscribe();
     };
   }, [supabase]);
@@ -145,19 +134,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Hook — throws if used outside <UserProvider> */
+/** Hook - throws if used outside <UserProvider> */
 export function useUser(): UserContextValue {
   return useContext(UserContext);
-}
-
-function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("Tempo limite ao verificar sessão no Supabase"));
-    }, timeoutMs);
-
-    Promise.resolve(promise)
-      .then(resolve, reject)
-      .finally(() => window.clearTimeout(timeout));
-  });
 }
