@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/nav-items";
 
@@ -35,25 +34,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         ].join(" ")}
       >
-        {/* Brand header */}
-        <div className="flex items-center gap-3 px-4 py-4 border-b border-zinc-700/60 shrink-0">
-          <Image
-            src="/logo.png"
-            alt="Marcos Krep's"
-            width={36}
-            height={36}
-            className="rounded-lg shrink-0"
-          />
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-white leading-tight truncate">
-              Marcos Krep&apos;s
-            </p>
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wider">
-              Ponto de Venda
-            </p>
-          </div>
-        </div>
-
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5" role="navigation">
           {navItems.map((item) => {

@@ -64,5 +64,14 @@ export const usersApi = {
     if (error) throw error;
     if (!data.success) throw new Error(data.error || 'Falha ao alterar status do usuário');
     return data.data;
+  },
+
+  async deleteUser(id: string) {
+    const { data, error } = await supabase.functions.invoke('manage-users', {
+      body: { action: 'delete_user', data: { id } }
+    });
+    if (error) throw error;
+    if (!data.success) throw new Error(data.error || 'Falha ao excluir usuário');
+    return data.data;
   }
 };

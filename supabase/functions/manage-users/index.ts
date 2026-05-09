@@ -179,6 +179,49 @@ serve(async (req) => {
         break;
       }
 
+      case 'delete_user': {
+        const { id } = data;
+        if (!id) throw new Error('ID do usuário é obrigatório.');
+
+        if (id === user.id) throw new Error('Você não pode excluir sua própria conta.');
+
+        const { count, error: countErr } = await supabaseAdmin
+          .from('profiles')
+          .select('*', { count: 'exact', head: true })
+          .eq('role', 'ADMIN')
+          .eq('active', true);
+
+        if (countErr) throw countErr;
+
+        const { data: targetProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('role, active')
+          .eq('id', id)
+          .single();
+
+        if (targetProfile?.role === 'ADMIN' && targetProfile?.active && count && count <= 1) {
+          throw new Error('Não é possível excluir o único administrador ativo.');
+        }
+
+        const { error: delProfileErr } = await supabaseAdmin
+          .from('profiles')
+          .delete()
+          .eq('id', id);
+
+        if (delProfileErr) throw delProfileErr;
+
+        const { error: delAuthErr } = await supabaseAdmin.auth.admin.deleteUser(id);
+        if (delAuthErr) throw delAuthErr;
+
+        await supabaseAdmin.from('audit_logs').insert({
+          user_id: user.id,
+          action: 'USER_DELETED',
+          table_name: 'profiles',
+          record_id: id,
+        });
+        break;
+      }
+
       default:
         throw new Error('Ação inválida.');
     }
