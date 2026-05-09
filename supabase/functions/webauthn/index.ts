@@ -241,16 +241,33 @@ function isAllowedOrigin(origin: string): boolean {
   return false;
 }
 
+/** Derives the WebAuthn rpId from the request Origin header.
+ *  rpId must be a registrable domain suffix of (or equal to) the page origin.
+ *  - localhost / 127.0.0.1  → "localhost"
+ *  - production domain      → configured RP_ID
+ *  - any other HTTPS origin → use its hostname directly
+ */
+function deriveRpId(origin: string): string {
+  try {
+    const { hostname } = new URL(origin);
+    if (hostname === "localhost" || hostname === "127.0.0.1") return "localhost";
+    if (hostname === RP_ID || hostname.endsWith(`.${RP_ID}`)) return RP_ID;
+    return hostname;
+  } catch {
+    return RP_ID;
+  }
+}
+
 // ─── Action handlers ─────────────────────────────────────────────────────────
 
-async function registerBegin(userId: string) {
+async function registerBegin(userId: string, rpId: string) {
   const { data: { user }, error } = await supabaseAdmin.auth.admin.getUserById(userId);
   if (error || !user) throw new Error("Usuário não encontrado");
 
   const challenge = await generateChallenge(userId);
   return {
     challenge,
-    rp: { id: RP_ID, name: RP_NAME },
+    rp: { id: rpId, name: RP_NAME },
     user: {
       id: b64uEncode(new TextEncoder().encode(userId)),
       name: user.email!,
@@ -275,6 +292,7 @@ async function registerComplete(
     response: { clientDataJSON: string; attestationObject: string };
   },
   deviceName?: string,
+  rpId: string = RP_ID,
 ) {
   if (!await verifyChallenge(challenge, userId)) throw new Error("Challenge inválido ou expirado");
 
@@ -301,7 +319,7 @@ async function registerComplete(
   if (!(authData.flags & 0x04)) throw new Error("Usuário não verificado (UV=0) — biometria obrigatória");
 
   // Verify RP ID hash
-  const rpIdHash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(RP_ID)));
+  const rpIdHash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rpId)));
   if (!arrayEq(authData.rpIdHash, rpIdHash)) throw new Error("RP ID hash não corresponde");
 
   const credentialId = b64uEncode(authData.credentialId);
@@ -318,7 +336,7 @@ async function registerComplete(
   return { credentialId };
 }
 
-async function authBegin(userId: string) {
+async function authBegin(userId: string, rpId: string) {
   const { data: creds, error } = await supabaseAdmin
     .from("webauthn_credentials")
     .select("credential_id")
@@ -329,7 +347,7 @@ async function authBegin(userId: string) {
   const challenge = await generateChallenge(userId);
   return {
     challenge,
-    rpId: RP_ID,
+    rpId,
     timeout: 60000,
     userVerification: "required",
     allowCredentials: creds.map((c) => ({ type: "public-key", id: c.credential_id })),
@@ -348,6 +366,7 @@ async function authComplete(
       signature: string;
     };
   },
+  rpId: string = RP_ID,
 ) {
   if (!await verifyChallenge(challenge, userId)) throw new Error("Challenge inválido ou expirado");
 
@@ -373,7 +392,7 @@ async function authComplete(
   const signature = b64uDecode(credential.response.signature);
 
   // Verify RP ID hash
-  const rpIdHash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(RP_ID)));
+  const rpIdHash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rpId)));
   if (!arrayEq(authDataBytes.slice(0, 32), rpIdHash)) throw new Error("RP ID hash não corresponde");
 
   // Verify UP + UV flags
@@ -413,6 +432,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
+    const origin = req.headers.get("origin") ?? "";
+    const rpId = deriveRpId(origin);
+
     const body = await req.json();
     const { action, ...data } = body;
 
@@ -427,9 +449,9 @@ Deno.serve(async (req) => {
       if (error || !user) throw new Error("Não autorizado");
 
       if (action === "register_begin") {
-        result = await registerBegin(user.id);
+        result = await registerBegin(user.id, rpId);
       } else if (action === "register_complete") {
-        result = await registerComplete(user.id, data.challenge, data.credential, data.deviceName);
+        result = await registerComplete(user.id, data.challenge, data.credential, data.deviceName, rpId);
       } else if (action === "list_credentials") {
         const { data: creds, error: listErr } = await supabaseAdmin
           .from("webauthn_credentials")
@@ -449,9 +471,9 @@ Deno.serve(async (req) => {
         result = { deleted: true };
       }
     } else if (action === "auth_begin") {
-      result = await authBegin(data.userId);
+      result = await authBegin(data.userId, rpId);
     } else if (action === "auth_complete") {
-      result = await authComplete(data.userId, data.challenge, data.credential);
+      result = await authComplete(data.userId, data.challenge, data.credential, rpId);
     } else {
       throw new Error(`Ação desconhecida: ${action}`);
     }
