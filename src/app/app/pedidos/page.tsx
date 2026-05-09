@@ -1,15 +1,34 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
 import { createClient } from "@/lib/supabase/client";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
-import { RefreshCw, Search } from "lucide-react";
+import {
+  Clock,
+  CreditCard,
+  PackageCheck,
+  RefreshCw,
+  Search,
+  ShoppingBag,
+  type LucideIcon,
+} from "lucide-react";
 
-type TabStatus = "TODOS" | "AGUARDANDO_CONFIRMACAO" | "NA_FILA" | "PRONTO" | "ENTREGUE" | "CANCELADO";
+type TabStatus =
+  | "TODOS"
+  | "AGUARDANDO_CONFIRMACAO"
+  | "NA_FILA"
+  | "PRONTO"
+  | "ENTREGUE"
+  | "CANCELADO";
+
+const currency = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 
 export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -18,9 +37,6 @@ export default function PedidosPage() {
   const [activeTab, setActiveTab] = useState<TabStatus>("NA_FILA");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-
-  // Keep a ref to selectedOrder so the realtime callback can access the latest value
-  // without capturing a stale closure.
   const selectedOrderRef = useRef<Order | null>(null);
 
   useEffect(() => {
@@ -30,14 +46,14 @@ export default function PedidosPage() {
   const fetchOrders = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
     setError("");
+
     try {
       const data = await ordersApi.getTodayOrders();
       setOrders(data || []);
 
-      // Keep the open detail-sheet in sync
       const current = selectedOrderRef.current;
       if (current) {
-        const updated = data.find((o) => o.id === current.id);
+        const updated = data.find((order) => order.id === current.id);
         if (updated) setSelectedOrder(updated);
       }
     } catch (err: unknown) {
@@ -48,28 +64,21 @@ export default function PedidosPage() {
   }, []);
 
   useEffect(() => {
-    // Initial load
     const initialLoadTimer = window.setTimeout(() => {
       fetchOrders();
     }, 0);
 
-    // ── Supabase Realtime ─────────────────────────────────────────────────────
-    // Subscribe to INSERT / UPDATE on the orders table.
-    // We re-fetch the full page rather than merging partial payloads so we always
-    // have consistent nested data (order_items, addons, etc.).
     const supabase = createClient();
-
     const channel = supabase
       .channel("orders-realtime")
       .on(
         "postgres_changes",
         {
-          event: "*",        // INSERT, UPDATE, DELETE
+          event: "*",
           schema: "public",
           table: "orders",
         },
         () => {
-          // Debounce: if multiple rows change in quick succession we only refetch once.
           fetchOrders(false);
         },
       )
@@ -81,112 +90,106 @@ export default function PedidosPage() {
     };
   }, [fetchOrders]);
 
-  const filteredOrders = orders.filter((o) => {
-    const matchesTab = activeTab === "TODOS" || o.status === activeTab;
-    const matchesSearch =
-      !searchQuery ||
-      String(o.daily_number).includes(searchQuery) ||
-      o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
-
   const getCount = (status: OrderStatus) =>
-    orders.filter((o) => o.status === status).length;
+    orders.filter((order) => order.status === status).length;
+
+  const queueCount = getCount("NA_FILA");
+  const readyCount = getCount("PRONTO");
+  const waitingCount = getCount("AGUARDANDO_CONFIRMACAO");
+  const pendingPaymentCount = orders.filter((order) => order.payment_status === "PENDING").length;
+  const receivedTotal = orders
+    .filter((order) => order.payment_status === "PAID" || order.payment_status === "COURTESY")
+    .reduce((sum, order) => sum + order.total_amount, 0);
 
   const tabs: { id: TabStatus; label: string; count?: number }[] = [
-    { id: "NA_FILA", label: "Na Fila", count: getCount("NA_FILA") },
-    { id: "PRONTO", label: "Prontos", count: getCount("PRONTO") },
+    { id: "NA_FILA", label: "Na fila", count: queueCount },
+    { id: "PRONTO", label: "Prontos", count: readyCount },
     {
       id: "AGUARDANDO_CONFIRMACAO",
       label: "Aguardando",
-      count: getCount("AGUARDANDO_CONFIRMACAO"),
+      count: waitingCount,
     },
     { id: "ENTREGUE", label: "Entregues", count: getCount("ENTREGUE") },
     { id: "CANCELADO", label: "Cancelados", count: getCount("CANCELADO") },
   ];
 
+  const filteredOrders = orders.filter((order) => {
+    const normalizedSearch = searchQuery.toLowerCase().trim();
+    const matchesTab = activeTab === "TODOS" || order.status === activeTab;
+    const matchesSearch =
+      !normalizedSearch ||
+      String(order.daily_number).includes(normalizedSearch) ||
+      order.customer_name?.toLowerCase().includes(normalizedSearch);
+
+    return matchesTab && matchesSearch;
+  });
+
   return (
-    <div className="flex flex-col h-full bg-[#F4F4F5]">
-      {/* Search & Tabs */}
-      <div className="sticky top-14 z-20 border-b border-zinc-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:px-6">
+    <div className="flex min-h-full flex-col bg-[#F5F7FA] px-3 pb-6 pt-0 md:px-6 md:pt-4 lg:px-8">
+      <section className="z-20 -mx-3 border-b border-zinc-200 bg-white/95 px-3 py-3 shadow-sm backdrop-blur md:sticky md:top-14 md:mx-0 md:rounded-2xl md:border md:p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <div className="relative flex-1">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
-            />
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <input
               type="text"
               placeholder="Buscar por número ou cliente..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-zinc-100 bg-zinc-100 py-2.5 pl-10 pr-4 text-sm font-bold transition-all placeholder:text-zinc-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-red"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="h-12 w-full rounded-2xl border border-zinc-100 bg-zinc-100 pl-11 pr-4 text-sm font-bold text-zinc-800 transition-all placeholder:text-zinc-400 focus:border-brand-red/30 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-red/10"
             />
           </div>
-          <button
-            onClick={() => fetchOrders()}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 transition-all hover:bg-zinc-50 active:scale-[0.98]"
-            aria-label="Atualizar pedidos"
-          >
-            <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-            <span>Atualizar</span>
-          </button>
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+            <QuickMetric icon={ShoppingBag} label="Hoje" value={orders.length} detail="pedidos" />
+            <QuickMetric icon={Clock} label="Fila" value={queueCount + waitingCount} detail="em preparo" tone="red" />
+            <QuickMetric icon={PackageCheck} label="Prontos" value={readyCount} detail="retirada" tone="emerald" />
+            <QuickMetric icon={CreditCard} label="Recebido" value={currency.format(receivedTotal)} detail={`${pendingPaymentCount} pend.`} tone="blue" />
+            <button
+              onClick={() => fetchOrders()}
+              className="col-span-2 inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 text-xs font-black uppercase text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 active:scale-[0.98] sm:col-span-1"
+              aria-label="Atualizar pedidos"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin text-brand-red" : ""}`} />
+              <span>Atualizar</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex space-x-2 overflow-x-auto px-4 pb-4 md:px-6 hide-scrollbar">
-          <button
+        <div className="mt-3 flex gap-2 overflow-x-auto rounded-2xl bg-zinc-100 p-1 hide-scrollbar">
+          <OrderTab
+            active={activeTab === "TODOS"}
+            label="Todos"
+            count={orders.length}
             onClick={() => setActiveTab("TODOS")}
-            className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase transition-all ${
-              activeTab === "TODOS"
-                ? "bg-brand-charcoal text-white"
-                : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-            }`}
-          >
-            TODOS ({orders.length})
-          </button>
+          />
           {tabs.map((tab) => (
-            <button
+            <OrderTab
               key={tab.id}
+              active={activeTab === tab.id}
+              label={tab.label}
+              count={tab.count}
               onClick={() => setActiveTab(tab.id)}
-              className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase transition-all flex items-center space-x-2 ${
-                activeTab === tab.id
-                  ? "bg-brand-red text-white shadow-md shadow-brand-red/20"
-                  : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-              }`}
-            >
-              <span>{tab.label}</span>
-              {tab.count !== undefined && tab.count > 0 && (
-                <span
-                  className={`px-1.5 py-0.5 rounded-md text-[10px] ${
-                    activeTab === tab.id
-                      ? "bg-white/20 text-white"
-                      : "bg-zinc-200 text-zinc-600"
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              )}
-            </button>
+            />
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto py-4 md:py-6">
         {isLoading && orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 text-zinc-400 space-y-4">
+          <div className="flex flex-col items-center justify-center space-y-4 rounded-2xl border border-dashed border-zinc-200 bg-white p-12 text-zinc-400">
             <RefreshCw size={32} className="animate-spin text-brand-red" />
             <p className="text-sm font-bold uppercase tracking-widest">
-              Sincronizando Pedidos...
+              Sincronizando pedidos...
             </p>
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 p-4 rounded-2xl text-center">
-            <p className="text-red-700 text-sm font-bold">⚠️ {error}</p>
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-center">
+            <p className="text-sm font-bold text-red-700">{error}</p>
             <button
               onClick={() => fetchOrders()}
-              className="mt-2 text-xs font-black text-red-500 uppercase tracking-widest"
+              className="mt-2 text-xs font-black uppercase tracking-widest text-red-500"
             >
-              Tentar Novamente
+              Tentar novamente
             </button>
           </div>
         ) : filteredOrders.length === 0 ? (
@@ -201,12 +204,12 @@ export default function PedidosPage() {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-24">
+          <div className="grid grid-cols-1 gap-4 pb-24 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {filteredOrders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
-                onClick={(o) => setSelectedOrder(o)}
+                onClick={(item) => setSelectedOrder(item)}
               />
             ))}
           </div>
@@ -221,5 +224,73 @@ export default function PedidosPage() {
         onOrderUpdated={() => fetchOrders(false)}
       />
     </div>
+  );
+}
+
+function QuickMetric({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone = "zinc",
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | number;
+  detail: string;
+  tone?: "zinc" | "red" | "emerald" | "blue";
+}) {
+  const toneClass = {
+    zinc: "bg-zinc-50 text-zinc-700",
+    red: "bg-red-50 text-brand-red",
+    emerald: "bg-emerald-50 text-emerald-700",
+    blue: "bg-blue-50 text-blue-700",
+  };
+
+  return (
+    <div className={`flex h-12 min-w-0 items-center gap-2 rounded-2xl px-3 ${toneClass[tone]}`}>
+      <Icon className="h-4 w-4 shrink-0" />
+      <div className="min-w-0 leading-tight">
+        <p className="truncate text-[10px] font-black uppercase tracking-wide opacity-70">{label}</p>
+        <p className="truncate text-sm font-black">
+          {value}
+          <span className="ml-1 text-[10px] font-bold opacity-60">{detail}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function OrderTab({
+  active,
+  label,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  count?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-xs font-black uppercase tracking-wide transition-all ${
+        active
+          ? "bg-brand-red text-white shadow-sm"
+          : "text-zinc-500 hover:bg-white hover:text-zinc-700"
+      }`}
+    >
+      <span>{label}</span>
+      {count !== undefined && (
+        <span
+          className={`rounded-lg px-1.5 py-0.5 text-[10px] ${
+            active ? "bg-white/20 text-white" : "bg-white text-zinc-500"
+          }`}
+        >
+          {count}
+        </span>
+      )}
+    </button>
   );
 }

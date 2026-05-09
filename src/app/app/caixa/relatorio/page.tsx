@@ -7,9 +7,12 @@ import {
   ArrowLeft,
   Banknote,
   BarChart3,
+  CalendarDays,
+  CheckCircle2,
   Clock,
   Coffee,
   CreditCard,
+  Filter,
   FilterX,
   Gift,
   Hash,
@@ -18,6 +21,7 @@ import {
   Pizza,
   QrCode,
   RefreshCw,
+  Target,
   TrendingUp,
   Trophy,
   Utensils,
@@ -51,6 +55,14 @@ const periodLabels: Record<Period, string> = {
   last7: "7 dias",
   last30: "30 dias",
   thisMonth: "Este mês",
+};
+
+const tabLabels: Record<ReportTab, string> = {
+  financial: "Financeiro",
+  payments: "Pagamentos",
+  sales: "Vendas",
+  time: "Dias e horários",
+  attention: "Atenção",
 };
 
 export default function RelatorioPage() {
@@ -176,59 +188,194 @@ export default function RelatorioPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F8FAFC] pb-24">
-      <section className="sticky top-14 z-20 border-b border-slate-200 bg-white">
-        <div className="flex flex-col gap-3 px-4 py-3 md:px-6">
-          <div className="flex items-center justify-between gap-3">
+    <div className="min-h-screen bg-[#F5F7FA] pb-24">
+      <main className="space-y-5 p-4 md:p-6 lg:p-8">
+        <ReportControlPanel
+          period={period}
+          filters={filters}
+          categories={categories}
+          isLoading={isLoading}
+          activeTab={activeTab}
+          onPeriodChange={setPeriod}
+          onFilterChange={setFilters}
+          onTabChange={setActiveTab}
+          onBack={() => router.push("/app/caixa")}
+          onRefresh={loadReport}
+        />
+
+        {!report ? null : (
+          <>
+            <ExecutiveSummary report={report} leadingPayment={leadingPayment} />
+            <OpportunityStrip report={report} leadingPayment={leadingPayment} />
+
+            {activeTab === "financial" && (
+              <div className="space-y-5">
+                <FinancialCommand report={report} />
+                <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <SummaryCard label="Recebido líquido" value={currency.format(report.summary.received)} sub={`${report.summary.paid_orders} pedidos pagos`} tone="emerald" icon={TrendingUp} />
+                  <SummaryCard label="Ticket médio" value={currency.format(report.summary.average_ticket)} sub="Por pedido pago" tone="blue" icon={CreditCard} />
+                  <SummaryCard label="Venda bruta" value={currency.format(report.summary.gross_sales)} sub="Exceto cancelados" tone="zinc" icon={BarChart3} />
+                  <SummaryCard label="Pendente" value={currency.format(report.summary.pending)} sub="Aguardando baixa" tone="amber" icon={Clock} />
+                </section>
+                <InsightsSection insights={report.insights} />
+              </div>
+            )}
+
+            {activeTab === "payments" && (
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+                <PaymentPanel report={report} />
+                <section className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
+                  <SummaryCard label="Descontos" value={currency.format(report.financial_attention.discount_total)} sub={`${report.financial_attention.discount_orders} pedidos`} tone="red" icon={Percent} />
+                  <SummaryCard label="Cortesias" value={currency.format(report.financial_attention.courtesy_total)} sub={`${report.financial_attention.courtesy_orders} pedidos`} tone="violet" icon={Gift} />
+                  <SummaryCard label="Cancelado" value={currency.format(report.financial_attention.canceled_total)} sub={`${report.financial_attention.canceled_orders} pedidos`} tone="zinc" icon={XCircle} />
+                </section>
+              </div>
+            )}
+
+            {activeTab === "sales" && (
+              <div className="space-y-5">
+                <CategoryPanel categories={report.category_breakdown} filtered={report.metadata.is_filtered_by_category} />
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  <RankingPanel title="Ranking geral" items={report.top_all_products} icon={Trophy} />
+                  <KrepRankings report={report} />
+                </div>
+              </div>
+            )}
+
+            {activeTab === "time" && (
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+                <HourlyPanel report={report} />
+                <WeekdayPanel report={report} />
+              </div>
+            )}
+
+            {activeTab === "attention" && (
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
+                <LowSellingPanel report={report} />
+                <AttentionPanel report={report} />
+              </div>
+            )}
+
+            {report.metadata.note && (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
+                {report.metadata.note}
+              </p>
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function ReportControlPanel({
+  period,
+  filters,
+  categories,
+  isLoading,
+  activeTab,
+  onPeriodChange,
+  onFilterChange,
+  onTabChange,
+  onBack,
+  onRefresh,
+}: {
+  period: Period;
+  filters: CashReportFilters;
+  categories: { id: string; name: string }[];
+  isLoading: boolean;
+  activeTab: ReportTab;
+  onPeriodChange: (period: Period) => void;
+  onFilterChange: (filters: CashReportFilters) => void;
+  onTabChange: (tab: ReportTab) => void;
+  onBack: () => void;
+  onRefresh: () => void;
+}) {
+  const activeCategory =
+    categories.find((category) => category.id === filters.category_id)?.name ??
+    "Todas as categorias";
+  const activePayment = paymentLabel(filters.payment_method);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-100 bg-brand-charcoal p-4 text-white md:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
             <button
-              onClick={() => router.back()}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-red"
-              aria-label="Voltar"
+              onClick={onBack}
+              className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-black text-white transition-colors hover:bg-white/15"
+              aria-label="Voltar ao caixa"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Caixa</span>
             </button>
-            <button
-              onClick={loadReport}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-xs font-black uppercase text-slate-600 transition-colors hover:bg-slate-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin text-brand-red" : ""}`} />
-              Atualizar
-            </button>
+            <div className="min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                Relatório gerencial
+              </p>
+              <h1 className="mt-1 text-2xl font-black tracking-tight md:text-3xl">
+                Painel de performance
+              </h1>
+              <p className="mt-1 text-sm text-zinc-300">
+                Filtros, tendências e pontos de atenção para operação e caixa.
+              </p>
+            </div>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
-            {(Object.keys(periodLabels) as Period[]).map((item) => (
-              <button
-                key={item}
-                onClick={() => setPeriod(item)}
-                className={`whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-                  period === item
-                    ? "bg-brand-red text-white shadow-md shadow-red-100"
-                    : "border border-slate-100 bg-slate-50 text-slate-500 hover:bg-slate-100"
-                }`}
-              >
-                {periodLabels[item]}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={onRefresh}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-xs font-black uppercase text-brand-charcoal shadow-sm transition-all hover:bg-zinc-100 active:scale-[0.98]"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin text-brand-red" : ""}`} />
+            Atualizar dados
+          </button>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+      <div className="space-y-4 p-4 md:p-5">
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar">
+          {(Object.keys(periodLabels) as Period[]).map((item) => (
+            <button
+              key={item}
+              onClick={() => onPeriodChange(item)}
+              className={`inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-xl px-4 text-xs font-black transition-all ${
+                period === item
+                  ? "bg-brand-red text-white shadow-sm"
+                  : "border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+              }`}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              {periodLabels[item]}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_1fr_auto]">
+          <div>
+            <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-400">
+              Categoria
+            </label>
             <Select
               value={filters.category_id}
-              onChange={(e) => setFilters({ ...filters, category_id: e.target.value })}
-              className="h-10 text-xs font-bold"
+              onChange={(event) => onFilterChange({ ...filters, category_id: event.target.value })}
+              className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-bold"
             >
               <option value="ALL">Todas as categorias</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
                 </option>
               ))}
             </Select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] font-black uppercase tracking-wide text-slate-400">
+              Pagamento
+            </label>
             <Select
               value={filters.payment_method}
-              onChange={(e) => setFilters({ ...filters, payment_method: e.target.value })}
-              className="h-10 text-xs font-bold"
+              onChange={(event) => onFilterChange({ ...filters, payment_method: event.target.value })}
+              className="h-11 rounded-xl border-slate-200 bg-slate-50 text-sm font-bold"
             >
               <option value="ALL">Todos os pagamentos</option>
               <option value="PIX">PIX</option>
@@ -238,99 +385,33 @@ export default function RelatorioPage() {
               <option value="COURTESY">Cortesia</option>
             </Select>
           </div>
-
-          <div className="flex gap-2 overflow-x-auto hide-scrollbar">
-            <ReportTabButton active={activeTab === "financial"} onClick={() => setActiveTab("financial")} label="Financeiro" />
-            <ReportTabButton active={activeTab === "payments"} onClick={() => setActiveTab("payments")} label="Pagamentos" />
-            <ReportTabButton active={activeTab === "sales"} onClick={() => setActiveTab("sales")} label="Vendas" />
-            <ReportTabButton active={activeTab === "time"} onClick={() => setActiveTab("time")} label="Dias e horários" />
-            <ReportTabButton active={activeTab === "attention"} onClick={() => setActiveTab("attention")} label="Atenção" />
+          <div className="flex items-end">
+            <div className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-500 xl:w-72">
+              <Filter className="h-4 w-4 text-brand-red" />
+              <span className="truncate">
+                {activeCategory} · {activePayment}
+              </span>
+            </div>
           </div>
         </div>
-      </section>
 
-      {!report ? null : (
-        <main className="space-y-5 p-4 md:p-6">
-          <ExecutiveSummary report={report} leadingPayment={leadingPayment} />
-
-          {activeTab === "financial" && (
-            <div className="space-y-5">
-              <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard label="Recebido líquido" value={currency.format(report.summary.received)} sub={`${report.summary.paid_orders} pedidos pagos`} tone="emerald" icon={TrendingUp} />
-                <SummaryCard label="Ticket médio" value={currency.format(report.summary.average_ticket)} sub="Por pedido pago" tone="blue" icon={CreditCard} />
-                <SummaryCard label="Venda bruta" value={currency.format(report.summary.gross_sales)} sub="Exceto cancelados" tone="zinc" icon={BarChart3} />
-                <SummaryCard label="Pendente" value={currency.format(report.summary.pending)} sub="Aguardando baixa" tone="amber" icon={Clock} />
-              </section>
-              <InsightsSection insights={report.insights} />
-            </div>
-          )}
-
-          {activeTab === "payments" && (
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-              <PaymentPanel report={report} />
-              <section className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
-                <SummaryCard label="Descontos" value={currency.format(report.financial_attention.discount_total)} sub={`${report.financial_attention.discount_orders} pedidos`} tone="red" icon={Percent} />
-                <SummaryCard label="Cortesias" value={currency.format(report.financial_attention.courtesy_total)} sub={`${report.financial_attention.courtesy_orders} pedidos`} tone="violet" icon={Gift} />
-                <SummaryCard label="Cancelado" value={currency.format(report.financial_attention.canceled_total)} sub={`${report.financial_attention.canceled_orders} pedidos`} tone="zinc" icon={XCircle} />
-              </section>
-            </div>
-          )}
-
-          {activeTab === "sales" && (
-            <div className="space-y-5">
-              <CategoryPanel categories={report.category_breakdown} filtered={report.metadata.is_filtered_by_category} />
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                <RankingPanel title="Ranking geral" items={report.top_all_products} icon={Trophy} />
-                <KrepRankings report={report} />
-              </div>
-            </div>
-          )}
-
-          {activeTab === "time" && (
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-              <HourlyPanel report={report} />
-              <WeekdayPanel report={report} />
-            </div>
-          )}
-
-          {activeTab === "attention" && (
-            <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_1fr]">
-              <LowSellingPanel report={report} />
-              <AttentionPanel report={report} />
-            </div>
-          )}
-
-          {report.metadata.note && (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
-              {report.metadata.note}
-            </p>
-          )}
-        </main>
-      )}
-    </div>
-  );
-}
-
-function ReportTabButton({
-  active,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`whitespace-nowrap rounded-xl px-4 py-2 text-xs font-black uppercase transition-all ${
-        active
-          ? "bg-brand-charcoal text-white shadow-sm"
-          : "border border-slate-100 bg-white text-slate-500 hover:bg-slate-50"
-      }`}
-    >
-      {label}
-    </button>
+        <div className="flex gap-2 overflow-x-auto rounded-2xl bg-slate-100 p-1 hide-scrollbar">
+          {(Object.keys(tabLabels) as ReportTab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => onTabChange(tab)}
+              className={`whitespace-nowrap rounded-xl px-4 py-2.5 text-xs font-black uppercase transition-all ${
+                activeTab === tab
+                  ? "bg-white text-brand-charcoal shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {tabLabels[tab]}
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -343,21 +424,139 @@ function ExecutiveSummary({
 }) {
   const topProduct = report.top_all_products[0];
   const peakHour = [...report.hourly_sales].sort((a, b) => b.orders - a.orders)[0];
+  const paidRate =
+    report.summary.total_orders > 0
+      ? Math.round((report.summary.paid_orders / report.summary.total_orders) * 100)
+      : 0;
 
   return (
-    <section className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-      <Card className="border-0 bg-brand-charcoal text-white xl:col-span-1">
-        <CardContent className="p-5">
-          <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Faturamento recebido</p>
-          <p className="mt-2 text-3xl font-black">{currency.format(report.summary.received)}</p>
-          <p className="mt-2 text-sm text-zinc-300">
-            {report.summary.paid_orders} pedidos pagos · ticket {currency.format(report.summary.average_ticket)}
-          </p>
+    <section className="grid grid-cols-1 gap-3 xl:grid-cols-[1.15fr_0.85fr_0.85fr]">
+      <Card className="overflow-hidden border-0 bg-brand-charcoal text-white">
+        <CardContent className="p-5 md:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">
+                Faturamento recebido
+              </p>
+              <p className="mt-2 text-4xl font-black tracking-tight">
+                {currency.format(report.summary.received)}
+              </p>
+              <p className="mt-2 text-sm text-zinc-300">
+                {report.summary.paid_orders} pedidos pagos · {paidRate}% de conversão
+              </p>
+            </div>
+            <span className="rounded-2xl bg-white/10 p-3 text-brand-yellow">
+              <TrendingUp className="h-6 w-6" />
+            </span>
+          </div>
         </CardContent>
       </Card>
-      <HighlightCard title="Pagamento que mais sai" value={leadingPayment ? paymentLabel(leadingPayment.method) : "Sem dados"} sub={leadingPayment ? `${currency.format(leadingPayment.total)} · ${leadingPayment.count} pedidos` : "Aguardando vendas"} icon={paymentIcon(leadingPayment?.method)} />
-      <HighlightCard title="Produto e horário fortes" value={topProduct?.name ?? "Sem vendas"} sub={peakHour?.orders ? `${topProduct?.quantity ?? 0} un. · pico ${peakHour.range}` : "Aguardando volume"} icon={Trophy} />
+      <HighlightCard
+        title="Pagamento dominante"
+        value={leadingPayment ? paymentLabel(leadingPayment.method) : "Sem dados"}
+        sub={leadingPayment ? `${currency.format(leadingPayment.total)} · ${leadingPayment.count} pedidos` : "Aguardando vendas"}
+        icon={paymentIcon(leadingPayment?.method)}
+        tone="blue"
+      />
+      <HighlightCard
+        title="Produto e pico"
+        value={topProduct?.name ?? "Sem vendas"}
+        sub={peakHour?.orders ? `${topProduct?.quantity ?? 0} un. · pico ${peakHour.range}` : "Aguardando volume"}
+        icon={Trophy}
+        tone="amber"
+      />
     </section>
+  );
+}
+
+function OpportunityStrip({
+  report,
+  leadingPayment,
+}: {
+  report: CashReportResponse;
+  leadingPayment?: CashReportResponse["payment_breakdown"][number];
+}) {
+  const pendingRate =
+    report.summary.gross_sales > 0
+      ? Math.round((report.summary.pending / report.summary.gross_sales) * 100)
+      : 0;
+  const discountRate =
+    report.summary.gross_sales > 0
+      ? Math.round((report.summary.discounts / report.summary.gross_sales) * 100)
+      : 0;
+  const paymentShare =
+    leadingPayment && report.summary.received > 0
+      ? Math.round((leadingPayment.total / report.summary.received) * 100)
+      : 0;
+  const top3Revenue = report.top_all_products
+    .slice(0, 3)
+    .reduce((total, product) => total + product.revenue, 0);
+  const top3Share =
+    report.summary.gross_sales > 0
+      ? Math.round((top3Revenue / report.summary.gross_sales) * 100)
+      : 0;
+
+  return (
+    <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <SignalCard
+        icon={CheckCircle2}
+        label="Saúde do caixa"
+        value={pendingRate === 0 ? "Em dia" : `${pendingRate}% pendente`}
+        detail={pendingRate === 0 ? "Sem valor pendente no recorte" : "Priorize baixa antes do fechamento"}
+        tone={pendingRate === 0 ? "emerald" : "amber"}
+      />
+      <SignalCard
+        icon={Target}
+        label="Concentração top 3"
+        value={`${top3Share}%`}
+        detail={top3Share >= 70 ? "Receita muito dependente de poucos itens" : "Mix com distribuição saudável"}
+        tone={top3Share >= 70 ? "amber" : "blue"}
+      />
+      <SignalCard
+        icon={CreditCard}
+        label="Meio líder"
+        value={leadingPayment ? `${paymentShare}%` : "Sem dados"}
+        detail={leadingPayment ? paymentLabel(leadingPayment.method) : "Aguardando pagamentos"}
+        tone={paymentShare >= 75 ? "amber" : "zinc"}
+      />
+      <SignalCard
+        icon={Percent}
+        label="Desconto sobre bruto"
+        value={`${discountRate}%`}
+        detail={`${currency.format(report.summary.discounts)} concedidos`}
+        tone={discountRate > 10 ? "red" : "zinc"}
+      />
+    </section>
+  );
+}
+
+function FinancialCommand({ report }: { report: CashReportResponse }) {
+  const netAfterAttention =
+    report.summary.received -
+    report.financial_attention.discount_total -
+    report.financial_attention.courtesy_total;
+  const riskTotal = report.summary.pending + report.summary.canceled;
+
+  return (
+    <Card className="border-slate-200">
+      <CardContent className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3 md:p-5">
+        <CommandMetric
+          label="Potencial líquido"
+          value={currency.format(Math.max(netAfterAttention, 0))}
+          detail="Recebido menos descontos e cortesias"
+        />
+        <CommandMetric
+          label="Receita em risco"
+          value={currency.format(riskTotal)}
+          detail="Pendente + cancelado"
+        />
+        <CommandMetric
+          label="Pedidos totais"
+          value={String(report.summary.total_orders)}
+          detail={`${report.summary.paid_orders} pagos no período`}
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -366,25 +565,80 @@ function HighlightCard({
   value,
   sub,
   icon: Icon,
+  tone,
 }: {
   title: string;
   value: string;
   sub: string;
   icon: React.ElementType;
+  tone: "amber" | "blue";
 }) {
+  const toneClass = tone === "amber" ? "bg-amber-50 text-amber-600" : "bg-blue-50 text-blue-600";
+
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="flex items-start justify-between gap-3 p-5">
         <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{title}</p>
           <p className="mt-2 truncate text-xl font-black text-slate-900">{value}</p>
           <p className="mt-1 text-sm font-medium text-slate-500">{sub}</p>
         </div>
-        <span className="rounded-xl bg-red-50 p-3 text-brand-red">
+        <span className={`rounded-xl p-3 ${toneClass}`}>
           <Icon className="h-5 w-5" />
         </span>
       </CardContent>
     </Card>
+  );
+}
+
+function SignalCard({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "amber" | "blue" | "emerald" | "red" | "zinc";
+}) {
+  const tones = {
+    amber: "border-amber-100 bg-amber-50 text-amber-700",
+    blue: "border-blue-100 bg-blue-50 text-blue-700",
+    emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    red: "border-red-100 bg-red-50 text-red-700",
+    zinc: "border-slate-100 bg-white text-slate-700",
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${tones[tone]}`}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-black uppercase tracking-wide opacity-75">{label}</p>
+        <Icon className="h-4 w-4 shrink-0" />
+      </div>
+      <p className="text-2xl font-black text-slate-950">{value}</p>
+      <p className="mt-1 text-xs font-semibold opacity-80">{detail}</p>
+    </div>
+  );
+}
+
+function CommandMetric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+      <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+      <p className="mt-1 text-xs font-semibold text-slate-500">{detail}</p>
+    </div>
   );
 }
 
@@ -411,7 +665,7 @@ function SummaryCard({
   };
 
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">{label}</p>
@@ -419,7 +673,7 @@ function SummaryCard({
             <Icon className="h-4 w-4" />
           </span>
         </div>
-        <p className="text-2xl font-black text-slate-900">{value}</p>
+        <p className="text-2xl font-black text-slate-950">{value}</p>
         <p className="mt-1 text-xs font-medium text-slate-400">{sub}</p>
       </CardContent>
     </Card>
@@ -458,7 +712,7 @@ function PaymentPanel({ report }: { report: CashReportResponse }) {
   const items = report.payment_breakdown.filter((item) => item.count > 0);
 
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="space-y-3 p-4">
         <PanelTitle icon={CreditCard} title="Uso dos meios de pagamento" />
         {items.length === 0 ? (
@@ -500,7 +754,7 @@ function CategoryPanel({
   filtered: boolean;
 }) {
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="space-y-3 p-4">
         <div className="flex items-center justify-between gap-3">
           <PanelTitle icon={Hash} title="Categorias que mais vendem" />
@@ -548,7 +802,7 @@ function RankingPanel({
   const maxQty = Math.max(...items.map((item) => item.quantity), 1);
 
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="space-y-3 p-4">
         <PanelTitle icon={Icon} title={title} />
         {items.length === 0 ? (
@@ -597,7 +851,7 @@ function HourlyPanel({ report }: { report: CashReportResponse }) {
   const maxOrders = Math.max(...report.hourly_sales.map((item) => item.orders), 1);
 
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="p-4">
         <PanelTitle icon={Clock} title="Controle por horário" />
         <div className="mt-6 flex h-56 items-end gap-2 border-b border-slate-100 px-1">
@@ -631,7 +885,7 @@ function WeekdayPanel({ report }: { report: CashReportResponse }) {
   const maxReceived = Math.max(...report.weekday_sales.map((item) => item.received), 1);
 
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="space-y-3 p-4">
         <PanelTitle icon={BarChart3} title="Controle por dia da semana" />
         {report.weekday_sales.map((day) => (
@@ -655,7 +909,7 @@ function WeekdayPanel({ report }: { report: CashReportResponse }) {
 
 function LowSellingPanel({ report }: { report: CashReportResponse }) {
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="space-y-3 p-4">
         <PanelTitle icon={AlertCircle} title="Produtos ativos sem saída" />
         {report.low_selling_products.length === 0 ? (
@@ -680,7 +934,7 @@ function LowSellingPanel({ report }: { report: CashReportResponse }) {
 
 function AttentionPanel({ report }: { report: CashReportResponse }) {
   return (
-    <Card>
+    <Card className="border-slate-200">
       <CardContent className="space-y-3 p-4">
         <PanelTitle icon={FilterX} title="Auditoria financeira" />
         <AttentionRow icon={Percent} label="Descontos concedidos" value={currency.format(report.financial_attention.discount_total)} count={report.financial_attention.discount_orders} tone="red" />
@@ -773,6 +1027,7 @@ function paymentIcon(method?: string) {
 
 function paymentLabel(method?: string) {
   const labels: Record<string, string> = {
+    ALL: "Todos os pagamentos",
     PIX: "PIX",
     CASH: "Dinheiro",
     DEBIT_CARD: "Débito",
