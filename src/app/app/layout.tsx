@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { TopBar } from "@/components/layout/TopBar";
 import { LoadingState } from "@/components/feedback/LoadingState";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -39,7 +40,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 pt-11">
+      <TopBar />
       <main className="mx-auto w-full max-w-md min-h-screen relative">
         {children}
       </main>
