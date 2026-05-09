@@ -27,6 +27,7 @@ import {
   KeyRound,
   Fingerprint,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 
 function getInitials(name: string) {
@@ -183,6 +184,18 @@ export default function GestaoUsuarios() {
       addToast("error", msg);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete(user: UserProfile) {
+    if (!window.confirm(`Excluir permanentemente "${user.name}"? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await usersApi.deleteUser(user.id);
+      addToast("success", `Usuário ${user.name} excluído.`);
+      loadUsers();
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Erro ao excluir usuário";
+      addToast("error", msg);
     }
   }
 
@@ -396,6 +409,15 @@ export default function GestaoUsuarios() {
                     >
                       <UserCog className="w-5 h-5" />
                     </button>
+                    {user.id !== currentUserId && (
+                      <button
+                        onClick={() => handleDelete(user)}
+                        className="p-3 rounded-2xl bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 active:scale-95 transition-all shadow-sm"
+                        title="Excluir usuário"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

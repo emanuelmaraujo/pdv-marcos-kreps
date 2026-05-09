@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 // RP_ID must match the effective domain of the app (no port, no scheme)
-const RP_ID = Deno.env.get("WEBAUTHN_RP_ID") ?? "pdv-marcos-kreps.vercel.app";
+const RP_ID = Deno.env.get("WEBAUTHN_RP_ID") ?? "marcoskreps.com.br";
 const RP_NAME = "Marcos Krep's PDV";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -234,8 +234,9 @@ function arrayEq(a: Uint8Array, b: Uint8Array): boolean {
 
 function isAllowedOrigin(origin: string): boolean {
   if (origin === `https://${RP_ID}`) return true;
+  if (origin === "https://marcoskreps.com.br") return true;
+  if (origin === "https://pdv-marcos-kreps.vercel.app") return true;
   if (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")) return true;
-  // Allow Vercel preview URLs for the same project
   if (origin.endsWith(".vercel.app")) return true;
   return false;
 }
