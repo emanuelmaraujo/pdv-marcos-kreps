@@ -12,6 +12,9 @@ interface Props {
 export function OrderCard({ order, onClick }: Props) {
   const isPendingPayment = order.payment_status === 'PENDING';
   const time = new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const itemSummary = order.items
+    ?.map(item => `${item.quantity}x ${item.product?.name ?? item.product_name_snapshot}`)
+    .join(' • ');
   
   return (
     <Card 
@@ -36,8 +39,8 @@ export function OrderCard({ order, onClick }: Props) {
                   <span className="text-[10px] font-black uppercase tracking-widest">{time}</span>
                 </div>
                 <div className="flex items-center space-x-1 mt-0.5">
-                  {order.order_type === 'BALCAO' ? <Utensils size={14} className="text-zinc-600" /> : <ShoppingBag size={14} className="text-zinc-600" />}
-                  <span className="text-xs font-bold text-zinc-600 uppercase tracking-tight">{order.order_type}</span>
+                  {order.type === 'BALCAO' ? <Utensils size={14} className="text-zinc-600" /> : <ShoppingBag size={14} className="text-zinc-600" />}
+                  <span className="text-xs font-bold text-zinc-600 uppercase tracking-tight">{order.type}</span>
                 </div>
               </div>
             </div>
@@ -59,7 +62,7 @@ export function OrderCard({ order, onClick }: Props) {
             )}
             
             <div className="text-[11px] text-zinc-500 font-medium line-clamp-1 px-1">
-              {order.items?.map(item => `${item.quantity}x ${item.product?.name}`).join(' • ')}
+              {itemSummary}
             </div>
           </div>
           

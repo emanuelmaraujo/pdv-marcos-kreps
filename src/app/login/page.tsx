@@ -33,14 +33,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showBiometric, setShowBiometric] = useState(false);
+  const [showBiometric] = useState(
+    () => isWebAuthnSupported() && hasEnrolledPasskey(),
+  );
   const router = useRouter();
   const supabase = createClient();
-
-  // Show biometric button only if WebAuthn is supported AND user has enrolled on this device
-  useEffect(() => {
-    setShowBiometric(isWebAuthnSupported() && hasEnrolledPasskey());
-  }, []);
 
   const redirectAfterLogin = useCallback(() => {
     storeLoginTime();
@@ -86,7 +83,7 @@ export default function LoginPage() {
     setError("");
     try {
       // authenticateWithPasskey triggers OS biometric prompt and returns a session token
-      const { token_hash, email: userEmail } = await authenticateWithPasskey();
+      const { token_hash } = await authenticateWithPasskey();
 
       // Exchange the token for a Supabase session (no email is sent)
       const { error: otpErr } = await supabase.auth.verifyOtp({
