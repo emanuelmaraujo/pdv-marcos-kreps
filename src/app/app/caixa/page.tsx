@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Banknote,
@@ -147,6 +147,8 @@ export default function CaixaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [isLive, setIsLive] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadCash = useCallback(async (refreshing = false) => {
     if (refreshing) setIsRefreshing(true);
@@ -178,6 +180,30 @@ export default function CaixaPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Auto-refresh every 60s when page is visible
+  useEffect(() => {
+    const startInterval = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        if (document.visibilityState === "visible") loadCash(true);
+      }, 60_000);
+      setIsLive(true);
+    };
+    const stopInterval = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      setIsLive(false);
+    };
+    const onVisibility = () => {
+      document.visibilityState === "visible" ? startInterval() : stopInterval();
+    };
+    startInterval();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopInterval();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [loadCash]);
+
   const lastUpdate = data?.generatedAt ? timeFormatter.format(new Date(data.generatedAt)) : null;
   const insights = useMemo(() => (data ? buildInsights(data) : []), [data]);
 
@@ -190,11 +216,22 @@ export default function CaixaPage() {
             <h1 className="text-base font-black tracking-tight text-brand-charcoal sm:text-lg">
               Caixa do dia
             </h1>
-            {lastUpdate && (
-              <p className="text-[11px] font-medium text-zinc-400">
-                Atualizado às {lastUpdate}
-              </p>
-            )}
+            <div className="flex items-center gap-2">
+              {lastUpdate && (
+                <p className="text-[11px] font-medium text-zinc-400">
+                  Atualizado às {lastUpdate}
+                </p>
+              )}
+              {isLive && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-600">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  </span>
+                  ao vivo
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {data?.role === "ADMIN" && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -34,6 +34,7 @@ import {
   Minus,
   Plus,
   Wallet,
+  Download,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -275,6 +276,14 @@ export default function RelatorioPage() {
     () => (report ? classifyABC(report.top_all_products) : []),
     [report],
   );
+  const operationalScore = useMemo(
+    () => (report ? computeScore(report) : null),
+    [report],
+  );
+  const projection = useMemo(
+    () => (report ? computeProjection(report, period, dailyRows) : null),
+    [report, period, dailyRows],
+  );
 
   if (isAdmin === null || (isAdmin === true && isLoading && !report)) {
     return <LoadingState message="Consolidando dados gerenciais..." />;
@@ -310,7 +319,7 @@ export default function RelatorioPage() {
           <div className="p-8"><LoadingState message="Carregando dados..." /></div>
         ) : !report ? null : (
           <div className="mx-auto max-w-7xl space-y-5 px-4 pb-28 pt-5 md:px-6 lg:px-8">
-            {activeSection === "overview"  && <SectionOverview  report={report} prevReport={prevReport} />}
+            {activeSection === "overview"  && <SectionOverview  report={report} prevReport={prevReport} score={operationalScore} projection={projection} />}
             {activeSection === "financial" && <SectionFinancial report={report} dailyRows={dailyRows} />}
             {activeSection === "sales"     && <SectionSales     report={report} abcProducts={abcProducts} />}
             {activeSection === "patterns"  && <SectionPatterns  report={report} />}
@@ -337,69 +346,122 @@ function ControlPanel({
   onBack: () => void;
   onRefresh: () => void;
 }) {
+  const hasActiveFilters =
+    (filters.category_id && filters.category_id !== "ALL") ||
+    (filters.payment_method && filters.payment_method !== "ALL");
+
+  const clearFilters = () =>
+    onFilterChange({ ...filters, category_id: "ALL", payment_method: "ALL" });
+
   return (
-    <div className="border-b border-zinc-200 bg-white px-4 py-3 md:px-6">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="border-b border-zinc-200 bg-white">
+      {/* Row 1: navigation + refresh */}
+      <div className="flex items-center gap-3 px-4 py-3 md:px-6">
         <button
           onClick={onBack}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 text-zinc-500 transition-colors hover:bg-zinc-50 active:scale-95"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
 
-        <h1 className="text-base font-black text-brand-charcoal">Relatório gerencial</h1>
-
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {/* Period buttons */}
-          <div className="flex gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
-            {(["today", "yesterday", "last7", "last30", "thisMonth"] as Period[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => onPeriodChange(p)}
-                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                  period === p
-                    ? "bg-brand-charcoal text-white shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700"
-                }`}
-              >
-                {PERIOD_LABELS[p]}
-              </button>
-            ))}
-          </div>
-
-          {/* Category filter */}
-          <Select
-            value={filters.category_id ?? "ALL"}
-            onChange={(e) => onFilterChange({ ...filters, category_id: e.target.value })}
-            className="h-8 rounded-lg border-zinc-200 bg-white text-xs"
-          >
-            <option value="ALL">Todas as categorias</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </Select>
-
-          {/* Payment filter */}
-          <Select
-            value={filters.payment_method ?? "ALL"}
-            onChange={(e) => onFilterChange({ ...filters, payment_method: e.target.value })}
-            className="h-8 rounded-lg border-zinc-200 bg-white text-xs"
-          >
-            <option value="ALL">Todos os pagamentos</option>
-            <option value="PIX">PIX</option>
-            <option value="CASH">Dinheiro</option>
-            <option value="DEBIT_CARD">Débito</option>
-            <option value="CREDIT_CARD">Crédito</option>
-          </Select>
-
-          <button
-            onClick={onRefresh}
-            disabled={isLoading}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 hover:bg-zinc-50 disabled:opacity-50"
-          >
-            {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">Atualizar</span>
-          </button>
+        {/* Period pills */}
+        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto hide-scrollbar rounded-xl border border-zinc-100 bg-zinc-50 p-1">
+          {(["today", "yesterday", "last7", "last30", "thisMonth"] as Period[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => onPeriodChange(p)}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-black transition-all ${
+                period === p
+                  ? "bg-brand-charcoal text-white shadow-sm"
+                  : "text-zinc-500 hover:text-zinc-700"
+              }`}
+            >
+              {PERIOD_LABELS[p]}
+            </button>
+          ))}
         </div>
+
+        <button
+          onClick={onRefresh}
+          disabled={isLoading}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 disabled:opacity-40 active:scale-95"
+          title="Atualizar"
+        >
+          {isLoading
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <RefreshCw className="h-4 w-4" />}
+        </button>
       </div>
+
+      {/* Row 2: secondary filters */}
+      <div className="flex items-center gap-2 overflow-x-auto border-t border-zinc-100 px-4 pb-3 pt-2 hide-scrollbar md:px-6">
+        <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400">
+          <Filter className="h-3 w-3" /> Filtros
+        </span>
+
+        {/* Category filter */}
+        <FilterChip
+          value={filters.category_id ?? "ALL"}
+          onChange={(v) => onFilterChange({ ...filters, category_id: v })}
+          label="Categoria"
+        >
+          <option value="ALL">Todas as categorias</option>
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </FilterChip>
+
+        {/* Payment filter */}
+        <FilterChip
+          value={filters.payment_method ?? "ALL"}
+          onChange={(v) => onFilterChange({ ...filters, payment_method: v })}
+          label="Pagamento"
+        >
+          <option value="ALL">Todos os pagamentos</option>
+          <option value="PIX">PIX</option>
+          <option value="CASH">Dinheiro</option>
+          <option value="DEBIT_CARD">Débito</option>
+          <option value="CREDIT_CARD">Crédito</option>
+        </FilterChip>
+
+        {/* Clear filters */}
+        {hasActiveFilters && (
+          <button
+            onClick={clearFilters}
+            className="shrink-0 inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-black text-red-600 transition-colors hover:bg-red-100"
+          >
+            <XCircle className="h-3 w-3" />
+            Limpar
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FilterChip({
+  value, onChange, label, children,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const isActive = value !== "ALL";
+  return (
+    <div className={`relative shrink-0 inline-flex items-center gap-1 rounded-full border px-1 py-0 transition-colors ${
+      isActive
+        ? "border-brand-charcoal bg-brand-charcoal"
+        : "border-zinc-200 bg-white hover:border-zinc-300"
+    }`}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`h-7 cursor-pointer appearance-none bg-transparent pl-2.5 pr-6 text-[11px] font-black focus:outline-none ${
+          isActive ? "text-white" : "text-zinc-600"
+        }`}
+      >
+        {children}
+      </select>
+      <ChevronDown className={`pointer-events-none absolute right-2 h-3 w-3 shrink-0 ${isActive ? "text-white/70" : "text-zinc-400"}`} />
     </div>
   );
 }
@@ -435,15 +497,116 @@ function SectionNav({ active, onChange }: { active: Section; onChange: (s: Secti
   );
 }
 
+// ── Score operacional ─────────────────────────────────────────────────────────
+
+interface OperationalScore {
+  total: number; // 0–100
+  conversionRate: number;   // % pedidos pagos
+  cancellationRate: number; // % cancelamentos (invertido)
+  consistency: number;      // 0–100 (baseado em coef. de variação dos dias)
+  discountImpact: number;   // % descontos+cortesias sobre bruto (invertido)
+}
+
+function computeScore(report: CashReportResponse): OperationalScore {
+  const { summary } = report;
+  const conversionRate = summary.total_orders > 0
+    ? (summary.paid_orders / summary.total_orders) * 100
+    : 100;
+  const cancelRate = summary.total_orders > 0
+    ? (report.financial_attention.canceled_orders / summary.total_orders) * 100
+    : 0;
+  const discountPct = summary.gross_sales > 0
+    ? ((summary.discounts + summary.courtesy) / summary.gross_sales) * 100
+    : 0;
+
+  // Hourly consistency: inverse of coefficient of variation
+  const receivedValues = report.hourly_sales.filter((h) => h.orders > 0).map((h) => h.received);
+  let consistency = 100;
+  if (receivedValues.length > 1) {
+    const mean = receivedValues.reduce((a, b) => a + b, 0) / receivedValues.length;
+    const variance = receivedValues.reduce((a, b) => a + (b - mean) ** 2, 0) / receivedValues.length;
+    const cv = mean > 0 ? (Math.sqrt(variance) / mean) * 100 : 0;
+    consistency = Math.max(0, Math.min(100, 100 - cv));
+  }
+
+  const score =
+    Math.min(conversionRate, 100) * 0.35 +
+    Math.max(0, 100 - cancelRate * 5) * 0.25 +
+    consistency * 0.20 +
+    Math.max(0, 100 - discountPct * 3) * 0.20;
+
+  return {
+    total: Math.round(Math.min(100, Math.max(0, score))),
+    conversionRate,
+    cancellationRate: cancelRate,
+    consistency,
+    discountImpact: discountPct,
+  };
+}
+
+// ── Projeção de receita ───────────────────────────────────────────────────────
+
+interface RevenueProjection {
+  avgPerDay: number;
+  daysWorked: number;
+  daysInPeriod: number;
+  projectedTotal: number;
+  optimistic: number;
+  pessimistic: number;
+  isMonthly: boolean;
+  daysRemainingInMonth: number;
+  projectedMonthEnd: number;
+}
+
+function computeProjection(
+  report: CashReportResponse,
+  period: Period,
+  dailyRows: DailyRow[],
+): RevenueProjection | null {
+  if (dailyRows.length === 0) return null;
+  const daysWorked = dailyRows.filter((r) => r.orders > 0).length || 1;
+  const avgPerDay = report.summary.received / daysWorked;
+
+  const receivedByDay = dailyRows.filter((r) => r.orders > 0).map((r) => r.received);
+  const stdDev = receivedByDay.length > 1
+    ? Math.sqrt(receivedByDay.reduce((s, v) => s + (v - avgPerDay) ** 2, 0) / receivedByDay.length)
+    : avgPerDay * 0.15;
+
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const dayOfMonth = now.getDate();
+  const daysRemainingInMonth = daysInMonth - dayOfMonth;
+
+  const daysInPeriod = period === "today" ? 1
+    : period === "yesterday" ? 1
+    : period === "last7" ? 7
+    : period === "last30" ? 30
+    : daysInMonth;
+
+  return {
+    avgPerDay,
+    daysWorked,
+    daysInPeriod,
+    projectedTotal: avgPerDay * daysInPeriod,
+    optimistic: (avgPerDay + stdDev) * daysInPeriod,
+    pessimistic: Math.max(0, (avgPerDay - stdDev) * daysInPeriod),
+    isMonthly: period === "thisMonth",
+    daysRemainingInMonth,
+    projectedMonthEnd: report.summary.received + avgPerDay * daysRemainingInMonth,
+  };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — VISÃO GERAL
 // ════════════════════════════════════════════════════════════════════════════
 
 function SectionOverview({
-  report, prevReport,
+  report, prevReport, score, projection,
 }: {
   report: CashReportResponse;
   prevReport: CashReportResponse | null;
+  score: OperationalScore | null;
+  projection: RevenueProjection | null;
 }) {
   const topPayment = report.payment_breakdown
     .filter((i) => i.count > 0 && i.method !== "PENDING")
@@ -537,6 +700,14 @@ function SectionOverview({
         </div>
       </div>
 
+      {/* Score + Projection */}
+      {(score || projection) && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          {score && <ScorePanel score={score} />}
+          {projection && <ProjectionPanel projection={projection} />}
+        </div>
+      )}
+
       {/* Insights */}
       {report.insights.length > 0 && (
         <div>
@@ -567,6 +738,113 @@ function SectionOverview({
         </div>
       )}
     </div>
+  );
+}
+
+function ScorePanel({ score }: { score: OperationalScore }) {
+  const color =
+    score.total >= 80 ? { ring: "text-emerald-600", bg: "bg-emerald-500", label: "Excelente", txt: "text-emerald-700", badge: "bg-emerald-50 text-emerald-700" }
+    : score.total >= 60 ? { ring: "text-amber-500",  bg: "bg-amber-400",   label: "Regular",   txt: "text-amber-700",  badge: "bg-amber-50 text-amber-700" }
+    : { ring: "text-red-600",   bg: "bg-red-500",     label: "Atenção",   txt: "text-red-700",   badge: "bg-red-50 text-red-700" };
+
+  const circ = 2 * Math.PI * 36;
+  const dash = (score.total / 100) * circ;
+
+  const components = [
+    { label: "Conversão (pagos/total)", pct: score.conversionRate, good: score.conversionRate >= 80 },
+    { label: "Cancelamentos",           pct: 100 - Math.min(100, score.cancellationRate * 5), good: score.cancellationRate < 10 },
+    { label: "Consistência operacional",pct: score.consistency, good: score.consistency >= 60 },
+    { label: "Impacto de descontos",    pct: Math.max(0, 100 - score.discountImpact * 3), good: score.discountImpact < 10 },
+  ];
+
+  return (
+    <Card className="border-zinc-100 shadow-sm">
+      <CardContent className="p-5">
+        <PanelHeader icon={BarChart3} title="Score operacional" />
+        <div className="mt-5 flex items-center gap-6">
+          {/* Ring */}
+          <div className="relative shrink-0">
+            <svg width="96" height="96" viewBox="0 0 96 96" className="-rotate-90">
+              <circle cx="48" cy="48" r="36" fill="none" stroke="#f4f4f5" strokeWidth="8" />
+              <circle
+                cx="48" cy="48" r="36" fill="none"
+                stroke="currentColor" strokeWidth="8"
+                strokeDasharray={`${dash} ${circ}`}
+                strokeLinecap="round"
+                className={color.ring}
+                style={{ transition: "stroke-dasharray 0.8s ease" }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <p className={`text-2xl font-black ${color.txt}`}>{score.total}</p>
+              <p className="text-[9px] font-bold uppercase text-zinc-400">/ 100</p>
+            </div>
+          </div>
+          {/* Details */}
+          <div className="min-w-0 flex-1 space-y-2.5">
+            <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-black ${color.badge}`}>{color.label}</span>
+            {components.map((c) => (
+              <div key={c.label}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-medium text-zinc-500 truncate">{c.label}</p>
+                  <p className={`shrink-0 text-[11px] font-black ${c.good ? "text-emerald-600" : "text-red-600"}`}>
+                    {c.pct.toFixed(0)}%
+                  </p>
+                </div>
+                <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-zinc-100">
+                  <div
+                    className={`h-full rounded-full ${c.good ? "bg-emerald-500" : "bg-red-400"}`}
+                    style={{ width: `${Math.min(100, c.pct)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProjectionPanel({ projection: p }: { projection: RevenueProjection }) {
+  return (
+    <Card className="border-zinc-100 shadow-sm">
+      <CardContent className="p-5">
+        <PanelHeader icon={TrendingUp} title="Projeção de receita" />
+        <div className="mt-5 space-y-4">
+          <div className="rounded-2xl bg-zinc-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">Média diária (dias com movimento)</p>
+            <p className="mt-1 text-2xl font-black text-brand-charcoal">{currency.format(p.avgPerDay)}</p>
+            <p className="text-xs font-medium text-zinc-400">{p.daysWorked} dia{p.daysWorked !== 1 ? "s" : ""} com vendas</p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-zinc-100 p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-zinc-400">Pessimista</p>
+              <p className="mt-1 text-sm font-black text-red-600">{currency.format(p.pessimistic)}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-emerald-600">Projetado</p>
+              <p className="mt-1 text-sm font-black text-emerald-700">{currency.format(p.projectedTotal)}</p>
+            </div>
+            <div className="rounded-xl border border-zinc-100 p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-zinc-400">Otimista</p>
+              <p className="mt-1 text-sm font-black text-blue-600">{currency.format(p.optimistic)}</p>
+            </div>
+          </div>
+
+          {p.isMonthly && p.daysRemainingInMonth > 0 && (
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-blue-600">Projeção de fechamento do mês</p>
+              <p className="mt-1 text-xl font-black text-blue-800">{currency.format(p.projectedMonthEnd)}</p>
+              <p className="text-xs font-medium text-blue-500">
+                Com base nos últimos {p.daysWorked} dias · faltam {p.daysRemainingInMonth} dias
+              </p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1245,8 +1523,30 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
     { key: "CANCELADOS",label: "Cancelados", count: orders.filter((o) => o.status === "CANCELADO").length },
   ];
 
-  // Summary stats
   const totalReceived = filtered.filter((o) => o.payment_status === "PAID").reduce((s, o) => s + o.total_amount, 0);
+
+  const exportCSV = () => {
+    const header = "Número,Status,Pagamento,Valor,Desconto,Data,Hora\n";
+    const rows = filtered.map((o) => {
+      const d = new Date(o.created_at);
+      return [
+        `#${String(o.daily_number).padStart(3, "0")}`,
+        o.status,
+        o.payment_method,
+        o.total_amount.toFixed(2).replace(".", ","),
+        (o.discount_amount ?? 0).toFixed(2).replace(".", ","),
+        longDate.format(d),
+        timeFormatter.format(d),
+      ].join(",");
+    }).join("\n");
+    const blob = new Blob(["﻿" + header + rows], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pedidos-${new Date().toISOString().substring(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-4">
@@ -1267,6 +1567,19 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
 
       <Card className="border-zinc-100 shadow-sm">
         <CardContent className="p-4 md:p-5">
+          {/* Export */}
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <PanelHeader icon={ListOrdered} title="Registro de pedidos" />
+            <button
+              onClick={exportCSV}
+              disabled={filtered.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-black text-zinc-600 transition-colors hover:bg-zinc-50 disabled:opacity-40"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Exportar CSV
+            </button>
+          </div>
+
           {/* Search */}
           <div className="relative mb-3">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
