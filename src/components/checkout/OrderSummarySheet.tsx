@@ -125,14 +125,17 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   }, [isOpen]);
 
   const estimatedSubtotal = getEstimatedSubtotal();
-  const showPackagingFee = orderType === "VIAGEM" && applyPackagingForTakeout && packagingFee > 0;
+  // Embalagem cobrada por krep marcado como Para Levar
+  const takeoutQuantity = items.filter((i) => i.is_takeout).reduce((s, i) => s + i.quantity, 0);
+  const packagingTotal = applyPackagingForTakeout && packagingFee > 0 ? takeoutQuantity * packagingFee : 0;
+  const showPackagingFee = packagingTotal > 0;
   const discountNum = parseFloat(discountValue.replace(",", ".")) || 0;
   const discountAmount = hasDiscount && discountNum > 0
     ? discountType === "AMOUNT"
       ? discountNum
       : (estimatedSubtotal * discountNum) / 100
     : 0;
-  const estimatedTotal = estimatedSubtotal + (showPackagingFee ? packagingFee : 0) - discountAmount;
+  const estimatedTotal = estimatedSubtotal + packagingTotal - discountAmount;
 
   const handleCheckout = async () => {
     setIsSubmitting(true);
@@ -147,8 +150,9 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         finalDiscount = { type: discountType, value: discountNum, reason: discountReason.trim() };
       }
 
+      const derivedOrderType = items.some((i) => i.is_takeout) ? "VIAGEM" : "BALCAO";
       const payload = {
-        order_type: orderType,
+        order_type: derivedOrderType,
         customer_name: customerName.trim() || undefined,
         customer_phone: customerPhone.trim() || undefined,
         notes: orderNotes.trim() || undefined,
@@ -349,38 +353,16 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         {step === 1 && (
           <div className="flex-1 space-y-5 px-4 pb-4">
 
-            {/* Order type toggle */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tipo de Pedido</p>
-              <div className="flex gap-2 rounded-2xl bg-zinc-100 p-1">
-                {(["BALCAO", "VIAGEM"] as const).map((type) => {
-                  const Icon = type === "BALCAO" ? Utensils : ShoppingBag;
-                  return (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setOrderType(type)}
-                      className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-sm font-black uppercase tracking-wide transition-all ${
-                        orderType === type
-                          ? "bg-white text-brand-charcoal shadow-sm"
-                          : "text-zinc-500"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {type === "BALCAO" ? "Balcão" : "Viagem"}
-                    </button>
-                  );
-                })}
+            {/* Packaging fee notice (per-item takeout) */}
+            {showPackagingFee && (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
+                <Tag className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <p className="text-xs font-bold text-amber-700">
+                  {takeoutQuantity} item{takeoutQuantity !== 1 ? "s" : ""} para levar —{" "}
+                  taxa de embalagem: <strong>{currency.format(packagingTotal)}</strong>
+                </p>
               </div>
-              {showPackagingFee && (
-                <div className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
-                  <Tag className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                  <p className="text-xs font-bold text-amber-700">
-                    Taxa de embalagem: <strong>{currency.format(packagingFee)}</strong> incluída no total
-                  </p>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Customer name */}
             <div className="space-y-2">
