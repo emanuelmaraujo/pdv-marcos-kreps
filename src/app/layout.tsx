@@ -9,9 +9,19 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  applicationName: "PDV Marcos Krep's",
   title: "PDV Marcos Krep's",
   description:
     "Sistema de ponto de venda para o Marcos Krep's — pedidos, caixa e gestão operacional.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "PDV Krep's",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {

@@ -425,7 +425,7 @@ export default function PedidosPage() {
 
       {/* ── Desktop Kanban (lg+) ─────────────────────────────── */}
       <div
-        className="hidden lg:flex gap-4 overflow-x-auto px-0 py-4"
+        className="hidden lg:flex gap-4 overflow-x-auto px-0 pb-4 pt-8"
         style={{ height: "calc(100vh - 56px - 148px)" }}
       >
         {kanbanColumns.map((col) => (
@@ -442,7 +442,7 @@ export default function PedidosPage() {
       </div>
 
       {/* ── Mobile/Tablet grid (<lg) ─────────────────────────── */}
-      <div className="flex-1 pt-4 pb-6 lg:hidden">
+      <div className="flex-1 pb-6 pt-8 md:pt-9 lg:hidden">
         {isLoading && orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-zinc-200 bg-white p-12 text-zinc-400 mx-3">
             <RefreshCw size={28} className="animate-spin text-brand-red" />
