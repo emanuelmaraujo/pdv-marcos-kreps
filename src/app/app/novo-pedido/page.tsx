@@ -39,6 +39,7 @@ export default function NovoPedidoPage() {
   const [selectedAddons, setSelectedAddons] = useState<Map<string, number>>(new Map());
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");
+  const [itemIsTakeout, setItemIsTakeout] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   useEffect(() => {
@@ -100,12 +101,14 @@ export default function NovoPedidoPage() {
       setSelectedAddons(addonsMap);
       setQuantity(existingItem.quantity);
       setNotes(existingItem.notes || "");
+      setItemIsTakeout(existingItem.is_takeout ?? false);
     } else {
       setEditingCartItemId(null);
       setRemovedIngredientIds(new Set());
       setSelectedAddons(new Map());
       setQuantity(1);
       setNotes("");
+      setItemIsTakeout(false);
     }
   };
 
@@ -148,7 +151,7 @@ export default function NovoPedidoPage() {
       removed_ingredients: Array.from(removedIngredientIds),
       addons: addonsArray,
       notes: notes.trim() ? notes : undefined,
-      is_takeout: false,
+      is_takeout: itemIsTakeout,
     };
 
     if (editingCartItemId) {
@@ -452,6 +455,42 @@ export default function NovoPedidoPage() {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
+            </div>
+
+            {/* Destino do Item */}
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] px-1">Destino do Item</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setItemIsTakeout(false)}
+                  className={`flex items-center justify-center gap-2 rounded-2xl border-2 p-4 text-sm font-black uppercase tracking-tight transition-all active:scale-[0.97] ${
+                    !itemIsTakeout
+                      ? "border-brand-charcoal bg-brand-charcoal text-white"
+                      : "border-zinc-100 bg-white text-zinc-400 hover:border-zinc-200"
+                  }`}
+                >
+                  <Utensils size={16} strokeWidth={2.5} />
+                  Comer Aqui
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setItemIsTakeout(true)}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl border-2 p-4 text-sm font-black uppercase tracking-tight transition-all active:scale-[0.97] ${
+                    itemIsTakeout
+                      ? "border-brand-charcoal bg-brand-charcoal text-white"
+                      : "border-zinc-100 bg-white text-zinc-400 hover:border-zinc-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart size={16} strokeWidth={2.5} />
+                    Para Levar
+                  </div>
+                  {itemIsTakeout && (
+                    <span className="text-[9px] font-black tracking-widest opacity-60">+ EMBALAGEM</span>
+                  )}
+                </button>
+              </div>
             </div>
 
             {/* Quantity & Add to Cart - Sticky at Bottom */}
