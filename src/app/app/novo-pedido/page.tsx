@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { Button } from "@/components/ui/Button";
 
 import { useCart, CartItem } from "@/features/cart/useCart";
@@ -11,6 +11,36 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
 import { Minus, Plus, Utensils, ShoppingCart, Info, AlertCircle, RefreshCw, Sandwich, Cookie, GlassWater, Coffee, Flame, Star, Beer, Beef, Hamburger, type LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+
+interface MenuIndexes {
+  ingredientsById: Map<string, Ingredient>;
+  addonsById: Map<string, Addon>;
+  ingredientIdsByProduct: Map<string, string[]>;
+  addonIdsByProduct: Map<string, string[]>;
+}
+
+function buildMenuIndexes(menuData: MenuData | null): MenuIndexes | null {
+  if (!menuData) return null;
+
+  const ingredientsById = new Map(menuData.ingredients.map((ingredient) => [ingredient.id, ingredient]));
+  const addonsById = new Map(menuData.addons.map((addon) => [addon.id, addon]));
+  const ingredientIdsByProduct = new Map<string, string[]>();
+  const addonIdsByProduct = new Map<string, string[]>();
+
+  for (const relation of menuData.productIngredients) {
+    const current = ingredientIdsByProduct.get(relation.product_id);
+    if (current) current.push(relation.ingredient_id);
+    else ingredientIdsByProduct.set(relation.product_id, [relation.ingredient_id]);
+  }
+
+  for (const relation of menuData.productAddons) {
+    const current = addonIdsByProduct.get(relation.product_id);
+    if (current) current.push(relation.addon_id);
+    else addonIdsByProduct.set(relation.product_id, [relation.addon_id]);
+  }
+
+  return { ingredientsById, addonsById, ingredientIdsByProduct, addonIdsByProduct };
+}
 
 export default function NovoPedidoPage() {
   const searchParams = useSearchParams();
@@ -91,7 +121,9 @@ export default function NovoPedidoPage() {
     return menuData.products.filter(p => p.category_id === selectedCategoryId);
   }, [menuData, selectedCategoryId]);
 
-  const openCustomization = (product: Product, existingItem?: CartItem) => {
+  const menuIndexes = useMemo(() => buildMenuIndexes(menuData), [menuData]);
+
+  const openCustomization = useCallback((product: Product, existingItem?: CartItem) => {
     setSelectedProduct(product);
     if (existingItem) {
       setEditingCartItemId(existingItem.id);
@@ -110,23 +142,23 @@ export default function NovoPedidoPage() {
       setNotes("");
       setItemIsTakeout(false);
     }
-  };
+  }, []);
 
-  const closeCustomization = () => {
+  const closeCustomization = useCallback(() => {
     setSelectedProduct(null);
     setEditingCartItemId(null);
-  };
+  }, []);
 
-  const toggleIngredient = (ingredientId: string) => {
+  const toggleIngredient = useCallback((ingredientId: string) => {
     setRemovedIngredientIds(prev => {
       const next = new Set(prev);
       if (next.has(ingredientId)) next.delete(ingredientId);
       else next.add(ingredientId);
       return next;
     });
-  };
+  }, []);
 
-  const updateAddonQty = (addonId: string, delta: number) => {
+  const updateAddonQty = useCallback((addonId: string, delta: number) => {
     setSelectedAddons(prev => {
       const next = new Map(prev);
       const current = next.get(addonId) || 0;
@@ -135,13 +167,13 @@ export default function NovoPedidoPage() {
       else next.set(addonId, newQty);
       return next;
     });
-  };
+  }, []);
 
-  const handleAddToCart = () => {
+  const handleAddToCart = useCallback(() => {
     if (!selectedProduct) return;
 
     const addonsArray = Array.from(selectedAddons.entries()).map(([addonId, qty]) => {
-      const addonData = menuData?.addons.find(a => a.id === addonId);
+      const addonData = menuIndexes?.addonsById.get(addonId);
       return { addon_id: addonId, addon_name: addonData?.name, quantity: qty, price: addonData?.price || 0 };
     });
 
@@ -161,30 +193,46 @@ export default function NovoPedidoPage() {
     }
 
     closeCustomization();
-  };
+  }, [
+    addItem,
+    closeCustomization,
+    editingCartItemId,
+    itemIsTakeout,
+    menuIndexes,
+    notes,
+    quantity,
+    removedIngredientIds,
+    selectedAddons,
+    selectedProduct,
+    updateItem,
+  ]);
 
   // Derived state for the customization sheet
   const productDefaultIngredients = useMemo(() => {
-    if (!selectedProduct || !menuData) return [];
-    const rels = menuData.productIngredients.filter(pi => pi.product_id === selectedProduct.id);
-    return rels.map(rel => menuData.ingredients.find(i => i.id === rel.ingredient_id)).filter(Boolean) as Ingredient[];
-  }, [selectedProduct, menuData]);
+    if (!selectedProduct || !menuIndexes) return [];
+    const ingredientIds = menuIndexes.ingredientIdsByProduct.get(selectedProduct.id) ?? [];
+    return ingredientIds
+      .map((ingredientId) => menuIndexes.ingredientsById.get(ingredientId))
+      .filter(Boolean) as Ingredient[];
+  }, [selectedProduct, menuIndexes]);
 
   const productAddons = useMemo(() => {
-    if (!selectedProduct || !menuData) return [];
-    const rels = menuData.productAddons.filter(pa => pa.product_id === selectedProduct.id);
-    return rels.map(rel => menuData.addons.find(a => a.id === rel.addon_id)).filter(Boolean) as Addon[];
-  }, [selectedProduct, menuData]);
+    if (!selectedProduct || !menuIndexes) return [];
+    const addonIds = menuIndexes.addonIdsByProduct.get(selectedProduct.id) ?? [];
+    return addonIds
+      .map((addonId) => menuIndexes.addonsById.get(addonId))
+      .filter(Boolean) as Addon[];
+  }, [selectedProduct, menuIndexes]);
 
   const sheetSubtotal = useMemo(() => {
     if (!selectedProduct) return 0;
     let total = selectedProduct.price;
     selectedAddons.forEach((qty, addonId) => {
-      const addon = menuData?.addons.find(a => a.id === addonId);
+      const addon = menuIndexes?.addonsById.get(addonId);
       if (addon) total += (addon.price * qty);
     });
     return total * quantity;
-  }, [selectedProduct, selectedAddons, quantity, menuData]);
+  }, [selectedProduct, selectedAddons, quantity, menuIndexes]);
 
   if (loading) {
     return (
@@ -281,7 +329,7 @@ export default function NovoPedidoPage() {
                 <div 
                   key={product.id} 
                   onClick={() => openCustomization(product)}
-                  className="bg-white border border-zinc-200 p-4 rounded-2xl shadow-sm active:scale-[0.98] transition-all flex items-center space-x-4 cursor-pointer relative group"
+                  className="relative flex cursor-pointer items-center space-x-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all [contain-intrinsic-size:96px] [content-visibility:auto] active:scale-[0.98] group"
                 >
                   {/* Thumbnail Placeholder / Icon */}
                   <div className="w-16 h-16 bg-zinc-50 rounded-xl flex items-center justify-center shrink-0 border border-zinc-100 text-zinc-300">

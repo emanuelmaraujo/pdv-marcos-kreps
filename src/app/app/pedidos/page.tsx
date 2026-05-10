@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
@@ -98,6 +98,17 @@ const CANCELLED_COLUMN: KanbanColumnConfig = {
   emptyText: "Nenhum cancelado",
   showAvgWait: false,
 };
+
+function subscribeMdPlus(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const mediaQuery = window.matchMedia("(min-width: 768px)");
+  mediaQuery.addEventListener("change", callback);
+  return () => mediaQuery.removeEventListener("change", callback);
+}
+
+function getMdPlusSnapshot() {
+  return typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -251,20 +262,11 @@ export default function PedidosPage() {
   const [now, setNow] = useState(() => Date.now());
   const [showCancelled, setShowCancelled] = useState(false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
-  const [isMdPlus, setIsMdPlus] = useState(false);
+  const isMdPlus = useSyncExternalStore(subscribeMdPlus, getMdPlusSnapshot, () => false);
 
   const selectedOrderRef = useRef<Order | null>(null);
 
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
-
-  // Detect screen size after mount
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    setIsMdPlus(mq.matches);
-    const h = (e: MediaQueryListEvent) => setIsMdPlus(e.matches);
-    mq.addEventListener("change", h);
-    return () => mq.removeEventListener("change", h);
-  }, []);
 
   // Tick every 30s for timers
   useEffect(() => {
@@ -425,7 +427,7 @@ export default function PedidosPage() {
 
       {/* ── Desktop Kanban (lg+) ─────────────────────────────── */}
       <div
-        className="hidden lg:flex gap-4 overflow-x-auto px-0 pb-4 pt-8"
+        className="hidden lg:flex gap-4 overflow-x-auto px-0 pb-4 pt-16"
         style={{ height: "calc(100vh - 56px - 148px)" }}
       >
         {kanbanColumns.map((col) => (
@@ -442,7 +444,7 @@ export default function PedidosPage() {
       </div>
 
       {/* ── Mobile/Tablet grid (<lg) ─────────────────────────── */}
-      <div className="flex-1 pb-6 pt-8 md:pt-9 lg:hidden">
+      <div className="flex-1 pb-6 pt-10 md:pt-12 lg:hidden">
         {isLoading && orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-zinc-200 bg-white p-12 text-zinc-400 mx-3">
             <RefreshCw size={28} className="animate-spin text-brand-red" />
