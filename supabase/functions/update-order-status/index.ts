@@ -106,7 +106,6 @@ serve(async (req) => {
     // Lógica por Status
     if (status === 'PRONTO') {
       updatePayload.ready_at = nowIso;
-      updatePayload.preparation_finished_at = nowIso;
       auditAction = 'ORDER_READY';
 
       // WhatsApp Integration (Non-blocking)
