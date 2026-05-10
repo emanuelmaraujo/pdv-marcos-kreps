@@ -1,38 +1,35 @@
+import { useState } from "react";
 import { Order } from "@/types/pdv";
-import { Clock, ShoppingBag, User, Utensils, Package, CheckCircle2 } from "lucide-react";
+import { Clock, ShoppingBag, User, Utensils, Package, CheckCircle2, Loader2 } from "lucide-react";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 
 interface Props {
   order: Order;
   onClick: (order: Order) => void;
-  now: number; // timestamp ms — passed from parent so all cards use the same "now"
+  now: number;
+  onQuickAction?: (order: Order) => Promise<void>;
 }
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function getStatusEnteredAt(order: Order): string | undefined {
   switch (order.status) {
-    case "NA_FILA":     return order.queue_entered_at ?? order.confirmed_at;
-    case "PRONTO":      return order.ready_at;
-    case "ENTREGUE":    return order.delivered_at;
-    case "CANCELADO":   return order.cancelled_at;
-    default:            return order.created_at;
+    case "NA_FILA":   return order.queue_entered_at ?? order.confirmed_at;
+    case "PRONTO":    return order.ready_at;
+    case "ENTREGUE":  return order.delivered_at;
+    case "CANCELADO": return order.cancelled_at;
+    default:          return order.created_at;
   }
 }
 
 function ElapsedTimer({ since, now }: { since: string; now: number }) {
-  const elapsed = Math.floor((now - new Date(since).getTime()) / 1000 / 60); // minutes
-
+  const elapsed = Math.floor((now - new Date(since).getTime()) / 1000 / 60);
   const colorClass =
-    elapsed < 10
-      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-      : elapsed < 20
-      ? "bg-amber-50 text-amber-700 border-amber-100"
-      : "bg-red-50 text-red-600 border-red-100";
-
-  const display = elapsed < 60 ? `${elapsed} min` : `${Math.floor(elapsed / 60)}h${elapsed % 60}m`;
-
+    elapsed < 10  ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+    : elapsed < 20 ? "bg-amber-50 text-amber-700 border-amber-100"
+    : "bg-red-50 text-red-600 border-red-100";
+  const display = elapsed < 60 ? `${elapsed}min` : `${Math.floor(elapsed / 60)}h${elapsed % 60}m`;
   return (
     <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase ${colorClass}`}>
       <Clock className="h-2.5 w-2.5" />
@@ -41,105 +38,132 @@ function ElapsedTimer({ since, now }: { since: string; now: number }) {
   );
 }
 
-function getAccentClass(status: Order["status"]) {
-  const map: Record<Order["status"], string> = {
-    AGUARDANDO_CONFIRMACAO: "bg-blue-500",
-    AGUARDANDO_PAGAMENTO: "bg-brand-amber",
-    NA_FILA: "bg-brand-red",
-    PRONTO: "bg-emerald-500",
-    ENTREGUE: "bg-zinc-400",
-    CANCELADO: "bg-red-400",
-    EXPIRADO: "bg-zinc-300",
-  };
-  return map[status] ?? "bg-zinc-300";
-}
+const ACCENT: Record<Order["status"], string> = {
+  AGUARDANDO_CONFIRMACAO: "bg-blue-500",
+  AGUARDANDO_PAGAMENTO:   "bg-brand-amber",
+  NA_FILA:                "bg-brand-red",
+  PRONTO:                 "bg-emerald-500",
+  ENTREGUE:               "bg-zinc-300",
+  CANCELADO:              "bg-red-300",
+  EXPIRADO:               "bg-zinc-200",
+};
 
 const ACTIVE_STATUSES: Order["status"][] = ["NA_FILA", "AGUARDANDO_CONFIRMACAO", "PRONTO"];
 
-export function OrderCard({ order, onClick, now }: Props) {
+export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
+  const [quickLoading, setQuickLoading] = useState(false);
+
   const isPendingPayment = order.payment_status === "PENDING";
   const time = new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const itemCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-
-  const firstItems = order.items?.slice(0, 2) ?? [];
-  const extraItems = Math.max((order.items?.length ?? 0) - 2, 0);
-  const accentClass = getAccentClass(order.status);
+  const firstItems = order.items?.slice(0, 3) ?? [];
+  const extraItems = Math.max((order.items?.length ?? 0) - 3, 0);
   const showTimer = ACTIVE_STATUSES.includes(order.status);
   const timerSince = getStatusEnteredAt(order);
 
-  const quickActionLabel =
-    order.status === "NA_FILA"
-      ? { label: "MARCAR PRONTO", Icon: Package, color: "bg-brand-amber text-brand-charcoal" }
+  // Urgency level based on elapsed time for active orders
+  const elapsed = showTimer && timerSince
+    ? Math.floor((now - new Date(timerSince).getTime()) / 1000 / 60)
+    : 0;
+  const isUrgent  = showTimer && elapsed >= 20;
+  const isWarning = showTimer && elapsed >= 10 && elapsed < 20;
+
+  const quickActionConfig =
+    order.status === "AGUARDANDO_CONFIRMACAO"
+      ? { label: "CONFIRMAR",  Icon: CheckCircle2, color: "bg-emerald-500 text-white hover:bg-emerald-600" }
+      : order.status === "NA_FILA"
+      ? { label: "PRONTO",     Icon: Package,       color: "bg-brand-amber text-brand-charcoal hover:bg-brand-amber/90" }
       : order.status === "PRONTO"
-      ? { label: "ENTREGAR", Icon: CheckCircle2, color: "bg-emerald-500 text-white" }
+      ? { label: "ENTREGAR",   Icon: CheckCircle2,  color: "bg-emerald-500 text-white hover:bg-emerald-600" }
       : null;
+
+  const handleQuickClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onQuickAction || quickLoading) return;
+    setQuickLoading(true);
+    try {
+      await onQuickAction(order);
+    } finally {
+      setQuickLoading(false);
+    }
+  };
+
+  const borderClass = isUrgent
+    ? "border-red-300 ring-2 ring-red-300/50"
+    : isWarning
+    ? "border-amber-200 ring-1 ring-amber-200"
+    : isPendingPayment
+    ? "border-brand-amber/40 ring-1 ring-brand-amber/20"
+    : "border-zinc-200";
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] cursor-pointer ${
-        isPendingPayment ? "border-brand-amber/40 ring-1 ring-brand-amber/30" : "border-zinc-200"
-      }`}
-      onClick={() => onClick(order)}
+      className={`group relative cursor-pointer overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] ${borderClass} ${quickLoading ? "opacity-60 pointer-events-none" : ""}`}
+      onClick={() => !quickLoading && onClick(order)}
     >
-      {/* Accent bar */}
-      <div className={`h-1 ${accentClass}`} />
+      {/* Status accent bar */}
+      <div className={`h-1 ${ACCENT[order.status]}`} />
 
-      <div className="p-4 space-y-3">
-        {/* Row 1: number + time + status + timer */}
+      {/* Urgent pulse overlay */}
+      {isUrgent && (
+        <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-red-400/30 animate-pulse" />
+      )}
+
+      <div className="p-3.5 space-y-2.5">
+        {/* Row 1: number + time + type + timer + payment badge */}
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-charcoal text-white shadow-sm">
-              <span className="text-lg font-black leading-none">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-charcoal text-white shadow-sm">
+              <span className={`font-black leading-none ${String(order.daily_number).length > 2 ? "text-sm" : "text-base"}`}>
                 {String(order.daily_number).padStart(2, "0")}
               </span>
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-zinc-400">
-                <Clock className="h-3 w-3" />
+                <Clock className="h-3 w-3 shrink-0" />
                 <span className="text-[10px] font-black uppercase tracking-widest">{time}</span>
-                {order.type === "BALCAO" ? (
-                  <Utensils className="h-3 w-3 ml-1 text-zinc-500" />
-                ) : (
-                  <ShoppingBag className="h-3 w-3 ml-1 text-zinc-500" />
-                )}
-                <span className="text-[10px] font-bold text-zinc-500">
-                  {order.type === "BALCAO" ? "Balcão" : "Viagem"}
-                </span>
+                {order.type === "BALCAO"
+                  ? <Utensils className="h-3 w-3 ml-0.5 text-zinc-400" />
+                  : <ShoppingBag className="h-3 w-3 ml-0.5 text-zinc-400" />
+                }
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <div className="mt-1 flex flex-wrap items-center gap-1">
                 <OrderStatusBadge status={order.status} />
-                {showTimer && timerSince && (
-                  <ElapsedTimer since={timerSince} now={now} />
-                )}
+                {showTimer && timerSince && <ElapsedTimer since={timerSince} now={now} />}
               </div>
             </div>
           </div>
           <PaymentStatusBadge status={order.payment_status} />
         </div>
 
-        {/* Row 2: customer */}
-        <div className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2">
+        {/* Row 2: customer name + item count */}
+        <div className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-1.5">
           <User className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-          <span className="truncate text-sm font-bold text-zinc-800">
-            {order.customer_name || "Cliente não informado"}
+          <span className={`flex-1 truncate text-sm font-bold ${order.customer_name ? "text-zinc-800" : "italic text-zinc-400"}`}>
+            {order.customer_name || "Cliente final"}
           </span>
           {itemCount > 0 && (
             <span className="ml-auto shrink-0 rounded-md bg-zinc-200 px-1.5 py-0.5 text-[10px] font-black text-zinc-600">
-              {itemCount} {itemCount === 1 ? "item" : "itens"}
+              {itemCount}×
             </span>
           )}
         </div>
 
-        {/* Row 3: items list */}
+        {/* Row 3: item list preview */}
         {firstItems.length > 0 && (
-          <div className="space-y-1 px-0.5">
+          <div className="space-y-0.5 px-0.5">
             {firstItems.map((item) => (
-              <p key={item.id} className="truncate text-xs font-medium text-zinc-500">
+              <p key={item.id} className="truncate text-xs font-medium text-zinc-500 leading-snug">
                 <span className="font-black text-zinc-700">{item.quantity}×</span>{" "}
                 {item.product?.name ?? item.product_name_snapshot}
                 {item.addons && item.addons.length > 0 && (
-                  <span className="text-emerald-600 font-bold">
+                  <span className="text-emerald-600 font-semibold">
                     {" "}+{item.addons.map((a) => a.addon?.name ?? a.addon_name_snapshot).join(", ")}
+                  </span>
+                )}
+                {item.removed_ingredients && item.removed_ingredients.length > 0 && (
+                  <span className="text-brand-red font-semibold">
+                    {" "}−{item.removed_ingredients.map((ri) => ri.ingredient?.name ?? ri.ingredient_name_snapshot).join(", ")}
                   </span>
                 )}
               </p>
@@ -151,29 +175,30 @@ export function OrderCard({ order, onClick, now }: Props) {
         )}
 
         {/* Row 4: total + quick action */}
-        <div className="flex items-center justify-between gap-3 border-t border-zinc-100 pt-3">
+        <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-2.5">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total</p>
-            <span className="text-lg font-black text-zinc-900">{currency.format(order.total_amount)}</span>
+            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">Total</p>
+            <span className="text-base font-black text-zinc-900">{currency.format(order.total_amount)}</span>
           </div>
-          {quickActionLabel && (
+          {quickActionConfig && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClick(order);
-              }}
-              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wide shadow-sm transition-all active:scale-95 ${quickActionLabel.color}`}
+              onClick={handleQuickClick}
+              className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wide shadow-sm transition-all active:scale-95 ${quickActionConfig.color}`}
             >
-              <quickActionLabel.Icon className="h-3 w-3" />
-              {quickActionLabel.label}
+              {quickLoading
+                ? <Loader2 className="h-3 w-3 animate-spin" />
+                : <quickActionConfig.Icon className="h-3 w-3" />
+              }
+              {quickActionConfig.label}
             </button>
           )}
         </div>
       </div>
 
+      {/* Pending payment banner */}
       {isPendingPayment && order.status !== "CANCELADO" && (
-        <div className="border-t border-brand-amber/20 bg-brand-amber/10 px-4 py-2 text-center">
+        <div className="border-t border-brand-amber/20 bg-brand-amber/8 px-4 py-1.5 text-center">
           <span className="text-[10px] font-black uppercase tracking-widest text-brand-amber">
             Aguardando pagamento
           </span>
