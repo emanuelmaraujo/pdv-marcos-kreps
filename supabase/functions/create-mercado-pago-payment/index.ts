@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 type JsonRecord = Record<string, unknown>;
-const PIX_EXPIRATION_MINUTES = 35;
+const PIX_EXPIRATION_MINUTES = 60;
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -43,6 +43,29 @@ function cleanEmail(value: unknown) {
   const email = cleanText(value, 254);
   if (!email) return null;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null;
+}
+
+function cleanDigits(value: unknown, maxLength: number) {
+  const text = cleanText(value, maxLength * 3);
+  if (!text) return null;
+  const digits = text.replace(/\D/g, "").slice(0, maxLength);
+  return digits || null;
+}
+
+function isValidCpf(value: unknown) {
+  const digits = cleanDigits(value, 11);
+  if (!digits || digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
+
+  const calculateDigit = (length: number) => {
+    let sum = 0;
+    for (let index = 0; index < length; index += 1) {
+      sum += Number(digits[index]) * (length + 1 - index);
+    }
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  return calculateDigit(9) === Number(digits[9]) && calculateDigit(10) === Number(digits[10]);
 }
 
 function toNumber(value: unknown) {
@@ -126,6 +149,43 @@ function sanitizePaymentPayload(payload: any) {
       ? payload.additional_info.items.length
       : 0,
   };
+}
+
+function sanitizeProviderCauses(cause: unknown) {
+  if (!Array.isArray(cause)) return [];
+  return cause.slice(0, 5).map((item: any) => ({
+    code: item?.code ?? null,
+    description: item?.description ?? item?.message ?? null,
+    data: item?.data ?? null,
+  }));
+}
+
+function providerCauseText(payment: any) {
+  const parts = [
+    payment?.message,
+    payment?.error,
+    ...(Array.isArray(payment?.cause)
+      ? payment.cause.flatMap((item: any) => [item?.code, item?.description, item?.message, item?.data])
+      : []),
+  ];
+  return parts.filter(Boolean).join(" ").toLowerCase();
+}
+
+function safeProviderErrorMessage(payment: any) {
+  const text = providerCauseText(payment);
+  if (text.includes("payer") && text.includes("email")) {
+    return "Informe um e-mail valido para gerar o Pix pelo Mercado Pago.";
+  }
+  if (text.includes("identification") || text.includes("cpf") || text.includes("document")) {
+    return "Informe um CPF valido para gerar o Pix pelo Mercado Pago.";
+  }
+  if (text.includes("collector") && text.includes("payer")) {
+    return "Use um e-mail de comprador diferente do e-mail da conta Mercado Pago.";
+  }
+  if (text.includes("pix") || text.includes("payment_method")) {
+    return "Pix nao esta habilitado ou disponivel nesta conta Mercado Pago.";
+  }
+  return "Nao foi possivel processar o pagamento. Verifique os dados e tente novamente.";
 }
 
 async function parseJsonResponse(response: Response) {
@@ -527,12 +587,15 @@ serve(async (req) => {
     if (formData.installments) paymentPayload.installments = Math.max(1, Math.trunc(toNumber(formData.installments)));
     if (formData.issuer_id || formData.issuerId) paymentPayload.issuer_id = String(formData.issuer_id ?? formData.issuerId);
 
-    const identificationType = cleanText(getNested(formData, ["payer", "identification", "type"]) ?? formData.identificationType, 20);
-    const identificationNumber = cleanText(getNested(formData, ["payer", "identification", "number"]) ?? formData.identificationNumber, 32);
+    const identificationType = cleanText(getNested(formData, ["payer", "identification", "type"]) ?? formData.identificationType, 20)?.toUpperCase() ?? null;
+    const identificationNumber = cleanDigits(getNested(formData, ["payer", "identification", "number"]) ?? formData.identificationNumber, 20);
+    if (isPix && (!identificationType || identificationType !== "CPF" || !isValidCpf(identificationNumber))) {
+      throw new Error("Informe um CPF valido para gerar o Pix pelo Mercado Pago.");
+    }
     if (identificationType && identificationNumber) {
       paymentPayload.payer.identification = {
         type: identificationType,
-        number: identificationNumber.replace(/\D/g, ""),
+        number: identificationNumber,
       };
     }
 
@@ -574,6 +637,8 @@ serve(async (req) => {
 
     const payment = await parseJsonResponse(mpResponse);
     if (!mpResponse.ok) {
+      const safeError = safeProviderErrorMessage(payment);
+      const providerCauses = sanitizeProviderCauses(payment?.cause);
       console.error("[create-mercado-pago-payment] Mercado Pago error", {
         status: mpResponse.status,
         message: payment?.message,
@@ -592,15 +657,17 @@ serve(async (req) => {
           provider_status: mpResponse.status,
           message: payment?.message ?? null,
           error: payment?.error ?? null,
-          cause: payment?.cause ?? null,
+          cause: providerCauses.length > 0 ? providerCauses : payment?.cause ?? null,
           payment_method_id: paymentMethodId,
         },
       });
       return jsonResponse(req, {
         success: false,
-        error: "Nao foi possivel processar o pagamento. Verifique os dados e tente novamente.",
+        error: safeError,
+        debug_code: "MERCADO_PAGO_PAYMENT_REJECTED",
         provider_status: mpResponse.status,
         provider_message: payment?.message ?? payment?.error ?? null,
+        provider_causes: providerCauses,
       }, 400);
     }
 
