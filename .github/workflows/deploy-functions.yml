@@ -30,7 +30,8 @@ jobs:
 
       - name: Apply pending migrations
         run: |
-          supabase db push --db-url "${{ secrets.SUPABASE_DB_URL }}"
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
+          supabase db push --linked
 
       - name: Deploy authenticated Edge Functions
         run: |
