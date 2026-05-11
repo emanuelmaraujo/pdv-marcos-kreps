@@ -339,6 +339,34 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function cpfDigits(value: string) {
+  return value.replace(/\D/g, "").slice(0, 11);
+}
+
+function isValidCpf(value: string) {
+  const digits = cpfDigits(value);
+  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
+
+  const calculateDigit = (length: number) => {
+    let sum = 0;
+    for (let index = 0; index < length; index += 1) {
+      sum += Number(digits[index]) * (length + 1 - index);
+    }
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  return calculateDigit(9) === Number(digits[9]) && calculateDigit(10) === Number(digits[10]);
+}
+
+function formatCpfInput(value: string) {
+  const digits = cpfDigits(value);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+
 function PixResult({
   payment,
   waitExpiresAt,
@@ -435,6 +463,7 @@ function PixCheckout({
   const [error, setError] = useState("");
   const [pixIdempotencyKey, setPixIdempotencyKey] = useState(() => crypto.randomUUID());
   const [now, setNow] = useState(() => Date.now());
+  const [payerCpf, setPayerCpf] = useState("");
 
   useEffect(() => {
     if (!payment) return;
@@ -451,18 +480,31 @@ function PixCheckout({
       setError("Informe um e-mail valido para gerar o Pix pelo Mercado Pago.");
       return;
     }
+    if (payerCpf.trim() && !isValidCpf(payerCpf)) {
+      setError("Informe um CPF valido para gerar o Pix pelo Mercado Pago.");
+      return;
+    }
 
     setIsGenerating(true);
     const requestIdempotencyKey = payment && !hasActivePix ? crypto.randomUUID() : pixIdempotencyKey;
     if (requestIdempotencyKey !== pixIdempotencyKey) setPixIdempotencyKey(requestIdempotencyKey);
 
     try {
+      const formData: Record<string, unknown> = {
+        payment_method_id: "pix",
+        email: payerEmail.trim(),
+      };
+      if (isValidCpf(payerCpf)) {
+        formData.identificationType = "CPF";
+        formData.identificationNumber = cpfDigits(payerCpf);
+      }
+
       const response = await pdvApi.createMercadoPagoPayment({
         order_id: order.order_id,
         public_token: order.public_token,
         payment_method_code: PIX_PAYMENT_METHOD_CODE,
         direct_payment_method: "pix",
-        form_data: { payment_method_id: "pix", email: payerEmail.trim() },
+        form_data: formData,
         idempotency_key: requestIdempotencyKey,
       });
 
@@ -501,6 +543,15 @@ function PixCheckout({
         onChange={(event) => onPayerEmailChange(event.target.value)}
         placeholder="E-mail exigido pelo Mercado Pago para Pix"
         type="email"
+        disabled={!!payment}
+        className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-teal-700 disabled:opacity-60"
+      />
+      <input
+        value={payerCpf}
+        onChange={(event) => setPayerCpf(formatCpfInput(event.target.value))}
+        placeholder="CPF opcional, usado se o Mercado Pago exigir"
+        type="text"
+        inputMode="numeric"
         disabled={!!payment}
         className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-teal-700 disabled:opacity-60"
       />

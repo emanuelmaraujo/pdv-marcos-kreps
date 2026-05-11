@@ -62,6 +62,8 @@ async function extractEdgeFunctionError(
     const fields: { label: string; key: string }[] = [
       { label: 'Error', key: 'error' },
       { label: 'Message', key: 'message' },
+      { label: 'Provider', key: 'provider_message' },
+      { label: 'Debug', key: 'debug_code' },
       { label: 'Details', key: 'details' },
       { label: 'Code', key: 'code' },
     ];
@@ -200,7 +202,13 @@ export type MercadoPagoPaymentResponse = {
   configuration_required?: boolean;
   already_paid?: boolean;
   error?: string;
+  debug_code?: string;
   provider_message?: string | null;
+  provider_causes?: Array<{
+    code?: string | number | null;
+    description?: string | null;
+    data?: unknown;
+  }>;
   payment?: {
     id: number | string;
     status: string;
