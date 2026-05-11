@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - "supabase/functions/**"
+      - "supabase/config.toml"
+      - "supabase/migrations/**"
   workflow_dispatch:
 
 jobs:
@@ -13,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,9 +29,19 @@ jobs:
           echo "Ref length: ${#PROJECT_REF}"
           echo "Ref matches format: $(echo "$PROJECT_REF" | grep -cP '^[a-z0-9]{20}$' || echo 0)"
 
+      - name: Push database migrations
+        if: env.SUPABASE_DB_PASSWORD != ''
+        run: |
+          PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
+          supabase db push --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
       - name: Deploy all Edge Functions
         run: |
           PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
-          for fn in add-items-to-order cash-report confirm-order create-attendant-order create-public-order get-public-order-status manage-users mark-payment reprint-order send-whatsapp test-printer update-order-status webauthn; do
+          for fn in add-items-to-order cash-report confirm-order create-attendant-order manage-users mark-payment reprint-order send-whatsapp test-printer update-order-status; do
             supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
+          done
+
+          for fn in create-public-order create-mercado-pago-payment get-public-order-status get-public-checkout-config mercado-pago-webhook webauthn expire-pending-public-orders; do
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt
           done
