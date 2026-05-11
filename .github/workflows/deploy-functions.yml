@@ -29,19 +29,41 @@ jobs:
           echo "Ref length: ${#PROJECT_REF}"
           echo "Ref matches format: $(echo "$PROJECT_REF" | grep -cP '^[a-z0-9]{20}$' || echo 0)"
 
-      - name: Push database migrations
+      - name: Apply pending migrations
         if: env.SUPABASE_DB_PASSWORD != ''
         run: |
-          PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
-          supabase db push --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
+          supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
 
-      - name: Deploy all Edge Functions
+      - name: Deploy authenticated Edge Functions
         run: |
           PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
-          for fn in add-items-to-order cash-report confirm-order create-attendant-order manage-users mark-payment reprint-order send-whatsapp test-printer update-order-status; do
+          for fn in \
+            add-items-to-order \
+            cash-report \
+            confirm-order \
+            create-attendant-order \
+            manage-users \
+            mark-payment \
+            reprint-order \
+            send-whatsapp \
+            test-printer \
+            update-order-status; do
             supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
           done
 
-          for fn in create-public-order create-mercado-pago-payment get-public-order-status get-public-checkout-config mercado-pago-webhook webauthn expire-pending-public-orders; do
-            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt
+      - name: Deploy public Edge Functions (JWT verification disabled)
+        run: |
+          PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
+          for fn in \
+            create-public-order \
+            create-mercado-pago-payment \
+            get-public-order-status \
+            get-public-checkout-config \
+            mercado-pago-webhook \
+            webauthn \
+            expire-pending-public-orders; do
+            supabase functions deploy "$fn" \
+              --project-ref "$PROJECT_REF" \
+              --no-verify-jwt
           done
