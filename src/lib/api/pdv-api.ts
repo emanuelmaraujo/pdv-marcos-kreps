@@ -1,6 +1,13 @@
 import { createClient } from '../supabase/client';
 import { PaymentMethod, OrderStatus, Order, PaymentTransaction } from '@/types/pdv';
 
+export class OrderingClosedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OrderingClosedError';
+  }
+}
+
 // Note: Ensure the client is only initialized when needed or properly passed to these functions
 // For client components, this works fine.
 
@@ -242,8 +249,31 @@ export const pdvApi = {
     return data as Order;
   },
 
-  createPublicOrder: (payload: CreatePublicOrderPayload) =>
-    invokeEdgeFunction<CreatePublicOrderResponse>('create-public-order', payload),
+  createPublicOrder: async (payload: CreatePublicOrderPayload): Promise<CreatePublicOrderResponse> => {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke('create-public-order', {
+      body: payload,
+      headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+    });
+
+    if (error) {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx instanceof Response) {
+        try {
+          const body = await ctx.clone().json() as Record<string, unknown>;
+          if (body.ordering_closed || body.ordering_disabled) {
+            throw new OrderingClosedError(typeof body.error === 'string' ? body.error : 'No momento nao estamos recebendo pedidos.');
+          }
+        } catch (e) {
+          if (e instanceof OrderingClosedError) throw e;
+        }
+      }
+      throw await extractEdgeFunctionError(error, 'create-public-order');
+    }
+
+    return data as CreatePublicOrderResponse;
+  },
 
   getPublicOrderStatus: (payload: { daily_number: number; public_token: string }) =>
     invokeEdgeFunction<PublicOrderStatusResponse>('get-public-order-status', payload),

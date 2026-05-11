@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
-import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
+import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { settingsApi } from "@/lib/api/settings-api";
 import { Addon, Ingredient, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
@@ -466,6 +466,35 @@ export default function PedirPublicPage() {
   }, [clearCart]);
 
   useEffect(() => {
+    const recheck = async () => {
+      try {
+        const settings = await settingsApi.getSettings();
+        const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
+        const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
+        const isEnabledByAdmin = settings.public_ordering_enabled !== "false";
+        const isOpenBySchedule = isWithinOrderingWindow(start, end);
+        const isEnabled = isEnabledByAdmin && isOpenBySchedule;
+
+        setOrderingSchedule({ start, end });
+        setOnlineOrderingEnabled(isEnabled);
+        setOrderingClosedReason(
+          !isEnabledByAdmin
+            ? "Os pedidos online foram pausados pelo administrador."
+            : !isOpenBySchedule
+              ? `No momento nao estamos recebendo pedidos. Atendimento online das ${start} as ${end}.`
+              : "",
+        );
+        if (!isEnabled) clearCart();
+      } catch {
+        // best-effort: mantém o estado atual em caso de erro
+      }
+    };
+
+    const interval = window.setInterval(recheck, 60_000);
+    return () => window.clearInterval(interval);
+  }, [clearCart]);
+
+  useEffect(() => {
     if (!orderData || step === "PAID") return;
 
     const interval = window.setInterval(async () => {
@@ -602,8 +631,18 @@ export default function PedirPublicPage() {
 
   const handleCreateOrder = async () => {
     setCheckoutError("");
-    if (!onlineOrderingEnabled) {
-      setCheckoutError(orderingClosedReason || "No momento nao estamos recebendo pedidos.");
+
+    // Revalida o horário no momento exato do clique para garantir que o cliente
+    // não consiga submeter um pedido quando o atendimento já encerrou ou foi pausado.
+    const isOpenNow = isWithinOrderingWindow(orderingSchedule.start, orderingSchedule.end);
+    if (!onlineOrderingEnabled || !isOpenNow) {
+      const reason = !isOpenNow
+        ? `No momento nao estamos recebendo pedidos. Atendimento online das ${orderingSchedule.start} as ${orderingSchedule.end}.`
+        : (orderingClosedReason || "No momento nao estamos recebendo pedidos.");
+      setCheckoutError(reason);
+      setOnlineOrderingEnabled(false);
+      setOrderingClosedReason(reason);
+      clearCart();
       return;
     }
     if (items.length === 0) {
@@ -636,7 +675,13 @@ export default function PedirPublicPage() {
       setOrderData(response.order);
       setStep("PAYMENT");
     } catch (err) {
-      setCheckoutError(err instanceof Error ? err.message : "Erro ao criar pedido.");
+      if (err instanceof OrderingClosedError) {
+        setOnlineOrderingEnabled(false);
+        setOrderingClosedReason(err.message);
+        clearCart();
+      } else {
+        setCheckoutError(err instanceof Error ? err.message : "Erro ao criar pedido.");
+      }
     } finally {
       setIsSubmittingOrder(false);
     }
