@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 type JsonRecord = Record<string, unknown>;
+const PIX_EXPIRATION_MINUTES = 35;
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -93,6 +94,47 @@ function mapTransactionPayload(payment: any) {
     expires_at: payment?.date_of_expiration ?? null,
     raw_provider_payload: payment,
   };
+}
+
+function maskEmail(email: string | null) {
+  if (!email) return null;
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "***";
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+function sanitizePaymentPayload(payload: any) {
+  return {
+    transaction_amount: payload.transaction_amount,
+    description: payload.description,
+    payment_method_id: payload.payment_method_id,
+    external_reference: payload.external_reference,
+    statement_descriptor: payload.statement_descriptor,
+    date_of_expiration: payload.date_of_expiration ?? null,
+    notification_url_present: Boolean(payload.notification_url),
+    payer: {
+      email: maskEmail(payload.payer?.email ?? null),
+      first_name_present: Boolean(payload.payer?.first_name),
+      last_name_present: Boolean(payload.payer?.last_name),
+      phone_present: Boolean(payload.payer?.phone),
+      identification_present: Boolean(payload.payer?.identification),
+    },
+    token_present: Boolean(payload.token),
+    installments: payload.installments ?? null,
+    issuer_id_present: Boolean(payload.issuer_id),
+    additional_info_items_count: Array.isArray(payload.additional_info?.items)
+      ? payload.additional_info.items.length
+      : 0,
+  };
+}
+
+async function parseJsonResponse(response: Response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { raw: text };
+  }
 }
 
 function settingBool(value: unknown): boolean {
@@ -358,6 +400,12 @@ serve(async (req) => {
     if (order.payment_status === "PAID") {
       return jsonResponse(req, { success: true, already_paid: true, order: { payment_status: "PAID" } });
     }
+    if (order.status !== "AGUARDANDO_PAGAMENTO" || order.payment_status !== "PENDING") {
+      throw new Error("Pedido nao esta aguardando pagamento.");
+    }
+    if (Number(order.total_amount) <= 0) {
+      throw new Error("Valor do pedido invalido para pagamento.");
+    }
 
     const { data: existingTx } = await supabaseAdmin
       .from("payment_transactions")
@@ -464,8 +512,17 @@ serve(async (req) => {
       };
     }
 
-    if (notificationUrl) paymentPayload.notification_url = notificationUrl;
-    if (isPix) paymentPayload.date_of_expiration = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    if (notificationUrl && /^https:\/\//i.test(notificationUrl)) {
+      paymentPayload.notification_url = notificationUrl;
+    } else if (notificationUrl) {
+      console.error("[create-mercado-pago-payment] Ignoring invalid Mercado Pago webhook URL", {
+        order_id: order.id,
+        external_reference: externalReference,
+      });
+    }
+    if (isPix) {
+      paymentPayload.date_of_expiration = new Date(Date.now() + PIX_EXPIRATION_MINUTES * 60 * 1000).toISOString();
+    }
     if (formData.token) paymentPayload.token = String(formData.token);
     if (formData.installments) paymentPayload.installments = Math.max(1, Math.trunc(toNumber(formData.installments)));
     if (formData.issuer_id || formData.issuerId) paymentPayload.issuer_id = String(formData.issuer_id ?? formData.issuerId);
@@ -515,7 +572,7 @@ serve(async (req) => {
       body: JSON.stringify(paymentPayload),
     });
 
-    const payment = await mpResponse.json();
+    const payment = await parseJsonResponse(mpResponse);
     if (!mpResponse.ok) {
       console.error("[create-mercado-pago-payment] Mercado Pago error", {
         status: mpResponse.status,
@@ -524,6 +581,7 @@ serve(async (req) => {
         cause: payment?.cause,
         order_id: order.id,
         external_reference: externalReference,
+        sanitized_payload: sanitizePaymentPayload(paymentPayload),
       });
       await supabaseAdmin.from("audit_logs").insert({
         action: "PAYMENT_PROVIDER_CREATE_FAILED",
