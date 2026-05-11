@@ -160,7 +160,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-                  {order.type === "BALCAO" ? "Balcão" : "Para Viagem"} · {order.source}
+                  {order.type === "BALCAO" ? "Balcão" : "Para Viagem"} · {order.source === "APP" ? "App" : order.source}
                 </p>
                 <h2 className="mt-0.5 text-2xl font-black leading-tight">
                   {order.customer_name || "Cliente Final"}

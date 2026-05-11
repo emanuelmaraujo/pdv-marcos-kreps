@@ -199,6 +199,7 @@ export type MercadoPagoPaymentResponse = {
   configuration_required?: boolean;
   already_paid?: boolean;
   error?: string;
+  provider_message?: string | null;
   payment?: {
     id: number | string;
     status: string;
@@ -234,6 +235,20 @@ export type PublicOrderStatusResponse = {
     delivered_at?: string;
   };
   transaction?: Partial<PaymentTransaction> | null;
+};
+
+export type PublicCheckoutConfigResponse = {
+  success: boolean;
+  error?: string;
+  settings: {
+    public_ordering_enabled: string;
+    public_ordering_start_time: string;
+    public_ordering_end_time: string;
+    packaging_fee: string;
+    apply_packaging_fee_for_takeout: string;
+  };
+  online_ordering_enabled: boolean;
+  ordering_closed_reason: string;
 };
 
 export const pdvApi = {
@@ -278,11 +293,15 @@ export const pdvApi = {
   getPublicOrderStatus: (payload: { daily_number: number; public_token: string }) =>
     invokeEdgeFunction<PublicOrderStatusResponse>('get-public-order-status', payload),
 
+  getPublicCheckoutConfig: () =>
+    invokeEdgeFunction<PublicCheckoutConfigResponse>('get-public-checkout-config', {}),
+
   createMercadoPagoPayment: (payload: {
     order_id: string;
     public_token: string;
     payment_method_code: string;
-    form_data: Record<string, unknown>;
+    form_data?: Record<string, unknown>;
+    direct_payment_method?: 'pix';
     idempotency_key: string;
   }) =>
     invokeEdgeFunction<MercadoPagoPaymentResponse>(

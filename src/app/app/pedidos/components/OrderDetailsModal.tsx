@@ -9,7 +9,7 @@ import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
 import {
   X, PlusCircle, Printer, CheckCircle2, Package, XCircle,
-  AlertTriangle, ArrowLeft, Utensils, ShoppingBag, Clock,
+  AlertTriangle, ArrowLeft, Utensils, ShoppingBag,
   QrCode, Banknote, CreditCard, Gift, ChevronDown, ChevronUp,
   History,
 } from "lucide-react";
@@ -84,11 +84,15 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
 
   // Reset panels when order changes
   useEffect(() => {
-    setErrorMsg("");
-    setShowCancelReason(false);
-    setCancelReason("");
-    setShowPaymentSelection(false);
-    setShowHistory(false);
+    const timer = window.setTimeout(() => {
+      setErrorMsg("");
+      setShowCancelReason(false);
+      setCancelReason("");
+      setShowPaymentSelection(false);
+      setShowHistory(false);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [order?.id]);
 
   if (!isOpen || !order) return null;
@@ -184,7 +188,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </h2>
                 <p className="text-[11px] text-white/40 mt-0.5">
                   {order.type === "BALCAO" ? "Balcão" : "Para Viagem"} ·{" "}
-                  {order.source === "ATTENDANT" ? "Atendente" : order.source === "QR_CODE" ? "QR Code" : "WhatsApp"} ·{" "}
+                  {order.source === "ATTENDANT" ? "Atendente" : order.source === "QR_CODE" ? "QR Code" : order.source === "APP" ? "App" : "WhatsApp"} ·{" "}
                   Criado às {fmt(order.created_at)}
                 </p>
               </div>

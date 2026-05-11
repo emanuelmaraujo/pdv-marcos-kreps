@@ -46,14 +46,22 @@ function toNumber(value: unknown) {
   return Number.isFinite(num) ? num : 0;
 }
 
-function settingBool(value: unknown) {
-  return value === true || value === "true";
+function settingBool(value: unknown, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.replace(/^"|"$/g, "").toLowerCase() === "true";
+  return fallback;
 }
 
 function settingNumber(value: unknown) {
   if (typeof value === "number") return value;
-  if (typeof value === "string") return Number(value) || 0;
+  if (typeof value === "string") return Number(value.replace(/^"|"$/g, "").replace(",", ".")) || 0;
   return 0;
+}
+
+function settingString(value: unknown, fallback: string) {
+  if (typeof value === "string") return value.replace(/^"|"$/g, "");
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
 }
 
 function uniq(values: string[]) {
@@ -161,7 +169,10 @@ serve(async (req) => {
 
     if (settingsErr) throw new Error("Erro ao buscar configuracoes.");
 
-    const publicOrderingEnabled = settingBool(settingsData?.find((s) => s.key === "public_ordering_enabled")?.value);
+    const publicOrderingEnabled = settingBool(
+      settingsData?.find((s) => s.key === "public_ordering_enabled")?.value,
+      true,
+    );
     if (!publicOrderingEnabled) {
       return jsonResponse(req, {
         success: false,
@@ -170,8 +181,14 @@ serve(async (req) => {
       }, 403);
     }
 
-    const orderingStart = settingsData?.find((s) => s.key === "public_ordering_start_time")?.value ?? DEFAULT_ORDERING_START;
-    const orderingEnd = settingsData?.find((s) => s.key === "public_ordering_end_time")?.value ?? DEFAULT_ORDERING_END;
+    const orderingStart = settingString(
+      settingsData?.find((s) => s.key === "public_ordering_start_time")?.value,
+      DEFAULT_ORDERING_START,
+    );
+    const orderingEnd = settingString(
+      settingsData?.find((s) => s.key === "public_ordering_end_time")?.value,
+      DEFAULT_ORDERING_END,
+    );
     if (!isWithinOrderingWindow(orderingStart, orderingEnd)) {
       return jsonResponse(req, {
         success: false,
@@ -262,7 +279,7 @@ serve(async (req) => {
       .from("orders")
       .insert({
         type: orderType,
-        source: "QR_CODE",
+        source: "APP",
         status: "AGUARDANDO_PAGAMENTO",
         payment_status: "PENDING",
         payment_method: "PENDING",
@@ -342,6 +359,7 @@ serve(async (req) => {
         daily_number: order.daily_number,
         total_amount: order.total_amount,
         payment_method_code: paymentMethodCode,
+        source: "APP",
       },
     });
 

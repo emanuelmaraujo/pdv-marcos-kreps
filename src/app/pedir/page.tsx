@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
-import { settingsApi } from "@/lib/api/settings-api";
 import { Addon, Ingredient, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
 
@@ -51,11 +50,12 @@ interface MenuIndexes {
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const PAYMENT_METHOD_CODE = "MERCADO_PAGO_PAYMENT_BRICK";
+const PIX_PAYMENT_METHOD_CODE = "PIX";
 const ALL_FILTER = "Todos";
 const DEFAULT_ORDERING_START = "17:00";
 const DEFAULT_ORDERING_END = "23:30";
-const ORDERING_TIME_ZONE = "America/Sao_Paulo";
 const INSTAGRAM_URL = "https://www.instagram.com/marcos_kreps/";
+const PIX_WAIT_MINUTES = 5;
 
 const SAVORY_PROTEINS = ["presunto", "calabresa", "frango", "atum", "peito de peru", "carne de sol"];
 const SWEET_BASES = ["banana", "morango", "nutella", "chocolate", "doce de leite", "goiabada"];
@@ -140,36 +140,6 @@ function getProductSummary(product: Product, categoryName: string | undefined, i
   return "Item do cardapio Marcos Krep's.";
 }
 
-function parseTimeToMinutes(value: string | undefined) {
-  const match = value?.match(/^(\d{2}):(\d{2})$/);
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) return null;
-  return hours * 60 + minutes;
-}
-
-function getSaoPauloMinutes(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: ORDERING_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const hours = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
-  const minutes = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
-  return hours * 60 + minutes;
-}
-
-function isWithinOrderingWindow(startTime: string, endTime: string) {
-  const start = parseTimeToMinutes(startTime) ?? parseTimeToMinutes(DEFAULT_ORDERING_START)!;
-  const end = parseTimeToMinutes(endTime) ?? parseTimeToMinutes(DEFAULT_ORDERING_END)!;
-  const now = getSaoPauloMinutes();
-  if (start === end) return true;
-  if (start < end) return now >= start && now <= end;
-  return now >= start || now <= end;
-}
-
 function buildMenuIndexes(menuData: MenuData | null): MenuIndexes | null {
   if (!menuData) return null;
   const ingredientsById = new Map(menuData.ingredients.map((ingredient) => [ingredient.id, ingredient]));
@@ -247,7 +217,6 @@ function MercadoPagoBrick({
           },
           customization: {
             paymentMethods: {
-              bankTransfer: "all",
               creditCard: "all",
               prepaidCard: "all",
               debitCard: "all",
@@ -284,7 +253,7 @@ function MercadoPagoBrick({
               });
             },
             onError: (err: unknown) => {
-              console.error("[MercadoPagoBrick] error", err);
+              console.error("[MercadoPagoBrick] error", JSON.stringify(err, null, 2), err);
               setError("O checkout do Mercado Pago nao carregou corretamente.");
             },
           },
@@ -337,20 +306,56 @@ function MercadoPagoBrick({
   );
 }
 
-function PixResult({ payment }: { payment: MercadoPagoPaymentResponse }) {
+function formatCountdown(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function PixResult({
+  payment,
+  waitExpiresAt,
+}: {
+  payment: MercadoPagoPaymentResponse;
+  waitExpiresAt?: string | null;
+}) {
   const transaction = payment.transaction;
   const qrBase64 = transaction?.qr_code_base64;
   const qrCode = transaction?.qr_code;
   const ticketUrl = transaction?.ticket_url;
+  const [copied, setCopied] = useState(false);
+  const [remainingMs, setRemainingMs] = useState(() => {
+    if (!waitExpiresAt) return PIX_WAIT_MINUTES * 60 * 1000;
+    return new Date(waitExpiresAt).getTime() - Date.now();
+  });
+
+  useEffect(() => {
+    if (!waitExpiresAt) return;
+    const updateRemaining = () => setRemainingMs(new Date(waitExpiresAt).getTime() - Date.now());
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(interval);
+  }, [waitExpiresAt]);
 
   if (!qrBase64 && !qrCode && !ticketUrl) return null;
 
+  const isExpired = remainingMs <= 0;
+
   return (
     <div className="space-y-3 rounded-2xl border border-teal-100 bg-teal-50 p-4">
-      <div className="flex items-center gap-2 text-teal-800">
-        <QrCode className="h-4 w-4" />
-        <p className="text-xs font-black uppercase tracking-widest">Pix gerado</p>
+      <div className="flex items-center justify-between gap-3 text-teal-800">
+        <div className="flex items-center gap-2">
+          <QrCode className="h-4 w-4" />
+          <p className="text-xs font-black uppercase tracking-widest">Pix gerado</p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-black ${isExpired ? "bg-red-100 text-red-700" : "bg-white text-teal-700"}`}>
+          {isExpired ? "Tempo esgotado" : formatCountdown(remainingMs)}
+        </span>
       </div>
+      <p className="text-sm font-semibold leading-relaxed text-teal-900/80">
+        Copie o codigo Pix ou escaneie o QR Code. Vamos conferir automaticamente por {PIX_WAIT_MINUTES} minutos.
+      </p>
       {qrBase64 && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -363,10 +368,14 @@ function PixResult({ payment }: { payment: MercadoPagoPaymentResponse }) {
         <Button
           variant="outline"
           className="w-full gap-2 border-teal-200 text-teal-700"
-          onClick={() => navigator.clipboard.writeText(qrCode)}
+          onClick={async () => {
+            await navigator.clipboard.writeText(qrCode);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1800);
+          }}
         >
           <Copy className="h-4 w-4" />
-          Copiar codigo Pix
+          {copied ? "Codigo copiado" : "Copiar Pix copia e cola"}
         </Button>
       )}
       {ticketUrl && (
@@ -380,6 +389,87 @@ function PixResult({ payment }: { payment: MercadoPagoPaymentResponse }) {
         </a>
       )}
     </div>
+  );
+}
+
+function PixCheckout({
+  order,
+  onPaid,
+}: {
+  order: CreatePublicOrderResponse["order"];
+  onPaid: () => void;
+}) {
+  const [payment, setPayment] = useState<MercadoPagoPaymentResponse | null>(null);
+  const [waitExpiresAt, setWaitExpiresAt] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleGeneratePix = async () => {
+    setError("");
+    setIsGenerating(true);
+
+    try {
+      const response = await pdvApi.createMercadoPagoPayment({
+        order_id: order.order_id,
+        public_token: order.public_token,
+        payment_method_code: PIX_PAYMENT_METHOD_CODE,
+        direct_payment_method: "pix",
+        form_data: { payment_method_id: "pix" },
+        idempotency_key: crypto.randomUUID(),
+      });
+
+      setPayment(response);
+      const createdAt = response.transaction?.created_at ? new Date(response.transaction.created_at).getTime() : Date.now();
+      setWaitExpiresAt(new Date(createdAt + PIX_WAIT_MINUTES * 60 * 1000).toISOString());
+
+      if (!response.success) {
+        setError(response.error || "Nao foi possivel gerar o Pix.");
+        return;
+      }
+      if (response.payment?.status === "approved" || response.already_paid) {
+        onPaid();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao gerar Pix.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-teal-100 bg-teal-50 p-4 text-teal-900">
+        <div className="flex items-center gap-2">
+          <QrCode className="h-5 w-5 text-teal-700" />
+          <p className="text-sm font-black">Pix copia e cola</p>
+        </div>
+        <p className="mt-1 text-xs font-semibold leading-relaxed text-teal-900/75">
+          Gere o codigo, pague pelo banco e deixe esta tela aberta. A confirmacao aparece automaticamente.
+        </p>
+      </div>
+
+      {!payment && (
+        <Button className="w-full gap-2 bg-teal-700 hover:bg-teal-800" loading={isGenerating} onClick={handleGeneratePix}>
+          <QrCode className="h-4 w-4" />
+          Gerar Pix copia e cola
+        </Button>
+      )}
+
+      {payment && <PixResult payment={payment} waitExpiresAt={waitExpiresAt} />}
+
+      {payment && (
+        <Button variant="outline" className="w-full gap-2" loading={isGenerating} onClick={handleGeneratePix}>
+          <RefreshCw className="h-4 w-4" />
+          Gerar novo Pix
+        </Button>
+      )}
+
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+          {error}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -424,34 +514,29 @@ export default function PedirPublicPage() {
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderData, setOrderData] = useState<CreatePublicOrderResponse["order"] | null>(null);
   const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
+  const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
 
   useEffect(() => {
     async function loadMenu() {
       try {
         setLoading(true);
-        const [data, settings] = await Promise.all([
+        const [data, config] = await Promise.all([
           menuApi.getMenuData(),
-          settingsApi.getSettings(),
+          pdvApi.getPublicCheckoutConfig(),
         ]);
+        if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
+        const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
-        const isEnabledByAdmin = settings.public_ordering_enabled !== "false";
-        const isOpenBySchedule = isWithinOrderingWindow(start, end);
-        const isEnabled = isEnabledByAdmin && isOpenBySchedule;
+        const isEnabled = config.online_ordering_enabled;
         const fee = Number(String(settings.packaging_fee ?? "0").replace(",", ".")) || 0;
 
         setOrderingSchedule({ start, end });
         setPackagingFee(fee);
         setApplyPackagingFeeForTakeout(settings.apply_packaging_fee_for_takeout === "true");
         setOnlineOrderingEnabled(isEnabled);
-        setOrderingClosedReason(
-          !isEnabledByAdmin
-            ? "Os pedidos online foram pausados pelo administrador."
-            : !isOpenBySchedule
-              ? `No momento nao estamos recebendo pedidos. Atendimento online das ${start} as ${end}.`
-              : "",
-        );
+        setOrderingClosedReason(config.ordering_closed_reason);
         if (!isEnabled) clearCart();
         setMenuData(data);
         setSelectedCategoryId(data.categories[0]?.id ?? null);
@@ -468,22 +553,16 @@ export default function PedirPublicPage() {
   useEffect(() => {
     const recheck = async () => {
       try {
-        const settings = await settingsApi.getSettings();
+        const config = await pdvApi.getPublicCheckoutConfig();
+        if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
+        const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
-        const isEnabledByAdmin = settings.public_ordering_enabled !== "false";
-        const isOpenBySchedule = isWithinOrderingWindow(start, end);
-        const isEnabled = isEnabledByAdmin && isOpenBySchedule;
+        const isEnabled = config.online_ordering_enabled;
 
         setOrderingSchedule({ start, end });
         setOnlineOrderingEnabled(isEnabled);
-        setOrderingClosedReason(
-          !isEnabledByAdmin
-            ? "Os pedidos online foram pausados pelo administrador."
-            : !isOpenBySchedule
-              ? `No momento nao estamos recebendo pedidos. Atendimento online das ${start} as ${end}.`
-              : "",
-        );
+        setOrderingClosedReason(config.ordering_closed_reason);
         if (!isEnabled) clearCart();
       } catch {
         // best-effort: mantém o estado atual em caso de erro
@@ -634,15 +713,25 @@ export default function PedirPublicPage() {
 
     // Revalida o horário no momento exato do clique para garantir que o cliente
     // não consiga submeter um pedido quando o atendimento já encerrou ou foi pausado.
-    const isOpenNow = isWithinOrderingWindow(orderingSchedule.start, orderingSchedule.end);
-    if (!onlineOrderingEnabled || !isOpenNow) {
-      const reason = !isOpenNow
-        ? `No momento nao estamos recebendo pedidos. Atendimento online das ${orderingSchedule.start} as ${orderingSchedule.end}.`
-        : (orderingClosedReason || "No momento nao estamos recebendo pedidos.");
-      setCheckoutError(reason);
-      setOnlineOrderingEnabled(false);
-      setOrderingClosedReason(reason);
-      clearCart();
+    try {
+      const config = await pdvApi.getPublicCheckoutConfig();
+      if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
+      const settings = config.settings;
+      const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
+      const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
+
+      setOrderingSchedule({ start, end });
+      setOnlineOrderingEnabled(config.online_ordering_enabled);
+      setOrderingClosedReason(config.ordering_closed_reason);
+
+      if (!config.online_ordering_enabled) {
+        const reason = config.ordering_closed_reason || "No momento nao estamos recebendo pedidos.";
+        setCheckoutError(reason);
+        clearCart();
+        return;
+      }
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Nao foi possivel validar o horario de atendimento.");
       return;
     }
     if (items.length === 0) {
@@ -673,6 +762,8 @@ export default function PedirPublicPage() {
       });
 
       setOrderData(response.order);
+      setPaymentResult(null);
+      setPaymentMode("PIX");
       setStep("PAYMENT");
     } catch (err) {
       if (err instanceof OrderingClosedError) {
@@ -1053,16 +1144,49 @@ export default function PedirPublicPage() {
             </div>
           </section>
 
-          <MercadoPagoBrick
-            order={orderData}
-            onResult={setPaymentResult}
-            onPaid={() => {
-              clearCart();
-              setStep("PAID");
-            }}
-          />
+          <section className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setPaymentMode("PIX")}
+              className={`flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-black uppercase transition-all ${
+                paymentMode === "PIX" ? "bg-teal-700 text-white" : "text-zinc-500"
+              }`}
+            >
+              <QrCode className="h-4 w-4" />
+              Pix
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaymentMode("CARD")}
+              className={`flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-black uppercase transition-all ${
+                paymentMode === "CARD" ? "bg-brand-charcoal text-white" : "text-zinc-500"
+              }`}
+            >
+              <CreditCard className="h-4 w-4" />
+              Cartao
+            </button>
+          </section>
 
-          {paymentResult && <PixResult payment={paymentResult} />}
+          {paymentMode === "PIX" ? (
+            <PixCheckout
+              order={orderData}
+              onPaid={() => {
+                clearCart();
+                setStep("PAID");
+              }}
+            />
+          ) : (
+            <MercadoPagoBrick
+              order={orderData}
+              onResult={setPaymentResult}
+              onPaid={() => {
+                clearCart();
+                setStep("PAID");
+              }}
+            />
+          )}
+
+          {paymentMode === "CARD" && paymentResult && <PixResult payment={paymentResult} />}
         </main>
       )}
 

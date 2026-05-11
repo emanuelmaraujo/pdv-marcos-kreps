@@ -14,7 +14,7 @@ export type OrderStatus =
 export type PaymentStatus = 'PENDING' | 'PAID' | 'REFUNDED' | 'CANCELED' | 'COURTESY';
 export type PaymentMethod = 'PIX' | 'CASH' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'PENDING' | 'COURTESY';
 export type OrderType = 'BALCAO' | 'VIAGEM';
-export type OrderSource = 'ATTENDANT' | 'QR_CODE' | 'WHATSAPP';
+export type OrderSource = 'ATTENDANT' | 'QR_CODE' | 'WHATSAPP' | 'APP';
 
 // ─── Menu ─────────────────────────────────────────────────────────────────────
 

@@ -70,7 +70,7 @@ function parseSignature(header: string | null) {
   );
 }
 
-async function verifyWebhookSignature(req: Request, paymentId: string) {
+async function verifyWebhookSignature(req: Request, signedPaymentId: string) {
   const secret = Deno.env.get("MERCADO_PAGO_WEBHOOK_SECRET");
   if (!secret) return true;
 
@@ -82,7 +82,7 @@ async function verifyWebhookSignature(req: Request, paymentId: string) {
 
   // Mercado Pago signs a manifest with the resource id, request id and timestamp.
   // Keep this strict only when MERCADO_PAGO_WEBHOOK_SECRET is configured.
-  const manifest = `id:${paymentId};request-id:${requestId};ts:${ts};`;
+  const manifest = `id:${signedPaymentId};request-id:${requestId};ts:${ts};`;
   const expected = await hmacSha256(secret, manifest);
   return expected === received;
 }
@@ -303,15 +303,17 @@ serve(async (req) => {
     const accessToken = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN");
     if (!accessToken) return jsonResponse({ success: false, error: "missing_access_token" }, 500);
 
+    const url = new URL(req.url);
     const body = await req.json();
     const type = cleanText(body.type, 80) ?? cleanText(body.topic, 80);
-    const paymentId = cleanText(body?.data?.id, 80) ?? cleanText(body.id, 80);
+    const queryPaymentId = cleanText(url.searchParams.get("data.id"), 80);
+    const paymentId = queryPaymentId ?? cleanText(body?.data?.id, 80) ?? cleanText(body.id, 80);
 
     if (type !== "payment" || !paymentId) {
       return jsonResponse({ success: true, ignored: true });
     }
 
-    const validSignature = await verifyWebhookSignature(req, paymentId);
+    const validSignature = await verifyWebhookSignature(req, queryPaymentId ?? paymentId);
     if (!validSignature) {
       console.error("[mercado-pago-webhook] invalid signature", { paymentId });
       return jsonResponse({ success: false }, 401);
