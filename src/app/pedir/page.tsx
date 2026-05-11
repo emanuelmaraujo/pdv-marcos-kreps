@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
-import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
+import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { settingsApi } from "@/lib/api/settings-api";
 import { Addon, Ingredient, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
@@ -675,7 +675,13 @@ export default function PedirPublicPage() {
       setOrderData(response.order);
       setStep("PAYMENT");
     } catch (err) {
-      setCheckoutError(err instanceof Error ? err.message : "Erro ao criar pedido.");
+      if (err instanceof OrderingClosedError) {
+        setOnlineOrderingEnabled(false);
+        setOrderingClosedReason(err.message);
+        clearCart();
+      } else {
+        setCheckoutError(err instanceof Error ? err.message : "Erro ao criar pedido.");
+      }
     } finally {
       setIsSubmittingOrder(false);
     }
