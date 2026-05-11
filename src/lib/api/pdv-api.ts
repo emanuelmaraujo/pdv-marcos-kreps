@@ -252,7 +252,8 @@ export const pdvApi = {
     order_id: string;
     public_token: string;
     payment_method_code: string;
-    form_data: Record<string, unknown>;
+    form_data?: Record<string, unknown>;
+    direct_payment_method?: 'pix';
     idempotency_key: string;
   }) =>
     invokeEdgeFunction<MercadoPagoPaymentResponse>(

@@ -170,6 +170,7 @@ serve(async (req) => {
     const orderId = cleanText(body.order_id, 64);
     const publicToken = cleanText(body.public_token, 128);
     const paymentMethodCode = cleanText(body.payment_method_code, 80) ?? "MERCADO_PAGO_PAYMENT_BRICK";
+    const directPaymentMethod = cleanText(body.direct_payment_method, 40)?.toLowerCase() ?? null;
     const idempotencyKey = cleanText(
       req.headers.get("x-idempotency-key") ?? body.idempotency_key,
       120,
@@ -218,11 +219,58 @@ serve(async (req) => {
     }
 
     const paymentMethodId =
+      directPaymentMethod === "pix" ? "pix" :
       cleanText(formData.payment_method_id, 80) ??
       cleanText(formData.paymentMethodId, 80) ??
       cleanText(getNested(formData, ["payment_method", "id"]), 80);
 
     if (!paymentMethodId) throw new Error("Metodo de pagamento nao informado pelo Brick.");
+    const isPix = paymentMethodId.toLowerCase() === "pix";
+
+    if (isPix) {
+      const { data: existingPendingPix } = await supabaseAdmin
+        .from("payment_transactions")
+        .select("*")
+        .eq("order_id", order.id)
+        .eq("provider", "MERCADO_PAGO")
+        .eq("provider_payment_method_id", "pix")
+        .in("provider_status", ["pending", "in_process"])
+        .gt("expires_at", new Date().toISOString())
+        .gt("created_at", new Date(Date.now() - 5 * 60 * 1000).toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingPendingPix) {
+        return jsonResponse(req, {
+          success: true,
+          transaction: {
+            id: existingPendingPix.id,
+            status: existingPendingPix.provider_status,
+            payment_method: existingPendingPix.internal_payment_method,
+            qr_code: existingPendingPix.qr_code,
+            qr_code_base64: existingPendingPix.qr_code_base64,
+            ticket_url: existingPendingPix.ticket_url,
+            expires_at: existingPendingPix.expires_at,
+            created_at: existingPendingPix.created_at,
+          },
+          payment: {
+            id: existingPendingPix.provider_payment_id,
+            status: existingPendingPix.provider_status,
+            status_detail: existingPendingPix.provider_status_detail,
+            payment_method_id: existingPendingPix.provider_payment_method_id,
+            payment_type_id: existingPendingPix.provider_payment_type_id,
+            point_of_interaction: {
+              transaction_data: {
+                qr_code: existingPendingPix.qr_code,
+                qr_code_base64: existingPendingPix.qr_code_base64,
+                ticket_url: existingPendingPix.ticket_url,
+              },
+            },
+          },
+        });
+      }
+    }
 
     const payerEmail =
       cleanText(getNested(formData, ["payer", "email"]), 254) ??
@@ -258,6 +306,7 @@ serve(async (req) => {
     }
 
     if (notificationUrl) paymentPayload.notification_url = notificationUrl;
+    if (isPix) paymentPayload.date_of_expiration = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     if (formData.token) paymentPayload.token = String(formData.token);
     if (formData.installments) paymentPayload.installments = Math.max(1, Math.trunc(toNumber(formData.installments)));
     if (formData.issuer_id || formData.issuerId) paymentPayload.issuer_id = String(formData.issuer_id ?? formData.issuerId);
