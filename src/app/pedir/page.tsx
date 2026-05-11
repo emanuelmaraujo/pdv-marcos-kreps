@@ -27,7 +27,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
-import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
+import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { Addon, Ingredient, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
 
@@ -551,6 +551,29 @@ export default function PedirPublicPage() {
   }, [clearCart]);
 
   useEffect(() => {
+    const recheck = async () => {
+      try {
+        const config = await pdvApi.getPublicCheckoutConfig();
+        if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
+        const settings = config.settings;
+        const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
+        const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
+        const isEnabled = config.online_ordering_enabled;
+
+        setOrderingSchedule({ start, end });
+        setOnlineOrderingEnabled(isEnabled);
+        setOrderingClosedReason(config.ordering_closed_reason);
+        if (!isEnabled) clearCart();
+      } catch {
+        // best-effort: mantém o estado atual em caso de erro
+      }
+    };
+
+    const interval = window.setInterval(recheck, 60_000);
+    return () => window.clearInterval(interval);
+  }, [clearCart]);
+
+  useEffect(() => {
     if (!orderData || step === "PAID") return;
 
     const interval = window.setInterval(async () => {
@@ -687,8 +710,28 @@ export default function PedirPublicPage() {
 
   const handleCreateOrder = async () => {
     setCheckoutError("");
-    if (!onlineOrderingEnabled) {
-      setCheckoutError(orderingClosedReason || "No momento nao estamos recebendo pedidos.");
+
+    // Revalida o horário no momento exato do clique para garantir que o cliente
+    // não consiga submeter um pedido quando o atendimento já encerrou ou foi pausado.
+    try {
+      const config = await pdvApi.getPublicCheckoutConfig();
+      if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
+      const settings = config.settings;
+      const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
+      const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
+
+      setOrderingSchedule({ start, end });
+      setOnlineOrderingEnabled(config.online_ordering_enabled);
+      setOrderingClosedReason(config.ordering_closed_reason);
+
+      if (!config.online_ordering_enabled) {
+        const reason = config.ordering_closed_reason || "No momento nao estamos recebendo pedidos.";
+        setCheckoutError(reason);
+        clearCart();
+        return;
+      }
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Nao foi possivel validar o horario de atendimento.");
       return;
     }
     if (items.length === 0) {
@@ -723,7 +766,13 @@ export default function PedirPublicPage() {
       setPaymentMode("PIX");
       setStep("PAYMENT");
     } catch (err) {
-      setCheckoutError(err instanceof Error ? err.message : "Erro ao criar pedido.");
+      if (err instanceof OrderingClosedError) {
+        setOnlineOrderingEnabled(false);
+        setOrderingClosedReason(err.message);
+        clearCart();
+      } else {
+        setCheckoutError(err instanceof Error ? err.message : "Erro ao criar pedido.");
+      }
     } finally {
       setIsSubmittingOrder(false);
     }
