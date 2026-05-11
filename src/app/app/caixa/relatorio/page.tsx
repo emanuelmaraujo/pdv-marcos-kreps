@@ -269,7 +269,11 @@ export default function RelatorioPage() {
     }
   }, [period, filters]);
 
-  useEffect(() => { if (isAdmin === true) loadReport(); }, [isAdmin, loadReport]);
+  useEffect(() => {
+    if (isAdmin !== true) return;
+    const timer = window.setTimeout(() => loadReport(), 0);
+    return () => window.clearTimeout(timer);
+  }, [isAdmin, loadReport]);
 
   const dailyRows = useMemo(() => buildDailyRows(orders), [orders]);
   const abcProducts = useMemo(

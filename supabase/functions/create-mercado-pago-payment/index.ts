@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
@@ -17,6 +18,13 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+function isAllowedOrigin(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
+  if (configured === "*" || !origin) return true;
+  return configured.split(",").map((value) => value.trim()).filter(Boolean).includes(origin);
+}
+
 function jsonResponse(req: Request, body: JsonRecord, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -28,6 +36,12 @@ function cleanText(value: unknown, maxLength: number) {
   if (typeof value !== "string") return null;
   const cleaned = value.replace(/\s+/g, " ").trim();
   return cleaned ? cleaned.slice(0, maxLength) : null;
+}
+
+function cleanEmail(value: unknown) {
+  const email = cleanText(value, 254);
+  if (!email) return null;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null;
 }
 
 function toNumber(value: unknown) {
@@ -287,6 +301,10 @@ serve(async (req) => {
   }
 
   try {
+    if (!isAllowedOrigin(req)) {
+      return jsonResponse(req, { success: false, error: "Origem nao autorizada." }, 403);
+    }
+
     const accessToken = Deno.env.get("MERCADO_PAGO_ACCESS_TOKEN");
     if (!accessToken) {
       return jsonResponse(req, {
@@ -345,6 +363,7 @@ serve(async (req) => {
       .from("payment_transactions")
       .select("*")
       .eq("idempotency_key", idempotencyKey)
+      .eq("order_id", orderId)
       .maybeSingle();
 
     if (existingTx) {
@@ -373,7 +392,6 @@ serve(async (req) => {
         .eq("provider_payment_method_id", "pix")
         .in("provider_status", ["pending", "in_process"])
         .gt("expires_at", new Date().toISOString())
-        .gt("created_at", new Date(Date.now() - 5 * 60 * 1000).toISOString())
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -410,18 +428,22 @@ serve(async (req) => {
     }
 
     const payerEmail =
-      cleanText(getNested(formData, ["payer", "email"]), 254) ??
-      cleanText(formData.email, 254) ??
-      cleanText(order.customer_email, 254);
+      cleanEmail(getNested(formData, ["payer", "email"])) ??
+      cleanEmail(formData.email) ??
+      cleanEmail(order.customer_email);
 
-    if (!payerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) {
-      throw new Error("Informe um e-mail valido no pagamento.");
+    if (!payerEmail) {
+      const message = isPix
+        ? "O Mercado Pago exige um e-mail valido para gerar Pix neste checkout."
+        : "Informe um e-mail valido no pagamento.";
+      throw new Error(message);
     }
 
     const externalReference = `${order.id}:${idempotencyKey}`;
     const notificationUrl = cleanText(Deno.env.get("MERCADO_PAGO_WEBHOOK_URL"), 500);
     const { firstName, lastName } = splitCustomerName(order.customer_name);
-    const customerPhoneDigits = cleanText(order.customer_phone, 24)?.replace(/\D/g, "");
+    const rawPhoneDigits = cleanText(order.customer_phone, 24)?.replace(/\D/g, "") ?? "";
+    const customerPhoneDigits = rawPhoneDigits.startsWith("55") ? rawPhoneDigits.slice(2) : rawPhoneDigits;
     const paymentPayload: any = {
       transaction_amount: Number(order.total_amount),
       description: `Pedido #${String(order.daily_number).padStart(3, "0")} - Marcos Krep's`,
@@ -435,7 +457,7 @@ serve(async (req) => {
 
     if (firstName) paymentPayload.payer.first_name = firstName;
     if (lastName) paymentPayload.payer.last_name = lastName;
-    if (customerPhoneDigits && customerPhoneDigits.length >= 10) {
+    if ((customerPhoneDigits.length === 10 || customerPhoneDigits.length === 11)) {
       paymentPayload.payer.phone = {
         area_code: customerPhoneDigits.slice(0, 2),
         number: customerPhoneDigits.slice(2),
@@ -455,6 +477,14 @@ serve(async (req) => {
         type: identificationType,
         number: identificationNumber.replace(/\D/g, ""),
       };
+    }
+
+    if (!order.customer_email && payerEmail) {
+      await supabaseAdmin
+        .from("orders")
+        .update({ customer_email: payerEmail })
+        .eq("id", order.id)
+        .is("customer_email", null);
     }
 
     const { data: orderItems } = await supabaseAdmin
@@ -492,6 +522,21 @@ serve(async (req) => {
         message: payment?.message,
         error: payment?.error,
         cause: payment?.cause,
+        order_id: order.id,
+        external_reference: externalReference,
+      });
+      await supabaseAdmin.from("audit_logs").insert({
+        action: "PAYMENT_PROVIDER_CREATE_FAILED",
+        table_name: "orders",
+        record_id: order.id,
+        new_data: {
+          provider: "MERCADO_PAGO",
+          provider_status: mpResponse.status,
+          message: payment?.message ?? null,
+          error: payment?.error ?? null,
+          cause: payment?.cause ?? null,
+          payment_method_id: paymentMethodId,
+        },
       });
       return jsonResponse(req, {
         success: false,

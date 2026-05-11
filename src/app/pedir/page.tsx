@@ -56,6 +56,7 @@ const DEFAULT_ORDERING_START = "17:00";
 const DEFAULT_ORDERING_END = "23:30";
 const INSTAGRAM_URL = "https://www.instagram.com/marcos_kreps/";
 const PIX_WAIT_MINUTES = 5;
+const PUBLIC_ORDER_STORAGE_KEY = "pdv-public-order";
 
 const SAVORY_PROTEINS = ["presunto", "calabresa", "frango", "atum", "peito de peru", "carne de sol"];
 const SWEET_BASES = ["banana", "morango", "nutella", "chocolate", "doce de leite", "goiabada"];
@@ -313,6 +314,31 @@ function formatCountdown(milliseconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function normalizeBrazilPhone(value: string) {
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("55")) digits = digits.slice(2);
+  digits = digits.replace(/^0+/, "");
+  if (digits.length !== 10 && digits.length !== 11) return null;
+  const ddd = Number(digits.slice(0, 2));
+  if (ddd < 11 || ddd > 99) return null;
+  if (digits.length === 11 && digits[2] !== "9") return null;
+  return `+55${digits}`;
+}
+
+function formatWhatsAppInput(value: string) {
+  const normalized = normalizeBrazilPhone(value);
+  const digits = (normalized ? normalized.replace(/^\+55/, "") : value.replace(/\D/g, "").replace(/^55/, "")).slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 function PixResult({
   payment,
   waitExpiresAt,
@@ -354,7 +380,7 @@ function PixResult({
         </span>
       </div>
       <p className="text-sm font-semibold leading-relaxed text-teal-900/80">
-        Copie o codigo Pix ou escaneie o QR Code. Vamos conferir automaticamente por {PIX_WAIT_MINUTES} minutos.
+        Copie o codigo Pix ou escaneie o QR Code. Mantenha esta tela aberta enquanto conferimos a aprovacao.
       </p>
       {qrBase64 && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -394,19 +420,41 @@ function PixResult({
 
 function PixCheckout({
   order,
+  payerEmail,
+  onPayerEmailChange,
   onPaid,
 }: {
   order: CreatePublicOrderResponse["order"];
+  payerEmail: string;
+  onPayerEmailChange: (email: string) => void;
   onPaid: () => void;
 }) {
   const [payment, setPayment] = useState<MercadoPagoPaymentResponse | null>(null);
   const [waitExpiresAt, setWaitExpiresAt] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [pixIdempotencyKey, setPixIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!payment) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [payment]);
+
+  const hasActivePix = !!payment?.transaction?.qr_code && !!waitExpiresAt && new Date(waitExpiresAt).getTime() > now;
 
   const handleGeneratePix = async () => {
+    if (isGenerating || hasActivePix) return;
     setError("");
+    if (!isValidEmail(payerEmail)) {
+      setError("Informe um e-mail valido para gerar o Pix pelo Mercado Pago.");
+      return;
+    }
+
     setIsGenerating(true);
+    const requestIdempotencyKey = payment && !hasActivePix ? crypto.randomUUID() : pixIdempotencyKey;
+    if (requestIdempotencyKey !== pixIdempotencyKey) setPixIdempotencyKey(requestIdempotencyKey);
 
     try {
       const response = await pdvApi.createMercadoPagoPayment({
@@ -414,16 +462,16 @@ function PixCheckout({
         public_token: order.public_token,
         payment_method_code: PIX_PAYMENT_METHOD_CODE,
         direct_payment_method: "pix",
-        form_data: { payment_method_id: "pix" },
-        idempotency_key: crypto.randomUUID(),
+        form_data: { payment_method_id: "pix", email: payerEmail.trim() },
+        idempotency_key: requestIdempotencyKey,
       });
 
       setPayment(response);
-      const createdAt = response.transaction?.created_at ? new Date(response.transaction.created_at).getTime() : Date.now();
-      setWaitExpiresAt(new Date(createdAt + PIX_WAIT_MINUTES * 60 * 1000).toISOString());
+      setWaitExpiresAt(response.transaction?.expires_at ?? null);
 
       if (!response.success) {
         setError(response.error || "Nao foi possivel gerar o Pix.");
+        setPixIdempotencyKey(crypto.randomUUID());
         return;
       }
       if (response.payment?.status === "approved" || response.already_paid) {
@@ -448,6 +496,15 @@ function PixCheckout({
         </p>
       </div>
 
+      <input
+        value={payerEmail}
+        onChange={(event) => onPayerEmailChange(event.target.value)}
+        placeholder="E-mail exigido pelo Mercado Pago para Pix"
+        type="email"
+        disabled={!!payment}
+        className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-teal-700 disabled:opacity-60"
+      />
+
       {!payment && (
         <Button className="w-full gap-2 bg-teal-700 hover:bg-teal-800" loading={isGenerating} onClick={handleGeneratePix}>
           <QrCode className="h-4 w-4" />
@@ -457,7 +514,7 @@ function PixCheckout({
 
       {payment && <PixResult payment={payment} waitExpiresAt={waitExpiresAt} />}
 
-      {payment && (
+      {payment && !hasActivePix && (
         <Button variant="outline" className="w-full gap-2" loading={isGenerating} onClick={handleGeneratePix}>
           <RefreshCw className="h-4 w-4" />
           Gerar novo Pix
@@ -511,6 +568,7 @@ export default function PedirPublicPage() {
   const [itemNotes, setItemNotes] = useState("");
   const [step, setStep] = useState<"MENU" | "CHECKOUT" | "PAYMENT" | "PAID">("MENU");
   const [customerEmail, setCustomerEmail] = useState("");
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderData, setOrderData] = useState<CreatePublicOrderResponse["order"] | null>(null);
   const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
@@ -551,6 +609,30 @@ export default function PedirPublicPage() {
   }, [clearCart]);
 
   useEffect(() => {
+    let timer: number | undefined;
+    try {
+      const stored = sessionStorage.getItem(PUBLIC_ORDER_STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as {
+        order?: CreatePublicOrderResponse["order"];
+        customerEmail?: string;
+      };
+      if (parsed.order?.order_id && parsed.order.public_token) {
+        timer = window.setTimeout(() => {
+          setOrderData(parsed.order!);
+          setCustomerEmail(parsed.customerEmail ?? "");
+          setStep("PAYMENT");
+        }, 0);
+      }
+    } catch {
+      sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
+    }
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
     const recheck = async () => {
       try {
         const config = await pdvApi.getPublicCheckoutConfig();
@@ -584,6 +666,7 @@ export default function PedirPublicPage() {
         });
         if (status.order.payment_status === "PAID") {
           clearCart();
+          sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
           setStep("PAID");
         }
       } catch {
@@ -709,6 +792,7 @@ export default function PedirPublicPage() {
   ]);
 
   const handleCreateOrder = async () => {
+    if (isSubmittingOrder || orderData) return;
     setCheckoutError("");
 
     // Revalida o horário no momento exato do clique para garantir que o cliente
@@ -738,8 +822,17 @@ export default function PedirPublicPage() {
       setCheckoutError("Seu carrinho esta vazio.");
       return;
     }
-    if (!customerEmail.trim()) {
-      setCheckoutError("Informe um e-mail valido para o pagamento.");
+    if (!customerName.trim()) {
+      setCheckoutError("Informe seu nome para continuar.");
+      return;
+    }
+    const normalizedPhone = normalizeBrazilPhone(customerPhone);
+    if (!normalizedPhone) {
+      setCheckoutError("Informe um WhatsApp valido com DDD.");
+      return;
+    }
+    if (customerEmail.trim() && !isValidEmail(customerEmail)) {
+      setCheckoutError("Se informar e-mail, use um endereco valido.");
       return;
     }
 
@@ -747,9 +840,10 @@ export default function PedirPublicPage() {
     try {
       const response = await pdvApi.createPublicOrder({
         order_type: orderType,
-        customer_name: customerName.trim() || undefined,
-        customer_phone: customerPhone.trim() || undefined,
-        customer_email: customerEmail.trim(),
+        customer_name: customerName.trim(),
+        customer_phone: normalizedPhone,
+        customer_email: customerEmail.trim() || undefined,
+        marketing_opt_in: marketingOptIn,
         notes: orderNotes.trim() || undefined,
         payment_method_code: PAYMENT_METHOD_CODE,
         items: items.map((item) => ({
@@ -762,6 +856,10 @@ export default function PedirPublicPage() {
       });
 
       setOrderData(response.order);
+      sessionStorage.setItem(PUBLIC_ORDER_STORAGE_KEY, JSON.stringify({
+        order: response.order,
+        customerEmail: customerEmail.trim(),
+      }));
       setPaymentResult(null);
       setPaymentMode("PIX");
       setStep("PAYMENT");
@@ -1036,23 +1134,36 @@ export default function PedirPublicPage() {
             <input
               value={customerName}
               onChange={(event) => setCustomerInfo(event.target.value, customerPhone)}
-              placeholder="Nome ou apelido"
+              placeholder="Nome ou apelido obrigatorio"
               className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-brand-red"
             />
             <input
               value={customerPhone}
-              onChange={(event) => setCustomerInfo(customerName, event.target.value)}
-              placeholder="WhatsApp opcional"
+              onChange={(event) => setCustomerInfo(customerName, formatWhatsAppInput(event.target.value))}
+              onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
+              placeholder="WhatsApp com DDD obrigatorio"
               type="tel"
+              inputMode="tel"
               className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-brand-red"
             />
             <input
               value={customerEmail}
               onChange={(event) => setCustomerEmail(event.target.value)}
-              placeholder="E-mail para pagamento"
+              placeholder="E-mail opcional, exigido para Pix"
               type="email"
               className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-brand-red"
             />
+            <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
+              <input
+                type="checkbox"
+                checked={marketingOptIn}
+                onChange={(event) => setMarketingOptIn(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-brand-red"
+              />
+              <span>
+                Aceito receber novidades e promocoes pelo WhatsApp. O WhatsApp do pedido sera usado para comunicacoes operacionais mesmo sem esta opcao.
+              </span>
+            </label>
             <textarea
               value={orderNotes}
               onChange={(event) => setOrderNotes(event.target.value)}
@@ -1170,8 +1281,17 @@ export default function PedirPublicPage() {
           {paymentMode === "PIX" ? (
             <PixCheckout
               order={orderData}
+              payerEmail={customerEmail}
+              onPayerEmailChange={(email) => {
+                setCustomerEmail(email);
+                sessionStorage.setItem(PUBLIC_ORDER_STORAGE_KEY, JSON.stringify({
+                  order: orderData,
+                  customerEmail: email.trim(),
+                }));
+              }}
               onPaid={() => {
                 clearCart();
+                sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
                 setStep("PAID");
               }}
             />
@@ -1181,6 +1301,7 @@ export default function PedirPublicPage() {
               onResult={setPaymentResult}
               onPaid={() => {
                 clearCart();
+                sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
                 setStep("PAID");
               }}
             />
@@ -1203,6 +1324,7 @@ export default function PedirPublicPage() {
           <Button onClick={() => {
             setOrderData(null);
             setPaymentResult(null);
+            sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
             setStep("MENU");
           }}>
             Fazer novo pedido

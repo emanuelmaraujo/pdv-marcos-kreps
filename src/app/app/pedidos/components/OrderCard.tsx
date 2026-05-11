@@ -48,7 +48,7 @@ const ACCENT: Record<Order["status"], string> = {
   EXPIRADO:               "bg-zinc-200",
 };
 
-const ACTIVE_STATUSES: Order["status"][] = ["NA_FILA", "AGUARDANDO_CONFIRMACAO", "PRONTO"];
+const ACTIVE_STATUSES: Order["status"][] = ["NA_FILA", "AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "PRONTO"];
 
 export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
   const [quickLoading, setQuickLoading] = useState(false);
@@ -60,6 +60,9 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
   const extraItems = Math.max((order.items?.length ?? 0) - 3, 0);
   const showTimer = ACTIVE_STATUSES.includes(order.status);
   const timerSince = getStatusEnteredAt(order);
+  const latestTransaction = order.transactions
+    ?.slice()
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
 
   // Urgency level based on elapsed time for active orders
   const elapsed = showTimer && timerSince
@@ -141,6 +144,11 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
           <User className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
           <span className={`flex-1 truncate text-sm font-bold ${order.customer_name ? "text-zinc-800" : "italic text-zinc-400"}`}>
             {order.customer_name || "Cliente final"}
+            {order.customer_phone && (
+              <span className="ml-1 text-xs font-semibold text-zinc-400">
+                {order.customer_phone}
+              </span>
+            )}
           </span>
           {itemCount > 0 && (
             <span className="ml-auto shrink-0 rounded-md bg-zinc-200 px-1.5 py-0.5 text-[10px] font-black text-zinc-600">
@@ -148,6 +156,23 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
             </span>
           )}
         </div>
+
+        {/* Row 3: item list preview */}
+        {order.status === "AGUARDANDO_PAGAMENTO" && (
+          <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-800">
+            <span className="font-black uppercase">
+              {latestTransaction?.internal_payment_method ?? "Pagamento online"}
+            </span>
+            {latestTransaction?.provider_status && (
+              <span className="ml-1 opacity-80">({latestTransaction.provider_status})</span>
+            )}
+            {latestTransaction?.expires_at && (
+              <span className="block text-[10px] uppercase opacity-70">
+                Expira {new Date(latestTransaction.expires_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Row 3: item list preview */}
         {firstItems.length > 0 && (

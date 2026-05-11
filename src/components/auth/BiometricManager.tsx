@@ -57,7 +57,9 @@ export function BiometricManager() {
   };
 
   useEffect(() => {
-    if (accessToken) loadCredentials(accessToken);
+    if (!accessToken) return;
+    const timer = window.setTimeout(() => loadCredentials(accessToken), 0);
+    return () => window.clearTimeout(timer);
   }, [accessToken]);
 
   const handleEnroll = async () => {

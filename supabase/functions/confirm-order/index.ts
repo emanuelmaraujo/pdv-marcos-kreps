@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
@@ -69,6 +70,10 @@ serve(async (req) => {
     }
 
     // Busca os Itens do Pedido com suas correlações
+    if (order.status === 'AGUARDANDO_PAGAMENTO' && order.payment_status !== 'PAID') {
+      throw new Error('Pedido aguardando pagamento nao pode ser enviado para a cozinha antes da aprovacao.');
+    }
+
     const { data: items, error: itemsErr } = await supabaseAdmin
       .from('order_items')
       .select(`

@@ -1,17 +1,49 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
+  const allowed = configured.split(",").map((value) => value.trim()).filter(Boolean);
+  const allowOrigin = configured === "*" || allowed.includes(origin) ? origin || "*" : allowed[0] ?? "";
+
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
+
+function isAllowedOrigin(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
+  if (configured === "*" || !origin) return true;
+  return configured.split(",").map((value) => value.trim()).filter(Boolean).includes(origin);
+}
+
+function jsonResponse(req: Request, body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+    status,
+  });
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCorsHeaders(req) });
+  }
+
+  if (req.method !== 'POST') {
+    return jsonResponse(req, { success: false, error: 'Metodo nao permitido.' }, 405);
   }
 
   try {
+    if (!isAllowedOrigin(req)) {
+      return jsonResponse(req, { success: false, error: 'Origem nao autorizada.' }, 403);
+    }
+
     // Usamos Service Role para ignorar RLS nas policies de read
     // Já que o público é estritamente travado, buscamos com token de admin
     // mas garantimos segurança validando o public_token exato que é um segredo longo.
@@ -47,7 +79,7 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    return new Response(JSON.stringify({ 
+    return jsonResponse(req, { 
       success: true, 
       order: {
         daily_number: order.daily_number,
@@ -62,12 +94,9 @@ serve(async (req) => {
         delivered_at: order.delivered_at
       },
       transaction
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }, 200);
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    });
+    return jsonResponse(req, { success: false, error: error.message }, 400);
   }
 });

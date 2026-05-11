@@ -418,3 +418,15 @@ verify_jwt = false
 
 [functions.get-public-checkout-config]
 verify_jwt = false
+
+[functions.create-public-order]
+verify_jwt = false
+
+[functions.create-mercado-pago-payment]
+verify_jwt = false
+
+[functions.get-public-order-status]
+verify_jwt = false
+
+[functions.expire-pending-public-orders]
+verify_jwt = false
