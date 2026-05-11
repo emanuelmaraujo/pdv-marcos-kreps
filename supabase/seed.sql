@@ -7,7 +7,10 @@ INSERT INTO settings (key, value) VALUES
   ('apply_packaging_fee_for_takeout', 'true'),
   ('print_customer_copy', 'true'),
   ('print_kitchen_copy', 'true'),
-  ('print_juice_potato_copy', 'true')
+  ('print_juice_potato_copy', 'true'),
+  ('public_ordering_enabled', 'true'),
+  ('public_ordering_start_time', '17:00'),
+  ('public_ordering_end_time', '23:30')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 DO $$

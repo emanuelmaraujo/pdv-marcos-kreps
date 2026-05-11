@@ -29,7 +29,7 @@ serve(async (req) => {
     // Busca exata e única pelo número E token
     const { data: order, error } = await supabaseClient
       .from('orders')
-      .select('daily_number, status, payment_status, total_amount, customer_name, created_at, confirmed_at, ready_at, delivered_at')
+      .select('id, daily_number, status, payment_status, payment_method, total_amount, customer_name, created_at, confirmed_at, ready_at, delivered_at')
       .eq('daily_number', daily_number)
       .eq('public_token', public_token)
       .single();
@@ -39,19 +39,29 @@ serve(async (req) => {
       throw new Error('Pedido não encontrado ou credenciais inválidas.');
     }
 
+    const { data: transaction } = await supabaseClient
+      .from('payment_transactions')
+      .select('provider_status, provider_status_detail, internal_payment_method, qr_code, qr_code_base64, ticket_url, expires_at, provider_payment_id, updated_at')
+      .eq('order_id', order.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     return new Response(JSON.stringify({ 
       success: true, 
       order: {
         daily_number: order.daily_number,
         status: order.status,
         payment_status: order.payment_status,
+        payment_method: order.payment_method,
         total: order.total_amount,
         customer_name: order.customer_name,
         created_at: order.created_at,
         confirmed_at: order.confirmed_at,
         ready_at: order.ready_at,
         delivered_at: order.delivered_at
-      }
+      },
+      transaction
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
   } catch (error: any) {

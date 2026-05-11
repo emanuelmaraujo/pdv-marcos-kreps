@@ -116,6 +116,7 @@ export interface Order {
   payment_method: PaymentMethod;
   customer_name?: string;
   customer_phone?: string;
+  customer_email?: string;
   notes?: string;
   discount_amount: number;
   discount_percentage: number;
@@ -161,6 +162,46 @@ export interface Payment {
   received_by?: string;
   notes?: string;
   created_at: string;
+}
+
+export interface PaymentMethodConfig {
+  code: string;
+  provider: 'MERCADO_PAGO' | 'NUPAY' | 'OTHER';
+  label: string;
+  internal_payment_method?: PaymentMethod | null;
+  enabled: boolean;
+  sort_order: number;
+  requires_email: boolean;
+  requires_document: boolean;
+  requires_device_support: boolean;
+  availability_reason?: string | null;
+  provider_config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentTransaction {
+  id: string;
+  order_id: string;
+  provider: 'MERCADO_PAGO' | 'NUPAY' | 'OTHER';
+  provider_payment_id?: string | null;
+  external_reference: string;
+  idempotency_key: string;
+  internal_payment_method?: PaymentMethod | null;
+  payment_method_code: string;
+  provider_payment_method_id?: string | null;
+  provider_payment_type_id?: string | null;
+  wallet_type?: string | null;
+  provider_status: string;
+  provider_status_detail?: string | null;
+  amount: number;
+  qr_code?: string | null;
+  qr_code_base64?: string | null;
+  ticket_url?: string | null;
+  expires_at?: string | null;
+  raw_provider_payload?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Discount {
