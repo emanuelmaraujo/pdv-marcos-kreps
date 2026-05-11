@@ -12,7 +12,7 @@ export function OrderStatusBadge({ status, className = "" }: Props) {
       classes: "bg-blue-50 text-blue-600 border-blue-100" 
     },
     AGUARDANDO_PAGAMENTO: { 
-      label: "Pendente", 
+      label: "Aguardando pgto", 
       classes: "bg-brand-amber/10 text-brand-amber border-brand-amber/20" 
     },
     NA_FILA: { 

@@ -118,10 +118,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
 
   // Load recent names when opening
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => {
       setRecentNames(getRecentNames());
       setStep(0);
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [isOpen]);
 
   const estimatedSubtotal = getEstimatedSubtotal();

@@ -167,6 +167,7 @@ export type CreatePublicOrderPayload = {
   customer_name?: string;
   customer_phone?: string;
   customer_email?: string;
+  marketing_opt_in?: boolean;
   notes?: string;
   payment_method_code?: string;
   items: Array<{

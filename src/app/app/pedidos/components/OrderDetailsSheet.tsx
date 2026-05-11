@@ -134,6 +134,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const hasDiscount = order.discount_amount > 0;
   const hasPacking  = order.packing_fee > 0;
   const subtotal = order.total_amount + order.discount_amount - order.packing_fee;
+  const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
 
   return (
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}>
@@ -296,7 +297,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               )}
 
               {/* Payment pending alert */}
-              {order.payment_status === "PENDING" && order.status !== "CANCELADO" && (
+              {order.payment_status === "PENDING" && order.status !== "CANCELADO" && !isAppAwaitingPayment && (
                 <div className="rounded-2xl border-2 border-brand-amber/30 bg-brand-amber/5 p-4 space-y-3">
                   <div className="flex items-center gap-2 text-brand-amber">
                     <AlertTriangle size={16} />
@@ -313,7 +314,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               )}
 
               {/* Add to order */}
-              {order.payment_status === "PENDING" && ["NA_FILA", "AGUARDANDO_PAGAMENTO"].includes(order.status) && (
+              {order.payment_status === "PENDING" && ["NA_FILA", "AGUARDANDO_PAGAMENTO"].includes(order.status) && !isAppAwaitingPayment && (
                 <Button
                   variant="outline"
                   className="h-12 w-full rounded-2xl border-2 border-zinc-900 font-black gap-2"
@@ -336,7 +337,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                     <Printer size={14} /> REIMPRIMIR
                   </Button>
                 )}
-                {["AGUARDANDO_CONFIRMACAO", "NA_FILA", "PRONTO"].includes(order.status) && (
+                {["AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "NA_FILA", "PRONTO"].includes(order.status) && (
                   <Button
                     variant="outline"
                     className="h-12 rounded-2xl border-2 border-red-100 font-black text-xs text-red-500 hover:bg-red-50 gap-2"

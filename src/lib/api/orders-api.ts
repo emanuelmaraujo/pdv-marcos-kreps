@@ -37,7 +37,8 @@ export const ordersApi = {
             *,
             ingredient:ingredients(*)
           )
-        )
+        ),
+        transactions:payment_transactions(*)
       `)
       .gte('created_at', startOfDay.toISOString())
       .order('created_at', { ascending: false });

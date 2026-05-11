@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
@@ -22,6 +23,13 @@ function getCorsHeaders(req: Request) {
   };
 }
 
+function isAllowedOrigin(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
+  if (configured === "*" || !origin) return true;
+  return configured.split(",").map((value) => value.trim()).filter(Boolean).includes(origin);
+}
+
 function jsonResponse(req: Request, body: JsonRecord, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -39,6 +47,19 @@ function cleanEmail(value: unknown) {
   const email = cleanText(value, 254);
   if (!email) return null;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null;
+}
+
+function normalizeBrazilPhone(value: unknown) {
+  if (typeof value !== "string") return null;
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("55")) digits = digits.slice(2);
+  digits = digits.replace(/^0+/, "");
+  if (digits.length !== 10 && digits.length !== 11) return null;
+  const ddd = Number(digits.slice(0, 2));
+  if (ddd < 11 || ddd > 99) return null;
+  if (digits.length === 11 && digits[2] !== "9") return null;
+  return `+55${digits}`;
 }
 
 function toNumber(value: unknown) {
@@ -109,6 +130,10 @@ serve(async (req) => {
   }
 
   try {
+    if (!isAllowedOrigin(req)) {
+      return jsonResponse(req, { success: false, error: "Origem nao autorizada." }, 403);
+    }
+
     const contentType = req.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) {
       throw new Error("Content-Type deve ser application/json.");
@@ -122,24 +147,24 @@ serve(async (req) => {
     const body = await req.json();
     const items = Array.isArray(body.items) ? body.items : [];
     const customerName = cleanText(body.customer_name, 80);
-    const customerPhone = cleanText(body.customer_phone, 24);
+    const customerPhone = normalizeBrazilPhone(body.customer_phone);
     const customerEmail = cleanEmail(body.customer_email);
+    const marketingOptIn = body.marketing_opt_in === true;
     const notes = cleanText(body.notes, 500);
     const orderType = body.order_type;
     const paymentMethodCode = cleanText(body.payment_method_code, 80) ?? DEFAULT_PAYMENT_METHOD_CODE;
 
     if (items.length === 0) throw new Error("Carrinho vazio.");
     if (items.length > 50) throw new Error("Carrinho excede o limite de itens.");
+    if (!customerName) throw new Error("Informe seu nome para continuar.");
+    if (!customerPhone) throw new Error("Informe um WhatsApp valido com DDD.");
     if (orderType !== "BALCAO" && orderType !== "VIAGEM") {
       throw new Error("Tipo de pedido invalido.");
-    }
-    if (customerPhone && customerPhone.replace(/\D/g, "").length < 8) {
-      throw new Error("Telefone invalido.");
     }
 
     const { data: methodConfig, error: methodErr } = await supabaseAdmin
       .from("payment_method_configs")
-      .select("code, provider, enabled, requires_email")
+      .select("code, provider, enabled")
       .eq("code", paymentMethodCode)
       .single();
 
@@ -148,9 +173,6 @@ serve(async (req) => {
     }
     if (methodConfig.provider !== "MERCADO_PAGO") {
       throw new Error("Metodo ainda nao habilitado para checkout online.");
-    }
-    if (methodConfig.requires_email && !customerEmail) {
-      throw new Error("Informe um e-mail valido para continuar com o pagamento.");
     }
 
     const productIds = uniq(items.map((item: any) => String(item.product_id ?? "")));
@@ -274,6 +296,32 @@ serve(async (req) => {
     }
 
     const totalAmount = Number((productsSubtotal + addonsTotal + packingFeeValue).toFixed(2));
+    const nowIso = new Date().toISOString();
+
+    const { data: existingCustomer } = await supabaseAdmin
+      .from("customers")
+      .select("orders_count, marketing_opt_in, marketing_opt_in_at")
+      .eq("id", customerPhone)
+      .maybeSingle();
+
+    const { error: customerErr } = await supabaseAdmin
+      .from("customers")
+      .upsert({
+        id: customerPhone,
+        phone_e164: customerPhone,
+        name: customerName,
+        last_seen_at: nowIso,
+        last_order_at: nowIso,
+        orders_count: Number(existingCustomer?.orders_count ?? 0) + 1,
+        marketing_opt_in: marketingOptIn || existingCustomer?.marketing_opt_in === true,
+        marketing_opt_in_at: existingCustomer?.marketing_opt_in_at ?? (marketingOptIn ? nowIso : null),
+        source: "APP",
+      }, {
+        onConflict: "id",
+        ignoreDuplicates: false,
+      });
+
+    if (customerErr) throw new Error("Erro ao registrar cliente.");
 
     const { data: order, error: orderErr } = await supabaseAdmin
       .from("orders")
@@ -286,6 +334,7 @@ serve(async (req) => {
         customer_name: customerName,
         customer_phone: customerPhone,
         customer_email: customerEmail,
+        customer_id: customerPhone,
         packing_fee: packingFeeValue,
         total_amount: totalAmount,
         notes,
