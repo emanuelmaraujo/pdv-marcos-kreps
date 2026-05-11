@@ -480,7 +480,7 @@ function PixCheckout({
       setError("Informe um e-mail valido para gerar o Pix pelo Mercado Pago.");
       return;
     }
-    if (!isValidCpf(payerCpf)) {
+    if (payerCpf.trim() && !isValidCpf(payerCpf)) {
       setError("Informe um CPF valido para gerar o Pix pelo Mercado Pago.");
       return;
     }
@@ -490,17 +490,21 @@ function PixCheckout({
     if (requestIdempotencyKey !== pixIdempotencyKey) setPixIdempotencyKey(requestIdempotencyKey);
 
     try {
+      const formData: Record<string, unknown> = {
+        payment_method_id: "pix",
+        email: payerEmail.trim(),
+      };
+      if (isValidCpf(payerCpf)) {
+        formData.identificationType = "CPF";
+        formData.identificationNumber = cpfDigits(payerCpf);
+      }
+
       const response = await pdvApi.createMercadoPagoPayment({
         order_id: order.order_id,
         public_token: order.public_token,
         payment_method_code: PIX_PAYMENT_METHOD_CODE,
         direct_payment_method: "pix",
-        form_data: {
-          payment_method_id: "pix",
-          email: payerEmail.trim(),
-          identificationType: "CPF",
-          identificationNumber: cpfDigits(payerCpf),
-        },
+        form_data: formData,
         idempotency_key: requestIdempotencyKey,
       });
 
@@ -545,7 +549,7 @@ function PixCheckout({
       <input
         value={payerCpf}
         onChange={(event) => setPayerCpf(formatCpfInput(event.target.value))}
-        placeholder="CPF exigido pelo Mercado Pago para Pix"
+        placeholder="CPF opcional, usado se o Mercado Pago exigir"
         type="text"
         inputMode="numeric"
         disabled={!!payment}

@@ -589,7 +589,7 @@ serve(async (req) => {
 
     const identificationType = cleanText(getNested(formData, ["payer", "identification", "type"]) ?? formData.identificationType, 20)?.toUpperCase() ?? null;
     const identificationNumber = cleanDigits(getNested(formData, ["payer", "identification", "number"]) ?? formData.identificationNumber, 20);
-    if (isPix && (!identificationType || identificationType !== "CPF" || !isValidCpf(identificationNumber))) {
+    if ((identificationType || identificationNumber) && (identificationType !== "CPF" || !isValidCpf(identificationNumber))) {
       throw new Error("Informe um CPF valido para gerar o Pix pelo Mercado Pago.");
     }
     if (identificationType && identificationNumber) {
