@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
-import { settingsApi } from "@/lib/api/settings-api";
 import { Addon, Ingredient, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
 
@@ -51,10 +50,10 @@ interface MenuIndexes {
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const PAYMENT_METHOD_CODE = "MERCADO_PAGO_PAYMENT_BRICK";
+const PIX_PAYMENT_METHOD_CODE = "PIX";
 const ALL_FILTER = "Todos";
 const DEFAULT_ORDERING_START = "17:00";
 const DEFAULT_ORDERING_END = "23:30";
-const ORDERING_TIME_ZONE = "America/Sao_Paulo";
 const INSTAGRAM_URL = "https://www.instagram.com/marcos_kreps/";
 const PIX_WAIT_MINUTES = 5;
 
@@ -139,36 +138,6 @@ function getProductSummary(product: Product, categoryName: string | undefined, i
   if (getCategoryKind(categoryName) === "DRINK") return "Bebida preparada para acompanhar seu pedido.";
   if (getCategoryKind(categoryName) === "POTATO") return "Porcao para dividir ou acompanhar seu krep.";
   return "Item do cardapio Marcos Krep's.";
-}
-
-function parseTimeToMinutes(value: string | undefined) {
-  const match = value?.match(/^(\d{2}):(\d{2})$/);
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) return null;
-  return hours * 60 + minutes;
-}
-
-function getSaoPauloMinutes(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: ORDERING_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const hours = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
-  const minutes = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
-  return hours * 60 + minutes;
-}
-
-function isWithinOrderingWindow(startTime: string, endTime: string) {
-  const start = parseTimeToMinutes(startTime) ?? parseTimeToMinutes(DEFAULT_ORDERING_START)!;
-  const end = parseTimeToMinutes(endTime) ?? parseTimeToMinutes(DEFAULT_ORDERING_END)!;
-  const now = getSaoPauloMinutes();
-  if (start === end) return true;
-  if (start < end) return now >= start && now <= end;
-  return now >= start || now <= end;
 }
 
 function buildMenuIndexes(menuData: MenuData | null): MenuIndexes | null {
@@ -443,7 +412,7 @@ function PixCheckout({
       const response = await pdvApi.createMercadoPagoPayment({
         order_id: order.order_id,
         public_token: order.public_token,
-        payment_method_code: PAYMENT_METHOD_CODE,
+        payment_method_code: PIX_PAYMENT_METHOD_CODE,
         direct_payment_method: "pix",
         form_data: { payment_method_id: "pix" },
         idempotency_key: crypto.randomUUID(),
@@ -552,28 +521,22 @@ export default function PedirPublicPage() {
     async function loadMenu() {
       try {
         setLoading(true);
-        const [data, settings] = await Promise.all([
+        const [data, config] = await Promise.all([
           menuApi.getMenuData(),
-          settingsApi.getSettings(),
+          pdvApi.getPublicCheckoutConfig(),
         ]);
+        if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
+        const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
-        const isEnabledByAdmin = settings.public_ordering_enabled !== "false";
-        const isOpenBySchedule = isWithinOrderingWindow(start, end);
-        const isEnabled = isEnabledByAdmin && isOpenBySchedule;
+        const isEnabled = config.online_ordering_enabled;
         const fee = Number(String(settings.packaging_fee ?? "0").replace(",", ".")) || 0;
 
         setOrderingSchedule({ start, end });
         setPackagingFee(fee);
         setApplyPackagingFeeForTakeout(settings.apply_packaging_fee_for_takeout === "true");
         setOnlineOrderingEnabled(isEnabled);
-        setOrderingClosedReason(
-          !isEnabledByAdmin
-            ? "Os pedidos online foram pausados pelo administrador."
-            : !isOpenBySchedule
-              ? `No momento nao estamos recebendo pedidos. Atendimento online das ${start} as ${end}.`
-              : "",
-        );
+        setOrderingClosedReason(config.ordering_closed_reason);
         if (!isEnabled) clearCart();
         setMenuData(data);
         setSelectedCategoryId(data.categories[0]?.id ?? null);

@@ -169,8 +169,10 @@ serve(async (req) => {
     const body = await req.json();
     const orderId = cleanText(body.order_id, 64);
     const publicToken = cleanText(body.public_token, 128);
-    const paymentMethodCode = cleanText(body.payment_method_code, 80) ?? "MERCADO_PAGO_PAYMENT_BRICK";
     const directPaymentMethod = cleanText(body.direct_payment_method, 40)?.toLowerCase() ?? null;
+    const paymentMethodCode =
+      cleanText(body.payment_method_code, 80) ??
+      (directPaymentMethod === "pix" ? "PIX" : "MERCADO_PAGO_PAYMENT_BRICK");
     const idempotencyKey = cleanText(
       req.headers.get("x-idempotency-key") ?? body.idempotency_key,
       120,
@@ -360,6 +362,7 @@ serve(async (req) => {
         success: false,
         error: "Nao foi possivel processar o pagamento. Verifique os dados e tente novamente.",
         provider_status: mpResponse.status,
+        provider_message: payment?.message ?? payment?.error ?? null,
       }, 400);
     }
 
