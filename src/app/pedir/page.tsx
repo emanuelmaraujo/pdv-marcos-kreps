@@ -466,6 +466,35 @@ export default function PedirPublicPage() {
   }, [clearCart]);
 
   useEffect(() => {
+    const recheck = async () => {
+      try {
+        const settings = await settingsApi.getSettings();
+        const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
+        const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
+        const isEnabledByAdmin = settings.public_ordering_enabled !== "false";
+        const isOpenBySchedule = isWithinOrderingWindow(start, end);
+        const isEnabled = isEnabledByAdmin && isOpenBySchedule;
+
+        setOrderingSchedule({ start, end });
+        setOnlineOrderingEnabled(isEnabled);
+        setOrderingClosedReason(
+          !isEnabledByAdmin
+            ? "Os pedidos online foram pausados pelo administrador."
+            : !isOpenBySchedule
+              ? `No momento nao estamos recebendo pedidos. Atendimento online das ${start} as ${end}.`
+              : "",
+        );
+        if (!isEnabled) clearCart();
+      } catch {
+        // best-effort: mantém o estado atual em caso de erro
+      }
+    };
+
+    const interval = window.setInterval(recheck, 60_000);
+    return () => window.clearInterval(interval);
+  }, [clearCart]);
+
+  useEffect(() => {
     if (!orderData || step === "PAID") return;
 
     const interval = window.setInterval(async () => {

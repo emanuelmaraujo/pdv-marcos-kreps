@@ -161,7 +161,7 @@ serve(async (req) => {
 
     if (settingsErr) throw new Error("Erro ao buscar configuracoes.");
 
-    const publicOrderingEnabled = settingsData?.find((s) => s.key === "public_ordering_enabled")?.value !== "false";
+    const publicOrderingEnabled = settingBool(settingsData?.find((s) => s.key === "public_ordering_enabled")?.value);
     if (!publicOrderingEnabled) {
       return jsonResponse(req, {
         success: false,
