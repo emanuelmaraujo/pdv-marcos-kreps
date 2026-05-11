@@ -412,3 +412,6 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # unauthenticated login flow while keeping the function secure via internal checks.
 [functions.webauthn]
 verify_jwt = false
+
+[functions.mercado-pago-webhook]
+verify_jwt = false

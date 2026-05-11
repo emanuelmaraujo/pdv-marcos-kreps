@@ -1,5 +1,5 @@
 import { createClient } from '../supabase/client';
-import { PaymentMethod, OrderStatus, Order } from '@/types/pdv';
+import { PaymentMethod, OrderStatus, Order, PaymentTransaction } from '@/types/pdv';
 
 // Note: Ensure the client is only initialized when needed or properly passed to these functions
 // For client components, this works fine.
@@ -96,13 +96,17 @@ async function extractEdgeFunctionError(
 async function invokeEdgeFunction<T = unknown>(
   functionName: string,
   payload: Record<string, unknown>,
+  extraHeaders: Record<string, string> = {},
 ): Promise<T> {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
 
   const { data, error } = await supabase.functions.invoke(functionName, {
     body: payload,
-    headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+    headers: {
+      ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      ...extraHeaders,
+    },
   });
 
   if (error) {
@@ -151,6 +155,80 @@ export type AddItemsToOrderResponse = {
   printer_jobs?: { type: string; id: string }[];
 };
 
+export type CreatePublicOrderPayload = {
+  order_type: 'BALCAO' | 'VIAGEM';
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  notes?: string;
+  payment_method_code?: string;
+  items: Array<{
+    product_id: string;
+    quantity: number;
+    removed_ingredient_ids?: string[];
+    addons?: Array<{
+      addon_id: string;
+      quantity?: number;
+    }>;
+    notes?: string;
+  }>;
+};
+
+export type CreatePublicOrderResponse = {
+  success: boolean;
+  order: {
+    order_id: string;
+    daily_number: number;
+    public_token: string;
+    total_amount: number;
+    status: OrderStatus;
+    payment_status: string;
+    payment_method_code: string;
+  };
+};
+
+export type MercadoPagoPaymentResponse = {
+  success: boolean;
+  configuration_required?: boolean;
+  already_paid?: boolean;
+  error?: string;
+  payment?: {
+    id: number | string;
+    status: string;
+    status_detail?: string;
+    payment_method_id?: string;
+    payment_type_id?: string;
+    point_of_interaction?: {
+      transaction_data?: {
+        qr_code?: string;
+        qr_code_base64?: string;
+        ticket_url?: string;
+      };
+    };
+  };
+  transaction?: Partial<PaymentTransaction>;
+  order?: {
+    payment_status: string;
+  };
+};
+
+export type PublicOrderStatusResponse = {
+  success: boolean;
+  order: {
+    daily_number: number;
+    status: OrderStatus;
+    payment_status: string;
+    payment_method: PaymentMethod;
+    total: number;
+    customer_name?: string;
+    created_at: string;
+    confirmed_at?: string;
+    ready_at?: string;
+    delivered_at?: string;
+  };
+  transaction?: Partial<PaymentTransaction> | null;
+};
+
 export const pdvApi = {
   getOrder: async (id: string) => {
     const supabase = createClient();
@@ -164,11 +242,24 @@ export const pdvApi = {
     return data as Order;
   },
 
-  createPublicOrder: (payload: Record<string, unknown>) =>
-    invokeEdgeFunction('create-public-order', payload),
+  createPublicOrder: (payload: CreatePublicOrderPayload) =>
+    invokeEdgeFunction<CreatePublicOrderResponse>('create-public-order', payload),
 
   getPublicOrderStatus: (payload: { daily_number: number; public_token: string }) =>
-    invokeEdgeFunction('get-public-order-status', payload),
+    invokeEdgeFunction<PublicOrderStatusResponse>('get-public-order-status', payload),
+
+  createMercadoPagoPayment: (payload: {
+    order_id: string;
+    public_token: string;
+    payment_method_code: string;
+    form_data: Record<string, unknown>;
+    idempotency_key: string;
+  }) =>
+    invokeEdgeFunction<MercadoPagoPaymentResponse>(
+      'create-mercado-pago-payment',
+      payload,
+      { 'x-idempotency-key': payload.idempotency_key },
+    ),
 
   confirmOrder: (orderId: string) =>
     invokeEdgeFunction('confirm-order', { order_id: orderId }),

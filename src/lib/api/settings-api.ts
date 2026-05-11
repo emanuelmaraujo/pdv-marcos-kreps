@@ -10,6 +10,15 @@ export interface PrinterSettings {
   printer_paper_width?: string | number;
 }
 
+type SettingPrimitive = string | number | boolean;
+
+function settingToInputValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(value);
+}
+
 export const settingsApi = {
   async getSettings(): Promise<Record<string, string>> {
     const { data, error } = await supabase
@@ -18,16 +27,16 @@ export const settingsApi = {
     
     if (error) throw error;
     
-    return (data || []).reduce((acc: Record<string, string>, curr: { key: string; value: string }) => {
-      acc[curr.key] = curr.value;
+    return (data || []).reduce((acc: Record<string, string>, curr: { key: string; value: unknown }) => {
+      acc[curr.key] = settingToInputValue(curr.value);
       return acc;
     }, {} as Record<string, string>);
   },
 
-  async saveSettings(settings: Record<string, string | number | boolean>) {
+  async saveSettings(settings: Record<string, SettingPrimitive>) {
     const entries = Object.entries(settings).map(([key, value]) => ({
       key,
-      value: String(value),
+      value,
       updated_at: new Date().toISOString()
     }));
 
