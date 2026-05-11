@@ -631,8 +631,18 @@ export default function PedirPublicPage() {
 
   const handleCreateOrder = async () => {
     setCheckoutError("");
-    if (!onlineOrderingEnabled) {
-      setCheckoutError(orderingClosedReason || "No momento nao estamos recebendo pedidos.");
+
+    // Revalida o horário no momento exato do clique para garantir que o cliente
+    // não consiga submeter um pedido quando o atendimento já encerrou ou foi pausado.
+    const isOpenNow = isWithinOrderingWindow(orderingSchedule.start, orderingSchedule.end);
+    if (!onlineOrderingEnabled || !isOpenNow) {
+      const reason = !isOpenNow
+        ? `No momento nao estamos recebendo pedidos. Atendimento online das ${orderingSchedule.start} as ${orderingSchedule.end}.`
+        : (orderingClosedReason || "No momento nao estamos recebendo pedidos.");
+      setCheckoutError(reason);
+      setOnlineOrderingEnabled(false);
+      setOrderingClosedReason(reason);
+      clearCart();
       return;
     }
     if (items.length === 0) {
