@@ -81,6 +81,135 @@ function mapTransactionPayload(payment: any) {
   };
 }
 
+function settingBool(value: unknown): boolean {
+  return value === true || value === "true";
+}
+
+async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
+  const { data: order } = await supabaseAdmin
+    .from("orders")
+    .select("id, daily_number, status, type, customer_name, discount_amount, packing_fee, total_amount, payment_status, payment_method")
+    .eq("id", orderId)
+    .single();
+
+  if (!order || order.status !== "AGUARDANDO_PAGAMENTO") return;
+
+  const { data: existingJobs } = await supabaseAdmin
+    .from("printer_jobs")
+    .select("id")
+    .eq("order_id", orderId);
+  if (existingJobs && existingJobs.length > 0) return;
+
+  const { data: items } = await supabaseAdmin
+    .from("order_items")
+    .select(`
+      id, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector,
+      order_item_removed_ingredients ( ingredient_name_snapshot ),
+      order_item_addons ( addon_name_snapshot, quantity, addon_price_snapshot )
+    `)
+    .eq("order_id", orderId);
+
+  if (!items || items.length === 0) return;
+
+  const { data: settings } = await supabaseAdmin
+    .from("settings")
+    .select("key, value")
+    .in("key", ["printing_enabled", "print_customer_copy", "print_kitchen_copy", "print_juice_potato_copy"]);
+
+  const printingEnabled = settingBool(settings?.find((s: any) => s.key === "printing_enabled")?.value);
+  const shouldPrintKitchen = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value);
+  const shouldPrintJuice = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value);
+  const shouldPrintCustomer = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_customer_copy")?.value);
+
+  const kitchenItems = items.filter((i: any) => i.production_sector === "KITCHEN");
+  const juicePotatoItems = items.filter((i: any) => i.production_sector === "JUICE_POTATO");
+  const printerJobsToInsert: any[] = [];
+  const timestampNow = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const formatBRL = (val: number) => `R$ ${parseFloat(val as any).toFixed(2).replace(".", ",")}`;
+
+  if (kitchenItems.length > 0 && shouldPrintKitchen) {
+    let content = `MARCOS KREP'S\n`;
+    content += `PEDIDO #${String(order.daily_number).padStart(3, "0")}\n`;
+    content += `COZINHA / KREP\n`;
+    content += `Tipo: ${order.type}\n`;
+    content += `Horário: ${timestampNow}\n`;
+    content += `------------------------\n`;
+    for (const item of kitchenItems) {
+      content += `${item.quantity}x ${item.product_name_snapshot}\n`;
+      if (item.order_item_removed_ingredients.length > 0) {
+        content += `  SEM: ${item.order_item_removed_ingredients.map((r: any) => r.ingredient_name_snapshot).join(", ")}\n`;
+      }
+      if (item.order_item_addons.length > 0) {
+        content += `  COM: ${item.order_item_addons.map((a: any) => `${a.quantity}x ${a.addon_name_snapshot}`).join(", ")}\n`;
+      }
+      if (item.observation) content += `  OBS: ${item.observation}\n`;
+      content += `\n`;
+    }
+    content += `------------------------\n`;
+    printerJobsToInsert.push({ order_id: orderId, sector: "KITCHEN", content: { text: content } });
+  }
+
+  if (juicePotatoItems.length > 0 && shouldPrintJuice) {
+    let content = `MARCOS KREP'S\n`;
+    content += `PEDIDO #${String(order.daily_number).padStart(3, "0")}\n`;
+    content += `SUCOS / BATATA\n`;
+    content += `Tipo: ${order.type}\n`;
+    content += `Horário: ${timestampNow}\n`;
+    content += `------------------------\n`;
+    for (const item of juicePotatoItems) {
+      content += `${item.quantity}x ${item.product_name_snapshot}\n`;
+      if (item.observation) content += `  OBS: ${item.observation}\n`;
+      content += `\n`;
+    }
+    content += `------------------------\n`;
+    printerJobsToInsert.push({ order_id: orderId, sector: "JUICE_POTATO", content: { text: content } });
+  }
+
+  if (shouldPrintCustomer) {
+    let content = `MARCOS KREP'S\n`;
+    content += `PEDIDO #${String(order.daily_number).padStart(3, "0")}\n`;
+    content += `CLIENTE / SENHA\n`;
+    content += `Tipo: ${order.type}\n`;
+    if (order.customer_name) content += `Cliente: ${order.customer_name}\n`;
+    content += `Horário: ${timestampNow}\n`;
+    content += `------------------------\n`;
+    for (const item of items) {
+      content += `${item.quantity}x ${item.product_name_snapshot} - ${formatBRL(item.product_price_snapshot)}\n`;
+      if (item.order_item_addons.length > 0) {
+        for (const add of item.order_item_addons) {
+          content += `  + ${add.quantity}x ${add.addon_name_snapshot} - ${formatBRL(add.addon_price_snapshot)}\n`;
+        }
+      }
+    }
+    content += `------------------------\n`;
+    if (order.discount_amount > 0) content += `Desconto: -${formatBRL(order.discount_amount)}\n`;
+    if (order.packing_fee > 0) content += `Taxa Embalagem: ${formatBRL(order.packing_fee)}\n`;
+    content += `TOTAL: ${formatBRL(order.total_amount)}\n`;
+    content += `Pagamento: ${order.payment_method}\n`;
+    content += `------------------------\n`;
+    content += `Guarde este número para retirada.\n`;
+    printerJobsToInsert.push({ order_id: orderId, sector: "CUSTOMER", content: { text: content } });
+  }
+
+  if (printerJobsToInsert.length > 0) {
+    await supabaseAdmin.from("printer_jobs").insert(printerJobsToInsert);
+  }
+
+  const nowIso = new Date().toISOString();
+  await supabaseAdmin
+    .from("orders")
+    .update({ status: "NA_FILA", confirmed_by: null, confirmed_at: nowIso, queue_entered_at: nowIso, updated_at: nowIso })
+    .eq("id", orderId)
+    .eq("status", "AGUARDANDO_PAGAMENTO");
+
+  await supabaseAdmin.from("audit_logs").insert({
+    action: "ORDER_AUTO_CONFIRMED",
+    table_name: "orders",
+    record_id: orderId,
+    new_data: { reason: "payment_approved_online" },
+  });
+}
+
 async function consolidateApprovedPayment(supabaseAdmin: any, order: any, payment: any, transactionId: string | null) {
   const internalMethod = inferInternalPaymentMethod(payment);
   if (internalMethod === "PENDING") {
@@ -140,6 +269,12 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
       status: payment?.status ?? null,
     },
   });
+
+  try {
+    await autoConfirmOnlinePaidOrder(supabaseAdmin, order.id);
+  } catch (autoConfirmErr) {
+    console.error("[create-mercado-pago-payment] autoConfirmOnlinePaidOrder failed:", autoConfirmErr);
+  }
 }
 
 serve(async (req) => {
