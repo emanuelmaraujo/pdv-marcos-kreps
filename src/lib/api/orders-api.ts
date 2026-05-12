@@ -48,6 +48,8 @@ export const ordersApi = {
       throw error;
     }
 
-    return data as Order[];
+    return (data as Order[]).filter(
+      (order) => !(order.source === 'APP' && order.status === 'AGUARDANDO_PAGAMENTO')
+    );
   }
 };

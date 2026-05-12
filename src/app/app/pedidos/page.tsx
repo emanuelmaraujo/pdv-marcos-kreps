@@ -27,7 +27,6 @@ import {
 type TabStatus =
   | "TODOS"
   | "AGUARDANDO_CONFIRMACAO"
-  | "AGUARDANDO_PAGAMENTO"
   | "NA_FILA"
   | "PRONTO"
   | "ENTREGUE"
@@ -57,14 +56,6 @@ const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
 };
 
 const KANBAN_COLUMNS: KanbanColumnConfig[] = [
-  {
-    status: "AGUARDANDO_PAGAMENTO",
-    label: "Aguardando pagamento",
-    topColor: "bg-brand-amber",
-    headerBg: "bg-amber-50 border-amber-100",
-    emptyText: "Sem pedidos do app aguardando pagamento",
-    showAvgWait: true,
-  },
   {
     status: "AGUARDANDO_CONFIRMACAO",
     label: "Aguardando",
@@ -335,7 +326,6 @@ export default function PedidosPage() {
   const queueCount       = getCount("NA_FILA");
   const readyCount       = getCount("PRONTO");
   const waitingCount     = getCount("AGUARDANDO_CONFIRMACAO");
-  const pendingAppPayCount = orders.filter((o) => o.status === "AGUARDANDO_PAGAMENTO" && o.source === "APP").length;
   const pendingPayCount  = orders.filter((o) => o.payment_status === "PENDING").length;
   const receivedTotal    = orders
     .filter((o) => o.payment_status === "PAID" || o.payment_status === "COURTESY")
@@ -346,9 +336,7 @@ export default function PedidosPage() {
     .filter((order) => {
       const q = searchQuery.toLowerCase().trim();
       const matchesTab = activeTab === "TODOS" ||
-        (activeTab === "AGUARDANDO_PAGAMENTO"
-          ? order.status === "AGUARDANDO_PAGAMENTO" && order.source === "APP"
-          : order.status === activeTab);
+        order.status === activeTab;
       const matchesSearch =
         !q || String(order.daily_number).includes(q) || order.customer_name?.toLowerCase().includes(q);
       return matchesTab && matchesSearch;
@@ -360,7 +348,6 @@ export default function PedidosPage() {
     });
 
   const tabs: { id: TabStatus; label: string; count?: number }[] = [
-    { id: "AGUARDANDO_PAGAMENTO", label: "Pagto.", count: pendingAppPayCount },
     { id: "NA_FILA",               label: "Na fila",    count: queueCount },
     { id: "PRONTO",                label: "Prontos",    count: readyCount },
     { id: "AGUARDANDO_CONFIRMACAO",label: "Aguardando", count: waitingCount },
@@ -448,7 +435,7 @@ export default function PedidosPage() {
           <KanbanColumn
             key={col.status}
             config={col}
-            orders={orders.filter((o) => o.status === col.status && (col.status !== "AGUARDANDO_PAGAMENTO" || o.source === "APP"))}
+            orders={orders.filter((o) => o.status === col.status)}
             now={now}
             onCardClick={setSelectedOrder}
             onQuickAction={handleQuickAction}

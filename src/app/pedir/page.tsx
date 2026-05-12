@@ -39,9 +39,6 @@ declare global {
         create: (type: string, containerId: string, settings: Record<string, unknown>) => Promise<{ unmount: () => void }>;
       };
     };
-    ApplePaySession?: {
-      canMakePayments: () => boolean;
-    };
   }
 }
 
@@ -55,16 +52,6 @@ interface MenuIndexes {
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const PAYMENT_METHOD_CODE = "MERCADO_PAGO_PAYMENT_BRICK";
 const PIX_PAYMENT_METHOD_CODE = "PIX";
-const GOOGLE_PAY_CODE = "GOOGLE_PAY";
-const APPLE_PAY_CODE = "APPLE_PAY";
-
-// Maps the Brick's selectedPaymentMethod to the backend payment_method_code.
-// Only wallet types get special codes; everything else uses the generic Brick code.
-function resolvePaymentMethodCode(selectedPaymentMethod: string): string {
-  if (selectedPaymentMethod === "google_pay") return GOOGLE_PAY_CODE;
-  if (selectedPaymentMethod === "apple_pay") return APPLE_PAY_CODE;
-  return PAYMENT_METHOD_CODE;
-}
 const ALL_FILTER = "Todos";
 const DEFAULT_ORDERING_START = "17:00";
 const DEFAULT_ORDERING_END = "23:30";
@@ -212,14 +199,10 @@ function loadMercadoPagoScript() {
 
 function MercadoPagoBrick({
   order,
-  googlePayAvailable,
-  applePayAvailable,
   onResult,
   onPaid,
 }: {
   order: CreatePublicOrderResponse["order"];
-  googlePayAvailable: boolean;
-  applePayAvailable: boolean;
   onResult: (result: MercadoPagoPaymentResponse) => void;
   onPaid: () => void;
 }) {
@@ -249,21 +232,17 @@ function MercadoPagoBrick({
               creditCard: "all",
               prepaidCard: "all",
               debitCard: "all",
-              // Wallet integrations: the Brick renders Google Pay and Apple Pay buttons
-              // automatically when the device/browser supports them and the account allows it.
-              // No extra configuration needed here; device detection is handled by the Brick.
             },
           },
           callbacks: {
             onReady: () => setIsReady(true),
-            onSubmit: ({ selectedPaymentMethod, formData }: { selectedPaymentMethod: string; formData: Record<string, unknown> }) => {
+            onSubmit: ({ formData }: { selectedPaymentMethod: string; formData: Record<string, unknown> }) => {
               return new Promise<void>((resolve, reject) => {
                 const idempotencyKey = crypto.randomUUID();
-                const paymentMethodCode = resolvePaymentMethodCode(selectedPaymentMethod);
                 pdvApi.createMercadoPagoPayment({
                   order_id: order.order_id,
                   public_token: order.public_token,
-                  payment_method_code: paymentMethodCode,
+                  payment_method_code: PAYMENT_METHOD_CODE,
                   form_data: formData,
                   idempotency_key: idempotencyKey,
                 })
@@ -312,11 +291,6 @@ function MercadoPagoBrick({
     );
   }
 
-  const walletLabels = [
-    googlePayAvailable && "Google Pay",
-    applePayAvailable && "Apple Pay",
-  ].filter(Boolean);
-
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-900">
@@ -325,7 +299,7 @@ function MercadoPagoBrick({
           <p className="text-sm font-black">Pagamento protegido pelo Mercado Pago</p>
         </div>
         <p className="mt-1 text-xs font-semibold leading-relaxed text-emerald-800/80">
-          Cartao de credito, debito{walletLabels.length > 0 ? `, ${walletLabels.join(", ")}` : ""} e outros meios aparecem conforme disponibilidade.
+          Cartao de credito, debito e outros meios aparecem conforme disponibilidade do Mercado Pago.
         </p>
       </div>
       {!isReady && !error && (
@@ -678,13 +652,12 @@ export default function PedirPublicPage() {
   const [rememberCheckoutData, setRememberCheckoutData] = useState(false);
   const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found">("idle");
   const [profileNotice, setProfileNotice] = useState("");
+  const [addonsExpanded, setAddonsExpanded] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderData, setOrderData] = useState<CreatePublicOrderResponse["order"] | null>(null);
   const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
-  const [googlePayAvailable, setGooglePayAvailable] = useState(false);
-  const [applePayAvailable, setApplePayAvailable] = useState(false);
 
   useEffect(() => {
     async function loadMenu() {
@@ -810,34 +783,6 @@ export default function PedirPublicPage() {
   }, [customerName, customerPhone, setCustomerInfo, setOrderType]);
 
   useEffect(() => {
-    // Google Pay: use the Payment Request API to check availability.
-    // Runs only client-side after mount.
-    if (typeof window !== "undefined" && window.PaymentRequest) {
-      const request = new PaymentRequest(
-        [
-          {
-            supportedMethods: "https://google.com/pay",
-            data: { apiVersion: 2, apiVersionMinor: 0, allowedPaymentMethods: [] },
-          },
-        ],
-        { total: { label: "Teste", amount: { currency: "BRL", value: "0" } } },
-      );
-      request.canMakePayment().then((result) => setGooglePayAvailable(!!result)).catch(() => {});
-    }
-
-    // Apple Pay: check ApplePaySession.canMakePayments().
-    // Only available in Safari on iOS/macOS with Apple Pay configured.
-    if (typeof window !== "undefined" && window.ApplePaySession) {
-      try {
-        const canMakePayments = window.ApplePaySession.canMakePayments();
-        window.setTimeout(() => setApplePayAvailable(canMakePayments), 0);
-      } catch {
-        // ApplePaySession can throw if called outside a secure context.
-      }
-    }
-  }, []);
-
-  useEffect(() => {
     const recheck = async () => {
       try {
         const config = await pdvApi.getPublicCheckoutConfig();
@@ -852,7 +797,7 @@ export default function PedirPublicPage() {
         setOrderingClosedReason(config.ordering_closed_reason);
         if (!isEnabled) clearCart();
       } catch {
-        // best-effort: mantém o estado atual em caso de erro
+        // best-effort: mantem o estado atual em caso de erro
       }
     };
 
@@ -938,9 +883,17 @@ export default function PedirPublicPage() {
   const estimatedSubtotal = getEstimatedSubtotal();
   const estimatedPackagingFee = orderType === "VIAGEM" && applyPackagingFeeForTakeout ? packagingFee : 0;
   const estimatedTotal = estimatedSubtotal + estimatedPackagingFee;
+  const selectedAddonCount = useMemo(() => {
+    let count = 0;
+    selectedAddons.forEach((qty) => {
+      count += qty;
+    });
+    return count;
+  }, [selectedAddons]);
 
   const openCustomization = useCallback((product: Product, existingItem?: CartItem) => {
     setSelectedProduct(product);
+    setAddonsExpanded(false);
     if (existingItem) {
       setEditingCartItemId(existingItem.id);
       setRemovedIngredientIds(new Set(existingItem.removed_ingredients));
@@ -999,8 +952,8 @@ export default function PedirPublicPage() {
     if (isSubmittingOrder || orderData) return;
     setCheckoutError("");
 
-    // Revalida o horário no momento exato do clique para garantir que o cliente
-    // não consiga submeter um pedido quando o atendimento já encerrou ou foi pausado.
+    // Revalida o horario no momento exato do clique para garantir que o cliente
+    // nao consiga submeter um pedido quando o atendimento ja encerrou ou foi pausado.
     try {
       const config = await pdvApi.getPublicCheckoutConfig();
       if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
@@ -1026,13 +979,13 @@ export default function PedirPublicPage() {
       setCheckoutError("Seu carrinho esta vazio.");
       return;
     }
-    if (!customerName.trim()) {
-      setCheckoutError("Informe seu nome para continuar.");
-      return;
-    }
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
     if (!normalizedPhone) {
       setCheckoutError("Informe um WhatsApp valido com DDD.");
+      return;
+    }
+    if (!customerName.trim()) {
+      setCheckoutError("Informe seu nome para continuar.");
       return;
     }
     if (customerEmail.trim() && !isValidEmail(customerEmail)) {
@@ -1190,10 +1143,10 @@ export default function PedirPublicPage() {
                 <Utensils className="h-6 w-6" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">Escolha pelo recheio</p>
-                <h2 className="mt-1 text-xl font-black leading-tight md:text-3xl">Krep quentinho, pedido sem fila.</h2>
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">Monte do seu jeito</p>
+                <h2 className="mt-1 text-xl font-black leading-tight md:text-3xl">Krep caprichado, pedido sem fila.</h2>
                 <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-amber-100/85">
-                  Veja a composicao de cada krep, filtre pela proteina ou base e finalize com pagamento seguro.
+                  Escolha o recheio, ajuste a composicao e finalize com pagamento seguro quando estiver tudo certo.
                 </p>
               </div>
               <div className="hidden rounded-2xl bg-white/10 px-4 py-3 text-right md:block">
@@ -1205,7 +1158,7 @@ export default function PedirPublicPage() {
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="min-w-0 space-y-4">
-          <section className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
+          <section className="flex gap-2 overflow-x-auto rounded-2xl border border-amber-900/10 bg-white/80 p-2 shadow-sm hide-scrollbar">
             {menuData?.categories.map((category) => (
               <button
                 key={category.id}
@@ -1215,8 +1168,8 @@ export default function PedirPublicPage() {
                 }}
                 className={`h-11 shrink-0 rounded-xl px-4 text-xs font-black uppercase tracking-wide transition-all ${
                   selectedCategoryId === category.id
-                    ? "bg-brand-red text-white shadow-sm"
-                    : "border border-amber-900/10 bg-white/90 text-zinc-700"
+                    ? "bg-brand-charcoal text-white shadow-sm"
+                    : "text-zinc-600 hover:bg-amber-50"
                 }`}
               >
                 {category.name}
@@ -1256,10 +1209,11 @@ export default function PedirPublicPage() {
                   key={product.id}
                   type="button"
                   onClick={() => openCustomization(product)}
-                  className="flex min-h-36 flex-col rounded-2xl border border-amber-900/10 bg-white/95 p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-red/25 hover:shadow-lg active:scale-[0.98]"
+                  className="group relative flex min-h-[190px] flex-col overflow-hidden rounded-2xl border border-amber-900/10 bg-white p-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-brand-red/30 hover:shadow-xl hover:shadow-amber-950/10 active:scale-[0.98]"
                 >
+                  <span className="absolute inset-x-0 top-0 h-1 bg-brand-red/85" />
                   <div className="flex items-start gap-3">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-brand-red">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#FFF1C9] text-brand-red transition-transform duration-300 group-hover:scale-105">
                       {categoryKind === "SAVORY" ? (
                         <Flame className="h-6 w-6" />
                       ) : categoryKind === "SWEET" ? (
@@ -1284,14 +1238,15 @@ export default function PedirPublicPage() {
                           </span>
                         )}
                       </div>
-                      <h2 className="mt-2 line-clamp-2 text-base font-black uppercase leading-tight text-zinc-950">{title}</h2>
+                      <h2 className="mt-2 line-clamp-2 text-base font-black leading-tight text-zinc-950">{title}</h2>
                       <p className="mt-1 line-clamp-3 text-xs font-semibold leading-relaxed text-zinc-500">{summary}</p>
                     </div>
                   </div>
                   <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3">
                     <p className="text-lg font-black text-brand-red">{currency.format(product.price)}</p>
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-red text-white">
+                    <span className="flex h-9 items-center gap-1 rounded-xl bg-brand-red px-3 text-xs font-black uppercase tracking-wide text-white transition-colors group-hover:bg-brand-charcoal">
                       <Plus className="h-5 w-5" />
+                      Montar
                     </span>
                   </div>
                 </button>
@@ -1357,12 +1312,12 @@ export default function PedirPublicPage() {
       )}
 
       {step === "CHECKOUT" && (
-        <main className="mx-auto max-w-5xl space-y-4 p-4 xl:px-6">
-          <section className="rounded-2xl border border-amber-900/10 bg-[#2A1612] p-4 text-white shadow-sm">
-            <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">Quase la</p>
-            <h2 className="mt-1 text-xl font-black">Confira seu pedido antes do pagamento.</h2>
+        <main className="mx-auto max-w-6xl space-y-4 p-4 xl:px-6">
+          <section className="rounded-2xl border border-amber-900/10 bg-[#2A1612] p-4 text-white shadow-sm md:p-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">Revisao final</p>
+            <h2 className="mt-1 text-xl font-black md:text-2xl">Confira seu pedido e continue para o pagamento.</h2>
             <p className="mt-2 text-sm font-medium leading-relaxed text-amber-100/85">
-              Depois de confirmar, o pedido fica pendente no painel ate o Mercado Pago aprovar.
+              Seu pedido so vai para preparo depois que o pagamento for confirmado.
             </p>
           </section>
 
@@ -1379,173 +1334,209 @@ export default function PedirPublicPage() {
             ))}
           </section>
 
-          <section className="rounded-2xl border border-amber-900/10 bg-white/95 p-4 shadow-sm">
-            <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">Resumo do pedido</h2>
-            <div className="mt-3 divide-y divide-zinc-100">
-              {items.map((item) => (
-                <div key={item.id} className="flex items-start gap-3 py-3">
-                  <span className="font-black text-zinc-500">{item.quantity}x</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-black text-zinc-900">{item.product.name}</p>
-                    {item.addons.length > 0 && (
-                      <p className="mt-0.5 text-xs font-bold text-emerald-600">
-                        + {item.addons.map((addon) => `${addon.quantity}x ${addon.addon_name}`).join(", ")}
-                      </p>
-                    )}
-                    {item.notes && <p className="mt-0.5 text-xs italic text-zinc-400">{item.notes}</p>}
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      className="rounded-lg bg-zinc-100 p-2 text-zinc-500"
-                      onClick={() => openCustomization(item.product, item)}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
-                    <button className="rounded-lg bg-red-50 p-2 text-red-500" onClick={() => removeItem(item.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
+            <section className="rounded-2xl border border-amber-900/10 bg-white/95 p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-zinc-400">Seu pedido</p>
+                  <h2 className="mt-1 text-xl font-black text-zinc-950">Itens escolhidos</h2>
                 </div>
-              ))}
-            </div>
-            <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-3">
-              <span className="text-sm font-black text-zinc-600">Subtotal dos itens</span>
-              <span className="text-xl font-black text-brand-red">{currency.format(estimatedSubtotal)}</span>
-            </div>
-            {estimatedPackagingFee > 0 && (
-              <div className="mt-2 flex items-center justify-between text-xs font-bold text-zinc-500">
-                <span>Inclui taxa para viagem</span>
-                <span>{currency.format(estimatedPackagingFee)}</span>
+                <Button variant="outline" size="sm" onClick={() => setStep("MENU")}>
+                  Adicionar mais
+                </Button>
               </div>
-            )}
-          </section>
 
-          <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">Seus dados</h2>
-                <p className="mt-1 text-xs font-semibold text-zinc-500">Use seu WhatsApp para recuperar dados salvos com sua permissao.</p>
+              <div className="mt-3 divide-y divide-zinc-100">
+                {items.map((item) => (
+                  <div key={item.id} className="flex items-start gap-3 py-3">
+                    <span className="rounded-xl bg-amber-50 px-2.5 py-1 text-xs font-black text-amber-800">{item.quantity}x</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-zinc-900">{item.product.name}</p>
+                      {item.addons.length > 0 && (
+                        <p className="mt-0.5 text-xs font-bold text-emerald-600">
+                          + {item.addons.map((addon) => `${addon.quantity}x ${addon.addon_name}`).join(", ")}
+                        </p>
+                      )}
+                      {item.notes && <p className="mt-0.5 text-xs italic text-zinc-400">{item.notes}</p>}
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        className="rounded-lg bg-zinc-100 p-2 text-zinc-500 transition-all hover:bg-zinc-200"
+                        onClick={() => openCustomization(item.product, item)}
+                        aria-label="Editar item"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg bg-red-50 p-2 text-red-500 transition-all hover:bg-red-100"
+                        onClick={() => removeItem(item.id)}
+                        aria-label="Remover item"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-              {profileLookupState === "checking" && <Loader2 className="h-4 w-4 animate-spin text-brand-red" />}
-            </div>
-            <input
-              value={customerName}
-              onChange={(event) => setCustomerInfo(event.target.value, customerPhone)}
-              placeholder="Nome ou apelido obrigatorio"
-              className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-brand-red"
-            />
-            <input
-              value={customerPhone}
-              onChange={(event) => setCustomerInfo(customerName, formatWhatsAppInput(event.target.value))}
-              onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
-              placeholder="WhatsApp com DDD obrigatorio"
-              type="tel"
-              inputMode="tel"
-              className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-brand-red"
-            />
-            {profileNotice && (
-              <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
-                {profileNotice}
-              </div>
-            )}
-            <input
-              value={customerEmail}
-              onChange={(event) => setCustomerEmail(event.target.value)}
-              placeholder="E-mail opcional, exigido para Pix"
-              type="email"
-              className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-brand-red"
-            />
-            <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
-              <input
-                type="checkbox"
-                checked={marketingOptIn}
-                onChange={(event) => setMarketingOptIn(event.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-brand-red"
-              />
-              <span>
-                Aceito receber novidades e promocoes pelo WhatsApp. O WhatsApp do pedido sera usado para comunicacoes operacionais mesmo sem esta opcao.
-              </span>
-            </label>
-            <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
-              <input
-                type="checkbox"
-                checked={rememberCheckoutData}
-                onChange={(event) => setRememberCheckoutData(event.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-brand-red"
-              />
-              <span>Salvar meus dados neste dispositivo e no checkout para proximos pedidos.</span>
-            </label>
-            {rememberCheckoutData && (
-              <button
-                type="button"
-                onClick={() => {
-                  localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
-                  setRememberCheckoutData(false);
-                  setProfileNotice("Dados salvos removidos deste dispositivo.");
-                }}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-zinc-500 transition-all hover:bg-zinc-50"
-              >
-                Remover dados salvos deste dispositivo
-              </button>
-            )}
-            <textarea
-              value={orderNotes}
-              onChange={(event) => setOrderNotes(event.target.value)}
-              placeholder="Observacao opcional"
-              className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-base font-bold outline-none focus:border-brand-red"
-            />
-          </section>
 
-          <section className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setOrderType("BALCAO")}
-              className={`rounded-2xl border-2 p-4 text-sm font-black uppercase transition-all ${
-                orderType === "BALCAO" ? "border-brand-charcoal bg-brand-charcoal text-white" : "border-zinc-200 bg-white text-zinc-500"
-              }`}
-            >
-              Comer aqui
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderType("VIAGEM")}
-              className={`rounded-2xl border-2 p-4 text-sm font-black uppercase transition-all ${
-                orderType === "VIAGEM" ? "border-brand-charcoal bg-brand-charcoal text-white" : "border-zinc-200 bg-white text-zinc-500"
-              }`}
-            >
-              Para levar
-            </button>
-          </section>
-
-          <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <div className="space-y-2 text-sm font-bold text-zinc-600">
-              <div className="flex items-center justify-between">
-                <span>Itens</span>
-                <span>{currency.format(estimatedSubtotal)}</span>
+              <div className="mt-4 rounded-2xl bg-amber-50 p-4">
+                <div className="flex items-center justify-between text-sm font-black text-zinc-700">
+                  <span>Subtotal dos itens</span>
+                  <span className="text-xl text-brand-red">{currency.format(estimatedSubtotal)}</span>
+                </div>
+                {estimatedPackagingFee > 0 && (
+                  <div className="mt-2 flex items-center justify-between text-xs font-bold text-zinc-500">
+                    <span>Embalagem para viagem</span>
+                    <span>{currency.format(estimatedPackagingFee)}</span>
+                  </div>
+                )}
               </div>
-              {estimatedPackagingFee > 0 && (
-                <div className="flex items-center justify-between">
-                  <span>Taxa para viagem</span>
-                  <span>{currency.format(estimatedPackagingFee)}</span>
+            </section>
+
+            <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm lg:sticky lg:top-24">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-zinc-400">Seus dados</p>
+                  <h2 className="mt-1 text-xl font-black text-zinc-950">Comece pelo WhatsApp</h2>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-zinc-500">
+                    Se voce salvou seus dados antes, o restante aparece automaticamente pelo numero.
+                  </p>
+                </div>
+                {profileLookupState === "checking" && <Loader2 className="h-4 w-4 animate-spin text-brand-red" />}
+              </div>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-zinc-400">WhatsApp</span>
+                <input
+                  value={customerPhone}
+                  onChange={(event) => setCustomerInfo(customerName, formatWhatsAppInput(event.target.value))}
+                  onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
+                  placeholder="(11) 99999-9999"
+                  type="tel"
+                  inputMode="tel"
+                  className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
+                />
+              </label>
+              {profileNotice && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+                  {profileNotice}
                 </div>
               )}
-              <div className="flex items-center justify-between border-t border-zinc-100 pt-3 text-lg font-black text-zinc-950">
-                <span>Total estimado</span>
-                <span className="text-brand-red">{currency.format(estimatedTotal)}</span>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-zinc-400">Nome</span>
+                <input
+                  value={customerName}
+                  onChange={(event) => setCustomerInfo(event.target.value, customerPhone)}
+                  placeholder="Como podemos chamar voce?"
+                  className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-zinc-400">E-mail</span>
+                <input
+                  value={customerEmail}
+                  onChange={(event) => setCustomerEmail(event.target.value)}
+                  placeholder="Opcional, usado no Pix"
+                  type="email"
+                  className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
+                />
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOrderType("BALCAO")}
+                  className={`rounded-2xl border-2 p-3 text-xs font-black uppercase transition-all ${
+                    orderType === "BALCAO" ? "border-brand-charcoal bg-brand-charcoal text-white" : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                  }`}
+                >
+                  Comer aqui
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrderType("VIAGEM")}
+                  className={`rounded-2xl border-2 p-3 text-xs font-black uppercase transition-all ${
+                    orderType === "VIAGEM" ? "border-brand-charcoal bg-brand-charcoal text-white" : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                  }`}
+                >
+                  Para levar
+                </button>
               </div>
-            </div>
-          </section>
 
-          {checkoutError && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-              {checkoutError}
-            </div>
-          )}
+              <textarea
+                value={orderNotes}
+                onChange={(event) => setOrderNotes(event.target.value)}
+                placeholder="Alguma observacao para a equipe?"
+                className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
+              />
 
-          <Button className="w-full gap-2" loading={isSubmittingOrder} onClick={handleCreateOrder}>
-            <CreditCard className="h-4 w-4" />
-            Ir para pagamento seguro
-          </Button>
+              <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={rememberCheckoutData}
+                  onChange={(event) => setRememberCheckoutData(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-brand-red"
+                />
+                <span>Salvar estes dados para preencher automaticamente nos proximos pedidos.</span>
+              </label>
+              <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={marketingOptIn}
+                  onChange={(event) => setMarketingOptIn(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-brand-red"
+                />
+                <span>Quero receber novidades e promocoes pelo WhatsApp.</span>
+              </label>
+              {rememberCheckoutData && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+                    setRememberCheckoutData(false);
+                    setProfileNotice("Dados salvos removidos deste dispositivo.");
+                  }}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-zinc-500 transition-all hover:bg-zinc-50"
+                >
+                  Remover dados salvos deste dispositivo
+                </button>
+              )}
+
+              <div className="rounded-2xl bg-zinc-950 p-4 text-white">
+                <div className="space-y-2 text-sm font-bold text-zinc-200">
+                  <div className="flex items-center justify-between">
+                    <span>Itens</span>
+                    <span>{currency.format(estimatedSubtotal)}</span>
+                  </div>
+                  {estimatedPackagingFee > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span>Embalagem</span>
+                      <span>{currency.format(estimatedPackagingFee)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between border-t border-white/10 pt-3 text-lg font-black text-white">
+                    <span>Total</span>
+                    <span className="text-amber-200">{currency.format(estimatedTotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {checkoutError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+                  {checkoutError}
+                </div>
+              )}
+
+              <Button className="h-12 w-full gap-2" loading={isSubmittingOrder} onClick={handleCreateOrder}>
+                <CreditCard className="h-4 w-4" />
+                Continuar para pagamento
+              </Button>
+            </section>
+          </div>
         </main>
       )}
 
@@ -1558,7 +1549,7 @@ export default function PedirPublicPage() {
                 <h2 className="text-3xl font-black">#{String(orderData.daily_number).padStart(3, "0")}</h2>
                 <p className="mt-1 flex items-center gap-1 text-xs font-bold text-amber-200">
                   <Clock className="h-3.5 w-3.5" />
-                  Aguardando pagamento
+                  Finalize para enviar
                 </p>
               </div>
               <p className="text-2xl font-black text-amber-100">{currency.format(orderData.total_amount)}</p>
@@ -1577,26 +1568,6 @@ export default function PedirPublicPage() {
                 <p className="mt-1 text-[10px] font-black uppercase text-amber-100">Seguro</p>
               </div>
             </div>
-            {(googlePayAvailable || applePayAvailable) && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {googlePayAvailable && (
-                  <span
-                    data-testid="google-pay-available-badge"
-                    className="rounded-full bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-amber-100"
-                  >
-                    Google Pay disponivel
-                  </span>
-                )}
-                {applePayAvailable && (
-                  <span
-                    data-testid="apple-pay-available-badge"
-                    className="rounded-full bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-amber-100"
-                  >
-                    Apple Pay disponivel
-                  </span>
-                )}
-              </div>
-            )}
           </section>
 
           <section className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm">
@@ -1655,8 +1626,6 @@ export default function PedirPublicPage() {
           ) : (
             <MercadoPagoBrick
               order={orderData}
-              googlePayAvailable={googlePayAvailable}
-              applePayAvailable={applePayAvailable}
               onResult={setPaymentResult}
               onPaid={() => {
                 clearCart();
@@ -1678,7 +1647,7 @@ export default function PedirPublicPage() {
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Pagamento aprovado</p>
             <h2 className="mt-1 text-2xl font-black text-zinc-900">Pedido recebido</h2>
-            <p className="mt-2 text-sm font-medium text-zinc-500">A equipe vai acompanhar seu pedido pelo painel.</p>
+            <p className="mt-2 text-sm font-medium text-zinc-500">A equipe ja recebeu a confirmacao e vai preparar seu pedido.</p>
           </div>
           <div className="grid w-full max-w-sm gap-3">
             {orderData && (
@@ -1771,48 +1740,70 @@ export default function PedirPublicPage() {
             )}
 
             {productAddons.length > 0 && (
-              <section className="space-y-3">
-                <p className="text-xs font-black uppercase tracking-widest text-zinc-400">Adicionais</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {productAddons.map((addon) => {
-                    const qty = selectedAddons.get(addon.id) || 0;
-                    return (
-                      <div key={addon.id} className="rounded-2xl border border-zinc-200 bg-white p-3">
-                        <p className="text-sm font-black text-zinc-900">{addon.name}</p>
-                        <p className="mt-1 text-sm font-black text-brand-red">+ {currency.format(addon.price)}</p>
-                        <div className="mt-3 flex items-center justify-between rounded-xl bg-zinc-100 p-1">
-                          <button
-                            className="rounded-lg bg-white p-2 text-zinc-500"
-                            onClick={() => {
-                              setSelectedAddons((current) => {
-                                const next = new Map(current);
-                                const nextQty = Math.max(0, qty - 1);
-                                if (nextQty === 0) next.delete(addon.id);
-                                else next.set(addon.id, nextQty);
-                                return next;
-                              });
-                            }}
-                          >
-                            <Minus className="h-4 w-4" />
-                          </button>
-                          <span className="font-black">{qty}</span>
-                          <button
-                            className="rounded-lg bg-white p-2 text-brand-red"
-                            onClick={() => {
-                              setSelectedAddons((current) => {
-                                const next = new Map(current);
-                                next.set(addon.id, qty + 1);
-                                return next;
-                              });
-                            }}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </button>
+              <section className="rounded-2xl border-2 border-dashed border-brand-red/25 bg-amber-50/75 p-3">
+                <button
+                  type="button"
+                  onClick={() => setAddonsExpanded((current) => !current)}
+                  className="flex w-full items-center justify-between gap-3 text-left"
+                >
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-brand-red">Adicionais</p>
+                    <h3 className="mt-1 text-base font-black text-zinc-950">Quer deixar ainda melhor?</h3>
+                    <p className="mt-1 text-xs font-bold text-amber-800">
+                      {selectedAddonCount > 0
+                        ? `${selectedAddonCount} adicional(is) selecionado(s)`
+                        : `${productAddons.length} opcoes para turbinar seu pedido`}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-xl bg-brand-red px-3 py-2 text-[11px] font-black uppercase tracking-wide text-white shadow-sm">
+                    {addonsExpanded ? "Fechar" : "Ver adicionais"}
+                  </span>
+                </button>
+
+                {addonsExpanded && (
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    {productAddons.map((addon) => {
+                      const qty = selectedAddons.get(addon.id) || 0;
+                      return (
+                        <div key={addon.id} className="rounded-2xl border border-amber-900/10 bg-white p-3 shadow-sm">
+                          <p className="text-sm font-black text-zinc-900">{addon.name}</p>
+                          <p className="mt-1 text-sm font-black text-brand-red">+ {currency.format(addon.price)}</p>
+                          <div className="mt-3 flex items-center justify-between rounded-xl bg-zinc-100 p-1">
+                            <button
+                              type="button"
+                              className="rounded-lg bg-white p-2 text-zinc-500"
+                              onClick={() => {
+                                setSelectedAddons((current) => {
+                                  const next = new Map(current);
+                                  const nextQty = Math.max(0, qty - 1);
+                                  if (nextQty === 0) next.delete(addon.id);
+                                  else next.set(addon.id, nextQty);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </button>
+                            <span className="font-black">{qty}</span>
+                            <button
+                              type="button"
+                              className="rounded-lg bg-white p-2 text-brand-red"
+                              onClick={() => {
+                                setSelectedAddons((current) => {
+                                  const next = new Map(current);
+                                  next.set(addon.id, qty + 1);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             )}
 
