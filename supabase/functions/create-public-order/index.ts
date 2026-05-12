@@ -150,6 +150,7 @@ serve(async (req) => {
     const customerPhone = normalizeBrazilPhone(body.customer_phone);
     const customerEmail = cleanEmail(body.customer_email);
     const marketingOptIn = body.marketing_opt_in === true;
+    const rememberCheckoutData = body.remember_checkout_data === true;
     const notes = cleanText(body.notes, 500);
     const orderType = body.order_type;
     const paymentMethodCode = cleanText(body.payment_method_code, 80) ?? DEFAULT_PAYMENT_METHOD_CODE;
@@ -310,11 +311,15 @@ serve(async (req) => {
         id: customerPhone,
         phone_e164: customerPhone,
         name: customerName,
+        email: rememberCheckoutData ? customerEmail : null,
         last_seen_at: nowIso,
         last_order_at: nowIso,
+        last_order_type: rememberCheckoutData ? orderType : null,
         orders_count: Number(existingCustomer?.orders_count ?? 0) + 1,
         marketing_opt_in: marketingOptIn || existingCustomer?.marketing_opt_in === true,
         marketing_opt_in_at: existingCustomer?.marketing_opt_in_at ?? (marketingOptIn ? nowIso : null),
+        remember_checkout_data: rememberCheckoutData,
+        checkout_profile_updated_at: rememberCheckoutData ? nowIso : null,
         source: "APP",
       }, {
         onConflict: "id",

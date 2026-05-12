@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   CheckCircle2,
@@ -57,6 +58,16 @@ const DEFAULT_ORDERING_END = "23:30";
 const INSTAGRAM_URL = "https://www.instagram.com/marcos_kreps/";
 const PIX_WAIT_MINUTES = 5;
 const PUBLIC_ORDER_STORAGE_KEY = "pdv-public-order";
+const PUBLIC_CUSTOMER_PROFILE_KEY = "pdv-public-customer-profile";
+
+type SavedPublicCustomerProfile = {
+  phone_e164: string;
+  name: string;
+  email?: string;
+  order_type: "BALCAO" | "VIAGEM";
+  marketing_opt_in: boolean;
+  saved_at: string;
+};
 
 const SAVORY_PROTEINS = ["presunto", "calabresa", "frango", "atum", "peito de peru", "carne de sol"];
 const SWEET_BASES = ["banana", "morango", "nutella", "chocolate", "doce de leite", "goiabada"];
@@ -335,6 +346,23 @@ function formatWhatsAppInput(value: string) {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
+function readSavedPublicProfile(): SavedPublicCustomerProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = localStorage.getItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as SavedPublicCustomerProfile;
+    return parsed.phone_e164 && parsed.name ? parsed : null;
+  } catch {
+    localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+    return null;
+  }
+}
+
+function savePublicProfile(profile: SavedPublicCustomerProfile) {
+  localStorage.setItem(PUBLIC_CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
+}
+
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
@@ -582,6 +610,7 @@ function PixCheckout({
 }
 
 export default function PedirPublicPage() {
+  const router = useRouter();
   const {
     items,
     addItem,
@@ -620,6 +649,9 @@ export default function PedirPublicPage() {
   const [step, setStep] = useState<"MENU" | "CHECKOUT" | "PAYMENT" | "PAID">("MENU");
   const [customerEmail, setCustomerEmail] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [rememberCheckoutData, setRememberCheckoutData] = useState(false);
+  const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found">("idle");
+  const [profileNotice, setProfileNotice] = useState("");
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderData, setOrderData] = useState<CreatePublicOrderResponse["order"] | null>(null);
   const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
@@ -684,6 +716,72 @@ export default function PedirPublicPage() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const saved = readSavedPublicProfile();
+      if (!saved) return;
+      setCustomerInfo(saved.name, formatWhatsAppInput(saved.phone_e164));
+      setCustomerEmail(saved.email ?? "");
+      setMarketingOptIn(saved.marketing_opt_in);
+      setRememberCheckoutData(true);
+      setOrderType(saved.order_type);
+      setProfileLookupState("found");
+      setProfileNotice("Dados deste dispositivo preenchidos para agilizar seu pedido.");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [setCustomerInfo, setOrderType]);
+
+  useEffect(() => {
+    const normalizedPhone = normalizeBrazilPhone(customerPhone);
+    if (!normalizedPhone) {
+      const timer = window.setTimeout(() => setProfileLookupState("idle"), 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    const saved = readSavedPublicProfile();
+    if (saved?.phone_e164 === normalizedPhone) {
+      const timer = window.setTimeout(() => {
+        setCustomerInfo(saved.name, formatWhatsAppInput(saved.phone_e164));
+        setCustomerEmail(saved.email ?? "");
+        setMarketingOptIn(saved.marketing_opt_in);
+        setRememberCheckoutData(true);
+        setOrderType(saved.order_type);
+        setProfileLookupState("found");
+        setProfileNotice("Dados salvos neste dispositivo encontrados.");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        setProfileLookupState("checking");
+        const response = await pdvApi.getPublicCustomerProfile({ customer_phone: normalizedPhone });
+        if (cancelled) return;
+        if (response.found && response.profile) {
+          setCustomerInfo(response.profile.name ?? customerName, formatWhatsAppInput(normalizedPhone));
+          setCustomerEmail(response.profile.email ?? "");
+          setMarketingOptIn(response.profile.marketing_opt_in === true);
+          if (response.profile.order_type === "BALCAO" || response.profile.order_type === "VIAGEM") {
+            setOrderType(response.profile.order_type);
+          }
+          setRememberCheckoutData(true);
+          setProfileLookupState("found");
+          setProfileNotice("Encontrei seus dados salvos pelo WhatsApp.");
+        } else {
+          setProfileLookupState("idle");
+        }
+      } catch {
+        if (!cancelled) setProfileLookupState("idle");
+      }
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [customerName, customerPhone, setCustomerInfo, setOrderType]);
+
+  useEffect(() => {
     const recheck = async () => {
       try {
         const config = await pdvApi.getPublicCheckoutConfig();
@@ -712,7 +810,6 @@ export default function PedirPublicPage() {
     const interval = window.setInterval(async () => {
       try {
         const status = await pdvApi.getPublicOrderStatus({
-          daily_number: orderData.daily_number,
           public_token: orderData.public_token,
         });
         if (status.order.payment_status === "PAID") {
@@ -895,6 +992,7 @@ export default function PedirPublicPage() {
         customer_phone: normalizedPhone,
         customer_email: customerEmail.trim() || undefined,
         marketing_opt_in: marketingOptIn,
+        remember_checkout_data: rememberCheckoutData,
         notes: orderNotes.trim() || undefined,
         payment_method_code: PAYMENT_METHOD_CODE,
         items: items.map((item) => ({
@@ -907,6 +1005,18 @@ export default function PedirPublicPage() {
       });
 
       setOrderData(response.order);
+      if (rememberCheckoutData) {
+        savePublicProfile({
+          phone_e164: normalizedPhone,
+          name: customerName.trim(),
+          email: customerEmail.trim() || undefined,
+          order_type: orderType,
+          marketing_opt_in: marketingOptIn,
+          saved_at: new Date().toISOString(),
+        });
+      } else {
+        localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+      }
       sessionStorage.setItem(PUBLIC_ORDER_STORAGE_KEY, JSON.stringify({
         order: response.order,
         customerEmail: customerEmail.trim(),
@@ -997,7 +1107,7 @@ export default function PedirPublicPage() {
     <div className="min-h-screen bg-[#FFF7ED] pb-32 text-zinc-950">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(220,38,38,0.16),transparent_30%),linear-gradient(135deg,rgba(255,247,237,0.98),rgba(255,255,255,0.92)_45%,rgba(254,243,199,0.65))]" />
       <header className="sticky top-0 z-40 border-b border-amber-900/10 bg-[#fffaf2]/95 px-4 py-3 shadow-sm backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-red text-white shadow-sm">
               <Flame className="h-5 w-5" />
@@ -1017,22 +1127,28 @@ export default function PedirPublicPage() {
       </header>
 
       {step === "MENU" && (
-        <main className="mx-auto max-w-3xl space-y-5 p-4">
-          <section className="overflow-hidden rounded-2xl border border-amber-900/10 bg-[#2A1612] p-4 text-white shadow-sm">
-            <div className="flex items-start gap-3">
+        <main className="mx-auto max-w-7xl space-y-5 p-4 xl:px-6">
+          <section className="overflow-hidden rounded-2xl border border-amber-900/10 bg-[#2A1612] p-4 text-white shadow-sm md:p-6">
+            <div className="flex items-start gap-3 md:items-center md:justify-between">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-red">
                 <Utensils className="h-6 w-6" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">Escolha pelo recheio</p>
-                <h2 className="mt-1 text-xl font-black leading-tight">Krep quentinho, pedido sem fila.</h2>
-                <p className="mt-2 text-sm font-medium leading-relaxed text-amber-100/85">
+                <h2 className="mt-1 text-xl font-black leading-tight md:text-3xl">Krep quentinho, pedido sem fila.</h2>
+                <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-amber-100/85">
                   Veja a composicao de cada krep, filtre pela proteina ou base e finalize com pagamento seguro.
                 </p>
+              </div>
+              <div className="hidden rounded-2xl bg-white/10 px-4 py-3 text-right md:block">
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">Hoje</p>
+                <p className="text-lg font-black text-white">{items.length} item(ns)</p>
               </div>
             </div>
           </section>
 
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="min-w-0 space-y-4">
           <section className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
             {menuData?.categories.map((category) => (
               <button
@@ -1072,7 +1188,7 @@ export default function PedirPublicPage() {
             </section>
           )}
 
-          <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <section className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
             {filteredProducts.map((product) => {
               const { code, title } = splitProductName(product.name);
               const tags = getProductTags(product, selectedCategory?.name, menuIndexes);
@@ -1084,7 +1200,7 @@ export default function PedirPublicPage() {
                   key={product.id}
                   type="button"
                   onClick={() => openCustomization(product)}
-                  className="flex min-h-36 flex-col rounded-2xl border border-amber-900/10 bg-white/95 p-4 text-left shadow-sm transition-all active:scale-[0.98]"
+                  className="flex min-h-36 flex-col rounded-2xl border border-amber-900/10 bg-white/95 p-4 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-red/25 hover:shadow-lg active:scale-[0.98]"
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-brand-red">
@@ -1126,17 +1242,85 @@ export default function PedirPublicPage() {
               );
             })}
           </section>
+            </div>
+
+            <aside className="hidden xl:block">
+              <div className="sticky top-24 space-y-3 rounded-2xl border border-amber-900/10 bg-white/95 p-4 shadow-xl shadow-amber-950/5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Seu pedido</p>
+                    <h2 className="text-lg font-black text-zinc-950">Carrinho</h2>
+                  </div>
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-charcoal text-white">
+                    <ShoppingCart className="h-5 w-5" />
+                  </div>
+                </div>
+
+                {items.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-5 text-center">
+                    <p className="text-sm font-bold text-zinc-500">Escolha um krep para montar seu pedido.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="max-h-[44vh] space-y-2 overflow-y-auto pr-1">
+                      {items.map((item) => (
+                        <div key={item.id} className="rounded-xl border border-zinc-100 bg-zinc-50 p-3">
+                          <div className="flex items-start gap-2">
+                            <span className="rounded-lg bg-white px-2 py-1 text-xs font-black text-zinc-600">{item.quantity}x</span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-black text-zinc-900">{item.product.name}</p>
+                              {item.addons.length > 0 && (
+                                <p className="mt-0.5 truncate text-xs font-bold text-emerald-600">
+                                  + {item.addons.map((addon) => `${addon.quantity}x ${addon.addon_name}`).join(", ")}
+                                </p>
+                              )}
+                            </div>
+                            <button className="rounded-lg bg-white p-2 text-red-500" onClick={() => removeItem(item.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="rounded-2xl bg-amber-50 p-4">
+                      <div className="flex items-center justify-between text-sm font-black text-zinc-700">
+                        <span>Total estimado</span>
+                        <span className="text-xl text-brand-red">{currency.format(estimatedTotal)}</span>
+                      </div>
+                      <Button className="mt-3 w-full gap-2" onClick={() => setStep("CHECKOUT")}>
+                        <CreditCard className="h-4 w-4" />
+                        Fechar pedido
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </aside>
+          </div>
         </main>
       )}
 
       {step === "CHECKOUT" && (
-        <main className="mx-auto max-w-xl space-y-4 p-4">
+        <main className="mx-auto max-w-5xl space-y-4 p-4 xl:px-6">
           <section className="rounded-2xl border border-amber-900/10 bg-[#2A1612] p-4 text-white shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-amber-200">Quase la</p>
             <h2 className="mt-1 text-xl font-black">Confira seu pedido antes do pagamento.</h2>
             <p className="mt-2 text-sm font-medium leading-relaxed text-amber-100/85">
               Depois de confirmar, o pedido fica pendente no painel ate o Mercado Pago aprovar.
             </p>
+          </section>
+
+          <section className="grid grid-cols-4 gap-2 rounded-2xl border border-amber-900/10 bg-white/90 p-2 text-center shadow-sm">
+            {["Cardapio", "Revisao", "Pagamento", "Acompanhar"].map((label, index) => (
+              <div
+                key={label}
+                className={`rounded-xl px-2 py-2 text-[10px] font-black uppercase tracking-wide ${
+                  index <= 1 ? "bg-brand-red text-white" : "bg-zinc-100 text-zinc-400"
+                }`}
+              >
+                {label}
+              </div>
+            ))}
           </section>
 
           <section className="rounded-2xl border border-amber-900/10 bg-white/95 p-4 shadow-sm">
@@ -1181,7 +1365,13 @@ export default function PedirPublicPage() {
           </section>
 
           <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">Seus dados</h2>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">Seus dados</h2>
+                <p className="mt-1 text-xs font-semibold text-zinc-500">Use seu WhatsApp para recuperar dados salvos com sua permissao.</p>
+              </div>
+              {profileLookupState === "checking" && <Loader2 className="h-4 w-4 animate-spin text-brand-red" />}
+            </div>
             <input
               value={customerName}
               onChange={(event) => setCustomerInfo(event.target.value, customerPhone)}
@@ -1197,6 +1387,11 @@ export default function PedirPublicPage() {
               inputMode="tel"
               className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-brand-red"
             />
+            {profileNotice && (
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+                {profileNotice}
+              </div>
+            )}
             <input
               value={customerEmail}
               onChange={(event) => setCustomerEmail(event.target.value)}
@@ -1215,6 +1410,28 @@ export default function PedirPublicPage() {
                 Aceito receber novidades e promocoes pelo WhatsApp. O WhatsApp do pedido sera usado para comunicacoes operacionais mesmo sem esta opcao.
               </span>
             </label>
+            <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
+              <input
+                type="checkbox"
+                checked={rememberCheckoutData}
+                onChange={(event) => setRememberCheckoutData(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-brand-red"
+              />
+              <span>Salvar meus dados neste dispositivo e no checkout para proximos pedidos.</span>
+            </label>
+            {rememberCheckoutData && (
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+                  setRememberCheckoutData(false);
+                  setProfileNotice("Dados salvos removidos deste dispositivo.");
+                }}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-zinc-500 transition-all hover:bg-zinc-50"
+              >
+                Remover dados salvos deste dispositivo
+              </button>
+            )}
             <textarea
               value={orderNotes}
               onChange={(event) => setOrderNotes(event.target.value)}
@@ -1277,7 +1494,7 @@ export default function PedirPublicPage() {
       )}
 
       {step === "PAYMENT" && orderData && (
-        <main className="mx-auto max-w-xl space-y-4 p-4">
+        <main className="mx-auto max-w-3xl space-y-4 p-4">
           <section className="rounded-2xl border border-amber-900/10 bg-[#2A1612] p-4 text-white shadow-sm">
             <p className="text-xs font-black uppercase tracking-widest text-amber-200">Pagamento seguro</p>
             <div className="mt-2 flex items-end justify-between">
@@ -1329,6 +1546,19 @@ export default function PedirPublicPage() {
             </button>
           </section>
 
+          <section className="grid grid-cols-4 gap-2 rounded-2xl border border-amber-900/10 bg-white/90 p-2 text-center shadow-sm">
+            {["Cardapio", "Revisao", "Pagamento", "Acompanhar"].map((label, index) => (
+              <div
+                key={label}
+                className={`rounded-xl px-2 py-2 text-[10px] font-black uppercase tracking-wide ${
+                  index <= 2 ? "bg-brand-red text-white" : "bg-zinc-100 text-zinc-400"
+                }`}
+              >
+                {label}
+              </div>
+            ))}
+          </section>
+
           {paymentMode === "PIX" ? (
             <PixCheckout
               order={orderData}
@@ -1372,19 +1602,28 @@ export default function PedirPublicPage() {
             <h2 className="mt-1 text-2xl font-black text-zinc-900">Pedido recebido</h2>
             <p className="mt-2 text-sm font-medium text-zinc-500">A equipe vai acompanhar seu pedido pelo painel.</p>
           </div>
-          <Button onClick={() => {
-            setOrderData(null);
-            setPaymentResult(null);
-            sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
-            setStep("MENU");
-          }}>
-            Fazer novo pedido
-          </Button>
+          <div className="grid w-full max-w-sm gap-3">
+            {orderData && (
+              <Button
+                onClick={() => router.push(`/pedido/${encodeURIComponent(orderData.public_token)}`)}
+              >
+                Acompanhar pedido #{String(orderData.daily_number).padStart(3, "0")}
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => {
+              setOrderData(null);
+              setPaymentResult(null);
+              sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
+              setStep("MENU");
+            }}>
+              Fazer novo pedido
+            </Button>
+          </div>
         </main>
       )}
 
       {items.length > 0 && step === "MENU" && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white p-4 shadow-2xl">
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white p-4 shadow-2xl xl:hidden">
           <div className="mx-auto flex max-w-xl items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-charcoal text-white">
               <ShoppingCart className="h-5 w-5" />
