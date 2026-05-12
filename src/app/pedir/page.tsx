@@ -702,7 +702,7 @@ export default function PedirPublicPage() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [rememberCheckoutData, setRememberCheckoutData] = useState(false);
-  const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found">("idle");
+  const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found" | "not_found">("idle");
   const [profileNotice, setProfileNotice] = useState("");
   const [addonsExpanded, setAddonsExpanded] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
@@ -710,6 +710,7 @@ export default function PedirPublicPage() {
   const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
+  const lastAutofilledPhoneRef = useRef<string | null>(null);
 
   useEffect(() => {
     async function loadMenu() {
@@ -769,24 +770,12 @@ export default function PedirPublicPage() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const saved = readSavedPublicProfile();
-      if (!saved) return;
-      setCustomerInfo(saved.name, formatWhatsAppInput(saved.phone_e164));
-      setCustomerEmail(saved.email ?? "");
-      setMarketingOptIn(saved.marketing_opt_in);
-      setRememberCheckoutData(true);
-      setOrderType(saved.order_type);
-      setProfileLookupState("found");
-      setProfileNotice("Dados deste dispositivo preenchidos para agilizar seu pedido.");
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [setCustomerInfo, setOrderType]);
-
-  useEffect(() => {
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
     if (!normalizedPhone) {
-      const timer = window.setTimeout(() => setProfileLookupState("idle"), 0);
+      const timer = window.setTimeout(() => {
+        setProfileLookupState("idle");
+        if (!customerPhone.trim()) setProfileNotice("");
+      }, 0);
       return () => window.clearTimeout(timer);
     }
 
@@ -798,10 +787,20 @@ export default function PedirPublicPage() {
         setMarketingOptIn(saved.marketing_opt_in);
         setRememberCheckoutData(true);
         setOrderType(saved.order_type);
+        lastAutofilledPhoneRef.current = saved.phone_e164;
         setProfileLookupState("found");
         setProfileNotice("Dados salvos neste dispositivo encontrados.");
       }, 0);
       return () => window.clearTimeout(timer);
+    }
+
+    if (lastAutofilledPhoneRef.current && lastAutofilledPhoneRef.current !== normalizedPhone) {
+      lastAutofilledPhoneRef.current = null;
+      setCustomerInfo("", formatWhatsAppInput(normalizedPhone));
+      setCustomerEmail("");
+      setMarketingOptIn(false);
+      setRememberCheckoutData(false);
+      setProfileNotice("");
     }
 
     let cancelled = false;
@@ -818,13 +817,18 @@ export default function PedirPublicPage() {
             setOrderType(response.profile.order_type);
           }
           setRememberCheckoutData(true);
+          lastAutofilledPhoneRef.current = normalizedPhone;
           setProfileLookupState("found");
           setProfileNotice("Encontrei seus dados salvos pelo WhatsApp.");
         } else {
-          setProfileLookupState("idle");
+          setProfileLookupState("not_found");
+          setProfileNotice("");
         }
       } catch {
-        if (!cancelled) setProfileLookupState("idle");
+        if (!cancelled) {
+          setProfileLookupState("not_found");
+          setProfileNotice("");
+        }
       }
     }, 500);
 
@@ -935,6 +939,8 @@ export default function PedirPublicPage() {
   const estimatedSubtotal = getEstimatedSubtotal();
   const estimatedPackagingFee = orderType === "VIAGEM" && applyPackagingFeeForTakeout ? packagingFee : 0;
   const estimatedTotal = estimatedSubtotal + estimatedPackagingFee;
+  const checkoutPhone = useMemo(() => normalizeBrazilPhone(customerPhone), [customerPhone]);
+  const shouldShowCheckoutDetails = !!checkoutPhone && profileLookupState !== "checking";
   const selectedAddonCount = useMemo(() => {
     let count = 0;
     selectedAddons.forEach((qty) => {
@@ -1477,122 +1483,146 @@ export default function PedirPublicPage() {
                   className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
                 />
               </label>
-              {profileNotice && (
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
-                  {profileNotice}
+
+              {!checkoutPhone && (
+                <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-sm font-bold leading-relaxed text-amber-900">
+                  Primeiro digite seu WhatsApp com DDD. Se seus dados estiverem salvos, a gente preenche o resto para voce.
                 </div>
               )}
 
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-zinc-400">Nome</span>
-                <input
-                  value={customerName}
-                  onChange={(event) => setCustomerInfo(event.target.value, customerPhone)}
-                  placeholder="Como podemos chamar voce?"
-                  className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-zinc-400">E-mail</span>
-                <input
-                  value={customerEmail}
-                  onChange={(event) => setCustomerEmail(event.target.value)}
-                  placeholder="Opcional, usado no Pix"
-                  type="email"
-                  className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setOrderType("BALCAO")}
-                  className={`rounded-2xl border-2 p-3 text-xs font-black uppercase transition-all ${
-                    orderType === "BALCAO" ? "border-brand-charcoal bg-brand-charcoal text-white" : "border-zinc-200 bg-zinc-50 text-zinc-500"
-                  }`}
-                >
-                  Comer aqui
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setOrderType("VIAGEM")}
-                  className={`rounded-2xl border-2 p-3 text-xs font-black uppercase transition-all ${
-                    orderType === "VIAGEM" ? "border-brand-charcoal bg-brand-charcoal text-white" : "border-zinc-200 bg-zinc-50 text-zinc-500"
-                  }`}
-                >
-                  Para levar
-                </button>
-              </div>
-
-              <textarea
-                value={orderNotes}
-                onChange={(event) => setOrderNotes(event.target.value)}
-                placeholder="Alguma observacao para a equipe?"
-                className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
-              />
-
-              <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
-                <input
-                  type="checkbox"
-                  checked={rememberCheckoutData}
-                  onChange={(event) => setRememberCheckoutData(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 accent-brand-red"
-                />
-                <span>Salvar estes dados para preencher automaticamente nos proximos pedidos.</span>
-              </label>
-              <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
-                <input
-                  type="checkbox"
-                  checked={marketingOptIn}
-                  onChange={(event) => setMarketingOptIn(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 accent-brand-red"
-                />
-                <span>Quero receber novidades e promocoes pelo WhatsApp.</span>
-              </label>
-              {rememberCheckoutData && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
-                    setRememberCheckoutData(false);
-                    setProfileNotice("Dados salvos removidos deste dispositivo.");
-                  }}
-                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-zinc-500 transition-all hover:bg-zinc-50"
-                >
-                  Remover dados salvos deste dispositivo
-                </button>
+              {checkoutPhone && profileLookupState === "checking" && (
+                <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-bold text-zinc-600">
+                  <Loader2 className="h-4 w-4 animate-spin text-brand-red" />
+                  Procurando dados salvos para esse WhatsApp...
+                </div>
               )}
 
-              <div className="rounded-2xl bg-zinc-950 p-4 text-white">
-                <div className="space-y-2 text-sm font-bold text-zinc-200">
-                  <div className="flex items-center justify-between">
-                    <span>Itens</span>
-                    <span>{currency.format(estimatedSubtotal)}</span>
-                  </div>
-                  {estimatedPackagingFee > 0 && (
-                    <div className="flex items-center justify-between">
-                      <span>Embalagem</span>
-                      <span>{currency.format(estimatedPackagingFee)}</span>
+              {shouldShowCheckoutDetails && (
+                <>
+                  {profileNotice && (
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
+                      {profileNotice}
                     </div>
                   )}
-                  <div className="flex items-center justify-between border-t border-white/10 pt-3 text-lg font-black text-white">
-                    <span>Total</span>
-                    <span className="text-amber-200">{currency.format(estimatedTotal)}</span>
+
+                  {profileLookupState === "not_found" && (
+                    <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                      Nao encontrei dados salvos para esse WhatsApp. Complete rapidinho abaixo.
+                    </div>
+                  )}
+
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-zinc-400">Nome</span>
+                    <input
+                      value={customerName}
+                      onChange={(event) => setCustomerInfo(event.target.value, customerPhone)}
+                      placeholder="Como podemos chamar voce?"
+                      className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-zinc-400">E-mail</span>
+                    <input
+                      value={customerEmail}
+                      onChange={(event) => setCustomerEmail(event.target.value)}
+                      placeholder="Opcional, usado no Pix"
+                      type="email"
+                      className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOrderType("BALCAO")}
+                      className={`rounded-2xl border-2 p-3 text-xs font-black uppercase transition-all ${
+                        orderType === "BALCAO" ? "border-brand-charcoal bg-brand-charcoal text-white" : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                      }`}
+                    >
+                      Comer aqui
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderType("VIAGEM")}
+                      className={`rounded-2xl border-2 p-3 text-xs font-black uppercase transition-all ${
+                        orderType === "VIAGEM" ? "border-brand-charcoal bg-brand-charcoal text-white" : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                      }`}
+                    >
+                      Para levar
+                    </button>
                   </div>
-                </div>
-              </div>
 
-              {checkoutError && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-                  {checkoutError}
-                </div>
+                  <textarea
+                    value={orderNotes}
+                    onChange={(event) => setOrderNotes(event.target.value)}
+                    placeholder="Alguma observacao para a equipe?"
+                    className="h-20 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
+                  />
+
+                  <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
+                    <input
+                      type="checkbox"
+                      checked={rememberCheckoutData}
+                      onChange={(event) => setRememberCheckoutData(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-brand-red"
+                    />
+                    <span>Salvar estes dados para preencher automaticamente nos proximos pedidos.</span>
+                  </label>
+                  <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm font-semibold text-zinc-600">
+                    <input
+                      type="checkbox"
+                      checked={marketingOptIn}
+                      onChange={(event) => setMarketingOptIn(event.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-brand-red"
+                    />
+                    <span>Quero receber novidades e promocoes pelo WhatsApp.</span>
+                  </label>
+                  {rememberCheckoutData && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+                        setRememberCheckoutData(false);
+                        setProfileNotice("Dados salvos removidos deste dispositivo.");
+                      }}
+                      className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-wide text-zinc-500 transition-all hover:bg-zinc-50"
+                    >
+                      Remover dados salvos deste dispositivo
+                    </button>
+                  )}
+
+                  <div className="rounded-2xl bg-zinc-950 p-4 text-white">
+                    <div className="space-y-2 text-sm font-bold text-zinc-200">
+                      <div className="flex items-center justify-between">
+                        <span>Itens</span>
+                        <span>{currency.format(estimatedSubtotal)}</span>
+                      </div>
+                      {estimatedPackagingFee > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span>Embalagem</span>
+                          <span>{currency.format(estimatedPackagingFee)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between border-t border-white/10 pt-3 text-lg font-black text-white">
+                        <span>Total</span>
+                        <span className="text-amber-200">{currency.format(estimatedTotal)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {checkoutError && (
+                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+                      {checkoutError}
+                    </div>
+                  )}
+
+                  <Button className="h-12 w-full gap-2" loading={isSubmittingOrder} onClick={handleCreateOrder}>
+                    <CreditCard className="h-4 w-4" />
+                    Continuar para pagamento
+                  </Button>
+                </>
               )}
-
-              <Button className="h-12 w-full gap-2" loading={isSubmittingOrder} onClick={handleCreateOrder}>
-                <CreditCard className="h-4 w-4" />
-                Continuar para pagamento
-              </Button>
             </section>
           </div>
         </main>
