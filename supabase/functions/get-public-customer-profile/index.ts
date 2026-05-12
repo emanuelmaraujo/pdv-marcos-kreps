@@ -70,12 +70,42 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileErr } = await supabaseAdmin
       .from("customers")
       .select("name, email, last_order_type, marketing_opt_in")
       .eq("phone_e164", phone)
       .eq("remember_checkout_data", true)
       .maybeSingle();
+
+    if (profileErr) {
+      console.error("[get-public-customer-profile] profile lookup failed", {
+        message: profileErr.message,
+        details: profileErr.details,
+        hint: profileErr.hint,
+        code: profileErr.code,
+      });
+
+      const { data: fallbackProfile, error: fallbackErr } = await supabaseAdmin
+        .from("customers")
+        .select("name, marketing_opt_in")
+        .eq("phone_e164", phone)
+        .maybeSingle();
+
+      if (fallbackErr || !fallbackProfile) {
+        return jsonResponse(req, { success: true, found: false }, 200);
+      }
+
+      return jsonResponse(req, {
+        success: true,
+        found: true,
+        profile: {
+          name: fallbackProfile.name,
+          email: null,
+          order_type: null,
+          marketing_opt_in: fallbackProfile.marketing_opt_in === true,
+        },
+      }, 200);
+    }
 
     if (!profile) {
       return jsonResponse(req, { success: true, found: false }, 200);
