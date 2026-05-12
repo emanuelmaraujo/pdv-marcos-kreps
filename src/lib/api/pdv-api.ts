@@ -324,8 +324,18 @@ export const pdvApi = {
   getPublicOrderStatus: (payload: { public_token: string }) =>
     invokeEdgeFunction<PublicOrderStatusResponse>('get-public-order-status', payload),
 
-  getPublicCustomerProfile: (payload: { customer_phone: string }) =>
-    invokeEdgeFunction<PublicCustomerProfileResponse>('get-public-customer-profile', payload),
+  getPublicCustomerProfile: async (payload: { customer_phone: string }) => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke('get-public-customer-profile', {
+      body: payload,
+    });
+
+    if (error) {
+      return { success: false, found: false } as PublicCustomerProfileResponse;
+    }
+
+    return data as PublicCustomerProfileResponse;
+  },
 
   getPublicCheckoutConfig: () =>
     invokeEdgeFunction<PublicCheckoutConfigResponse>('get-public-checkout-config', {}),
