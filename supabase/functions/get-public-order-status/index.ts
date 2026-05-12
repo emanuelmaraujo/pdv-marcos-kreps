@@ -44,25 +44,24 @@ serve(async (req) => {
       return jsonResponse(req, { success: false, error: 'Origem nao autorizada.' }, 403);
     }
 
-    // Usamos Service Role para ignorar RLS nas policies de read
-    // Já que o público é estritamente travado, buscamos com token de admin
-    // mas garantimos segurança validando o public_token exato que é um segredo longo.
+    // Usamos Service Role para ignorar RLS nas policies de read. O acesso publico
+    // e autorizado apenas pelo public_token, que e um segredo longo e unico.
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { daily_number, public_token } = await req.json();
+    const { public_token } = await req.json();
 
-    if (!daily_number || !public_token) {
-      throw new Error('Faltam parâmetros de busca (daily_number e public_token).');
+    if (!public_token || typeof public_token !== 'string') {
+      throw new Error('Link de acompanhamento invalido.');
     }
 
-    // Busca exata e única pelo número E token
+    // Busca exata pelo token publico. Nao aceitar daily_number na URL evita
+    // enumeracao visual de pedidos como /pedido/123.
     const { data: order, error } = await supabaseClient
       .from('orders')
       .select('id, daily_number, status, payment_status, payment_method, total_amount, customer_name, created_at, confirmed_at, ready_at, delivered_at')
-      .eq('daily_number', daily_number)
       .eq('public_token', public_token)
       .single();
 
@@ -79,6 +78,21 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
+    const { data: items } = await supabaseClient
+      .from('order_items')
+      .select(`
+        id,
+        product_name_snapshot,
+        product_price_snapshot,
+        quantity,
+        observation,
+        total_price,
+        order_item_addons(addon_name_snapshot, quantity, addon_price_snapshot),
+        order_item_removed_ingredients(ingredient_name_snapshot)
+      `)
+      .eq('order_id', order.id)
+      .order('created_at', { ascending: true });
+
     return jsonResponse(req, { 
       success: true, 
       order: {
@@ -93,7 +107,21 @@ serve(async (req) => {
         ready_at: order.ready_at,
         delivered_at: order.delivered_at
       },
-      transaction
+      transaction,
+      items: (items ?? []).map((item: any) => ({
+        id: item.id,
+        product_name: item.product_name_snapshot,
+        product_price: item.product_price_snapshot,
+        quantity: item.quantity,
+        observation: item.observation,
+        total_price: item.total_price,
+        addons: (item.order_item_addons ?? []).map((addon: any) => ({
+          name: addon.addon_name_snapshot,
+          quantity: addon.quantity,
+          price: addon.addon_price_snapshot,
+        })),
+        removed_ingredients: (item.order_item_removed_ingredients ?? []).map((removed: any) => removed.ingredient_name_snapshot),
+      })),
     }, 200);
 
   } catch (error: any) {

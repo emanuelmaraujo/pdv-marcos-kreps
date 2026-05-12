@@ -170,6 +170,7 @@ export type CreatePublicOrderPayload = {
   customer_phone?: string;
   customer_email?: string;
   marketing_opt_in?: boolean;
+  remember_checkout_data?: boolean;
   notes?: string;
   payment_method_code?: string;
   items: Array<{
@@ -244,6 +245,27 @@ export type PublicOrderStatusResponse = {
     delivered_at?: string;
   };
   transaction?: Partial<PaymentTransaction> | null;
+  items?: Array<{
+    id: string;
+    product_name: string;
+    product_price: number;
+    quantity: number;
+    observation?: string | null;
+    total_price: number;
+    addons: Array<{ name: string; quantity: number; price: number }>;
+    removed_ingredients: string[];
+  }>;
+};
+
+export type PublicCustomerProfileResponse = {
+  success: boolean;
+  found: boolean;
+  profile?: {
+    name?: string | null;
+    email?: string | null;
+    order_type?: 'BALCAO' | 'VIAGEM' | null;
+    marketing_opt_in?: boolean;
+  };
 };
 
 export type PublicCheckoutConfigResponse = {
@@ -299,8 +321,11 @@ export const pdvApi = {
     return data as CreatePublicOrderResponse;
   },
 
-  getPublicOrderStatus: (payload: { daily_number: number; public_token: string }) =>
+  getPublicOrderStatus: (payload: { public_token: string }) =>
     invokeEdgeFunction<PublicOrderStatusResponse>('get-public-order-status', payload),
+
+  getPublicCustomerProfile: (payload: { customer_phone: string }) =>
+    invokeEdgeFunction<PublicCustomerProfileResponse>('get-public-customer-profile', payload),
 
   getPublicCheckoutConfig: () =>
     invokeEdgeFunction<PublicCheckoutConfigResponse>('get-public-checkout-config', {}),
