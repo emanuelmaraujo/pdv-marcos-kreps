@@ -5,6 +5,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 type JsonRecord = Record<string, unknown>;
 const PIX_EXPIRATION_MINUTES = 60;
 
+// Wallet codes supported in sandbox via Mercado Pago Payment Brick.
+// Production enablement requires domain validation (Apple Pay) and account confirmation.
+const WALLET_TYPE_BY_CODE: Record<string, string> = {
+  GOOGLE_PAY: "google_pay",
+  APPLE_PAY: "apple_pay",
+};
+
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "";
   const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
@@ -184,6 +191,9 @@ function safeProviderErrorMessage(payment: any) {
   }
   if (text.includes("pix") || text.includes("payment_method")) {
     return "Pix nao esta habilitado ou disponivel nesta conta Mercado Pago.";
+  }
+  if (text.includes("wallet") || text.includes("google") || text.includes("apple")) {
+    return "Carteira digital nao disponivel. Tente outro metodo de pagamento.";
   }
   return "Nao foi possivel processar o pagamento. Verifique os dados e tente novamente.";
 }
@@ -672,6 +682,7 @@ serve(async (req) => {
     }
 
     const txPayload = mapTransactionPayload(payment);
+    const walletType = WALLET_TYPE_BY_CODE[paymentMethodCode] ?? null;
     const { data: transaction, error: txErr } = await supabaseAdmin
       .from("payment_transactions")
       .insert({
@@ -681,6 +692,7 @@ serve(async (req) => {
         idempotency_key: idempotencyKey,
         payment_method_code: paymentMethodCode,
         amount: order.total_amount,
+        wallet_type: walletType,
         ...txPayload,
       })
       .select("*")

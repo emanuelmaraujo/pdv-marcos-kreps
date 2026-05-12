@@ -38,6 +38,9 @@ declare global {
         create: (type: string, containerId: string, settings: Record<string, unknown>) => Promise<{ unmount: () => void }>;
       };
     };
+    ApplePaySession?: {
+      canMakePayments: () => boolean;
+    };
   }
 }
 
@@ -51,6 +54,16 @@ interface MenuIndexes {
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const PAYMENT_METHOD_CODE = "MERCADO_PAGO_PAYMENT_BRICK";
 const PIX_PAYMENT_METHOD_CODE = "PIX";
+const GOOGLE_PAY_CODE = "GOOGLE_PAY";
+const APPLE_PAY_CODE = "APPLE_PAY";
+
+// Maps the Brick's selectedPaymentMethod to the backend payment_method_code.
+// Only wallet types get special codes; everything else uses the generic Brick code.
+function resolvePaymentMethodCode(selectedPaymentMethod: string): string {
+  if (selectedPaymentMethod === "google_pay") return GOOGLE_PAY_CODE;
+  if (selectedPaymentMethod === "apple_pay") return APPLE_PAY_CODE;
+  return PAYMENT_METHOD_CODE;
+}
 const ALL_FILTER = "Todos";
 const DEFAULT_ORDERING_START = "17:00";
 const DEFAULT_ORDERING_END = "23:30";
@@ -188,10 +201,14 @@ function loadMercadoPagoScript() {
 
 function MercadoPagoBrick({
   order,
+  googlePayAvailable,
+  applePayAvailable,
   onResult,
   onPaid,
 }: {
   order: CreatePublicOrderResponse["order"];
+  googlePayAvailable: boolean;
+  applePayAvailable: boolean;
   onResult: (result: MercadoPagoPaymentResponse) => void;
   onPaid: () => void;
 }) {
@@ -221,17 +238,21 @@ function MercadoPagoBrick({
               creditCard: "all",
               prepaidCard: "all",
               debitCard: "all",
+              // Wallet integrations: the Brick renders Google Pay and Apple Pay buttons
+              // automatically when the device/browser supports them and the account allows it.
+              // No extra configuration needed here; device detection is handled by the Brick.
             },
           },
           callbacks: {
             onReady: () => setIsReady(true),
-            onSubmit: ({ formData }: { selectedPaymentMethod: string; formData: Record<string, unknown> }) => {
+            onSubmit: ({ selectedPaymentMethod, formData }: { selectedPaymentMethod: string; formData: Record<string, unknown> }) => {
               return new Promise<void>((resolve, reject) => {
                 const idempotencyKey = crypto.randomUUID();
+                const paymentMethodCode = resolvePaymentMethodCode(selectedPaymentMethod);
                 pdvApi.createMercadoPagoPayment({
                   order_id: order.order_id,
                   public_token: order.public_token,
-                  payment_method_code: PAYMENT_METHOD_CODE,
+                  payment_method_code: paymentMethodCode,
                   form_data: formData,
                   idempotency_key: idempotencyKey,
                 })
@@ -280,6 +301,11 @@ function MercadoPagoBrick({
     );
   }
 
+  const walletLabels = [
+    googlePayAvailable && "Google Pay",
+    applePayAvailable && "Apple Pay",
+  ].filter(Boolean);
+
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-900">
@@ -288,7 +314,7 @@ function MercadoPagoBrick({
           <p className="text-sm font-black">Pagamento protegido pelo Mercado Pago</p>
         </div>
         <p className="mt-1 text-xs font-semibold leading-relaxed text-emerald-800/80">
-          Cartao, Pix e outros meios aparecem conforme disponibilidade da sua conta Mercado Pago.
+          Cartao de credito, debito{walletLabels.length > 0 ? `, ${walletLabels.join(", ")}` : ""} e outros meios aparecem conforme disponibilidade.
         </p>
       </div>
       {!isReady && !error && (
@@ -625,6 +651,8 @@ export default function PedirPublicPage() {
   const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
+  const [googlePayAvailable, setGooglePayAvailable] = useState(false);
+  const [applePayAvailable, setApplePayAvailable] = useState(false);
 
   useEffect(() => {
     async function loadMenu() {
@@ -681,6 +709,33 @@ export default function PedirPublicPage() {
     return () => {
       if (timer) window.clearTimeout(timer);
     };
+  }, []);
+
+  useEffect(() => {
+    // Google Pay: use the Payment Request API to check availability.
+    // Runs only client-side after mount.
+    if (typeof window !== "undefined" && window.PaymentRequest) {
+      const request = new PaymentRequest(
+        [
+          {
+            supportedMethods: "https://google.com/pay",
+            data: { apiVersion: 2, apiVersionMinor: 0, allowedPaymentMethods: [] },
+          },
+        ],
+        { total: { label: "Teste", amount: { currency: "BRL", value: "0" } } },
+      );
+      request.canMakePayment().then((result) => setGooglePayAvailable(!!result)).catch(() => {});
+    }
+
+    // Apple Pay: check ApplePaySession.canMakePayments().
+    // Only available in Safari on iOS/macOS with Apple Pay configured.
+    if (typeof window !== "undefined" && window.ApplePaySession) {
+      try {
+        setApplePayAvailable(window.ApplePaySession.canMakePayments());
+      } catch {
+        // ApplePaySession can throw if called outside a secure context.
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -1304,6 +1359,26 @@ export default function PedirPublicPage() {
                 <p className="mt-1 text-[10px] font-black uppercase text-amber-100">Seguro</p>
               </div>
             </div>
+            {(googlePayAvailable || applePayAvailable) && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {googlePayAvailable && (
+                  <span
+                    data-testid="google-pay-available-badge"
+                    className="rounded-full bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-amber-100"
+                  >
+                    Google Pay disponivel
+                  </span>
+                )}
+                {applePayAvailable && (
+                  <span
+                    data-testid="apple-pay-available-badge"
+                    className="rounded-full bg-white/15 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-amber-100"
+                  >
+                    Apple Pay disponivel
+                  </span>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm">
@@ -1349,6 +1424,8 @@ export default function PedirPublicPage() {
           ) : (
             <MercadoPagoBrick
               order={orderData}
+              googlePayAvailable={googlePayAvailable}
+              applePayAvailable={applePayAvailable}
               onResult={setPaymentResult}
               onPaid={() => {
                 clearCart();
