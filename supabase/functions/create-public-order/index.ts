@@ -120,6 +120,86 @@ function isWithinOrderingWindow(startTime: unknown, endTime: unknown) {
   return now >= start || now <= end;
 }
 
+function logDbError(context: string, error: any) {
+  console.error(`[create-public-order] ${context}`, {
+    message: error?.message ?? null,
+    details: error?.details ?? null,
+    hint: error?.hint ?? null,
+    code: error?.code ?? null,
+  });
+}
+
+async function registerCustomer(supabaseAdmin: any, payload: {
+  customerPhone: string;
+  customerName: string;
+  customerEmail: string | null;
+  orderType: "BALCAO" | "VIAGEM";
+  marketingOptIn: boolean;
+  rememberCheckoutData: boolean;
+  nowIso: string;
+}) {
+  const {
+    customerPhone,
+    customerName,
+    customerEmail,
+    orderType,
+    marketingOptIn,
+    rememberCheckoutData,
+    nowIso,
+  } = payload;
+
+  const { data: existingCustomer, error: existingCustomerErr } = await supabaseAdmin
+    .from("customers")
+    .select("orders_count, marketing_opt_in, marketing_opt_in_at")
+    .eq("id", customerPhone)
+    .maybeSingle();
+
+  if (existingCustomerErr) {
+    logDbError("customer lookup failed", existingCustomerErr);
+  }
+
+  const baseCustomer = {
+    id: customerPhone,
+    phone_e164: customerPhone,
+    name: customerName,
+    last_seen_at: nowIso,
+    last_order_at: nowIso,
+    orders_count: Number(existingCustomer?.orders_count ?? 0) + 1,
+    marketing_opt_in: marketingOptIn || existingCustomer?.marketing_opt_in === true,
+    marketing_opt_in_at: existingCustomer?.marketing_opt_in_at ?? (marketingOptIn ? nowIso : null),
+    source: "APP",
+  };
+
+  const { error: customerErr } = await supabaseAdmin
+    .from("customers")
+    .upsert({
+      ...baseCustomer,
+      email: rememberCheckoutData ? customerEmail : null,
+      last_order_type: rememberCheckoutData ? orderType : null,
+      remember_checkout_data: rememberCheckoutData,
+      checkout_profile_updated_at: rememberCheckoutData ? nowIso : null,
+    }, {
+      onConflict: "id",
+      ignoreDuplicates: false,
+    });
+
+  if (!customerErr) return customerPhone;
+
+  logDbError("customer profile upsert failed", customerErr);
+
+  const { error: fallbackErr } = await supabaseAdmin
+    .from("customers")
+    .upsert(baseCustomer, {
+      onConflict: "id",
+      ignoreDuplicates: false,
+    });
+
+  if (!fallbackErr) return customerPhone;
+
+  logDbError("customer fallback upsert failed", fallbackErr);
+  return null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: getCorsHeaders(req) });
@@ -298,35 +378,15 @@ serve(async (req) => {
 
     const totalAmount = Number((productsSubtotal + addonsTotal + packingFeeValue).toFixed(2));
     const nowIso = new Date().toISOString();
-
-    const { data: existingCustomer } = await supabaseAdmin
-      .from("customers")
-      .select("orders_count, marketing_opt_in, marketing_opt_in_at")
-      .eq("id", customerPhone)
-      .maybeSingle();
-
-    const { error: customerErr } = await supabaseAdmin
-      .from("customers")
-      .upsert({
-        id: customerPhone,
-        phone_e164: customerPhone,
-        name: customerName,
-        email: rememberCheckoutData ? customerEmail : null,
-        last_seen_at: nowIso,
-        last_order_at: nowIso,
-        last_order_type: rememberCheckoutData ? orderType : null,
-        orders_count: Number(existingCustomer?.orders_count ?? 0) + 1,
-        marketing_opt_in: marketingOptIn || existingCustomer?.marketing_opt_in === true,
-        marketing_opt_in_at: existingCustomer?.marketing_opt_in_at ?? (marketingOptIn ? nowIso : null),
-        remember_checkout_data: rememberCheckoutData,
-        checkout_profile_updated_at: rememberCheckoutData ? nowIso : null,
-        source: "APP",
-      }, {
-        onConflict: "id",
-        ignoreDuplicates: false,
-      });
-
-    if (customerErr) throw new Error("Erro ao registrar cliente.");
+    const customerId = await registerCustomer(supabaseAdmin, {
+      customerPhone,
+      customerName,
+      customerEmail,
+      orderType,
+      marketingOptIn,
+      rememberCheckoutData,
+      nowIso,
+    });
 
     const { data: order, error: orderErr } = await supabaseAdmin
       .from("orders")
@@ -339,7 +399,7 @@ serve(async (req) => {
         customer_name: customerName,
         customer_phone: customerPhone,
         customer_email: customerEmail,
-        customer_id: customerPhone,
+        customer_id: customerId,
         packing_fee: packingFeeValue,
         total_amount: totalAmount,
         notes,
