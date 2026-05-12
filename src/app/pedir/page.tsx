@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -130,7 +130,8 @@ function getProductTags(product: Product, categoryName: string | undefined, inde
   }
 
   if (kind === "DRINK") {
-    if (normalizedName.includes("refrigerante") || normalizedName.includes("h2o")) return ["Geladas"];
+    if (normalizedName.includes("refrigerante")) return ["Refrigerante", "Geladas"];
+    if (normalizedName.includes("h2o")) return ["H2O", "Geladas"];
     if (normalizedName.includes("polpa")) return ["Polpas"];
     if (normalizedName.includes("acai") || normalizedName.includes("creme")) return ["Cremes"];
     if (normalizedName.includes("soda")) return ["Soda"];
@@ -172,6 +173,55 @@ function buildMenuIndexes(menuData: MenuData | null): MenuIndexes | null {
   }
 
   return { ingredientsById, addonsById, ingredientIdsByProduct, addonIdsByProduct };
+}
+
+function useHorizontalDragScroll() {
+  const ref = useRef<HTMLElement | null>(null);
+  const isPointerDownRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const didDragRef = useRef(false);
+
+  const finishDrag = useCallback(() => {
+    isPointerDownRef.current = false;
+    ref.current?.classList.remove("cursor-grabbing");
+  }, []);
+
+  const onMouseDown = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (event.button !== 0 || !ref.current) return;
+    isPointerDownRef.current = true;
+    didDragRef.current = false;
+    startXRef.current = event.pageX - ref.current.offsetLeft;
+    scrollLeftRef.current = ref.current.scrollLeft;
+    ref.current.classList.add("cursor-grabbing");
+  }, []);
+
+  const onMouseMove = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (!isPointerDownRef.current || !ref.current) return;
+    const x = event.pageX - ref.current.offsetLeft;
+    const distance = x - startXRef.current;
+    if (Math.abs(distance) > 4) didDragRef.current = true;
+    if (didDragRef.current) event.preventDefault();
+    ref.current.scrollLeft = scrollLeftRef.current - distance;
+  }, []);
+
+  const onClickCapture = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (!didDragRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.setTimeout(() => {
+      didDragRef.current = false;
+    }, 0);
+  }, []);
+
+  return {
+    ref,
+    onMouseDown,
+    onMouseLeave: finishDrag,
+    onMouseUp: finishDrag,
+    onMouseMove,
+    onClickCapture,
+  };
 }
 
 function loadMercadoPagoScript() {
@@ -611,6 +661,8 @@ function PixCheckout({
 
 export default function PedirPublicPage() {
   const router = useRouter();
+  const categoryDragScroll = useHorizontalDragScroll();
+  const filterDragScroll = useHorizontalDragScroll();
   const {
     items,
     addItem,
@@ -1158,7 +1210,10 @@ export default function PedirPublicPage() {
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="min-w-0 space-y-4">
-          <section className="flex gap-2 overflow-x-auto rounded-2xl border border-amber-900/10 bg-white/80 p-2 shadow-sm hide-scrollbar">
+          <section
+            {...categoryDragScroll}
+            className="flex cursor-grab select-none gap-2 overflow-x-auto rounded-2xl border border-amber-900/10 bg-white/80 p-2 shadow-sm hide-scrollbar"
+          >
             {menuData?.categories.map((category) => (
               <button
                 key={category.id}
@@ -1178,7 +1233,10 @@ export default function PedirPublicPage() {
           </section>
 
           {categoryFilters.length > 1 && (
-            <section className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
+            <section
+              {...filterDragScroll}
+              className="flex cursor-grab select-none gap-2 overflow-x-auto pb-1 hide-scrollbar"
+            >
               {categoryFilters.map((filter) => (
                 <button
                   key={filter}
