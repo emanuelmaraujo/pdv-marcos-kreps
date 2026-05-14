@@ -1,5 +1,6 @@
 import { createClient } from "../supabase/client";
 import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from "@/types/pdv";
+import { getBusinessDayRange, getSpHour } from "../utils/business-day";
 
 interface CashOrderRow {
   id: string;
@@ -23,6 +24,11 @@ interface OrderItemRow {
   order_id: string;
 }
 
+export interface PeakHour {
+  start: number;       // hour 0–23 in America/Sao_Paulo
+  orderCount: number;
+}
+
 export interface DaySummary {
   totalBruto: number;
   totalRecebido: number;
@@ -38,8 +44,10 @@ export interface DaySummary {
   pedidosCancelados: number;
   pedidosCortesia: number;
   pedidosComDesconto: number;
-  taxaCancelamento: number;   // percentage 0–100
-  horaDePico: number | null;  // hour 0–23, null if no orders
+  taxaCancelamento: number;        // percentage 0–100
+  peakHour: PeakHour | null;
+  crepesSold: number;
+  avgDeliveryMinutes: number | null;
 }
 
 export interface PaymentBreakdown {
@@ -146,8 +154,7 @@ export const cashApi = {
   getDaySummary: async (): Promise<CaixaData> => {
     const supabase = createClient();
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const { start: startOfDay, end: endOfDay } = getBusinessDayRange();
 
     const {
       data: { user },
@@ -170,6 +177,7 @@ export const cashApi = {
         "id, daily_number, status, payment_status, payment_method, discount_amount, packing_fee, total_amount, created_at, paid_at, delivered_at, cancelled_at"
       )
       .gte("created_at", startOfDay.toISOString())
+      .lt("created_at", endOfDay.toISOString())
       .order("created_at", { ascending: false });
 
     if (ordersError) {
@@ -191,17 +199,34 @@ export const cashApi = {
 
     const totalRecebido = sumOrders(paid);
 
-    // Peak hour: hour with most orders created
-    let horaDePico: number | null = null;
+    // Peak hour (1h bucket starting at H, in America/Sao_Paulo).
+    // Tie-breaker: earliest hour wins.
+    let peakHour: PeakHour | null = null;
     if (orders.length > 0) {
-      const hourCounts: Record<number, number> = {};
+      const hourCounts = new Array<number>(24).fill(0);
       for (const o of orders) {
-        const h = new Date(o.created_at).getHours();
-        hourCounts[h] = (hourCounts[h] ?? 0) + 1;
+        hourCounts[getSpHour(new Date(o.created_at))]++;
       }
-      horaDePico = Number(
-        Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0][0]
-      );
+      let bestHour = -1;
+      let bestCount = 0;
+      for (let h = 0; h < 24; h++) {
+        if (hourCounts[h] > bestCount) {
+          bestCount = hourCounts[h];
+          bestHour = h;
+        }
+      }
+      if (bestHour >= 0) peakHour = { start: bestHour, orderCount: bestCount };
+    }
+
+    // Average delivery time (delivered_at - created_at, in minutes).
+    const delivered = nonCancelled.filter((o) => o.delivered_at);
+    let avgDeliveryMinutes: number | null = null;
+    if (delivered.length > 0) {
+      const totalMs = delivered.reduce((acc, o) => {
+        const diff = new Date(o.delivered_at!).getTime() - new Date(o.created_at).getTime();
+        return acc + (Number.isFinite(diff) && diff > 0 ? diff : 0);
+      }, 0);
+      avgDeliveryMinutes = Math.round(totalMs / delivered.length / 60_000);
     }
 
     const summary: DaySummary = {
@@ -229,7 +254,9 @@ export const cashApi = {
       taxaCancelamento: orders.length > 0
         ? Math.round((cancelled.length / orders.length) * 100)
         : 0,
-      horaDePico,
+      peakHour,
+      crepesSold: 0, // filled after order_items are loaded
+      avgDeliveryMinutes,
     };
 
     const paymentBreakdown: PaymentBreakdown[] = PAYMENT_METHODS.map((method) => {
@@ -279,13 +306,17 @@ export const cashApi = {
     }
 
     const productMap = new Map<string, { quantity: number; revenue: number }>();
+    let crepesSold = 0;
     for (const item of orderItems) {
+      const qty = money(item.quantity);
+      crepesSold += qty;
       const name = item.product_name_snapshot || "Produto sem nome";
       const current = productMap.get(name) ?? { quantity: 0, revenue: 0 };
-      current.quantity += money(item.quantity);
+      current.quantity += qty;
       current.revenue += money(item.total_price);
       productMap.set(name, current);
     }
+    summary.crepesSold = crepesSold;
 
     const topProducts = Array.from(productMap.entries())
       .map(([name, data]) => ({ name, ...data }))
