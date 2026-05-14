@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { buildCustomerReceipt, buildProductionReceipt } from "../_shared/print-format.ts";
+import { buildCustomerReceipt, buildProductionReceipt, resolveProductionSector } from "../_shared/print-format.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,17 +66,25 @@ serve(async (req) => {
     // 3. Buscar Pedido
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, type, customer_name, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at')
+      .select('id, daily_number, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at')
       .eq('id', order_id)
       .single();
 
     if (orderErr || !order) throw new Error('Pedido inexistente.');
+
+    if (order.source === 'APP') {
+      copies = copies.filter((copy: string) => copy !== 'CUSTOMER');
+      if (copies.length === 0) {
+        copies = ['KITCHEN', 'JUICE_POTATO'];
+      }
+    }
 
     // 4. Buscar Itens
     const { data: items, error: itemsErr } = await supabaseAdmin
       .from('order_items')
       .select(`
         id, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector,
+        product:products(name, sector, category:categories(name)),
         order_item_removed_ingredients ( ingredient_name_snapshot ),
         order_item_addons ( addon_name_snapshot, quantity, addon_price_snapshot )
       `)
@@ -85,8 +93,8 @@ serve(async (req) => {
     if (itemsErr || !items || items.length === 0) throw new Error('Pedido sem itens. Erro de integridade estrutural.');
 
     // 5. Separa itens pelos setores de produção
-    const kitchenItems = items.filter(i => i.production_sector === 'KITCHEN');
-    const juicePotatoItems = items.filter(i => i.production_sector === 'JUICE_POTATO');
+    const kitchenItems = items.filter(i => resolveProductionSector(i) === 'KITCHEN');
+    const juicePotatoItems = items.filter(i => resolveProductionSector(i) === 'JUICE_POTATO');
 
     // Validações rigorosas de emissão coerente - Agora apenas filtra o que é possível
     if (copies.includes('KITCHEN') && kitchenItems.length === 0) {

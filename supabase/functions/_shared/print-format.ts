@@ -37,6 +37,34 @@ function text(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function normalize(value: unknown): string {
+  return text(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+export function resolveProductionSector(item: any): Sector | "NONE" {
+  const explicit = text(item?.production_sector || item?.product?.sector || item?.sector).toUpperCase();
+  if (explicit === "KITCHEN" || explicit === "JUICE_POTATO") return explicit;
+
+  const searchable = [
+    item?.product_name_snapshot,
+    item?.product?.name,
+    item?.name,
+    item?.category_name,
+    item?.product?.category?.name,
+    item?.category?.name,
+  ].map(normalize).join(" ");
+
+  if (/\b(bebida|suco|refri|refrigerante|agua|coca|guarana|fanta|sprite|kuat|schweppes|h2o|del valle|tampico|mate|cha|cafe|cerveja|heineken|skol|brahma|batata)\b/.test(searchable)) {
+    return "JUICE_POTATO";
+  }
+
+  if (/\b(krep|kreps|crepe|crepes)\b/.test(searchable)) {
+    return "KITCHEN";
+  }
+
+  return "NONE";
+}
+
 function orderNumber(order: any): string {
   return String(order?.daily_number ?? "0").padStart(3, "0");
 }
@@ -50,7 +78,7 @@ function itemName(item: any): string {
 }
 
 function itemSector(item: any): string {
-  return text(item?.production_sector || item?.product?.sector);
+  return resolveProductionSector(item);
 }
 
 function itemPrice(item: any): number {

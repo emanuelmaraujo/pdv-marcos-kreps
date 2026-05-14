@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { resolveProductionSector } from "../_shared/print-format.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -310,7 +311,7 @@ serve(async (req) => {
 
     const { data: products, error: prodErr } = await supabaseAdmin
       .from("products")
-      .select("id, name, price, sector, active, product_ingredients(ingredient_id)")
+      .select("id, name, price, sector, active, category:categories(name), product_ingredients(ingredient_id)")
       .in("id", productIds);
 
     if (prodErr) throw new Error("Erro ao buscar produtos.");
@@ -426,7 +427,7 @@ serve(async (req) => {
           product_id: product.id,
           product_name_snapshot: product.name,
           product_price_snapshot: product.price,
-          production_sector: product.sector,
+          production_sector: resolveProductionSector(product),
           quantity,
           observation: cleanText(item.notes, 300),
           total_price: Number(itemTotalPrice.toFixed(2)),
