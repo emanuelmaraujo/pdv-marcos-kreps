@@ -29,7 +29,6 @@ import { Card, CardContent } from "@/components/ui/Card";
 import {
   CaixaData,
   PaymentBreakdown,
-  TopProduct,
   cashApi,
 } from "@/lib/api/cash-api";
 import { PaymentMethod } from "@/types/pdv";
@@ -90,8 +89,8 @@ function buildInsights(data: CaixaData): DayInsight[] {
   }
 
   // Peak hour
-  if (summary.horaDePico != null) {
-    const h = summary.horaDePico;
+  if (summary.peakHour) {
+    const h = summary.peakHour.start;
     const end = (h + 1) % 24;
     insights.push({
       icon: Zap,
@@ -280,14 +279,14 @@ export default function CaixaPage() {
               {/* Status chips */}
               <StatusStrip data={data} />
 
+              {/* Hoje em números */}
+              <DayMetricsPanel data={data} />
+
               {/* Insights */}
               {insights.length > 0 && <InsightsSection insights={insights} />}
 
-              {/* Products + Payments */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <TopProductsCard products={data.topProducts.slice(0, 5)} />
-                <PaymentsCard items={data.paymentBreakdown} received={data.summary.totalRecebido} />
-              </div>
+              {/* Payments */}
+              <PaymentsCard items={data.paymentBreakdown} received={data.summary.totalRecebido} />
 
               {/* Admin CTA */}
               {data.role === "ADMIN" && <AdminCTA />}
@@ -324,8 +323,8 @@ function DayHero({ data }: { data: CaixaData }) {
           </p>
           <p className="mt-2 text-sm font-medium text-zinc-400">
             {summary.totalPedidos} pedidos · {paidPct}% pagos
-            {summary.horaDePico != null && (
-              <> · Pico <span className="text-zinc-300">{String(summary.horaDePico).padStart(2, "0")}h</span></>
+            {summary.peakHour && (
+              <> · Pico <span className="text-zinc-300">{String(summary.peakHour.start).padStart(2, "0")}h</span></>
             )}
           </p>
         </div>
@@ -431,50 +430,100 @@ function InsightsSection({ insights }: { insights: DayInsight[] }) {
   );
 }
 
-// ── Top products ──────────────────────────────────────────────────────────────
+// ── Hoje em números ───────────────────────────────────────────────────────────
 
-function TopProductsCard({ products }: { products: TopProduct[] }) {
-  if (products.length === 0) return null;
-  const max = Math.max(...products.map((p) => p.quantity), 1);
+function DayMetricsPanel({ data }: { data: CaixaData }) {
+  const { summary, topProducts } = data;
+
+  if (summary.totalPedidos === 0) {
+    return (
+      <Card className="border-zinc-100 shadow-sm">
+        <CardContent className="px-4 py-5">
+          <p className="text-sm font-medium text-zinc-500">Sem vendas registradas ainda.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const peakLabel = summary.peakHour
+    ? `${String(summary.peakHour.start).padStart(2, "0")}h–${String((summary.peakHour.start + 1) % 24).padStart(2, "0")}h · ${summary.peakHour.orderCount} pedido${summary.peakHour.orderCount !== 1 ? "s" : ""}`
+    : "—";
+
+  const avgLabel = summary.avgDeliveryMinutes != null
+    ? `${summary.avgDeliveryMinutes} min`
+    : "—";
+
+  const topThree = topProducts.slice(0, 3);
 
   return (
-    <Card className="overflow-hidden border-zinc-100 shadow-sm">
-      <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3.5">
-        <Trophy className="h-4 w-4 text-brand-amber" />
-        <h2 className="text-sm font-black text-brand-charcoal">Mais vendidos</h2>
+    <section className="space-y-2">
+      <div className="flex items-center gap-1.5 px-0.5">
+        <BarChart3 className="h-3.5 w-3.5 text-zinc-400" />
+        <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Hoje em números</p>
       </div>
-      <CardContent className="divide-y divide-zinc-50 p-0">
-        {products.map((p, i) => {
-          const pct = (p.quantity / max) * 100;
-          const rankCls =
-            i === 0 ? "bg-brand-amber text-white" :
-            i === 1 ? "bg-zinc-300 text-zinc-700" :
-            i === 2 ? "bg-amber-800/20 text-amber-900" :
-                      "bg-zinc-100 text-zinc-500";
-          return (
-            <div key={p.name} className="px-4 py-3.5">
-              <div className="flex items-center gap-3">
-                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black ${rankCls}`}>
-                  {i + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="truncate text-sm font-bold text-brand-charcoal">{p.name}</p>
-                    <p className="shrink-0 text-sm font-black text-brand-charcoal">{currency.format(p.revenue)}</p>
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                      <div className="h-full rounded-full bg-brand-red" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="w-10 shrink-0 text-right text-[11px] font-bold text-zinc-400">
-                      {p.quantity} un.
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          icon={ShoppingBag}
+          label="Crepes vendidos"
+          value={String(summary.crepesSold)}
+        />
+        <MetricCard
+          icon={Zap}
+          label="Horário de pico"
+          value={peakLabel}
+        />
+        <MetricCard
+          icon={Clock}
+          label="Tempo médio de entrega"
+          value={avgLabel}
+        />
+        <MetricCard
+          icon={Trophy}
+          label="Top 3 crepes do dia"
+          empty={topThree.length === 0}
+        >
+          {topThree.length === 0 ? (
+            <p className="mt-1 text-sm font-medium text-zinc-400">—</p>
+          ) : (
+            <ol className="mt-1 space-y-0.5">
+              {topThree.map((p, i) => (
+                <li key={p.name} className="truncate text-sm font-semibold text-brand-charcoal">
+                  {i + 1}. {p.name} · <span className="font-bold text-zinc-500">{p.quantity} un</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </MetricCard>
+      </div>
+    </section>
+  );
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  children,
+  empty,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value?: string;
+  children?: React.ReactNode;
+  empty?: boolean;
+}) {
+  return (
+    <Card className="border-zinc-100 shadow-sm">
+      <CardContent className="px-4 py-3.5">
+        <div className="flex items-center gap-1.5">
+          <Icon className="h-3.5 w-3.5 text-zinc-400" />
+          <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">{label}</p>
+        </div>
+        {children ?? (
+          <p className={`mt-1 text-xl font-black ${empty ? "text-zinc-400" : "text-brand-charcoal"}`}>
+            {value}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
