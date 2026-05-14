@@ -743,6 +743,12 @@ export default function PedirPublicPage() {
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
   const lastAutofilledPhoneRef = useRef<string | null>(null);
+  // Latest customerName captured for use inside the debounced profile lookup;
+  // keeps the autofill effect from re-running on every keystroke in the name field.
+  const customerNameRef = useRef(customerName);
+  useEffect(() => {
+    customerNameRef.current = customerName;
+  }, [customerName]);
 
   useEffect(() => {
     async function loadMenu() {
@@ -870,7 +876,7 @@ export default function PedirPublicPage() {
         const response = await pdvApi.getPublicCustomerProfile({ customer_phone: normalizedPhone });
         if (cancelled) return;
         if (response.found && response.profile) {
-          setCustomerInfo(response.profile.name ?? customerName, formatWhatsAppInput(normalizedPhone));
+          setCustomerInfo(response.profile.name ?? customerNameRef.current, formatWhatsAppInput(normalizedPhone));
           setCustomerEmail(response.profile.email ?? "");
           setMarketingOptIn(response.profile.marketing_opt_in === true);
           if (response.profile.order_type === "BALCAO" || response.profile.order_type === "VIAGEM") {
@@ -896,7 +902,7 @@ export default function PedirPublicPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [customerName, customerPhone, setCustomerInfo, setOrderType]);
+  }, [customerPhone, setCustomerInfo, setOrderType]);
 
   useEffect(() => {
     const recheck = async () => {
