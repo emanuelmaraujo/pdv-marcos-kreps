@@ -10,8 +10,11 @@ import {
   MessageCircle,
   Package,
   Printer,
+  RefreshCw,
   Save,
   Store,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { BiometricManager } from "@/components/auth/BiometricManager";
 import { Button } from "@/components/ui/Button";
@@ -41,6 +44,17 @@ type SettingsState = {
 
 type SectionId = "pedido" | "embalagem" | "impressao" | "whatsapp" | "biometria";
 
+type PrintWorkerStatus = {
+  online: boolean;
+  value: string;
+  label: string;
+  tone: "green" | "red" | "neutral";
+  lastSeen: string;
+  raspberryIp: string;
+  printerHost: string;
+  printerPort: string;
+};
+
 const DEFAULT_SETTINGS: SettingsState = {
   printing_enabled: "true",
   printer_host: "192.168.0.50",
@@ -59,6 +73,17 @@ const DEFAULT_SETTINGS: SettingsState = {
   public_ordering_end_time: "23:30",
   packaging_fee: "0",
   apply_packaging_fee_for_takeout: "false",
+};
+
+const DEFAULT_WORKER_STATUS: PrintWorkerStatus = {
+  online: false,
+  value: "Offline",
+  label: "Sem sinal do Raspberry",
+  tone: "red",
+  lastSeen: "Nunca recebido",
+  raspberryIp: "-",
+  printerHost: "-",
+  printerPort: "-",
 };
 
 const SECTIONS: Array<{
@@ -182,6 +207,40 @@ function StatPill({
   );
 }
 
+function formatLastSeen(iso?: string) {
+  if (!iso) return "Nunca recebido";
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return "Data invalida";
+
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
+  if (diffSeconds < 10) return "Agora";
+  if (diffSeconds < 60) return `Ha ${diffSeconds}s`;
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `Ha ${diffMinutes}min`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  return `Ha ${diffHours}h`;
+}
+
+function resolvePrintWorkerStatus(data: Record<string, string>): PrintWorkerStatus {
+  const lastSeenAt = data.print_worker_last_seen_at;
+  const lastSeenTime = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
+  const secondsSinceLastSeen = Number.isFinite(lastSeenTime) ? (Date.now() - lastSeenTime) / 1000 : Infinity;
+  const online = data.print_worker_status === "ACTIVE" && secondsSinceLastSeen <= 45;
+
+  return {
+    online,
+    value: online ? "Online" : "Offline",
+    label: online ? "Raspberry ativo" : "Sem heartbeat recente",
+    tone: online ? "green" : "red",
+    lastSeen: formatLastSeen(lastSeenAt),
+    raspberryIp: data.print_worker_ip || "-",
+    printerHost: data.print_worker_printer_host || "-",
+    printerPort: data.print_worker_printer_port || "-",
+  };
+}
+
 export default function ConfiguracoesSistema() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -190,6 +249,7 @@ export default function ConfiguracoesSistema() {
   const [processingQueue, setProcessingQueue] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>("pedido");
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
+  const [printWorkerStatus, setPrintWorkerStatus] = useState<PrintWorkerStatus>(DEFAULT_WORKER_STATUS);
   const [whatsappStats, setWhatsappStats] = useState({ pending: 0, sent: 0, failed: 0 });
   const { toasts, addToast, removeToast } = useToast();
 
@@ -227,9 +287,10 @@ export default function ConfiguracoesSistema() {
     }
   };
 
-  const loadSettings = useCallback(async () => {
+  const loadSettings = useCallback(async (silent = false) => {
     try {
       const data = await settingsApi.getSettings();
+      setPrintWorkerStatus(resolvePrintWorkerStatus(data));
       setSettings((prev) => ({
         ...prev,
         printing_enabled: String(data.printing_enabled ?? DEFAULT_SETTINGS.printing_enabled),
@@ -256,7 +317,7 @@ export default function ConfiguracoesSistema() {
       const stats = await settingsApi.getWhatsAppStats();
       setWhatsappStats(stats);
     } catch {
-      addToast("error", "Erro ao carregar configuracoes");
+      if (!silent) addToast("error", "Erro ao carregar configuracoes");
     } finally {
       setLoading(false);
     }
@@ -266,8 +327,14 @@ export default function ConfiguracoesSistema() {
     const timer = window.setTimeout(() => {
       void loadSettings();
     }, 0);
+    const interval = window.setInterval(() => {
+      void loadSettings(true);
+    }, 15000);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+    };
   }, [loadSettings]);
 
   async function handleSave() {
@@ -275,6 +342,7 @@ export default function ConfiguracoesSistema() {
     try {
       await settingsApi.saveSettings(savePayload);
       addToast("success", "Configuracoes salvas com sucesso");
+      void loadSettings(true);
     } catch (error: unknown) {
       addToast("error", error instanceof Error ? error.message : "Erro ao salvar configuracoes");
     } finally {
@@ -353,7 +421,7 @@ export default function ConfiguracoesSistema() {
             </Button>
           </div>
 
-          <div className="mt-5 grid grid-cols-3 gap-2 md:gap-3">
+          <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
             <StatPill
               label={`Das ${settings.public_ordering_start_time} as ${settings.public_ordering_end_time}`}
               value={publicOrderStatus}
@@ -363,6 +431,11 @@ export default function ConfiguracoesSistema() {
               label={`${settings.printer_host}:${settings.printer_port}`}
               value={printingStatus}
               tone={settings.printing_enabled === "true" ? "green" : "red"}
+            />
+            <StatPill
+              label={printWorkerStatus.lastSeen}
+              value={`Pi ${printWorkerStatus.value}`}
+              tone={printWorkerStatus.tone}
             />
             <StatPill
               label={`${whatsappStats.pending} pendentes`}
@@ -515,6 +588,46 @@ export default function ConfiguracoesSistema() {
             className={activeSection === "impressao" ? "block" : "hidden md:block"}
           >
             <div className="space-y-5">
+              <div className={`rounded-xl border p-4 ${
+                printWorkerStatus.online
+                  ? "border-emerald-100 bg-emerald-50"
+                  : "border-red-100 bg-red-50"
+              }`}>
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                      printWorkerStatus.online ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                    }`}>
+                      {printWorkerStatus.online ? <Wifi className="h-5 w-5" /> : <WifiOff className="h-5 w-5" />}
+                    </span>
+                    <span>
+                      <p className="text-sm font-black text-zinc-950">Raspberry Pi</p>
+                      <p className="text-xs font-semibold text-zinc-600">{printWorkerStatus.label} - {printWorkerStatus.lastSeen}</p>
+                    </span>
+                  </div>
+                  <Button variant="outline" onClick={() => void loadSettings(true)} className="h-10 gap-2 bg-white md:w-auto">
+                    <RefreshCw className="h-4 w-4" />
+                    Atualizar
+                  </Button>
+                </div>
+                <div className="mt-4 grid gap-3 text-xs font-semibold text-zinc-700 md:grid-cols-3">
+                  <div className="rounded-lg bg-white/80 p-3">
+                    <p className="font-black uppercase tracking-wide text-zinc-400">IP do Raspberry</p>
+                    <p className="mt-1 text-sm font-black text-zinc-900">{printWorkerStatus.raspberryIp}</p>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3">
+                    <p className="font-black uppercase tracking-wide text-zinc-400">IP lido pelo worker</p>
+                    <p className="mt-1 text-sm font-black text-zinc-900">
+                      {printWorkerStatus.printerHost}:{printWorkerStatus.printerPort}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3">
+                    <p className="font-black uppercase tracking-wide text-zinc-400">Configurado no painel</p>
+                    <p className="mt-1 text-sm font-black text-zinc-900">{settings.printer_host}:{settings.printer_port}</p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid gap-4 lg:grid-cols-3">
                 <ToggleRow
                   checked={settings.printing_enabled === "true"}
@@ -548,7 +661,11 @@ export default function ConfiguracoesSistema() {
                     placeholder="192.168.0.50"
                     value={settings.printer_host}
                     onChange={(event) => set("printer_host", event.target.value)}
+                    aria-describedby="printer-host-hint"
                   />
+                  <span id="printer-host-hint" className="block text-xs font-medium leading-relaxed text-zinc-400">
+                    Salve para o Raspberry assumir o novo IP; o worker atualiza sozinho em poucos segundos.
+                  </span>
                 </Field>
                 <Field label="Porta">
                   <Input

@@ -31,7 +31,7 @@ serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const minutes = Math.max(30, Math.min(240, Math.trunc(toNumber(body.minutes, 45))));
+    const minutes = Math.max(10, Math.min(240, Math.trunc(toNumber(body.minutes, 20))));
     const cutoffIso = new Date(Date.now() - minutes * 60 * 1000).toISOString();
     const nowIso = new Date().toISOString();
 

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { buildCustomerReceipt, buildProductionReceipt, settingBool, settingNumber } from "../_shared/print-format.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -191,8 +192,8 @@ serve(async (req) => {
 
     // 4. Calcular Taxas e Descontos
     let packingFee = 0;
-    if (order_type === 'VIAGEM' && settings.apply_packaging_fee_for_takeout === 'true') {
-      packingFee = Number(settings.packaging_fee || 0);
+    if (order_type === 'VIAGEM' && settingBool(settings.apply_packaging_fee_for_takeout)) {
+      packingFee = settingNumber(settings.packaging_fee);
     }
 
     let discountAmount = 0;
@@ -321,9 +322,10 @@ serve(async (req) => {
     }
 
     // 9. Fila de Impressão (como já nasce NA_FILA, precisamos imprimir)
-    const shouldPrintCustomer = settings['print_customer_copy'] === 'true';
-    const shouldPrintKitchen = settings['print_kitchen_copy'] === 'true';
-    const shouldPrintJuice = settings['print_juice_potato_copy'] === 'true';
+    const printingEnabled = settingBool(settings['printing_enabled'], true);
+    const shouldPrintCustomer = printingEnabled && settingBool(settings['print_customer_copy']);
+    const shouldPrintKitchen = printingEnabled && settingBool(settings['print_kitchen_copy']);
+    const shouldPrintJuice = printingEnabled && settingBool(settings['print_juice_potato_copy']);
 
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');
@@ -332,12 +334,24 @@ serve(async (req) => {
     const createdJobsResponse = [];
     const formatBRL = (val: number) => `R$ ${parseFloat(val as any).toFixed(2).replace('.', ',')}`;
     const timestampNow = new Date(nowIso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const receiptOrder = {
+      ...createdOrder,
+      type: order_type,
+      customer_name,
+      customer_phone,
+      notes,
+      discount_amount: discountAmount,
+      packing_fee: packingFee,
+      total_amount: totalAmount,
+      payment_status,
+      payment_method,
+    };
 
     // Monta Via KITCHEN
     if (kitchenItems.length > 0 && shouldPrintKitchen) {
       let content = `MARCOS KREP'S\n`;
       content += `PEDIDO #${String(createdOrder.daily_number).padStart(3, '0')}\n`;
-      content += `COZINHA / KREP\n`;
+      content += `KREPS\n`;
       content += `Tipo: ${order_type}\n`;
       content += `Horário: ${timestampNow}\n`;
       content += `------------------------\n`;
@@ -356,6 +370,10 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
+      content = buildProductionReceipt(receiptOrder, finalItemsData, 'KITCHEN', {
+        timestamp: timestampNow,
+        title: 'KREPS',
+      });
       printerJobsToInsert.push({ order_id: createdOrder.id, sector: 'KITCHEN', content: { text: content } });
     }
 
@@ -363,7 +381,7 @@ serve(async (req) => {
     if (juicePotatoItems.length > 0 && shouldPrintJuice) {
       let content = `MARCOS KREP'S\n`;
       content += `PEDIDO #${String(createdOrder.daily_number).padStart(3, '0')}\n`;
-      content += `SUCOS / BATATA\n`;
+      content += `COZINHA\n`;
       content += `Tipo: ${order_type}\n`;
       content += `Horário: ${timestampNow}\n`;
       content += `------------------------\n`;
@@ -376,6 +394,10 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
+      content = buildProductionReceipt(receiptOrder, finalItemsData, 'JUICE_POTATO', {
+        timestamp: timestampNow,
+        title: 'COZINHA',
+      });
       printerJobsToInsert.push({ order_id: createdOrder.id, sector: 'JUICE_POTATO', content: { text: content } });
     }
 
@@ -408,6 +430,7 @@ serve(async (req) => {
       content += `------------------------\n`;
       content += `Guarde este número para retirada.\n`;
 
+      content = buildCustomerReceipt(receiptOrder, finalItemsData, { timestamp: timestampNow });
       printerJobsToInsert.push({ order_id: createdOrder.id, sector: 'CUSTOMER', content: { text: content } });
     }
 

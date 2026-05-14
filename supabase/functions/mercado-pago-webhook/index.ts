@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { buildProductionReceipt } from "../_shared/print-format.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -87,14 +88,17 @@ async function verifyWebhookSignature(req: Request, signedPaymentId: string) {
   return expected === received;
 }
 
-function settingBool(value: unknown): boolean {
-  return value === true || value === "true";
+function settingBool(value: unknown, fallback = false): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+  return fallback;
 }
 
 async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const { data: order } = await supabaseAdmin
     .from("orders")
-    .select("id, daily_number, status, type, customer_name, discount_amount, packing_fee, total_amount, payment_status, payment_method")
+    .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, packing_fee, total_amount, payment_status, payment_method")
     .eq("id", orderId)
     .single();
 
@@ -102,9 +106,9 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
 
   const { data: existingJobs } = await supabaseAdmin
     .from("printer_jobs")
-    .select("id")
+    .select("sector")
     .eq("order_id", orderId);
-  if (existingJobs && existingJobs.length > 0) return;
+  const existingSectors = new Set((existingJobs ?? []).map((job: any) => String(job.sector)));
 
   const { data: items } = await supabaseAdmin
     .from("order_items")
@@ -122,10 +126,10 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
     .select("key, value")
     .in("key", ["printing_enabled", "print_customer_copy", "print_kitchen_copy", "print_juice_potato_copy"]);
 
-  const printingEnabled = settingBool(settings?.find((s: any) => s.key === "printing_enabled")?.value);
-  const shouldPrintKitchen = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value);
-  const shouldPrintJuice = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value);
-  const shouldPrintCustomer = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_customer_copy")?.value);
+  const printingEnabled = settingBool(settings?.find((s: any) => s.key === "printing_enabled")?.value, true);
+  const shouldPrintKitchen = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value, true);
+  const shouldPrintJuice = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value, true);
+  const shouldPrintCustomer = false;
 
   const kitchenItems = items.filter((i: any) => i.production_sector === "KITCHEN");
   const juicePotatoItems = items.filter((i: any) => i.production_sector === "JUICE_POTATO");
@@ -133,10 +137,10 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const timestampNow = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const formatBRL = (val: number) => `R$ ${parseFloat(val as any).toFixed(2).replace(".", ",")}`;
 
-  if (kitchenItems.length > 0 && shouldPrintKitchen) {
+  if (kitchenItems.length > 0 && shouldPrintKitchen && !existingSectors.has("KITCHEN")) {
     let content = `MARCOS KREP'S\n`;
     content += `PEDIDO #${String(order.daily_number).padStart(3, "0")}\n`;
-    content += `COZINHA / KREP\n`;
+    content += `KREPS\n`;
     content += `Tipo: ${order.type}\n`;
     content += `Horário: ${timestampNow}\n`;
     content += `------------------------\n`;
@@ -152,13 +156,18 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       content += `\n`;
     }
     content += `------------------------\n`;
+    content = buildProductionReceipt({ ...order, source: "APP" }, items, "KITCHEN", {
+      timestamp: timestampNow,
+      title: "KREPS",
+      source: "PUBLIC",
+    });
     printerJobsToInsert.push({ order_id: orderId, sector: "KITCHEN", content: { text: content } });
   }
 
-  if (juicePotatoItems.length > 0 && shouldPrintJuice) {
+  if (juicePotatoItems.length > 0 && shouldPrintJuice && !existingSectors.has("JUICE_POTATO")) {
     let content = `MARCOS KREP'S\n`;
     content += `PEDIDO #${String(order.daily_number).padStart(3, "0")}\n`;
-    content += `SUCOS / BATATA\n`;
+    content += `COZINHA\n`;
     content += `Tipo: ${order.type}\n`;
     content += `Horário: ${timestampNow}\n`;
     content += `------------------------\n`;
@@ -168,6 +177,11 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       content += `\n`;
     }
     content += `------------------------\n`;
+    content = buildProductionReceipt({ ...order, source: "APP" }, items, "JUICE_POTATO", {
+      timestamp: timestampNow,
+      title: "COZINHA",
+      source: "PUBLIC",
+    });
     printerJobsToInsert.push({ order_id: orderId, sector: "JUICE_POTATO", content: { text: content } });
   }
 

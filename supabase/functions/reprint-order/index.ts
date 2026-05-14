@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { buildCustomerReceipt, buildProductionReceipt } from "../_shared/print-format.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -110,7 +111,7 @@ serve(async (req) => {
       let content = `*** REIMPRESSÃO ***\n`;
       content += `MARCOS KREP'S\n`;
       content += `PEDIDO #${String(order.daily_number).padStart(3, '0')}\n`;
-      content += `COZINHA / KREP\n`;
+      content += `KREPS\n`;
       content += `Tipo: ${order.type}\n`;
       content += `Horário Reimpr: ${timestampNow}\n`;
       content += `------------------------\n`;
@@ -129,6 +130,11 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
+      content = buildProductionReceipt(order, items, 'KITCHEN', {
+        timestamp: timestampNow,
+        title: 'KREPS',
+        mode: 'REPRINT',
+      });
       printerJobsToInsert.push({ order_id: order.id, sector: 'KITCHEN', content: { text: content } });
     }
 
@@ -137,7 +143,7 @@ serve(async (req) => {
       let content = `*** REIMPRESSÃO ***\n`;
       content += `MARCOS KREP'S\n`;
       content += `PEDIDO #${String(order.daily_number).padStart(3, '0')}\n`;
-      content += `SUCOS / BATATA\n`;
+      content += `COZINHA\n`;
       content += `Tipo: ${order.type}\n`;
       content += `Horário Reimpr: ${timestampNow}\n`;
       content += `------------------------\n`;
@@ -150,6 +156,11 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
+      content = buildProductionReceipt(order, items, 'JUICE_POTATO', {
+        timestamp: timestampNow,
+        title: 'COZINHA',
+        mode: 'REPRINT',
+      });
       printerJobsToInsert.push({ order_id: order.id, sector: 'JUICE_POTATO', content: { text: content } });
     }
 
@@ -183,6 +194,10 @@ serve(async (req) => {
       content += `------------------------\n`;
       content += `Guarde este número para retirada.\n`;
 
+      content = buildCustomerReceipt(order, items, {
+        timestamp: timestampNow,
+        mode: 'REPRINT',
+      });
       printerJobsToInsert.push({ order_id: order.id, sector: 'CUSTOMER', content: { text: content } });
     }
 

@@ -181,8 +181,8 @@ function InfoPill({
 
 function sectorLabel(sector: PrinterJob["sector"]) {
   const labels: Record<PrinterJob["sector"], string> = {
-    KITCHEN: "Cozinha",
-    JUICE_POTATO: "Sucos/Batata",
+    KITCHEN: "Kreps",
+    JUICE_POTATO: "Cozinha",
     CUSTOMER: "Cliente",
   };
   return labels[sector] ?? sector;

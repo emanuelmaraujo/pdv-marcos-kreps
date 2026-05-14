@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { buildCustomerReceipt, buildProductionReceipt, settingBool } from "../_shared/print-format.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -56,7 +57,7 @@ serve(async (req) => {
     // 3. Busca o Pedido
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, status, type, customer_name, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at')
+      .select('id, daily_number, status, type, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at')
       .eq('id', order_id)
       .single();
 
@@ -99,11 +100,12 @@ serve(async (req) => {
     const { data: settings } = await supabaseAdmin
       .from('settings')
       .select('key, value')
-      .in('key', ['print_customer_copy', 'print_kitchen_copy', 'print_juice_potato_copy']);
+      .in('key', ['printing_enabled', 'print_customer_copy', 'print_kitchen_copy', 'print_juice_potato_copy']);
     
-    const shouldPrintCustomer = settings?.find(s => s.key === 'print_customer_copy')?.value === 'true';
-    const shouldPrintKitchen = settings?.find(s => s.key === 'print_kitchen_copy')?.value === 'true';
-    const shouldPrintJuice = settings?.find(s => s.key === 'print_juice_potato_copy')?.value === 'true';
+    const printingEnabled = settingBool(settings?.find(s => s.key === 'printing_enabled')?.value, true);
+    const shouldPrintCustomer = printingEnabled && settingBool(settings?.find(s => s.key === 'print_customer_copy')?.value);
+    const shouldPrintKitchen = printingEnabled && settingBool(settings?.find(s => s.key === 'print_kitchen_copy')?.value);
+    const shouldPrintJuice = printingEnabled && settingBool(settings?.find(s => s.key === 'print_juice_potato_copy')?.value);
 
     // 4. Separa os itens por setor
     const kitchenItems = items.filter(i => i.production_sector === 'KITCHEN');
@@ -118,7 +120,7 @@ serve(async (req) => {
     if (kitchenItems.length > 0 && shouldPrintKitchen) {
       let content = `MARCOS KREP'S\n`;
       content += `PEDIDO #${String(order.daily_number).padStart(3, '0')}\n`;
-      content += `COZINHA / KREP\n`;
+      content += `KREPS\n`;
       content += `Tipo: ${order.type}\n`;
       content += `Horário: ${timestampNow}\n`;
       content += `------------------------\n`;
@@ -138,6 +140,10 @@ serve(async (req) => {
       }
       content += `------------------------\n`;
 
+      content = buildProductionReceipt(order, items, 'KITCHEN', {
+        timestamp: timestampNow,
+        title: 'KREPS',
+      });
       printerJobsToInsert.push({ order_id: order.id, sector: 'KITCHEN', content: { text: content } });
     }
 
@@ -145,7 +151,7 @@ serve(async (req) => {
     if (juicePotatoItems.length > 0 && shouldPrintJuice) {
       let content = `MARCOS KREP'S\n`;
       content += `PEDIDO #${String(order.daily_number).padStart(3, '0')}\n`;
-      content += `SUCOS / BATATA\n`;
+      content += `COZINHA\n`;
       content += `Tipo: ${order.type}\n`;
       content += `Horário: ${timestampNow}\n`;
       content += `------------------------\n`;
@@ -159,6 +165,10 @@ serve(async (req) => {
       }
       content += `------------------------\n`;
 
+      content = buildProductionReceipt(order, items, 'JUICE_POTATO', {
+        timestamp: timestampNow,
+        title: 'COZINHA',
+      });
       printerJobsToInsert.push({ order_id: order.id, sector: 'JUICE_POTATO', content: { text: content } });
     }
 
@@ -191,6 +201,7 @@ serve(async (req) => {
       content += `------------------------\n`;
       content += `Guarde este número para retirada.\n`;
 
+      content = buildCustomerReceipt(order, items, { timestamp: timestampNow });
       printerJobsToInsert.push({ order_id: order.id, sector: 'CUSTOMER', content: { text: content } });
     }
 

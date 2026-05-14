@@ -9,7 +9,8 @@ export const config = {
   printerHost: process.env.PRINTER_HOST || '192.168.0.50',
   printerPort: parseInt(process.env.PRINTER_PORT || '9100', 10),
   pollIntervalMs: parseInt(process.env.POLL_INTERVAL_MS || '3000', 10),
-  printerPaperWidth: parseInt(process.env.PRINTER_PAPER_WIDTH || '80', 10)
+  printerPaperWidth: parseInt(process.env.PRINTER_PAPER_WIDTH || '80', 10),
+  printerCharacterSet: process.env.PRINTER_CHARACTER_SET || 'PC860_PORTUGUESE'
 };
 
 if (!config.supabaseUrl || !config.supabaseServiceKey) {

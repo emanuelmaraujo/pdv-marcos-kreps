@@ -517,7 +517,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
               {showPackagingFee && (
                 <div className="flex justify-between text-sm font-semibold text-zinc-600">
                   <span>Embalagem</span>
-                  <span>{currency.format(packagingFee)}</span>
+                  <span>{currency.format(packagingTotal)}</span>
                 </div>
               )}
               {discountAmount > 0 && (
