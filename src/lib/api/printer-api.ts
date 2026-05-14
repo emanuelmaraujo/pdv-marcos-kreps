@@ -1,12 +1,12 @@
 import { PrinterJob } from '@/types/pdv';
 import { createClient } from '../supabase/client';
+import { getBusinessDayRange } from '../utils/business-day';
 
 export const printerApi = {
   getTodayJobs: async (): Promise<PrinterJob[]> => {
     const supabase = createClient();
-    
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+
+    const { start, end } = getBusinessDayRange();
 
     const { data, error } = await supabase
       .from('printer_jobs')
@@ -20,7 +20,8 @@ export const printerApi = {
           customer_name
         )
       `)
-      .gte('created_at', startOfDay.toISOString())
+      .gte('created_at', start.toISOString())
+      .lt('created_at', end.toISOString())
       .order('created_at', { ascending: false });
 
     if (error) {

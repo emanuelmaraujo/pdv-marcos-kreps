@@ -1,5 +1,6 @@
 import { createClient } from "../supabase/client";
 import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from "@/types/pdv";
+import { getBusinessDayRange } from "../utils/business-day";
 
 interface CashOrderRow {
   id: string;
@@ -146,8 +147,7 @@ export const cashApi = {
   getDaySummary: async (): Promise<CaixaData> => {
     const supabase = createClient();
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const { start: startOfDay, end: endOfDay } = getBusinessDayRange();
 
     const {
       data: { user },
@@ -170,6 +170,7 @@ export const cashApi = {
         "id, daily_number, status, payment_status, payment_method, discount_amount, packing_fee, total_amount, created_at, paid_at, delivered_at, cancelled_at"
       )
       .gte("created_at", startOfDay.toISOString())
+      .lt("created_at", endOfDay.toISOString())
       .order("created_at", { ascending: false });
 
     if (ordersError) {
