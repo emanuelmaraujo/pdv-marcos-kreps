@@ -126,7 +126,10 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
     handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: order.total_amount }));
   const onReprint = () =>
-    handleAction(() => pdvApi.reprintOrder({ orderId: order.id, copies: ["CUSTOMER", "KITCHEN", "JUICE_POTATO"] }));
+    handleAction(() => pdvApi.reprintOrder({
+      orderId: order.id,
+      copies: order.source === "APP" ? ["KITCHEN", "JUICE_POTATO"] : ["CUSTOMER", "KITCHEN", "JUICE_POTATO"],
+    }));
 
   const isCANCELADO  = order.status === "CANCELADO";
   const isNA_FILA    = order.status === "NA_FILA";

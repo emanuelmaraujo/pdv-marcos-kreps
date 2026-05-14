@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { buildProductionReceipt } from "../_shared/print-format.ts";
+import { buildProductionReceipt, resolveProductionSector } from "../_shared/print-format.ts";
 
 type JsonRecord = Record<string, unknown>;
 const PIX_EXPIRATION_MINUTES = 60;
@@ -248,8 +248,8 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const shouldPrintKitchen = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value, true);
   const shouldPrintJuice = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value, true);
 
-  const kitchenItems = items.filter((i: any) => i.production_sector === "KITCHEN");
-  const juicePotatoItems = items.filter((i: any) => i.production_sector === "JUICE_POTATO");
+  const kitchenItems = items.filter((i: any) => resolveProductionSector(i) === "KITCHEN");
+  const juicePotatoItems = items.filter((i: any) => resolveProductionSector(i) === "JUICE_POTATO");
   const printerJobsToInsert: any[] = [];
   const timestampNow = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const formatBRL = (val: number) => `R$ ${parseFloat(val as any).toFixed(2).replace(".", ",")}`;

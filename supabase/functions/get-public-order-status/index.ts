@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { buildProductionReceipt } from "../_shared/print-format.ts";
+import { buildProductionReceipt, resolveProductionSector } from "../_shared/print-format.ts";
 
 async function parseJsonResponse(response: Response) {
   const text = await response.text();
@@ -83,7 +83,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const timestampNow = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const printerJobsToInsert: any[] = [];
 
-  if (items.some((item: any) => item.production_sector === "KITCHEN") && shouldPrintKitchen && !existingSectors.has("KITCHEN")) {
+  if (items.some((item: any) => resolveProductionSector(item) === "KITCHEN") && shouldPrintKitchen && !existingSectors.has("KITCHEN")) {
     printerJobsToInsert.push({
       order_id: orderId,
       sector: "KITCHEN",
@@ -97,7 +97,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
     });
   }
 
-  if (items.some((item: any) => item.production_sector === "JUICE_POTATO") && shouldPrintJuice && !existingSectors.has("JUICE_POTATO")) {
+  if (items.some((item: any) => resolveProductionSector(item) === "JUICE_POTATO") && shouldPrintJuice && !existingSectors.has("JUICE_POTATO")) {
     printerJobsToInsert.push({
       order_id: orderId,
       sector: "JUICE_POTATO",
