@@ -1,6 +1,7 @@
 "use client";
 
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -1191,14 +1192,19 @@ export default function PedirPublicPage() {
 
   if (!onlineOrderingEnabled) {
     return (
-      <div className="flex min-h-screen flex-col bg-[#FFF7ED] text-zinc-950">
+      <div className="flex min-h-screen flex-col bg-[#FFF7ED] text-brand-charcoal">
         <header className="border-b border-amber-900/10 bg-[#fffaf2]/95 px-4 py-3 shadow-sm">
-          <div className="mx-auto flex max-w-xl items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-red text-white shadow-sm">
-              <Flame className="h-5 w-5" />
-            </div>
+          <div className="mx-auto flex max-w-xl items-center gap-3">
+            <Image
+              src="/logo.png"
+              alt="Marcos Krep's"
+              width={56}
+              height={56}
+              className="h-14 w-14 shrink-0 rounded-xl"
+              priority
+            />
             <div>
-              <h1 className="text-base font-black text-zinc-950">Marcos Krep&apos;s</h1>
+              <h1 className="text-base font-black text-brand-charcoal">Marcos Krep&apos;s</h1>
               <p className="text-[10px] font-black uppercase tracking-widest text-amber-700/70">Pedido online</p>
             </div>
           </div>
@@ -1236,16 +1242,21 @@ export default function PedirPublicPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF7ED] pb-32 text-zinc-950">
+    <div className="min-h-screen bg-[#FFF7ED] pb-32 text-brand-charcoal">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(220,38,38,0.16),transparent_30%),linear-gradient(135deg,rgba(255,247,237,0.98),rgba(255,255,255,0.92)_45%,rgba(254,243,199,0.65))]" />
       <header className="sticky top-0 z-40 border-b border-amber-900/10 bg-[#fffaf2]/95 px-4 py-3 shadow-sm backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-red text-white shadow-sm">
-              <Flame className="h-5 w-5" />
-            </div>
+          <div className="flex items-center gap-3">
+            <Image
+              src="/logo.png"
+              alt="Marcos Krep's"
+              width={56}
+              height={56}
+              className="h-14 w-14 shrink-0 rounded-xl sm:h-16 sm:w-16"
+              priority
+            />
             <div>
-              <h1 className="text-base font-black text-zinc-950">Marcos Krep&apos;s</h1>
+              <h1 className="text-base font-black text-brand-charcoal">Marcos Krep&apos;s</h1>
               <p className="text-[10px] font-black uppercase tracking-widest text-amber-700/70">Pedido online</p>
             </div>
           </div>
@@ -1315,7 +1326,7 @@ export default function PedirPublicPage() {
                   onClick={() => setSelectedFilter(filter)}
                   className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-black uppercase tracking-wide transition-all ${
                     selectedFilter === filter
-                      ? "bg-zinc-950 text-white"
+                      ? "bg-brand-charcoal text-white"
                       : "border border-amber-900/10 bg-white/85 text-zinc-600"
                   }`}
                 >
@@ -1657,7 +1668,7 @@ export default function PedirPublicPage() {
                     </button>
                   )}
 
-                  <div className="rounded-2xl bg-zinc-950 p-4 text-white">
+                  <div className="rounded-2xl bg-brand-charcoal p-4 text-white">
                     <div className="space-y-2 text-sm font-bold text-zinc-200">
                       <div className="flex items-center justify-between">
                         <span>Itens</span>
