@@ -124,12 +124,11 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const { data: settings } = await supabaseAdmin
     .from("settings")
     .select("key, value")
-    .in("key", ["printing_enabled", "print_customer_copy", "print_kitchen_copy", "print_juice_potato_copy"]);
+    .in("key", ["printing_enabled", "print_kitchen_copy", "print_juice_potato_copy"]);
 
   const printingEnabled = settingBool(settings?.find((s: any) => s.key === "printing_enabled")?.value, true);
   const shouldPrintKitchen = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value, true);
   const shouldPrintJuice = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value, true);
-  const shouldPrintCustomer = false;
 
   const kitchenItems = items.filter((i: any) => i.production_sector === "KITCHEN");
   const juicePotatoItems = items.filter((i: any) => i.production_sector === "JUICE_POTATO");
@@ -183,32 +182,6 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       source: "PUBLIC",
     });
     printerJobsToInsert.push({ order_id: orderId, sector: "JUICE_POTATO", content: { text: content } });
-  }
-
-  if (shouldPrintCustomer) {
-    let content = `MARCOS KREP'S\n`;
-    content += `PEDIDO #${String(order.daily_number).padStart(3, "0")}\n`;
-    content += `CLIENTE / SENHA\n`;
-    content += `Tipo: ${order.type}\n`;
-    if (order.customer_name) content += `Cliente: ${order.customer_name}\n`;
-    content += `Horário: ${timestampNow}\n`;
-    content += `------------------------\n`;
-    for (const item of items) {
-      content += `${item.quantity}x ${item.product_name_snapshot} - ${formatBRL(item.product_price_snapshot)}\n`;
-      if (item.order_item_addons.length > 0) {
-        for (const add of item.order_item_addons) {
-          content += `  + ${add.quantity}x ${add.addon_name_snapshot} - ${formatBRL(add.addon_price_snapshot)}\n`;
-        }
-      }
-    }
-    content += `------------------------\n`;
-    if (order.discount_amount > 0) content += `Desconto: -${formatBRL(order.discount_amount)}\n`;
-    if (order.packing_fee > 0) content += `Taxa Embalagem: ${formatBRL(order.packing_fee)}\n`;
-    content += `TOTAL: ${formatBRL(order.total_amount)}\n`;
-    content += `Pagamento: ${order.payment_method}\n`;
-    content += `------------------------\n`;
-    content += `Guarde este número para retirada.\n`;
-    printerJobsToInsert.push({ order_id: orderId, sector: "CUSTOMER", content: { text: content } });
   }
 
   if (printerJobsToInsert.length > 0) {
