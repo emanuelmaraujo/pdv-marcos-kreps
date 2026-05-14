@@ -59,6 +59,7 @@ const INSTAGRAM_URL = "https://www.instagram.com/marcos_kreps/";
 const PIX_WAIT_MINUTES = 5;
 const PUBLIC_ORDER_STORAGE_KEY = "pdv-public-order";
 const PUBLIC_CUSTOMER_PROFILE_KEY = "pdv-public-customer-profile";
+const PENDING_ORDER_RESTORE_MS = 20 * 60 * 1000;
 
 type SavedPublicCustomerProfile = {
   phone_e164: string;
@@ -67,6 +68,12 @@ type SavedPublicCustomerProfile = {
   order_type: "BALCAO" | "VIAGEM";
   marketing_opt_in: boolean;
   saved_at: string;
+};
+
+type SavedPublicOrderSession = {
+  order?: CreatePublicOrderResponse["order"];
+  customerEmail?: string;
+  saved_at?: string;
 };
 
 const SAVORY_PROTEINS = ["presunto", "calabresa", "frango", "atum", "peito de peru", "carne de sol"];
@@ -413,6 +420,31 @@ function savePublicProfile(profile: SavedPublicCustomerProfile) {
   localStorage.setItem(PUBLIC_CUSTOMER_PROFILE_KEY, JSON.stringify(profile));
 }
 
+function clearSavedPublicOrderSession() {
+  sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
+}
+
+function savePublicOrderSession(order: CreatePublicOrderResponse["order"], customerEmail: string) {
+  sessionStorage.setItem(PUBLIC_ORDER_STORAGE_KEY, JSON.stringify({
+    order,
+    customerEmail: customerEmail.trim(),
+    saved_at: new Date().toISOString(),
+  }));
+}
+
+function hasActivePendingTransaction(transaction: MercadoPagoPaymentResponse["transaction"] | null | undefined) {
+  const providerStatus = String(transaction?.provider_status ?? "").toLowerCase();
+  if (!["pending", "in_process"].includes(providerStatus)) return false;
+  if (!transaction?.expires_at) return false;
+  return new Date(transaction.expires_at).getTime() > Date.now();
+}
+
+function isRecentPendingOrder(createdAt: string | undefined) {
+  if (!createdAt) return false;
+  const createdAtTime = new Date(createdAt).getTime();
+  return Number.isFinite(createdAtTime) && Date.now() - createdAtTime <= PENDING_ORDER_RESTORE_MS;
+}
+
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
@@ -746,28 +778,56 @@ export default function PedirPublicPage() {
   }, [clearCart]);
 
   useEffect(() => {
-    let timer: number | undefined;
+    let cancelled = false;
     try {
       const stored = sessionStorage.getItem(PUBLIC_ORDER_STORAGE_KEY);
       if (!stored) return;
-      const parsed = JSON.parse(stored) as {
-        order?: CreatePublicOrderResponse["order"];
-        customerEmail?: string;
-      };
-      if (parsed.order?.order_id && parsed.order.public_token) {
-        timer = window.setTimeout(() => {
-          setOrderData(parsed.order!);
-          setCustomerEmail(parsed.customerEmail ?? "");
-          setStep("PAYMENT");
-        }, 0);
+      const parsed = JSON.parse(stored) as SavedPublicOrderSession;
+      const savedOrder = parsed.order;
+      if (!savedOrder?.order_id || !savedOrder.public_token) {
+        clearSavedPublicOrderSession();
+        return;
       }
+
+      void pdvApi.getPublicOrderStatus({ public_token: savedOrder.public_token })
+        .then((status) => {
+          if (cancelled) return;
+          if (status.order.payment_status === "PAID") {
+            setOrderData(savedOrder);
+            setCustomerEmail(parsed.customerEmail ?? "");
+            clearCart();
+            clearSavedPublicOrderSession();
+            setStep("PAID");
+            return;
+          }
+
+          const canRestorePayment =
+            status.order.status === "AGUARDANDO_PAGAMENTO" &&
+            status.order.payment_status === "PENDING" &&
+            (hasActivePendingTransaction(status.transaction) || isRecentPendingOrder(status.order.created_at));
+
+          if (canRestorePayment) {
+            setOrderData(savedOrder);
+            setCustomerEmail(parsed.customerEmail ?? "");
+            setStep("PAYMENT");
+            return;
+          }
+
+          clearSavedPublicOrderSession();
+          setOrderData(null);
+          setPaymentResult(null);
+          setStep("MENU");
+        })
+        .catch(() => {
+          clearSavedPublicOrderSession();
+        });
     } catch {
-      sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
+      clearSavedPublicOrderSession();
     }
     return () => {
-      if (timer) window.clearTimeout(timer);
+      cancelled = true;
     };
-  }, []);
+  }, [clearCart]);
 
   useEffect(() => {
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
@@ -871,7 +931,7 @@ export default function PedirPublicPage() {
         });
         if (status.order.payment_status === "PAID") {
           clearCart();
-          sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
+          clearSavedPublicOrderSession();
           setStep("PAID");
         }
       } catch {
@@ -1067,7 +1127,9 @@ export default function PedirPublicPage() {
           quantity: item.quantity,
           removed_ingredient_ids: item.removed_ingredients,
           addons: item.addons.map((addon) => ({ addon_id: addon.addon_id, quantity: addon.quantity })),
-          notes: item.notes,
+          notes: item.is_takeout || orderType === "VIAGEM"
+            ? `[VIAGEM] ${item.notes || ""}`.trim()
+            : item.notes,
         })),
       });
 
@@ -1084,10 +1146,7 @@ export default function PedirPublicPage() {
       } else {
         localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
       }
-      sessionStorage.setItem(PUBLIC_ORDER_STORAGE_KEY, JSON.stringify({
-        order: response.order,
-        customerEmail: customerEmail.trim(),
-      }));
+      savePublicOrderSession(response.order, customerEmail);
       setPaymentResult(null);
       setPaymentMode("PIX");
       setStep("PAYMENT");
@@ -1694,20 +1753,31 @@ export default function PedirPublicPage() {
             ))}
           </section>
 
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={() => {
+              setOrderData(null);
+              setPaymentResult(null);
+              clearSavedPublicOrderSession();
+              setStep("MENU");
+            }}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Voltar ao cardapio
+          </Button>
+
           {paymentMode === "PIX" ? (
             <PixCheckout
               order={orderData}
               payerEmail={customerEmail}
               onPayerEmailChange={(email) => {
                 setCustomerEmail(email);
-                sessionStorage.setItem(PUBLIC_ORDER_STORAGE_KEY, JSON.stringify({
-                  order: orderData,
-                  customerEmail: email.trim(),
-                }));
+                savePublicOrderSession(orderData, email);
               }}
               onPaid={() => {
                 clearCart();
-                sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
+                clearSavedPublicOrderSession();
                 setStep("PAID");
               }}
             />
@@ -1717,7 +1787,7 @@ export default function PedirPublicPage() {
               onResult={setPaymentResult}
               onPaid={() => {
                 clearCart();
-                sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
+                clearSavedPublicOrderSession();
                 setStep("PAID");
               }}
             />
@@ -1748,7 +1818,7 @@ export default function PedirPublicPage() {
             <Button variant="outline" onClick={() => {
               setOrderData(null);
               setPaymentResult(null);
-              sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
+              clearSavedPublicOrderSession();
               setStep("MENU");
             }}>
               Fazer novo pedido

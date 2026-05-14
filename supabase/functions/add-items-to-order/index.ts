@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { buildProductionReceipt, settingBool } from "../_shared/print-format.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,7 +65,7 @@ serve(async (req) => {
     // 3. Buscar e validar pedido original
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, status, payment_status, total_amount, type')
+      .select('id, daily_number, status, payment_status, total_amount, type, customer_name, customer_phone, notes')
       .eq('id', order_id)
       .single();
 
@@ -229,8 +230,9 @@ serve(async (req) => {
     });
 
     // 8. Fila de Impressão (Apenas novos itens)
-    const shouldPrintKitchen = settings['print_kitchen_copy'] === 'true';
-    const shouldPrintJuice = settings['print_juice_potato_copy'] === 'true';
+    const printingEnabled = settingBool(settings['printing_enabled'], true);
+    const shouldPrintKitchen = printingEnabled && settingBool(settings['print_kitchen_copy']);
+    const shouldPrintJuice = printingEnabled && settingBool(settings['print_juice_potato_copy']);
 
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');
@@ -241,7 +243,7 @@ serve(async (req) => {
     const header = `MARCOS KREP'S\nADICIONAL DE COMANDA\nPEDIDO #${String(order.daily_number).padStart(3, '0')}\n`;
 
     if (kitchenItems.length > 0 && shouldPrintKitchen) {
-      let content = header + `COZINHA / KREP\nHorário: ${timestampNow}\n------------------------\n`;
+      let content = header + `KREPS\nHorário: ${timestampNow}\n------------------------\n`;
       for (const item of kitchenItems) {
         content += `${item.quantity}x ${item.product.name}\n`;
         if (item.removedIngredientsSnapshots.length > 0) {
@@ -254,17 +256,27 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
+      content = buildProductionReceipt(order, finalItemsData, 'KITCHEN', {
+        timestamp: timestampNow,
+        title: 'KREPS',
+        mode: 'ADDITIONAL',
+      });
       printerJobsToInsert.push({ order_id: order.id, sector: 'KITCHEN', content: { text: content } });
     }
 
     if (juicePotatoItems.length > 0 && shouldPrintJuice) {
-      let content = header + `SUCOS / BATATA\nHorário: ${timestampNow}\n------------------------\n`;
+      let content = header + `COZINHA\nHorário: ${timestampNow}\n------------------------\n`;
       for (const item of juicePotatoItems) {
         content += `${item.quantity}x ${item.product.name}\n`;
         if (item.notes) content += `  OBS: ${item.notes}\n`;
         content += `\n`;
       }
       content += `------------------------\n`;
+      content = buildProductionReceipt(order, finalItemsData, 'JUICE_POTATO', {
+        timestamp: timestampNow,
+        title: 'COZINHA',
+        mode: 'ADDITIONAL',
+      });
       printerJobsToInsert.push({ order_id: order.id, sector: 'JUICE_POTATO', content: { text: content } });
     }
 

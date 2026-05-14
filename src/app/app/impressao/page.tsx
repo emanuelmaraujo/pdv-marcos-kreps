@@ -29,8 +29,8 @@ const statusFilters: { id: PrintStatusFilter; label: string }[] = [
 
 const sectorFilters: { id: PrintSectorFilter; label: string }[] = [
   { id: "ALL", label: "Todos setores" },
-  { id: "KITCHEN", label: "Cozinha" },
-  { id: "JUICE_POTATO", label: "Sucos/Batata" },
+  { id: "KITCHEN", label: "Kreps" },
+  { id: "JUICE_POTATO", label: "Cozinha" },
   { id: "CUSTOMER", label: "Cliente" },
 ];
 

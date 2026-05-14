@@ -1,6 +1,7 @@
 import { initPrinter } from './printer';
-import { pollPendingJobs, subscribeToJobs } from './jobs';
+import { pollPendingJobs, subscribeToJobs, subscribeToSettingsChanges } from './jobs';
 import { config } from './config';
+import { startWorkerHeartbeat } from './status';
 
 async function main() {
   console.log('=============================================');
@@ -17,7 +18,9 @@ async function main() {
   console.log(`[SYSTEM] Configurando rotina de checagem a cada ${config.pollIntervalMs}ms...`);
   setInterval(pollPendingJobs, config.pollIntervalMs);
   
+  startWorkerHeartbeat();
   subscribeToJobs();
+  subscribeToSettingsChanges();
   
   console.log('[SYSTEM] Worker rodando com segurança. Aguardando impressão...');
 }

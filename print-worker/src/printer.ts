@@ -1,19 +1,31 @@
 const ThermalPrinter = require("node-thermal-printer").printer;
 const PrinterTypes = require("node-thermal-printer").types;
+const CharacterSet = require("node-thermal-printer").characterSet;
+
+export async function initPrinter(): Promise<void> {
+  console.log('[PRINTER] Driver ESC/POS inicializado para impressora de rede.');
+}
+
+function resolvePrinterColumns(paperWidth: number) {
+  if (paperWidth >= 70) return 48;
+  if (paperWidth > 0 && paperWidth < 70) return 32;
+  return 48;
+}
 
 export async function printWithConfig(content: any, printerConfig: {
   printerHost: string;
   printerPort: number;
   printerType: string;
   printerPaperWidth: number;
+  printerCharacterSet?: string;
 }): Promise<void> {
   
-  // Criamos uma nova instância para garantir que estamos usando a config mais recente
+  // Cria uma nova instancia para garantir que a config mais recente seja usada.
   const printer = new ThermalPrinter({
     type: printerConfig.printerType === 'network' ? PrinterTypes.EPSON : PrinterTypes.STAR,
     interface: `tcp://${printerConfig.printerHost}:${printerConfig.printerPort}`,
-    characterSet: "PC852_LATIN2",
-    width: printerConfig.printerPaperWidth,
+    characterSet: CharacterSet[printerConfig.printerCharacterSet || 'PC860_PORTUGUESE'] || CharacterSet.PC860_PORTUGUESE,
+    width: resolvePrinterColumns(printerConfig.printerPaperWidth),
     removeSpecialCharacters: false,
     lineCharacter: "-",
     breakLine: "WORD"
@@ -22,12 +34,12 @@ export async function printWithConfig(content: any, printerConfig: {
   // Tenta conectar antes de enviar
   const isConnected = await printer.isPrinterConnected();
   if (!isConnected) {
-    throw new Error(`Impressora Offline ou Inalcançável em ${printerConfig.printerHost}:${printerConfig.printerPort}`);
+    throw new Error(`Impressora offline ou inalcancavel em ${printerConfig.printerHost}:${printerConfig.printerPort}`);
   }
 
   printer.clear();
 
-  // Tratamento do conteúdo
+  // Tratamento do conteudo.
   if (typeof content === 'string') {
     printer.println(content);
   } else if (content && typeof content === 'object') {
@@ -48,7 +60,7 @@ export async function printWithConfig(content: any, printerConfig: {
     await printer.execute();
     console.log(`[PRINTER] Job impresso com sucesso em ${printerConfig.printerHost}`);
   } catch (error) {
-    console.error('[PRINTER] Falha crítica na execução da impressão:', error);
+    console.error('[PRINTER] Falha critica na execucao da impressao:', error);
     throw error;
   }
 }

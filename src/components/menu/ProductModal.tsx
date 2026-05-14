@@ -123,7 +123,7 @@ export function ProductModal({
                       : "bg-white text-zinc-500 border-zinc-200"
                   }`}
                 >
-                  {s === "KITCHEN" ? "Cozinha" : s === "JUICE_POTATO" ? "Sucos/Batata" : "Nenhum"}
+                  {s === "KITCHEN" ? "Kreps" : s === "JUICE_POTATO" ? "Cozinha" : "Nenhum"}
                 </button>
               ))}
             </div>

@@ -12,6 +12,11 @@ export interface PrinterSettings {
 
 type SettingPrimitive = string | number | boolean;
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session ? { Authorization: `Bearer ${session.access_token}` } : {};
+}
+
 function settingToInputValue(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
@@ -48,7 +53,9 @@ export const settingsApi = {
   },
 
   async testPrinter() {
-    const { data, error } = await supabase.functions.invoke('test-printer');
+    const { data, error } = await supabase.functions.invoke('test-printer', {
+      headers: await getAuthHeaders(),
+    });
     if (error) throw error;
     if (!data.success) throw new Error(data.error || 'Falha ao disparar teste de impressão');
     return data;
@@ -56,7 +63,8 @@ export const settingsApi = {
 
   async testWhatsApp(phone: string) {
     const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-      body: { action: 'send_test', phone }
+      body: { action: 'send_test', phone },
+      headers: await getAuthHeaders(),
     });
     if (error) throw error;
     if (!data.success) throw new Error(data.error || 'Falha ao enviar teste de WhatsApp');
@@ -65,7 +73,8 @@ export const settingsApi = {
 
   async processWhatsAppQueue() {
     const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-      body: { action: 'process_queue' }
+      body: { action: 'process_queue' },
+      headers: await getAuthHeaders(),
     });
     if (error) throw error;
     if (!data.success) throw new Error(data.error || 'Falha ao processar fila de WhatsApp');

@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { buildProductionReceipt } from "../_shared/print-format.ts";
 
 type JsonRecord = Record<string, unknown>;
 const PIX_EXPIRATION_MINUTES = 60;
+const PENDING_ORDER_PAYMENT_TIMEOUT_MINUTES = 20;
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -197,14 +199,24 @@ async function parseJsonResponse(response: Response) {
   }
 }
 
-function settingBool(value: unknown): boolean {
-  return value === true || value === "true";
+function settingBool(value: unknown, fallback = false): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+  return fallback;
+}
+
+function isPastPendingPaymentWindow(createdAt: unknown) {
+  if (typeof createdAt !== "string") return false;
+  const createdAtTime = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdAtTime)) return false;
+  return Date.now() - createdAtTime > PENDING_ORDER_PAYMENT_TIMEOUT_MINUTES * 60 * 1000;
 }
 
 async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const { data: order } = await supabaseAdmin
     .from("orders")
-    .select("id, daily_number, status, type, customer_name, discount_amount, packing_fee, total_amount, payment_status, payment_method")
+    .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, packing_fee, total_amount, payment_status, payment_method")
     .eq("id", orderId)
     .single();
 
@@ -212,9 +224,9 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
 
   const { data: existingJobs } = await supabaseAdmin
     .from("printer_jobs")
-    .select("id")
+    .select("sector")
     .eq("order_id", orderId);
-  if (existingJobs && existingJobs.length > 0) return;
+  const existingSectors = new Set((existingJobs ?? []).map((job: any) => String(job.sector)));
 
   const { data: items } = await supabaseAdmin
     .from("order_items")
@@ -232,10 +244,10 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
     .select("key, value")
     .in("key", ["printing_enabled", "print_customer_copy", "print_kitchen_copy", "print_juice_potato_copy"]);
 
-  const printingEnabled = settingBool(settings?.find((s: any) => s.key === "printing_enabled")?.value);
-  const shouldPrintKitchen = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value);
-  const shouldPrintJuice = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value);
-  const shouldPrintCustomer = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_customer_copy")?.value);
+  const printingEnabled = settingBool(settings?.find((s: any) => s.key === "printing_enabled")?.value, true);
+  const shouldPrintKitchen = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value, true);
+  const shouldPrintJuice = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value, true);
+  const shouldPrintCustomer = false;
 
   const kitchenItems = items.filter((i: any) => i.production_sector === "KITCHEN");
   const juicePotatoItems = items.filter((i: any) => i.production_sector === "JUICE_POTATO");
@@ -243,10 +255,10 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const timestampNow = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const formatBRL = (val: number) => `R$ ${parseFloat(val as any).toFixed(2).replace(".", ",")}`;
 
-  if (kitchenItems.length > 0 && shouldPrintKitchen) {
+  if (kitchenItems.length > 0 && shouldPrintKitchen && !existingSectors.has("KITCHEN")) {
     let content = `MARCOS KREP'S\n`;
     content += `PEDIDO #${String(order.daily_number).padStart(3, "0")}\n`;
-    content += `COZINHA / KREP\n`;
+    content += `KREPS\n`;
     content += `Tipo: ${order.type}\n`;
     content += `Horário: ${timestampNow}\n`;
     content += `------------------------\n`;
@@ -262,13 +274,18 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       content += `\n`;
     }
     content += `------------------------\n`;
+    content = buildProductionReceipt({ ...order, source: "APP" }, items, "KITCHEN", {
+      timestamp: timestampNow,
+      title: "KREPS",
+      source: "PUBLIC",
+    });
     printerJobsToInsert.push({ order_id: orderId, sector: "KITCHEN", content: { text: content } });
   }
 
-  if (juicePotatoItems.length > 0 && shouldPrintJuice) {
+  if (juicePotatoItems.length > 0 && shouldPrintJuice && !existingSectors.has("JUICE_POTATO")) {
     let content = `MARCOS KREP'S\n`;
     content += `PEDIDO #${String(order.daily_number).padStart(3, "0")}\n`;
-    content += `SUCOS / BATATA\n`;
+    content += `COZINHA\n`;
     content += `Tipo: ${order.type}\n`;
     content += `Horário: ${timestampNow}\n`;
     content += `------------------------\n`;
@@ -278,6 +295,11 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       content += `\n`;
     }
     content += `------------------------\n`;
+    content = buildProductionReceipt({ ...order, source: "APP" }, items, "JUICE_POTATO", {
+      timestamp: timestampNow,
+      title: "COZINHA",
+      source: "PUBLIC",
+    });
     printerJobsToInsert.push({ order_id: orderId, sector: "JUICE_POTATO", content: { text: content } });
   }
 
@@ -393,6 +415,85 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
   }
 }
 
+async function expireStaleAwaitingPaymentOrder(supabaseAdmin: any, order: any) {
+  if (!isPastPendingPaymentWindow(order.created_at)) return false;
+
+  const { data: activeTransaction } = await supabaseAdmin
+    .from("payment_transactions")
+    .select("id")
+    .eq("order_id", order.id)
+    .in("provider_status", ["pending", "in_process"])
+    .gt("expires_at", new Date().toISOString())
+    .limit(1)
+    .maybeSingle();
+
+  if (activeTransaction) return false;
+
+  const nowIso = new Date().toISOString();
+  const { error } = await supabaseAdmin
+    .from("orders")
+    .update({
+      status: "EXPIRADO",
+      cancelled_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("id", order.id)
+    .eq("status", "AGUARDANDO_PAGAMENTO")
+    .eq("payment_status", "PENDING");
+
+  if (error) throw new Error("Erro ao expirar pedido pendente.");
+
+  await supabaseAdmin.from("audit_logs").insert({
+    action: "PUBLIC_ORDER_EXPIRED",
+    table_name: "orders",
+    record_id: order.id,
+    new_data: {
+      reason: "payment_not_started_timeout",
+      age_minutes_threshold: PENDING_ORDER_PAYMENT_TIMEOUT_MINUTES,
+      daily_number: order.daily_number,
+    },
+  });
+
+  return true;
+}
+
+async function refreshExistingMercadoPagoTransaction(supabaseAdmin: any, accessToken: string, order: any, transaction: any) {
+  if (!transaction?.provider_payment_id) return { transaction, payment: transaction?.raw_provider_payload ?? null };
+
+  const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${transaction.provider_payment_id}`, {
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const payment = await parseJsonResponse(mpResponse);
+  if (!mpResponse.ok) {
+    console.error("[create-mercado-pago-payment] existing payment refresh failed", {
+      provider_payment_id: transaction.provider_payment_id,
+      status: mpResponse.status,
+      message: payment?.message,
+      error: payment?.error,
+    });
+    return { transaction, payment: transaction.raw_provider_payload ?? null };
+  }
+
+  const { data: updatedTransaction, error } = await supabaseAdmin
+    .from("payment_transactions")
+    .update(mapTransactionPayload(payment))
+    .eq("id", transaction.id)
+    .select("*")
+    .single();
+
+  if (error) throw new Error("Erro ao atualizar transacao existente.");
+
+  if (payment.status === "approved") {
+    await consolidateApprovedPayment(supabaseAdmin, order, payment, updatedTransaction.id);
+  }
+
+  return { transaction: updatedTransaction, payment };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: getCorsHeaders(req) });
@@ -448,7 +549,7 @@ serve(async (req) => {
 
     const { data: order, error: orderErr } = await supabaseAdmin
       .from("orders")
-      .select("id, daily_number, public_token, status, payment_status, total_amount, customer_name, customer_phone, customer_email")
+      .select("id, daily_number, public_token, status, payment_status, total_amount, customer_name, customer_phone, customer_email, created_at")
       .eq("id", orderId)
       .eq("public_token", publicToken)
       .single();
@@ -462,6 +563,9 @@ serve(async (req) => {
     }
     if (order.status !== "AGUARDANDO_PAGAMENTO" || order.payment_status !== "PENDING") {
       throw new Error("Pedido nao esta aguardando pagamento.");
+    }
+    if (await expireStaleAwaitingPaymentOrder(supabaseAdmin, order)) {
+      throw new Error("Este pedido expirou. Volte ao cardapio e faca um novo pedido.");
     }
     if (Number(order.total_amount) <= 0) {
       throw new Error("Valor do pedido invalido para pagamento.");
@@ -505,29 +609,34 @@ serve(async (req) => {
         .maybeSingle();
 
       if (existingPendingPix) {
+        const refreshed = await refreshExistingMercadoPagoTransaction(supabaseAdmin, accessToken, order, existingPendingPix);
+        const existingPix = refreshed.transaction;
+        const providerPayment = refreshed.payment ?? existingPix.raw_provider_payload;
+
         return jsonResponse(req, {
           success: true,
+          already_paid: providerPayment?.status === "approved",
           transaction: {
-            id: existingPendingPix.id,
-            status: existingPendingPix.provider_status,
-            payment_method: existingPendingPix.internal_payment_method,
-            qr_code: existingPendingPix.qr_code,
-            qr_code_base64: existingPendingPix.qr_code_base64,
-            ticket_url: existingPendingPix.ticket_url,
-            expires_at: existingPendingPix.expires_at,
-            created_at: existingPendingPix.created_at,
+            id: existingPix.id,
+            status: existingPix.provider_status,
+            payment_method: existingPix.internal_payment_method,
+            qr_code: existingPix.qr_code,
+            qr_code_base64: existingPix.qr_code_base64,
+            ticket_url: existingPix.ticket_url,
+            expires_at: existingPix.expires_at,
+            created_at: existingPix.created_at,
           },
           payment: {
-            id: existingPendingPix.provider_payment_id,
-            status: existingPendingPix.provider_status,
-            status_detail: existingPendingPix.provider_status_detail,
-            payment_method_id: existingPendingPix.provider_payment_method_id,
-            payment_type_id: existingPendingPix.provider_payment_type_id,
+            id: providerPayment?.id ?? existingPix.provider_payment_id,
+            status: providerPayment?.status ?? existingPix.provider_status,
+            status_detail: providerPayment?.status_detail ?? existingPix.provider_status_detail,
+            payment_method_id: providerPayment?.payment_method_id ?? existingPix.provider_payment_method_id,
+            payment_type_id: providerPayment?.payment_type_id ?? existingPix.provider_payment_type_id,
             point_of_interaction: {
               transaction_data: {
-                qr_code: existingPendingPix.qr_code,
-                qr_code_base64: existingPendingPix.qr_code_base64,
-                ticket_url: existingPendingPix.ticket_url,
+                qr_code: existingPix.qr_code,
+                qr_code_base64: existingPix.qr_code_base64,
+                ticket_url: existingPix.ticket_url,
               },
             },
           },

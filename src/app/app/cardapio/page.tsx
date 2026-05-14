@@ -1070,9 +1070,9 @@ function InlineInput({
 function sectorLabel(sector: string): string {
   switch (sector) {
     case "KITCHEN":
-      return "🍳 Cozinha";
+      return "Kreps";
     case "JUICE_POTATO":
-      return "🥤 Sucos/Batata";
+      return "Cozinha";
     case "NONE":
       return "—";
     default:

@@ -14,44 +14,50 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header missing');
 
-    const supabaseClientAuth = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    const { data: { user }, error: authErr } = await supabaseClientAuth.auth.getUser();
-    if (authErr || !user) throw new Error('Usuário não autenticado.');
-
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const token = authHeader.replace('Bearer ', '');
 
-    // Validar se o chamador é ADMIN e está ATIVO
+    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !user) throw new Error('Usuario nao autenticado.');
+
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from('profiles')
       .select('role, active')
       .eq('id', user.id)
       .single();
 
-    if (profileErr || !profile) throw new Error('Perfil não encontrado.');
+    if (profileErr || !profile) throw new Error('Perfil nao encontrado.');
     if (profile.role !== 'ADMIN') throw new Error('Acesso negado. Apenas administradores podem testar a impressora.');
-    if (!profile.active) throw new Error('Usuário inativo.');
+    if (!profile.active) throw new Error('Usuario inativo.');
+
+    const { data: latestOrder, error: latestOrderErr } = await supabaseAdmin
+      .from('orders')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (latestOrderErr || !latestOrder) {
+      throw new Error('Nenhum pedido encontrado para vincular ao teste de impressao.');
+    }
 
     const timestamp = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    
-    const testContent = `TESTE DE IMPRESSÃO\n` +
+
+    const testContent = `TESTE DE IMPRESSAO\n` +
       `PDV Marcos Krep's\n\n` +
-      `Se você está vendo este papel,\n` +
-      `a impressora está configurada corretamente.\n\n` +
+      `Se voce esta vendo este papel,\n` +
+      `a impressora esta configurada corretamente.\n\n` +
       `Data/hora: ${timestamp}\n` +
       `------------------------\n`;
 
-    // Criar printer_job de teste
     const { data: job, error: jobErr } = await supabaseAdmin
       .from('printer_jobs')
       .insert({
+        order_id: latestOrder.id,
         sector: 'TEST',
         status: 'PENDING',
         content: { text: testContent }
@@ -61,7 +67,6 @@ serve(async (req) => {
 
     if (jobErr) throw new Error('Erro ao gerar job de teste: ' + jobErr.message);
 
-    // Log de auditoria
     await supabaseAdmin.from('audit_logs').insert({
       user_id: user.id,
       action: 'PRINTER_TEST_REQUESTED',
