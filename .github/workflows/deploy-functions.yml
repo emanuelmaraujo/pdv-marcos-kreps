@@ -46,7 +46,6 @@ jobs:
             manage-users \
             mark-payment \
             reprint-order \
-            send-whatsapp \
             test-printer \
             update-order-status; do
             supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
@@ -62,7 +61,9 @@ jobs:
             get-public-checkout-config \
             mercado-pago-webhook \
             webauthn \
-            expire-pending-public-orders; do
+            expire-pending-public-orders \
+            send-whatsapp \
+            whatsapp-webhook; do
             supabase functions deploy "$fn" \
               --project-ref "$PROJECT_REF" \
               --no-verify-jwt

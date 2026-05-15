@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
 import {
+  AlertTriangle,
   Check,
   Clock,
   Fingerprint,
@@ -11,6 +12,7 @@ import {
   Package,
   Printer,
   RefreshCw,
+  RotateCcw,
   Save,
   Store,
   Wifi,
@@ -33,6 +35,7 @@ type SettingsState = {
   print_juice_potato_copy: string;
   whatsapp_enabled: string;
   whatsapp_template_ready: string;
+  whatsapp_template_received: string;
   whatsapp_template_language: string;
   whatsapp_test_phone: string;
   public_ordering_enabled: string;
@@ -66,6 +69,7 @@ const DEFAULT_SETTINGS: SettingsState = {
   print_juice_potato_copy: "true",
   whatsapp_enabled: "false",
   whatsapp_template_ready: "pedido_pronto",
+  whatsapp_template_received: "novo_pedido",
   whatsapp_template_language: "pt_BR",
   whatsapp_test_phone: "",
   public_ordering_enabled: "true",
@@ -245,12 +249,20 @@ export default function ConfiguracoesSistema() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testingWA, setTestingWA] = useState(false);
+  const [testingEvent, setTestingEvent] = useState<"order_received" | "order_ready" | null>(null);
   const [processingQueue, setProcessingQueue] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>("pedido");
   const [settings, setSettings] = useState<SettingsState>(DEFAULT_SETTINGS);
   const [printWorkerStatus, setPrintWorkerStatus] = useState<PrintWorkerStatus>(DEFAULT_WORKER_STATUS);
-  const [whatsappStats, setWhatsappStats] = useState({ pending: 0, sent: 0, failed: 0 });
+  const [whatsappStats, setWhatsappStats] = useState({
+    pending: 0,
+    sent_24h: 0,
+    failed_24h: 0,
+    delivered_24h: 0,
+    read_24h: 0,
+    token_expired: false,
+  });
   const { toasts, addToast, removeToast } = useToast();
 
   const publicOrderStatus = settings.public_ordering_enabled === "true" ? "Aberto" : "Pausado";
@@ -303,6 +315,7 @@ export default function ConfiguracoesSistema() {
         print_juice_potato_copy: String(data.print_juice_potato_copy ?? DEFAULT_SETTINGS.print_juice_potato_copy),
         whatsapp_enabled: String(data.whatsapp_enabled ?? DEFAULT_SETTINGS.whatsapp_enabled),
         whatsapp_template_ready: data.whatsapp_template_ready ?? DEFAULT_SETTINGS.whatsapp_template_ready,
+        whatsapp_template_received: data.whatsapp_template_received ?? DEFAULT_SETTINGS.whatsapp_template_received,
         whatsapp_template_language: data.whatsapp_template_language ?? DEFAULT_SETTINGS.whatsapp_template_language,
         whatsapp_test_phone: data.whatsapp_test_phone ?? DEFAULT_SETTINGS.whatsapp_test_phone,
         public_ordering_enabled: String(data.public_ordering_enabled ?? DEFAULT_SETTINGS.public_ordering_enabled),
@@ -362,21 +375,36 @@ export default function ConfiguracoesSistema() {
     }
   }
 
-  async function handleTestWhatsApp() {
+  async function handleTestWhatsApp(eventType: "order_received" | "order_ready") {
     if (!settings.whatsapp_test_phone) {
       addToast("error", "Informe um telefone de teste");
       return;
     }
+    const templateName = eventType === "order_received"
+      ? settings.whatsapp_template_received
+      : settings.whatsapp_template_ready;
+    if (!templateName) {
+      addToast("error", "Informe o nome do template antes de testar");
+      return;
+    }
 
-    setTestingWA(true);
+    setTestingEvent(eventType);
     try {
-      await settingsApi.testWhatsApp(settings.whatsapp_test_phone);
-      addToast("success", "Teste de WhatsApp enviado");
+      const result = await settingsApi.testWhatsApp({
+        phone: settings.whatsapp_test_phone,
+        event_type: eventType,
+        template_name: templateName,
+        daily_number: 999,
+      });
+      addToast(
+        "success",
+        `Teste enviado (${templateName})${result.provider_message_id ? ` · id ${String(result.provider_message_id).slice(-10)}` : ""}`,
+      );
       setWhatsappStats(await settingsApi.getWhatsAppStats());
     } catch (error: unknown) {
       addToast("error", error instanceof Error ? error.message : "Erro ao enviar teste");
     } finally {
-      setTestingWA(false);
+      setTestingEvent(null);
     }
   }
 
@@ -384,12 +412,32 @@ export default function ConfiguracoesSistema() {
     setProcessingQueue(true);
     try {
       const result = await settingsApi.processWhatsAppQueue();
-      addToast("success", `${result.processed} mensagens processadas`);
+      addToast(
+        "success",
+        `${result.processed ?? 0} processadas (enviadas: ${result.sent ?? 0}, falhas: ${result.failed ?? 0})`,
+      );
       setWhatsappStats(await settingsApi.getWhatsAppStats());
     } catch (error: unknown) {
       addToast("error", error instanceof Error ? error.message : "Erro ao processar fila");
     } finally {
       setProcessingQueue(false);
+    }
+  }
+
+  async function handleReprocessFailures() {
+    setReprocessing(true);
+    try {
+      const { reset } = await settingsApi.reprocessFailedWhatsApp();
+      if (reset === 0) {
+        addToast("success", "Nenhuma falha recuperavel encontrada");
+      } else {
+        addToast("success", `${reset} mensagens reenfileiradas para nova tentativa`);
+      }
+      setWhatsappStats(await settingsApi.getWhatsAppStats());
+    } catch (error: unknown) {
+      addToast("error", error instanceof Error ? error.message : "Erro ao reprocessar falhas");
+    } finally {
+      setReprocessing(false);
     }
   }
 
@@ -711,25 +759,44 @@ export default function ConfiguracoesSistema() {
             id="whatsapp"
             icon={MessageCircle}
             title="WhatsApp"
-            description="Gerencie templates, testes e processamento da fila."
+            description="Templates transacionais, testes e fila de envio."
             className={activeSection === "whatsapp" ? "block" : "hidden md:block"}
           >
             <div className="space-y-5">
+              {whatsappStats.token_expired && (
+                <div className="flex gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div className="text-xs font-semibold leading-relaxed">
+                    <p className="font-black">Token Meta expirado nas ultimas 24h.</p>
+                    <p className="mt-1">Renove WHATSAPP_ACCESS_TOKEN no Supabase Secrets e reprocesse as falhas.</p>
+                  </div>
+                </div>
+              )}
+
               <ToggleRow
                 checked={settings.whatsapp_enabled === "true"}
                 onChange={() => toggle("whatsapp_enabled")}
                 label="Integracao WhatsApp"
-                description="Envia mensagem ao cliente quando o pedido ficar pronto."
+                description="Envia novo_pedido (quando entra na fila) e pedido_pronto (quando fica pronto)."
               />
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
                 <StatPill label="Pendentes" value={whatsappStats.pending} />
-                <StatPill label="Enviadas" value={whatsappStats.sent} tone="green" />
-                <StatPill label="Falhas" value={whatsappStats.failed} tone="red" />
+                <StatPill label="Enviadas (24h)" value={whatsappStats.sent_24h} tone="green" />
+                <StatPill label="Entregues (24h)" value={whatsappStats.delivered_24h} tone="green" />
+                <StatPill label="Lidas (24h)" value={whatsappStats.read_24h} tone="green" />
+                <StatPill label="Falhas (24h)" value={whatsappStats.failed_24h} tone="red" />
               </div>
 
               <div className="grid gap-4 border-t border-zinc-100 pt-4 md:grid-cols-2">
-                <Field label="Template">
+                <Field label="Template 'novo pedido'" hint="Enviado ao entrar em producao (UTILITY).">
+                  <Input
+                    placeholder="novo_pedido"
+                    value={settings.whatsapp_template_received}
+                    onChange={(event) => set("whatsapp_template_received", event.target.value)}
+                  />
+                </Field>
+                <Field label="Template 'pedido pronto'" hint="Enviado ao marcar PRONTO (UTILITY).">
                   <Input
                     placeholder="pedido_pronto"
                     value={settings.whatsapp_template_ready}
@@ -743,27 +810,56 @@ export default function ConfiguracoesSistema() {
                     onChange={(event) => set("whatsapp_template_language", event.target.value)}
                   />
                 </Field>
-                <Field label="Telefone de teste" hint="Use DDI + DDD + numero, sem simbolos.">
+                <Field label="Telefone de teste" hint="DDI+DDD+numero (com ou sem +).">
                   <Input
-                    placeholder="5561999999999"
+                    placeholder="+5561999999999"
                     value={settings.whatsapp_test_phone}
                     onChange={(event) => set("whatsapp_test_phone", event.target.value)}
                   />
                 </Field>
-                <div className="grid grid-cols-2 gap-2 md:self-end">
-                  <Button variant="outline" onClick={handleTestWhatsApp} loading={testingWA}>
-                    Enviar teste
-                  </Button>
-                  <Button variant="outline" onClick={handleProcessQueue} loading={processingQueue}>
-                    Processar fila
-                  </Button>
-                </div>
+              </div>
+
+              <div className="grid gap-2 border-t border-zinc-100 pt-4 md:grid-cols-2">
+                <Button
+                  variant="outline"
+                  onClick={() => handleTestWhatsApp("order_received")}
+                  loading={testingEvent === "order_received"}
+                  disabled={testingEvent !== null}
+                >
+                  Testar &quot;novo pedido&quot;
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleTestWhatsApp("order_ready")}
+                  loading={testingEvent === "order_ready"}
+                  disabled={testingEvent !== null}
+                >
+                  Testar &quot;pedido pronto&quot;
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleProcessQueue}
+                  loading={processingQueue}
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Processar fila agora
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleReprocessFailures}
+                  loading={reprocessing}
+                  className="gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reprocessar falhas recuperaveis
+                </Button>
               </div>
 
               <div className="flex gap-3 rounded-xl border border-amber-100 bg-amber-50 p-4 text-amber-900">
                 <Info className="mt-0.5 h-5 w-5 shrink-0" />
                 <p className="text-xs font-semibold leading-relaxed">
-                  O WhatsApp Cloud API exige templates aprovados pela Meta e secrets configurados no Supabase.
+                  Templates devem estar aprovados pela Meta (categoria UTILITY). Falhas definitivas (template inexistente, token invalido, destinatario fora do WhatsApp) nao sao reprocessadas automaticamente.
                 </p>
               </div>
             </div>

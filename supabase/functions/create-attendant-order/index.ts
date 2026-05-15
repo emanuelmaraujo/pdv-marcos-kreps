@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildCustomerReceipt, buildProductionReceipt, settingBool, settingNumber } from "../_shared/print-format.ts";
+import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -453,6 +454,15 @@ serve(async (req) => {
     if (auditLogsToInsert.length > 0) {
       await supabaseAdmin.from('audit_logs').insert(auditLogsToInsert);
     }
+
+    // WhatsApp: notify "novo_pedido" if attendant captured customer phone (non-blocking)
+    await enqueueWhatsAppMessage(supabaseAdmin, {
+      orderId: createdOrder.id,
+      eventType: 'order_received',
+      phone: customer_phone,
+      customerName: customer_name,
+      dailyNumber: createdOrder.daily_number,
+    });
 
     // 10. Retorno
     return new Response(JSON.stringify({ 

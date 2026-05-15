@@ -1558,6 +1558,9 @@ export default function PedirPublicPage() {
                   inputMode="tel"
                   className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none transition-all focus:border-brand-red focus:bg-white"
                 />
+                <span className="mt-1 block text-[11px] font-medium leading-relaxed text-zinc-500">
+                  Vamos avisar voce pelo WhatsApp quando o pedido for confirmado e quando ficar pronto. Para sair, responda <span className="font-black">PARAR</span> a qualquer momento.
+                </span>
               </label>
 
               {!checkoutPhone && (

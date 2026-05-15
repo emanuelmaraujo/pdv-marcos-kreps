@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -60,7 +61,7 @@ serve(async (req) => {
     // Busca o Pedido atual
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, status, payment_status, customer_phone')
+      .select('id, daily_number, status, payment_status, customer_phone, customer_name')
       .eq('id', order_id)
       .single();
 
@@ -108,50 +109,14 @@ serve(async (req) => {
       updatePayload.ready_at = nowIso;
       auditAction = 'ORDER_READY';
 
-      // WhatsApp Integration (Non-blocking)
-      try {
-        // 1. Check if WhatsApp is enabled in settings
-        const { data: whatsappEnabledSetting } = await supabaseAdmin
-          .from('settings')
-          .select('value')
-          .eq('key', 'whatsapp_enabled')
-          .single();
-        
-        const isEnabled = whatsappEnabledSetting?.value === 'true' || whatsappEnabledSetting?.value === '"true"';
-
-        if (isEnabled && order.customer_phone && order.customer_phone.length >= 8) {
-           const templateName = 'pedido_ready'; // Standard for this event
-
-           // 2. Avoid Duplicates (Same order + same template)
-           const { data: existingMsg } = await supabaseAdmin
-             .from('whatsapp_messages')
-             .select('id')
-             .eq('order_id', order.id)
-             .eq('template_name', templateName)
-             .neq('status', 'FAILED')
-             .limit(1);
-
-           if (!existingMsg || existingMsg.length === 0) {
-              await supabaseAdmin.from('whatsapp_messages').insert({
-                 order_id: order.id,
-                 phone: order.customer_phone,
-                 template_name: templateName,
-                 message_type: 'order_ready', // Keep for compatibility
-                 status: 'PENDING',
-                 payload: {
-                    customer_name: order.customer_name || 'Cliente',
-                    daily_number: order.daily_number
-                 }
-              });
-              console.log(`[update-order-status] Fila de WhatsApp criada para pedido ${order.id}`);
-           } else {
-              console.log(`[update-order-status] Notificação de WhatsApp já existe para pedido ${order.id}`);
-           }
-        }
-      } catch (whatsappErr: any) {
-        // Critical: Never block the main flow
-        console.error('[update-order-status] Erro silencioso ao criar fila de WhatsApp:', whatsappErr.message);
-      }
+      // WhatsApp Integration (Non-blocking, idempotent — see _shared/whatsapp-enqueue.ts)
+      await enqueueWhatsAppMessage(supabaseAdmin, {
+        orderId: order.id,
+        eventType: 'order_ready',
+        phone: order.customer_phone,
+        customerName: order.customer_name,
+        dailyNumber: order.daily_number,
+      });
 
     } else if (status === 'ENTREGUE') {
       if (order.payment_status === 'PENDING') {

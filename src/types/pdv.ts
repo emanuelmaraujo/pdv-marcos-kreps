@@ -239,16 +239,34 @@ export interface PrinterJob {
 
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 
+export type WhatsAppEventType = 'order_received' | 'order_ready';
+
+export type WhatsAppDeliveryStatus =
+  | 'SENT'
+  | 'DELIVERED'
+  | 'READ'
+  | 'FAILED_BY_PROVIDER'
+  | 'UNDELIVERED';
+
 export interface WhatsAppMessage {
   id: string;
   order_id: string;
   phone: string;
+  event_type: WhatsAppEventType;
   message_type: string;
   template_name?: string;
   payload?: Record<string, unknown>;
   status: 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
   attempts: number;
   last_attempt_at?: string;
+  scheduled_at: string;
+  next_retry_at?: string;
+  delivery_status?: WhatsAppDeliveryStatus;
+  customer_opt_in?: boolean;
+  error_code?: string;
+  error_message?: string;
+  sent_at?: string;
+  provider_message_id?: string;
   created_at: string;
   updated_at: string;
 }

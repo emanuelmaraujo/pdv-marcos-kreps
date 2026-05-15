@@ -430,3 +430,12 @@ verify_jwt = false
 
 [functions.expire-pending-public-orders]
 verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+# send-whatsapp uses dual auth (admin Bearer OR x-cron-secret header).
+# Platform-level JWT verification must be disabled so the cron path works;
+# the function enforces auth internally before doing anything.
+[functions.send-whatsapp]
+verify_jwt = false
