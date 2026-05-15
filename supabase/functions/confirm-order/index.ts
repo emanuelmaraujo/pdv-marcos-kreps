@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildCustomerReceipt, buildProductionReceipt, settingBool } from "../_shared/print-format.ts";
+import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -247,6 +248,15 @@ serve(async (req) => {
       table_name: 'orders',
       record_id: order.id,
       user_id: user.id
+    });
+
+    // WhatsApp: notify "novo_pedido" once order enters production (non-blocking)
+    await enqueueWhatsAppMessage(supabaseAdmin, {
+      orderId: order.id,
+      eventType: 'order_received',
+      phone: order.customer_phone,
+      customerName: order.customer_name,
+      dailyNumber: order.daily_number,
     });
 
     // 7. Retorno com sucesso

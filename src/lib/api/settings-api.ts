@@ -61,9 +61,20 @@ export const settingsApi = {
     return data;
   },
 
-  async testWhatsApp(phone: string) {
+  async testWhatsApp(params: {
+    phone: string;
+    event_type?: 'order_received' | 'order_ready';
+    template_name?: string;
+    daily_number?: number | string;
+  }) {
     const { data, error } = await supabase.functions.invoke('send-whatsapp', {
-      body: { action: 'send_test', phone },
+      body: {
+        action: 'send_test',
+        phone: params.phone,
+        event_type: params.event_type,
+        template_name: params.template_name,
+        daily_number: params.daily_number,
+      },
       headers: await getAuthHeaders(),
     });
     if (error) throw error;
@@ -81,25 +92,80 @@ export const settingsApi = {
     return data;
   },
 
-  async getWhatsAppStats() {
+  async getWhatsAppStats(): Promise<{
+    pending: number;
+    sent_24h: number;
+    failed_24h: number;
+    delivered_24h: number;
+    read_24h: number;
+    token_expired: boolean;
+  }> {
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [{ data: rows, error: rowsErr }, { data: tokenAlerts }] = await Promise.all([
+      supabase
+        .from('whatsapp_messages')
+        .select('status, delivery_status, updated_at')
+        .gte('updated_at', since24h),
+      supabase
+        .from('audit_logs')
+        .select('id')
+        .eq('action', 'WHATSAPP_FAILED')
+        .gte('created_at', since24h)
+        .filter('new_data->>token_expired', 'eq', 'true')
+        .limit(1),
+    ]);
+    if (rowsErr) throw rowsErr;
+
+    let pending = 0;
+    let sent_24h = 0;
+    let failed_24h = 0;
+    let delivered_24h = 0;
+    let read_24h = 0;
+
+    (rows || []).forEach((m: { status: string; delivery_status?: string | null }) => {
+      if (m.status === 'PENDING') pending++;
+      else if (m.status === 'SENT') sent_24h++;
+      else if (m.status === 'FAILED') failed_24h++;
+      if (m.delivery_status === 'DELIVERED') delivered_24h++;
+      else if (m.delivery_status === 'READ') read_24h++;
+    });
+
+    // pending count must not be bound to the 24h window — count it independently
+    const { count: pendingTotal } = await supabase
+      .from('whatsapp_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'PENDING');
+
+    return {
+      pending: pendingTotal ?? pending,
+      sent_24h,
+      failed_24h,
+      delivered_24h,
+      read_24h,
+      token_expired: (tokenAlerts?.length ?? 0) > 0,
+    };
+  },
+
+  // Recoverable failures = transient errors (rate limits, 5xx, network) that
+  // exhausted retries. Definitive failures (template missing, token expired,
+  // recipient invalid, bad params) are skipped — reprocessing would just fail
+  // again.
+  async reprocessFailedWhatsApp(): Promise<{ reset: number }> {
+    const DEFINITIVE_CODES = ['100', '131026', '131047', '131051', '132000', '132001', '132005', '132012', '190'];
     const { data, error } = await supabase
       .from('whatsapp_messages')
-      .select('status');
-    
+      .update({
+        status: 'PENDING',
+        attempts: 0,
+        next_retry_at: null,
+        error_message: null,
+        error_code: null,
+      })
+      .eq('status', 'FAILED')
+      .or(`error_code.is.null,error_code.not.in.(${DEFINITIVE_CODES.join(',')})`)
+      .select('id');
     if (error) throw error;
-    
-    const stats = {
-      pending: 0,
-      sent: 0,
-      failed: 0,
-    };
-    
-    (data || []).forEach((m: { status: string }) => {
-      if (m.status === 'PENDING') stats.pending++;
-      else if (m.status === 'SENT') stats.sent++;
-      else if (m.status === 'FAILED') stats.failed++;
-    });
-    
-    return stats;
-  }
+    return { reset: data?.length ?? 0 };
+  },
 };

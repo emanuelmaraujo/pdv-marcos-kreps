@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildProductionReceipt, resolveProductionSector } from "../_shared/print-format.ts";
+import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 
 type JsonRecord = Record<string, unknown>;
 const PIX_EXPIRATION_MINUTES = 60;
@@ -318,6 +319,15 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
     table_name: "orders",
     record_id: orderId,
     new_data: { reason: "payment_approved_online" },
+  });
+
+  // WhatsApp: notify "novo_pedido" once payment is approved and order entered the queue (non-blocking)
+  await enqueueWhatsAppMessage(supabaseAdmin, {
+    orderId,
+    eventType: "order_received",
+    phone: order.customer_phone,
+    customerName: order.customer_name,
+    dailyNumber: order.daily_number,
   });
 }
 
