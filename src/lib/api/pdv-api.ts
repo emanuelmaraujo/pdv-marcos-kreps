@@ -268,6 +268,20 @@ export type PublicCustomerProfileResponse = {
   };
 };
 
+export type AttendantCustomerProfileResponse = {
+  success: boolean;
+  found: boolean;
+  profile?: {
+    name?: string | null;
+    email?: string | null;
+    order_type?: 'BALCAO' | 'VIAGEM' | null;
+    marketing_opt_in?: boolean;
+    remember_checkout_data?: boolean;
+    orders_count?: number;
+    last_order_at?: string | null;
+  };
+};
+
 export type PublicCheckoutConfigResponse = {
   success: boolean;
   error?: string;
@@ -335,6 +349,21 @@ export const pdvApi = {
     }
 
     return data as PublicCustomerProfileResponse;
+  },
+
+  // Authenticated lookup for ADMIN/ATTENDANT — returns any customer matching
+  // the phone, regardless of remember_checkout_data. Used by /app/novo-pedido.
+  getCustomerProfile: async (payload: { customer_phone: string }) => {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke('get-customer-profile', {
+      body: payload,
+      headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+    });
+    if (error) {
+      return { success: false, found: false } as AttendantCustomerProfileResponse;
+    }
+    return data as AttendantCustomerProfileResponse;
   },
 
   getPublicCheckoutConfig: () =>

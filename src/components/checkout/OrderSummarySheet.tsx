@@ -202,7 +202,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
       }
       try {
         setProfileLookupState("checking");
-        const response = await pdvApi.getPublicCustomerProfile({ customer_phone: normalizedPhone });
+        const response = await pdvApi.getCustomerProfile({ customer_phone: normalizedPhone });
         if (cancelled) return;
         if (response.found && response.profile) {
           const resolvedName = response.profile.name ?? customerNameRef.current;
