@@ -8,6 +8,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Normaliza telefone BR para E.164 canonico ("+55DDDNNNNNNNN[N]"). Retorna null se invalido.
+function normalizeBrazilPhone(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  let digits = value.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    digits = digits.slice(2);
+  }
+  digits = digits.replace(/^0+/, "");
+  if (digits.length !== 10 && digits.length !== 11) return null;
+  const ddd = Number(digits.slice(0, 2));
+  if (ddd < 11 || ddd > 99) return null;
+  if (digits.length === 11 && digits[2] !== "9") return null;
+  return `+55${digits}`;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -75,17 +92,18 @@ serve(async (req) => {
     }
 
     // 2. Extrair payload
-    const { 
-      order_type, customer_name, customer_phone, notes, 
-      payment_method, payment_status, discount, items 
+    const {
+      order_type, customer_name, customer_phone, notes,
+      payment_method, payment_status, discount, items,
+      remember_checkout_data,
     } = await req.json();
 
     if (!items || items.length === 0) throw new Error('O carrinho está vazio.');
     if (order_type !== 'BALCAO' && order_type !== 'VIAGEM') throw new Error('order_type inválido (BALCAO ou VIAGEM).');
-    
+
     const validPayMethods = ['PIX', 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'PENDING', 'COURTESY'];
     const validPayStatuses = ['PENDING', 'PAID', 'COURTESY'];
-    
+
     if (!validPayMethods.includes(payment_method)) throw new Error('payment_method inválido.');
     if (!validPayStatuses.includes(payment_status)) throw new Error('payment_status inválido.');
 
@@ -93,10 +111,14 @@ serve(async (req) => {
        throw new Error('payment_method deve ser COURTESY quando o status for COURTESY.');
     }
 
-    // Validação básica do telefone (opcional)
+    // Normalizacao do telefone (opcional). Frontend ja envia +E.164, mas mantemos
+    // defensivo. customer_phone_e164 sera usado para upsert em customers e para
+    // gravar o pedido. Se invalido, mantem so o que veio (compat com fluxos antigos).
+    const customerPhoneE164 = normalizeBrazilPhone(customer_phone);
     if (customer_phone && customer_phone.length > 0 && customer_phone.length < 8) {
       throw new Error('Número de telefone inválido.');
     }
+    const shouldRememberCustomer = remember_checkout_data === true && !!customerPhoneE164;
 
     // 3. Buscar configurações e validar produtos/addons
     const { data: settingsData } = await supabaseAdmin.from('settings').select('key, value');
@@ -225,6 +247,50 @@ serve(async (req) => {
       paidAt = nowIso;
     }
 
+    // 4.5. Upsert do cliente se telefone valido. Mesmo padrão do create-public-order:
+    // sempre toca last_seen/last_order/orders_count; só atualiza nome + flag de
+    // "lembrar" quando remember_checkout_data=true. Falha aqui nao bloqueia o pedido.
+    let customerId: string | null = null;
+    if (customerPhoneE164) {
+      try {
+        const { data: existingCustomer } = await supabaseAdmin
+          .from('customers')
+          .select('id, orders_count, name, remember_checkout_data')
+          .eq('id', customerPhoneE164)
+          .maybeSingle();
+
+        const ordersCount = Number(existingCustomer?.orders_count ?? 0) + 1;
+        const upsertPayload: Record<string, unknown> = {
+          id: customerPhoneE164,
+          phone_e164: customerPhoneE164,
+          // Se o atendente nao digitou nome, preserva o nome anterior (fallback "Cliente")
+          name: (customer_name && String(customer_name).trim()) || existingCustomer?.name || 'Cliente',
+          last_seen_at: nowIso,
+          last_order_at: nowIso,
+          orders_count: ordersCount,
+          source: existingCustomer ? undefined : 'ATTENDANT',
+        };
+
+        if (shouldRememberCustomer) {
+          upsertPayload.remember_checkout_data = true;
+          upsertPayload.checkout_profile_updated_at = nowIso;
+          upsertPayload.last_order_type = order_type;
+        }
+
+        const { error: customerErr } = await supabaseAdmin
+          .from('customers')
+          .upsert(upsertPayload, { onConflict: 'id', ignoreDuplicates: false });
+
+        if (customerErr) {
+          console.error('[create-attendant-order] customer upsert falhou (non-blocking):', customerErr.message);
+        } else {
+          customerId = customerPhoneE164;
+        }
+      } catch (customerErr) {
+        console.error('[create-attendant-order] customer upsert excecao (non-blocking):', customerErr);
+      }
+    }
+
     // 5. Inserir Pedido (Avança o status para NA_FILA)
     const { data: createdOrder, error: insertError } = await supabaseAdmin
       .from('orders')
@@ -233,7 +299,8 @@ serve(async (req) => {
         type: order_type,
         status: 'NA_FILA',
         customer_name: customer_name || null,
-        customer_phone: customer_phone || null,
+        customer_phone: customerPhoneE164 ?? (customer_phone || null),
+        customer_id: customerId,
         notes: notes || null,
         discount_amount: discountAmount,
         packing_fee: packingFee,
@@ -459,7 +526,7 @@ serve(async (req) => {
     await enqueueWhatsAppMessage(supabaseAdmin, {
       orderId: createdOrder.id,
       eventType: 'order_received',
-      phone: customer_phone,
+      phone: customerPhoneE164 ?? customer_phone,
       customerName: customer_name,
       dailyNumber: createdOrder.daily_number,
     });
