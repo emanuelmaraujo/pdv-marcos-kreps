@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { useCart, CartItem } from "@/features/cart/useCart";
@@ -11,6 +11,7 @@ import {
   Trash2,
   Edit2,
   ChevronLeft,
+  Loader2,
   User,
   ShoppingBag,
   Utensils,
@@ -24,6 +25,31 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+// ─── Phone helpers (mirror /pedir page) ───────────────────────────────────────
+
+function normalizeBrazilPhone(value: string): string | null {
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("55")) digits = digits.slice(2);
+  digits = digits.replace(/^0+/, "");
+  if (digits.length !== 10 && digits.length !== 11) return null;
+  const ddd = Number(digits.slice(0, 2));
+  if (ddd < 11 || ddd > 99) return null;
+  if (digits.length === 11 && digits[2] !== "9") return null;
+  return `+55${digits}`;
+}
+
+function formatWhatsAppInput(value: string): string {
+  const normalized = normalizeBrazilPhone(value);
+  const digits = (
+    normalized ? normalized.replace(/^\+55/, "") : value.replace(/\D/g, "").replace(/^55/, "")
+  ).slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
 
 // ─── Local storage helpers for recent names ───────────────────────────────────
 
@@ -108,6 +134,17 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number } | null>(null);
 
+  // Customer profile lookup (mirrors /pedir behavior)
+  const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found" | "not_found">("idle");
+  const [profileNotice, setProfileNotice] = useState("");
+  const [rememberCustomerData, setRememberCustomerData] = useState(false);
+  const customerNameRef = useRef(customerName);
+  const lastAutofilledPhoneRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    customerNameRef.current = customerName;
+  }, [customerName]);
+
   // Load packaging fee setting once
   useEffect(() => {
     settingsApi.getSettings().then((s) => {
@@ -125,6 +162,72 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [isOpen]);
+
+  // Reset lookup state when sheet closes (deferred to avoid sync setState in effect)
+  useEffect(() => {
+    if (isOpen) return;
+    const timer = window.setTimeout(() => {
+      setProfileLookupState("idle");
+      setProfileNotice("");
+      setRememberCustomerData(false);
+      lastAutofilledPhoneRef.current = null;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
+
+  // Debounced lookup: when phone becomes a valid E.164, query the public
+  // customer profile API and auto-fill the name + offer remember toggle.
+  useEffect(() => {
+    if (!isOpen) return;
+    const normalizedPhone = normalizeBrazilPhone(customerPhone);
+
+    if (!normalizedPhone) {
+      const idleTimer = window.setTimeout(() => {
+        setProfileLookupState("idle");
+        if (!customerPhone.trim()) setProfileNotice("");
+      }, 0);
+      return () => window.clearTimeout(idleTimer);
+    }
+
+    // Clear stale auto-fill if phone changed since last fill
+    const phoneChanged =
+      lastAutofilledPhoneRef.current && lastAutofilledPhoneRef.current !== normalizedPhone;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (phoneChanged) {
+        lastAutofilledPhoneRef.current = null;
+        setProfileNotice("");
+        setRememberCustomerData(false);
+      }
+      try {
+        setProfileLookupState("checking");
+        const response = await pdvApi.getPublicCustomerProfile({ customer_phone: normalizedPhone });
+        if (cancelled) return;
+        if (response.found && response.profile) {
+          const resolvedName = response.profile.name ?? customerNameRef.current;
+          setCustomerInfo(resolvedName, formatWhatsAppInput(normalizedPhone));
+          setRememberCustomerData(true);
+          lastAutofilledPhoneRef.current = normalizedPhone;
+          setProfileLookupState("found");
+          setProfileNotice("Cliente reconhecido pelo WhatsApp.");
+        } else {
+          setProfileLookupState("not_found");
+          setProfileNotice("");
+        }
+      } catch {
+        if (!cancelled) {
+          setProfileLookupState("not_found");
+          setProfileNotice("");
+        }
+      }
+    }, 500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [customerPhone, isOpen, setCustomerInfo]);
 
   const estimatedSubtotal = getEstimatedSubtotal();
   // Embalagem cobrada por krep marcado como Para Levar
@@ -153,10 +256,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
       }
 
       const derivedOrderType = items.some((i) => i.is_takeout) ? "VIAGEM" : "BALCAO";
+      const normalizedPhone = normalizeBrazilPhone(customerPhone);
       const payload = {
         order_type: derivedOrderType,
         customer_name: customerName.trim() || undefined,
-        customer_phone: customerPhone.trim() || undefined,
+        customer_phone: normalizedPhone ?? (customerPhone.trim() || undefined),
+        remember_checkout_data: normalizedPhone ? rememberCustomerData : false,
         notes: orderNotes.trim() || undefined,
         payment_method: selectedPaymentMethod,
         payment_status: paymentStatus,
@@ -402,14 +507,60 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
 
             {/* WhatsApp */}
             <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">WhatsApp (opcional)</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">WhatsApp (opcional)</p>
+                {profileLookupState === "checking" && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-zinc-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    procurando...
+                  </span>
+                )}
+              </div>
               <input
                 type="tel"
                 placeholder="(00) 00000-0000"
                 value={customerPhone}
                 onChange={(e) => setCustomerInfo(customerName, e.target.value)}
+                onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
                 className="w-full rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3.5 font-bold text-zinc-900 placeholder-zinc-400 focus:border-brand-red/30 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-red/10 transition-all text-sm"
               />
+
+              {profileLookupState === "found" && profileNotice && (
+                <p className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  {profileNotice}
+                </p>
+              )}
+              {profileLookupState === "not_found" && (
+                <p className="text-[11px] font-medium text-zinc-400">
+                  Cliente novo. Marque a opção abaixo para salvar para a próxima vez.
+                </p>
+              )}
+
+              {/* Remember toggle — só aparece com telefone valido */}
+              {normalizeBrazilPhone(customerPhone) && (
+                <button
+                  type="button"
+                  onClick={() => setRememberCustomerData((v) => !v)}
+                  className={`mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                    rememberCustomerData
+                      ? "border-emerald-200 bg-emerald-50"
+                      : "border-zinc-200 bg-white hover:bg-zinc-50"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className={`block text-xs font-black ${rememberCustomerData ? "text-emerald-800" : "text-zinc-800"}`}>
+                      Salvar dados deste cliente
+                    </span>
+                    <span className={`mt-0.5 block text-[10px] font-medium leading-relaxed ${rememberCustomerData ? "text-emerald-600" : "text-zinc-400"}`}>
+                      Da próxima vez que ele digitar o WhatsApp, o nome aparece sozinho.
+                    </span>
+                  </span>
+                  <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${rememberCustomerData ? "bg-emerald-500" : "bg-zinc-300"}`}>
+                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${rememberCustomerData ? "translate-x-4" : "translate-x-0.5"}`} />
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* Notes */}
