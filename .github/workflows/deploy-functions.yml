@@ -43,6 +43,7 @@ jobs:
             cash-report \
             confirm-order \
             create-attendant-order \
+            get-customer-profile \
             manage-users \
             mark-payment \
             reprint-order \
