@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
+import { PayItemsModal } from "./PayItemsModal";
 import { useState } from "react";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
@@ -92,6 +93,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [showCancelReason, setShowCancelReason] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [showPaymentSelection, setShowPaymentSelection] = useState(false);
+  const [showPayItems, setShowPayItems] = useState(false);
 
   if (!order) return null;
 
@@ -141,6 +143,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
 
   return (
+    <>
     <BottomSheet isOpen={isOpen} onClose={onClose} title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}>
       <div className="flex flex-col gap-5 pb-10">
 
@@ -270,20 +273,42 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </Button>
               )}
 
-              {/* Payment pending alert */}
-              {order.payment_status === "PENDING" && order.status !== "CANCELADO" && !isAppAwaitingPayment && (
+              {/* Payment pending / partial alert */}
+              {(order.payment_status === "PENDING" || order.payment_status === "PARTIAL") && order.status !== "CANCELADO" && !isAppAwaitingPayment && (
                 <div className="rounded-2xl border-2 border-brand-amber/30 bg-brand-amber/5 p-4 space-y-3">
                   <div className="flex items-center gap-2 text-brand-amber">
                     <AlertTriangle size={16} />
-                    <span className="text-xs font-black uppercase tracking-widest">Pagamento Pendente</span>
+                    <span className="text-xs font-black uppercase tracking-widest">
+                      {order.payment_status === "PARTIAL" ? "Pagamento Parcial" : "Pagamento Pendente"}
+                    </span>
                   </div>
-                  <Button
-                    className="h-12 w-full bg-brand-amber font-black text-brand-charcoal hover:bg-brand-amber/80"
-                    onClick={() => setShowPaymentSelection(true)}
-                    disabled={isLoading}
-                  >
-                    RECEBER AGORA
-                  </Button>
+                  {/* Pedido com múltiplos itens: permite pagar por item */}
+                  {(order.items?.length ?? 0) > 1 ? (
+                    <div className="flex gap-2">
+                      <Button
+                        className="h-12 flex-1 bg-brand-amber font-black text-brand-charcoal hover:bg-brand-amber/80 text-xs"
+                        onClick={() => setShowPayItems(true)}
+                        disabled={isLoading}
+                      >
+                        PAGAR ITENS
+                      </Button>
+                      <Button
+                        className="h-12 flex-1 bg-brand-charcoal font-black text-white hover:bg-zinc-700 text-xs"
+                        onClick={() => setShowPaymentSelection(true)}
+                        disabled={isLoading}
+                      >
+                        PAGAR TUDO
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      className="h-12 w-full bg-brand-amber font-black text-brand-charcoal hover:bg-brand-amber/80"
+                      onClick={() => setShowPaymentSelection(true)}
+                      disabled={isLoading}
+                    >
+                      RECEBER AGORA
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -396,5 +421,14 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
         </div>
       </div>
     </BottomSheet>
+
+    {showPayItems && (
+      <PayItemsModal
+        order={order}
+        onClose={() => setShowPayItems(false)}
+        onPaid={() => { setShowPayItems(false); onOrderUpdated(); onClose(); }}
+      />
+    )}
+    </>
   );
 }

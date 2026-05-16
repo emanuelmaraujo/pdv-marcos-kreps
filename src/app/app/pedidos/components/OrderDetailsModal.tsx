@@ -5,6 +5,7 @@ import { Order, PaymentMethod, PaymentStatus } from "@/types/pdv";
 import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
+import { PayItemsModal } from "./PayItemsModal";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
@@ -73,6 +74,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [showCancelReason, setShowCancelReason] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [showPaymentSelection, setShowPaymentSelection] = useState(false);
+  const [showPayItems, setShowPayItems] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
   // Close on Escape
@@ -362,22 +364,41 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </Button>
                 )}
 
-                {/* Payment pending alert */}
-                {order.payment_status === "PENDING" && !isCANCELADO && !isAppAwaitingPayment && (
+                {/* Payment pending / partial alert */}
+                {(order.payment_status === "PENDING" || order.payment_status === "PARTIAL") && !isCANCELADO && !isAppAwaitingPayment && (
                   <div className="rounded-2xl border-2 border-brand-amber/30 bg-brand-amber/5 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-brand-amber">
                       <AlertTriangle size={14} />
                       <span className="text-[10px] font-black uppercase tracking-widest">
-                        Pagamento Pendente
+                        {order.payment_status === "PARTIAL" ? "Pagamento Parcial" : "Pagamento Pendente"}
                       </span>
                     </div>
-                    <Button
-                      className="h-11 w-full bg-brand-amber text-sm font-black text-brand-charcoal hover:bg-brand-amber/80"
-                      onClick={() => setShowPaymentSelection(true)}
-                      disabled={isLoading}
-                    >
-                      RECEBER AGORA
-                    </Button>
+                    {(order.items?.length ?? 0) > 1 ? (
+                      <div className="flex gap-2">
+                        <Button
+                          className="h-11 flex-1 bg-brand-amber text-xs font-black text-brand-charcoal hover:bg-brand-amber/80"
+                          onClick={() => setShowPayItems(true)}
+                          disabled={isLoading}
+                        >
+                          PAGAR ITENS
+                        </Button>
+                        <Button
+                          className="h-11 flex-1 bg-brand-charcoal text-xs font-black text-white hover:bg-zinc-700"
+                          onClick={() => setShowPaymentSelection(true)}
+                          disabled={isLoading}
+                        >
+                          PAGAR TUDO
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        className="h-11 w-full bg-brand-amber text-sm font-black text-brand-charcoal hover:bg-brand-amber/80"
+                        onClick={() => setShowPaymentSelection(true)}
+                        disabled={isLoading}
+                      >
+                        RECEBER AGORA
+                      </Button>
+                    )}
                   </div>
                 )}
 
@@ -495,6 +516,13 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
           </div>
         </div>
       </div>
+      {showPayItems && (
+        <PayItemsModal
+          order={order}
+          onClose={() => setShowPayItems(false)}
+          onPaid={() => { setShowPayItems(false); onOrderUpdated(); onClose(); }}
+        />
+      )}
     </>
   );
 }
