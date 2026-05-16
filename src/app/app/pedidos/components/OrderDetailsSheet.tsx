@@ -3,6 +3,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
+import { OrderItemsControl } from "./OrderItemsControl";
 import { useState } from "react";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
@@ -200,44 +201,14 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
           </div>
         </div>
 
-        {/* Items */}
+        {/* Items com controles por item */}
         <div className="space-y-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Itens do Pedido</p>
-          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-            <div className="divide-y divide-zinc-100 max-h-64 overflow-y-auto">
-              {order.items?.map((item) => (
-                <div key={item.id} className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-black text-sm text-zinc-900">
-                        {item.quantity}× {item.product?.name ?? item.product_name_snapshot}
-                      </p>
-                      {item.removed_ingredients && item.removed_ingredients.length > 0 && (
-                        <p className="mt-0.5 text-[11px] font-bold text-brand-red uppercase">
-                          − SEM: {item.removed_ingredients.map((ri) => ri.ingredient?.name ?? ri.ingredient_name_snapshot).join(", ")}
-                        </p>
-                      )}
-                      {item.addons && item.addons.length > 0 && (
-                        <p className="mt-0.5 text-[11px] font-bold text-emerald-600 uppercase">
-                          + {item.addons.map((a) => `${a.quantity}× ${a.addon?.name ?? a.addon_name_snapshot}`).join(", ")}
-                        </p>
-                      )}
-                      {item.observation && (
-                        <div className="mt-2 rounded-lg border-l-4 border-zinc-200 bg-zinc-50 px-3 py-1.5">
-                          <p className="text-[11px] italic font-medium text-zinc-500">&quot;{item.observation}&quot;</p>
-                        </div>
-                      )}
-                    </div>
-                    <p className="shrink-0 text-sm font-black text-zinc-700">
-                      {currency.format(item.total_price)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <OrderItemsControl order={order} onMutated={onOrderUpdated} />
 
-            {/* Financial summary */}
-            <div className="border-t border-zinc-100 bg-zinc-50/80 p-4 space-y-2">
+          {/* Financial summary */}
+          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <div className="bg-zinc-50/80 p-4 space-y-2">
               {hasDiscount && (
                 <div className="flex justify-between text-xs font-semibold text-zinc-500">
                   <span>Subtotal</span>

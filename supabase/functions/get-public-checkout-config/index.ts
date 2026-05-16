@@ -95,6 +95,35 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
+    // Resolve filial (opcional via query ?branch=slug ou body.branch_slug).
+    let branchSlug: string | null = null;
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      branchSlug = url.searchParams.get("branch");
+    } else {
+      try {
+        const body = await req.json();
+        branchSlug = typeof body?.branch_slug === "string" ? body.branch_slug : null;
+      } catch { /* sem body, ok */ }
+    }
+
+    let branch: any = null;
+    if (branchSlug) {
+      const { data } = await supabaseAdmin
+        .from("branches")
+        .select("id, code, name, slug, active, ordering_enabled, ordering_start_time, ordering_end_time, packing_fee")
+        .eq("slug", branchSlug)
+        .maybeSingle();
+      branch = data;
+      if (!branch || !branch.active) {
+        return jsonResponse(req, {
+          success: false,
+          error: "Filial inexistente ou inativa.",
+          ordering_disabled: true,
+        }, 404);
+      }
+    }
+
     const publicKeys = [
       "public_ordering_enabled",
       "public_ordering_start_time",
@@ -111,19 +140,25 @@ serve(async (req) => {
     if (error) throw new Error("Erro ao carregar configuracoes publicas.");
 
     const settings = Object.fromEntries((data ?? []).map((row: any) => [row.key, row.value]));
-    const enabledByAdmin = settingBool(settings.public_ordering_enabled, true);
-    const start = settingString(settings.public_ordering_start_time, DEFAULT_ORDERING_START);
-    const end = settingString(settings.public_ordering_end_time, DEFAULT_ORDERING_END);
+    const globalEnabled = settingBool(settings.public_ordering_enabled, true);
+    const enabledByAdmin = branch ? (globalEnabled && branch.ordering_enabled !== false) : globalEnabled;
+    const start = (branch?.ordering_start_time as string | null) ??
+      settingString(settings.public_ordering_start_time, DEFAULT_ORDERING_START);
+    const end = (branch?.ordering_end_time as string | null) ??
+      settingString(settings.public_ordering_end_time, DEFAULT_ORDERING_END);
     const isOpenBySchedule = isWithinOrderingWindow(start, end);
     const onlineOrderingEnabled = enabledByAdmin && isOpenBySchedule;
+    const branchFee = branch ? Number(branch.packing_fee ?? 0) : 0;
+    const packingFee = branchFee > 0 ? branchFee : settingNumber(settings.packaging_fee, 0);
 
     return jsonResponse(req, {
       success: true,
+      branch: branch ? { id: branch.id, code: branch.code, name: branch.name, slug: branch.slug } : null,
       settings: {
         public_ordering_enabled: String(enabledByAdmin),
         public_ordering_start_time: start,
         public_ordering_end_time: end,
-        packaging_fee: String(settingNumber(settings.packaging_fee, 0)),
+        packaging_fee: String(packingFee),
         apply_packaging_fee_for_takeout: String(settingBool(settings.apply_packaging_fee_for_takeout, false)),
       },
       online_ordering_enabled: onlineOrderingEnabled,

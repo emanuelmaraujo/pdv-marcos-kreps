@@ -7,13 +7,17 @@ interface Props {
 
 export function PaymentStatusBadge({ status, className = "" }: Props) {
   const map: Record<PaymentStatus, { label: string; classes: string }> = {
-    PENDING: { 
-      label: "Pendente", 
-      classes: "bg-brand-amber text-brand-charcoal border-brand-amber shadow-sm" 
+    PENDING: {
+      label: "Pendente",
+      classes: "bg-brand-amber text-brand-charcoal border-brand-amber shadow-sm"
     },
-    PAID: { 
-      label: "Pago", 
-      classes: "bg-emerald-500 text-white border-emerald-500 shadow-sm" 
+    PARTIAL: {
+      label: "Parcial",
+      classes: "bg-blue-100 text-blue-700 border-blue-300 shadow-sm"
+    },
+    PAID: {
+      label: "Pago",
+      classes: "bg-emerald-500 text-white border-emerald-500 shadow-sm"
     },
     REFUNDED: { 
       label: "Estornado", 

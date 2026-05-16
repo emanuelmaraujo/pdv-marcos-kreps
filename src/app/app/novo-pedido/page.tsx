@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { useCart, CartItem } from "@/features/cart/useCart";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi } from "@/lib/api/pdv-api";
+import { useCurrentBranchId } from "@/contexts/BranchContext";
 import { Product, Ingredient, Order, Addon } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
@@ -45,6 +46,7 @@ function buildMenuIndexes(menuData: MenuData | null): MenuIndexes | null {
 export default function NovoPedidoPage() {
   const searchParams = useSearchParams();
   const addToId = searchParams.get("add_to");
+  const currentBranchId = useCurrentBranchId();
   
   const {
     items,
@@ -76,7 +78,7 @@ export default function NovoPedidoPage() {
     async function loadMenu() {
       try {
         setLoading(true);
-        const data = await menuApi.getMenuData();
+        const data = await menuApi.getMenuData(currentBranchId);
         setMenuData(data);
         if (data.categories.length > 0) {
           setSelectedCategoryId(data.categories[0].id);
@@ -92,7 +94,7 @@ export default function NovoPedidoPage() {
       }
     }
     loadMenu();
-  }, []);
+  }, [currentBranchId]);
 
   useEffect(() => {
     if (addToId) {

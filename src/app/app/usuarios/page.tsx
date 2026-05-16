@@ -10,6 +10,8 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { usersApi, UserProfile } from "@/lib/api/users-api";
 import { useToast, ToastContainer } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { useBranch } from "@/contexts/BranchContext";
+import { branchesAdminApi } from "@/lib/api/branches-admin-api";
 import { enrollPasskey, isWebAuthnSupported, hasEnrolledPasskey } from "@/lib/webauthn-client";
 import {
   UserPlus,
@@ -84,6 +86,7 @@ export default function GestaoUsuarios() {
   const [biometricSaving, setBiometricSaving] = useState(false);
   const [biometricDone, setBiometricDone] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
+  const { branches } = useBranch();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -91,6 +94,7 @@ export default function GestaoUsuarios() {
     password: "",
     role: "ATTENDANT" as "ADMIN" | "ATTENDANT",
     active: true,
+    branch_ids: [] as string[],
   });
 
   const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
@@ -126,13 +130,18 @@ export default function GestaoUsuarios() {
 
   function handleAdd() {
     setEditingUser(null);
-    setFormData({ name: "", email: "", password: "", role: "ATTENDANT", active: true });
+    setFormData({ name: "", email: "", password: "", role: "ATTENDANT", active: true, branch_ids: [] });
     setIsModalOpen(true);
   }
 
-  function handleEdit(user: UserProfile) {
+  async function handleEdit(user: UserProfile) {
     setEditingUser(user);
-    setFormData({ name: user.name, email: user.email, password: "", role: user.role, active: user.active });
+    // Pré-carrega as filiais que o usuário já está vinculado.
+    let branch_ids: string[] = [];
+    try {
+      branch_ids = await branchesAdminApi.listProfileBranches(user.id);
+    } catch { /* não bloqueia abertura do form */ }
+    setFormData({ name: user.name, email: user.email, password: "", role: user.role, active: user.active, branch_ids });
     setIsModalOpen(true);
   }
 
@@ -147,10 +156,20 @@ export default function GestaoUsuarios() {
     setSaving(true);
     try {
       if (editingUser) {
-        await usersApi.updateUser({ id: editingUser.id, name: formData.name, role: formData.role });
+        await usersApi.updateUser({
+          id: editingUser.id,
+          name: formData.name,
+          role: formData.role,
+          branch_ids: formData.branch_ids,
+          home_branch_id: formData.branch_ids[0] ?? null,
+        });
         addToast("success", "Usuário atualizado com sucesso!");
       } else {
-        await usersApi.createUser(formData);
+        await usersApi.createUser({
+          ...formData,
+          branch_ids: formData.branch_ids,
+          home_branch_id: formData.branch_ids[0] ?? null,
+        });
         addToast("success", "Usuário criado com sucesso!");
       }
       setIsModalOpen(false);
@@ -521,6 +540,57 @@ export default function GestaoUsuarios() {
               </div>
               <p className="text-[10px] text-zinc-400 italic px-2">Administradores podem gerenciar estoque, financeiro e outros usuários.</p>
             </div>
+
+            {/* Filiais autorizadas */}
+            {branches.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">
+                  Filiais Autorizadas
+                </label>
+                <p className="text-[10px] text-zinc-400 italic px-2">
+                  Selecione em quais filiais este usuário pode operar. ADMIN tem acesso a todas independente da seleção.
+                </p>
+                <div className="space-y-1.5">
+                  {branches.map((b) => {
+                    const checked = formData.branch_ids.includes(b.id);
+                    return (
+                      <label
+                        key={b.id}
+                        className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all ${
+                          checked ? "border-brand-red bg-red-50" : "border-zinc-200 bg-white hover:bg-zinc-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...formData.branch_ids, b.id]
+                              : formData.branch_ids.filter((x) => x !== b.id);
+                            setFormData({ ...formData, branch_ids: next });
+                          }}
+                          className="h-4 w-4 accent-brand-red"
+                        />
+                        <span className="rounded-md bg-brand-charcoal px-2 py-0.5 text-[10px] font-black text-white">
+                          {b.code}
+                        </span>
+                        <span className="flex-1 text-sm font-bold text-zinc-800">{b.name}</span>
+                        {!b.active && (
+                          <span className="text-[10px] font-bold text-red-500">Inativa</span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+                {formData.branch_ids.length > 0 && (
+                  <p className="text-[10px] font-bold text-zinc-500 px-2">
+                    Filial padrão (home): <span className="text-brand-red">
+                      {branches.find((b) => b.id === formData.branch_ids[0])?.name ?? "—"}
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="pt-6">

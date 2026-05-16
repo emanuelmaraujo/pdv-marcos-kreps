@@ -75,7 +75,7 @@ serve(async (req) => {
       }
 
       case 'create_user': {
-        const { email, password, name, role, active } = data;
+        const { email, password, name, role, active, branch_ids, home_branch_id } = data;
 
         if (!email || !password || !name || !role) {
           throw new Error('Campos obrigatórios ausentes (email, senha, nome, perfil).');
@@ -92,16 +92,27 @@ serve(async (req) => {
 
         const { error: insErr } = await supabaseAdmin
           .from('profiles')
-          .upsert({ id: newUser.user.id, name, role, active: active ?? true });
+          .upsert({
+            id: newUser.user.id,
+            name,
+            role,
+            active: active ?? true,
+            home_branch_id: home_branch_id ?? (Array.isArray(branch_ids) && branch_ids.length > 0 ? branch_ids[0] : null),
+          });
 
         if (insErr) throw insErr;
+
+        if (Array.isArray(branch_ids) && branch_ids.length > 0) {
+          const rows = branch_ids.map((bid: string) => ({ profile_id: newUser.user.id, branch_id: bid }));
+          await supabaseAdmin.from('profile_branches').insert(rows);
+        }
 
         await supabaseAdmin.from('audit_logs').insert({
           user_id: user.id,
           action: 'USER_CREATED',
           table_name: 'profiles',
           record_id: newUser.user.id,
-          new_data: { email, name, role, active: active ?? true }
+          new_data: { email, name, role, active: active ?? true, branch_ids }
         });
 
         responseData = { id: newUser.user.id };
@@ -109,22 +120,37 @@ serve(async (req) => {
       }
 
       case 'update_user': {
-        const { id, name, role } = data;
+        const { id, name, role, branch_ids, home_branch_id } = data;
         if (!id || !name || !role) throw new Error('ID, nome e perfil são obrigatórios.');
+
+        const profileUpdate: Record<string, unknown> = { name, role };
+        if (home_branch_id !== undefined) profileUpdate.home_branch_id = home_branch_id;
 
         const { error: updErr } = await supabaseAdmin
           .from('profiles')
-          .update({ name, role })
+          .update(profileUpdate)
           .eq('id', id);
 
         if (updErr) throw updErr;
+
+        // Se branch_ids foi enviado, sincroniza profile_branches (delete + insert).
+        if (Array.isArray(branch_ids)) {
+          const { error: delErr } = await supabaseAdmin
+            .from('profile_branches').delete().eq('profile_id', id);
+          if (delErr) throw delErr;
+          if (branch_ids.length > 0) {
+            const rows = branch_ids.map((bid: string) => ({ profile_id: id, branch_id: bid }));
+            const { error: insErr } = await supabaseAdmin.from('profile_branches').insert(rows);
+            if (insErr) throw insErr;
+          }
+        }
 
         await supabaseAdmin.from('audit_logs').insert({
           user_id: user.id,
           action: 'USER_UPDATED',
           table_name: 'profiles',
           record_id: id,
-          new_data: { name, role }
+          new_data: { name, role, branch_ids }
         });
         break;
       }

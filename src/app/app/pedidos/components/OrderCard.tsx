@@ -1,8 +1,46 @@
 import { useState } from "react";
-import { Order } from "@/types/pdv";
+import { Order, OrderItem, OrderItemStatus } from "@/types/pdv";
 import { Clock, ShoppingBag, User, Utensils, Package, CheckCircle2, Loader2 } from "lucide-react";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
+
+// Cor de cada estado de item — usada nos chips de progresso embaixo do card.
+const ITEM_DOT: Record<OrderItemStatus, string> = {
+  PENDING:        "bg-zinc-300",
+  IN_PREPARATION: "bg-amber-400",
+  READY:          "bg-emerald-500",
+  DELIVERED:      "bg-emerald-700",
+  CANCELLED:      "bg-zinc-200 ring-1 ring-zinc-300",
+};
+
+function ItemProgress({ items, branchCode, dailyNumber }: {
+  items: OrderItem[];
+  branchCode?: string;
+  dailyNumber: number;
+}) {
+  const active = items.filter((i) => i.status !== "CANCELLED");
+  if (active.length < 2) return null; // único item: chips não agregam valor
+
+  const doneCount = active.filter((i) => i.status === "READY" || i.status === "DELIVERED").length;
+  const orderLabel = branchCode ? `${branchCode}-${String(dailyNumber).padStart(3, "0")}` : String(dailyNumber);
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-zinc-50 px-2.5 py-1.5">
+      <span className="text-[10px] font-black uppercase tracking-wide text-zinc-500">
+        {doneCount}/{active.length} prontos
+      </span>
+      <div className="flex flex-1 flex-wrap items-center gap-1">
+        {items.map((i) => (
+          <span
+            key={i.id}
+            title={`${orderLabel}-${i.sequence_no ?? "?"} · ${i.product_name_snapshot} · ${i.status}`}
+            className={`h-2.5 w-2.5 rounded-full ${ITEM_DOT[i.status]}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   order: Order;
@@ -15,11 +53,12 @@ const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 
 function getStatusEnteredAt(order: Order): string | undefined {
   switch (order.status) {
-    case "NA_FILA":   return order.queue_entered_at ?? order.confirmed_at;
-    case "PRONTO":    return order.ready_at;
-    case "ENTREGUE":  return order.delivered_at;
-    case "CANCELADO": return order.cancelled_at;
-    default:          return order.created_at;
+    case "NA_FILA":         return order.queue_entered_at ?? order.confirmed_at;
+    case "PRONTO_PARCIAL":  return order.queue_entered_at ?? order.confirmed_at;
+    case "PRONTO":          return order.ready_at;
+    case "ENTREGUE":        return order.delivered_at;
+    case "CANCELADO":       return order.cancelled_at;
+    default:                return order.created_at;
   }
 }
 
@@ -42,13 +81,16 @@ const ACCENT: Record<Order["status"], string> = {
   AGUARDANDO_CONFIRMACAO: "bg-blue-500",
   AGUARDANDO_PAGAMENTO:   "bg-brand-amber",
   NA_FILA:                "bg-brand-red",
+  PRONTO_PARCIAL:         "bg-amber-500",
   PRONTO:                 "bg-emerald-500",
   ENTREGUE:               "bg-zinc-300",
   CANCELADO:              "bg-red-300",
   EXPIRADO:               "bg-zinc-200",
 };
 
-const ACTIVE_STATUSES: Order["status"][] = ["NA_FILA", "AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "PRONTO"];
+const ACTIVE_STATUSES: Order["status"][] = [
+  "NA_FILA", "AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "PRONTO_PARCIAL", "PRONTO",
+];
 
 export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
   const [quickLoading, setQuickLoading] = useState(false);
@@ -73,11 +115,13 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
 
   const quickActionConfig =
     order.status === "AGUARDANDO_CONFIRMACAO"
-      ? { label: "CONFIRMAR",  Icon: CheckCircle2, color: "bg-emerald-500 text-white hover:bg-emerald-600" }
+      ? { label: "CONFIRMAR",       Icon: CheckCircle2, color: "bg-emerald-500 text-white hover:bg-emerald-600" }
       : order.status === "NA_FILA"
-      ? { label: "PRONTO",     Icon: Package,       color: "bg-brand-amber text-brand-charcoal hover:bg-brand-amber/90" }
+      ? { label: "PRONTO",          Icon: Package,       color: "bg-brand-amber text-brand-charcoal hover:bg-brand-amber/90" }
+      : order.status === "PRONTO_PARCIAL"
+      ? { label: "ENTREGAR PRONTOS", Icon: Package,       color: "bg-amber-500 text-white hover:bg-amber-600" }
       : order.status === "PRONTO"
-      ? { label: "ENTREGAR",   Icon: CheckCircle2,  color: "bg-emerald-500 text-white hover:bg-emerald-600" }
+      ? { label: "ENTREGAR",        Icon: CheckCircle2,  color: "bg-emerald-500 text-white hover:bg-emerald-600" }
       : null;
 
   const handleQuickClick = async (e: React.MouseEvent) => {
@@ -116,7 +160,10 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
         {/* Row 1: number + time + type + timer + payment badge */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-charcoal text-white shadow-sm">
+            <div className="flex h-10 min-w-[2.5rem] shrink-0 flex-col items-center justify-center rounded-xl bg-brand-charcoal px-1 text-white shadow-sm">
+              {order.branch?.code && (
+                <span className="text-[8px] font-black leading-none text-zinc-400">{order.branch.code}</span>
+              )}
               <span className={`font-black leading-none ${String(order.daily_number).length > 2 ? "text-sm" : "text-base"}`}>
                 {String(order.daily_number).padStart(2, "0")}
               </span>
@@ -179,6 +226,11 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
           <div className="space-y-0.5 px-0.5">
             {firstItems.map((item) => (
               <p key={item.id} className="truncate text-xs font-medium text-zinc-500 leading-snug">
+                {item.sequence_no != null && (
+                  <span className="mr-1 inline-block rounded bg-zinc-200 px-1 text-[9px] font-black text-zinc-600">
+                    {item.sequence_no}
+                  </span>
+                )}
                 <span className="font-black text-zinc-700">{item.quantity}×</span>{" "}
                 {item.product?.name ?? item.product_name_snapshot}
                 {item.addons && item.addons.length > 0 && (
@@ -197,6 +249,11 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
               <p className="text-[10px] font-bold text-zinc-400">+{extraItems} mais...</p>
             )}
           </div>
+        )}
+
+        {/* Per-item progress chips — só aparece em pedidos com 2+ itens ativos */}
+        {order.items && showTimer && (
+          <ItemProgress items={order.items} branchCode={order.branch?.code} dailyNumber={order.daily_number} />
         )}
 
         {/* Row 4: total + quick action */}

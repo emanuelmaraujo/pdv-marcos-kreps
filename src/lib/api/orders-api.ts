@@ -3,15 +3,17 @@ import { Order } from '@/types/pdv';
 import { getBusinessDayRange } from '../utils/business-day';
 
 export const ordersApi = {
-  getTodayOrders: async (): Promise<Order[]> => {
+  // branchId opcional: passar pra filtrar por filial (omitido = mostra todas as autorizadas pelo RLS).
+  getTodayOrders: async (branchId?: string | null): Promise<Order[]> => {
     const supabase = createClient();
 
     const { start, end } = getBusinessDayRange();
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('orders')
       .select(`
         *,
+        branch:branches(id, code, name, slug),
         items:order_items(
           *,
           product:products(*),
@@ -29,6 +31,10 @@ export const ordersApi = {
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
       .order('created_at', { ascending: false });
+
+    if (branchId) query = query.eq('branch_id', branchId);
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching today orders:', error);

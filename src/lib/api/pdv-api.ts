@@ -1,5 +1,5 @@
 import { createClient } from '../supabase/client';
-import { PaymentMethod, OrderStatus, Order, PaymentTransaction } from '@/types/pdv';
+import { PaymentMethod, OrderStatus, OrderItemStatus, Order, PaymentTransaction } from '@/types/pdv';
 
 export class OrderingClosedError extends Error {
   constructor(message: string) {
@@ -386,13 +386,21 @@ export const pdvApi = {
   confirmOrder: (orderId: string) =>
     invokeEdgeFunction('confirm-order', { order_id: orderId }),
 
-  markPayment: (payload: { orderId: string; paymentMethod: PaymentMethod; status: string; amount?: number; notes?: string }) =>
+  markPayment: (payload: {
+    orderId: string;
+    paymentMethod: PaymentMethod;
+    status: string;
+    amount?: number;
+    notes?: string;
+    orderItemIds?: string[];
+  }) =>
     invokeEdgeFunction('mark-payment', {
       order_id: payload.orderId,
       payment_method: payload.paymentMethod,
       payment_status: payload.status,
       amount: payload.amount,
-      notes: payload.notes
+      notes: payload.notes,
+      order_item_ids: payload.orderItemIds,
     }),
 
   updateOrderStatus: (payload: { orderId: string; newStatus: OrderStatus; reason?: string; forceDelivery?: boolean }) =>
@@ -401,6 +409,21 @@ export const pdvApi = {
       status: payload.newStatus,
       reason: payload.reason,
       force_delivery: payload.forceDelivery
+    }),
+
+  updateOrderItemStatus: (payload: {
+    orderItemId: string;
+    newStatus: OrderItemStatus;
+    reason?: string;
+  }) =>
+    invokeEdgeFunction<{
+      success: boolean;
+      item: { id: string; sequence_no: number; status: OrderItemStatus };
+      order: { id: string; status: OrderStatus; payment_status: string; ready_at?: string; delivered_at?: string };
+    }>('update-order-item-status', {
+      order_item_id: payload.orderItemId,
+      new_status: payload.newStatus,
+      reason: payload.reason,
     }),
 
   createAttendantOrder: (payload: Record<string, unknown>) =>

@@ -96,9 +96,20 @@ serve(async (req) => {
       order_type, customer_name, customer_phone, notes,
       payment_method, payment_status, discount, items,
       remember_checkout_data,
+      branch_id,
     } = await req.json();
 
     if (!items || items.length === 0) throw new Error('O carrinho está vazio.');
+    if (!branch_id) throw new Error('branch_id é obrigatório.');
+
+    // Valida que o atendente pode operar essa filial (RLS via JWT).
+    const { data: branch, error: branchErr } = await supabaseClientAuth
+      .from('branches')
+      .select('id, code, name, active')
+      .eq('id', branch_id)
+      .single();
+    if (branchErr || !branch) throw new Error('Filial inválida ou usuário sem permissão.');
+    if (!branch.active) throw new Error('Filial inativa.');
     if (order_type !== 'BALCAO' && order_type !== 'VIAGEM') throw new Error('order_type inválido (BALCAO ou VIAGEM).');
 
     const validPayMethods = ['PIX', 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'PENDING', 'COURTESY'];
@@ -133,11 +144,12 @@ serve(async (req) => {
 
       const { data: product, error: prodErr } = await supabaseAdmin
         .from('products')
-        .select('id, name, price, sector, active')
+        .select('id, name, price, sector, active, branch_id')
         .eq('id', item.product_id)
+        .eq('branch_id', branch_id)
         .single();
 
-      if (prodErr || !product) throw new Error(`Produto inexistente (ID: ${item.product_id}).`);
+      if (prodErr || !product) throw new Error(`Produto inexistente nessa filial (ID: ${item.product_id}).`);
       if (!product.active) throw new Error(`Produto ${product.name} não está ativo.`);
 
       let itemTotalPrice = Number(product.price) * item.quantity;
@@ -295,6 +307,7 @@ serve(async (req) => {
     const { data: createdOrder, error: insertError } = await supabaseAdmin
       .from('orders')
       .insert({
+        branch_id: branch.id,
         source: 'ATTENDANT',
         type: order_type,
         status: 'NA_FILA',
@@ -441,8 +454,10 @@ serve(async (req) => {
       content = buildProductionReceipt(receiptOrder, finalItemsData, 'KITCHEN', {
         timestamp: timestampNow,
         title: 'KREPS',
+        branchCode: branch.code,
+        branchName: branch.name,
       });
-      printerJobsToInsert.push({ order_id: createdOrder.id, sector: 'KITCHEN', content: { text: content } });
+      printerJobsToInsert.push({ order_id: createdOrder.id, branch_id: branch.id, sector: 'KITCHEN', content: { text: content } });
     }
 
     // Monta Via JUICE_POTATO
@@ -465,8 +480,10 @@ serve(async (req) => {
       content = buildProductionReceipt(receiptOrder, finalItemsData, 'JUICE_POTATO', {
         timestamp: timestampNow,
         title: 'COZINHA',
+        branchCode: branch.code,
+        branchName: branch.name,
       });
-      printerJobsToInsert.push({ order_id: createdOrder.id, sector: 'JUICE_POTATO', content: { text: content } });
+      printerJobsToInsert.push({ order_id: createdOrder.id, branch_id: branch.id, sector: 'JUICE_POTATO', content: { text: content } });
     }
 
     // Monta Via CUSTOMER
@@ -498,8 +515,12 @@ serve(async (req) => {
       content += `------------------------\n`;
       content += `Guarde este número para retirada.\n`;
 
-      content = buildCustomerReceipt(receiptOrder, finalItemsData, { timestamp: timestampNow });
-      printerJobsToInsert.push({ order_id: createdOrder.id, sector: 'CUSTOMER', content: { text: content } });
+      content = buildCustomerReceipt(receiptOrder, finalItemsData, {
+        timestamp: timestampNow,
+        branchCode: branch.code,
+        branchName: branch.name,
+      });
+      printerJobsToInsert.push({ order_id: createdOrder.id, branch_id: branch.id, sector: 'CUSTOMER', content: { text: content } });
     }
 
     // Insert Printer Jobs
@@ -525,10 +546,13 @@ serve(async (req) => {
     // WhatsApp: notify "novo_pedido" if attendant captured customer phone (non-blocking)
     await enqueueWhatsAppMessage(supabaseAdmin, {
       orderId: createdOrder.id,
+      branchId: branch.id,
       eventType: 'order_received',
       phone: customerPhoneE164 ?? customer_phone,
       customerName: customer_name,
       dailyNumber: createdOrder.daily_number,
+      branchCode: branch.code,
+      branchName: branch.name,
     });
 
     // 10. Retorno

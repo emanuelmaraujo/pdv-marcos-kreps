@@ -15,13 +15,17 @@ export function OrderStatusBadge({ status, className = "" }: Props) {
       label: "Aguardando pgto", 
       classes: "bg-brand-amber/10 text-brand-amber border-brand-amber/20" 
     },
-    NA_FILA: { 
-      label: "Na Fila", 
-      classes: "bg-brand-red/10 text-brand-red border-brand-red/20" 
+    NA_FILA: {
+      label: "Na Fila",
+      classes: "bg-brand-red/10 text-brand-red border-brand-red/20"
     },
-    PRONTO: { 
-      label: "Pronto", 
-      classes: "bg-emerald-50 text-emerald-600 border-emerald-100" 
+    PRONTO_PARCIAL: {
+      label: "Pronto Parcial",
+      classes: "bg-amber-100 text-amber-700 border-amber-300"
+    },
+    PRONTO: {
+      label: "Pronto",
+      classes: "bg-emerald-50 text-emerald-600 border-emerald-100"
     },
     ENTREGUE: { 
       label: "Entregue", 

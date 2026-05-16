@@ -5,6 +5,8 @@ type ReceiptOptions = {
   timestamp?: string;
   mode?: "NORMAL" | "REPRINT" | "ADDITIONAL";
   source?: "ATTENDANT" | "PUBLIC";
+  branchCode?: string;   // prefixo curto da filial: "P", "F", etc. Resulta em "P-042-1".
+  branchName?: string;   // nome humano da filial: aparece no cabeçalho do recibo.
 };
 
 const LINE = "========================================";
@@ -69,6 +71,17 @@ function orderNumber(order: any): string {
   return String(order?.daily_number ?? "0").padStart(3, "0");
 }
 
+function orderLabel(order: any, branchCode?: string): string {
+  const num = orderNumber(order);
+  return branchCode ? `${branchCode}-${num}` : num;
+}
+
+function itemLabel(order: any, item: any, branchCode?: string): string {
+  const seq = item?.sequence_no;
+  const base = orderLabel(order, branchCode);
+  return seq != null ? `${base}-${seq}` : base;
+}
+
 function timestampNow() {
   return new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 }
@@ -109,7 +122,7 @@ function addons(item: any): Array<{ name: string; quantity: number; price: numbe
 }
 
 function header(order: any, section: string, options: ReceiptOptions) {
-  const number = orderNumber(order);
+  const label = orderLabel(order, options.branchCode);
   const modeLabel = options.mode === "REPRINT"
     ? "REIMPRESSAO"
     : options.mode === "ADDITIONAL"
@@ -119,9 +132,11 @@ function header(order: any, section: string, options: ReceiptOptions) {
   const lines = [
     LINE,
     "MARCOS KREP'S",
-    `${modeLabel} ${number}`,
-    section,
   ];
+
+  if (options.branchName) lines.push(`Filial: ${options.branchName}`);
+  lines.push(`${modeLabel} ${label}`);
+  lines.push(section);
 
   if (options.source === "PUBLIC") lines.push("Origem: APP");
   if (order?.customer_name) lines.push(`Cliente: ${text(order.customer_name)}`);
@@ -137,8 +152,9 @@ export function buildProductionReceipt(order: any, items: any[], sector: Sector,
   const sectorItems = items.filter((item) => itemSector(item) === sector);
   let content = header(order, section, options);
 
-  sectorItems.forEach((item, index) => {
-    content += `${index + 1}) ${settingNumber(item?.quantity, 1)}x ${itemName(item)}\n`;
+  sectorItems.forEach((item) => {
+    const label = itemLabel(order, item, options.branchCode);
+    content += `${label}) ${settingNumber(item?.quantity, 1)}x ${itemName(item)}\n`;
     if (sector === "KITCHEN" && itemIsTakeout(item)) {
       content += "   >>> PARA VIAGEM <<<\n";
     }
@@ -158,7 +174,7 @@ export function buildProductionReceipt(order: any, items: any[], sector: Sector,
 
   content += `TOTAL ITENS: ${sectorItems.reduce((sum, item) => sum + settingNumber(item?.quantity, 1), 0)}\n`;
   content += `${LINE}\n`;
-  content += `>>> PEDIDO ${orderNumber(order)} <<<\n`;
+  content += `>>> PEDIDO ${orderLabel(order, options.branchCode)} <<<\n`;
   return content;
 }
 
@@ -167,7 +183,8 @@ export function buildCustomerReceipt(order: any, items: any[], options: ReceiptO
 
   for (const item of items) {
     const quantity = settingNumber(item?.quantity, 1);
-    content += `${quantity}x ${itemName(item)} - ${formatBRL(itemPrice(item))}\n`;
+    const itemTag = item?.sequence_no != null ? `${itemLabel(order, item, options.branchCode)} · ` : "";
+    content += `${itemTag}${quantity}x ${itemName(item)} - ${formatBRL(itemPrice(item))}\n`;
     if (itemSector(item) === "KITCHEN" && itemIsTakeout(item)) {
       content += "   PARA VIAGEM\n";
     }
@@ -189,7 +206,7 @@ export function buildCustomerReceipt(order: any, items: any[], options: ReceiptO
     content += `Forma: ${text(order.payment_method)}\n`;
   }
   content += LINE + "\n";
-  content += `SENHA: ${orderNumber(order)}\n`;
+  content += `SENHA: ${orderLabel(order, options.branchCode)}\n`;
   content += "Guarde este numero para retirada.\n";
   content += DASH + "\n";
   content += "Na proxima, peca pelo site:\n";
