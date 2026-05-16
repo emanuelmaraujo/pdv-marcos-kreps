@@ -275,7 +275,7 @@ export default function PedidosPage() {
   const [showCancelled, setShowCancelled] = useState(false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const isMdPlus = useSyncExternalStore(subscribeMdPlus, getMdPlusSnapshot, () => false);
-  const { currentBranch } = useBranch();
+  const { currentBranch, currentBranchId } = useBranch();
 
   const selectedOrderRef = useRef<Order | null>(null);
 
@@ -291,7 +291,7 @@ export default function PedidosPage() {
     if (showLoading) setIsLoading(true);
     setError("");
     try {
-      const data = await ordersApi.getTodayOrders(currentBranch?.id ?? null);
+      const data = await ordersApi.getTodayOrders(currentBranchId);
       setOrders(data || []);
       const current = selectedOrderRef.current;
       if (current) {
@@ -303,7 +303,7 @@ export default function PedidosPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentBranch]);
+  }, [currentBranchId]);
 
   // Initial load + realtime. Refaz quando filial selecionada muda.
   useEffect(() => {
