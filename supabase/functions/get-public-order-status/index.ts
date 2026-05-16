@@ -336,10 +336,24 @@ serve(async (req) => {
       transaction = refreshed.transaction;
     }
 
+    // Busca pedido com branch para exibir o prefixo correto (P-042, F-012).
+    const { data: orderWithBranch } = await supabaseClient
+      .from('orders')
+      .select('id, daily_number, status, payment_status, payment_method, total_amount, customer_name, created_at, confirmed_at, ready_at, delivered_at, branch:branches(code, name)')
+      .eq('id', order.id)
+      .single();
+
+    const branch = (orderWithBranch as any)?.branch ?? null;
+
     const { data: items } = await supabaseClient
       .from('order_items')
       .select(`
         id,
+        sequence_no,
+        status,
+        payment_status,
+        item_ready_at,
+        delivered_at,
         product_name_snapshot,
         product_price_snapshot,
         quantity,
@@ -349,10 +363,10 @@ serve(async (req) => {
         order_item_removed_ingredients(ingredient_name_snapshot)
       `)
       .eq('order_id', order.id)
-      .order('created_at', { ascending: true });
+      .order('sequence_no', { ascending: true, nullsFirst: false });
 
-    return jsonResponse(req, { 
-      success: true, 
+    return jsonResponse(req, {
+      success: true,
       order: {
         daily_number: order.daily_number,
         status: order.status,
@@ -363,11 +377,17 @@ serve(async (req) => {
         created_at: order.created_at,
         confirmed_at: order.confirmed_at,
         ready_at: order.ready_at,
-        delivered_at: order.delivered_at
+        delivered_at: order.delivered_at,
+        branch,
       },
       transaction,
       items: (items ?? []).map((item: any) => ({
         id: item.id,
+        sequence_no: item.sequence_no,
+        status: item.status,
+        payment_status: item.payment_status,
+        item_ready_at: item.item_ready_at,
+        delivered_at: item.delivered_at,
         product_name: item.product_name_snapshot,
         product_price: item.product_price_snapshot,
         quantity: item.quantity,

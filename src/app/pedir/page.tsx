@@ -2,7 +2,7 @@
 
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   CheckCircle2,
@@ -694,6 +694,8 @@ function PixCheckout({
 
 export default function PedirPublicPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const branchSlug = searchParams.get("branch") ?? undefined;
   const categoryDragScroll = useHorizontalDragScroll();
   const filterDragScroll = useHorizontalDragScroll();
   const {
@@ -713,6 +715,8 @@ export default function PedirPublicPage() {
   } = useCart();
 
   const [menuData, setMenuData] = useState<MenuData | null>(null);
+  const [branchId, setBranchId] = useState<string | null>(null);
+  const [branchName, setBranchName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [onlineOrderingEnabled, setOnlineOrderingEnabled] = useState(true);
@@ -755,11 +759,11 @@ export default function PedirPublicPage() {
     async function loadMenu() {
       try {
         setLoading(true);
-        const [data, config] = await Promise.all([
-          menuApi.getMenuData(),
-          pdvApi.getPublicCheckoutConfig(),
-        ]);
+        const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
         if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
+        const resolvedBranchId = config.branch?.id ?? null;
+        setBranchId(resolvedBranchId);
+        setBranchName(config.branch?.name ?? null);
         const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
@@ -772,6 +776,7 @@ export default function PedirPublicPage() {
         setOnlineOrderingEnabled(isEnabled);
         setOrderingClosedReason(config.ordering_closed_reason);
         if (!isEnabled) clearCart();
+        const data = await menuApi.getMenuData(resolvedBranchId);
         setMenuData(data);
         setSelectedCategoryId(data.categories[0]?.id ?? null);
       } catch (err) {
@@ -782,7 +787,8 @@ export default function PedirPublicPage() {
     }
 
     loadMenu();
-  }, [clearCart]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clearCart, branchSlug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -908,7 +914,7 @@ export default function PedirPublicPage() {
   useEffect(() => {
     const recheck = async () => {
       try {
-        const config = await pdvApi.getPublicCheckoutConfig();
+        const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
         if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
         const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
@@ -1129,6 +1135,7 @@ export default function PedirPublicPage() {
         remember_checkout_data: rememberCheckoutData,
         notes: orderNotes.trim() || undefined,
         payment_method_code: PAYMENT_METHOD_CODE,
+        branch_slug: branchSlug,
         items: items.map((item) => ({
           product_id: item.product.id,
           quantity: item.quantity,
@@ -1205,7 +1212,9 @@ export default function PedirPublicPage() {
             />
             <div>
               <h1 className="text-base font-black text-brand-charcoal">Marcos Krep&apos;s</h1>
-              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700/70">Pedido online</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700/70">
+                {branchName ?? "Pedido online"}
+              </p>
             </div>
           </div>
         </header>
@@ -1257,7 +1266,9 @@ export default function PedirPublicPage() {
             />
             <div>
               <h1 className="text-base font-black text-brand-charcoal">Marcos Krep&apos;s</h1>
-              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700/70">Pedido online</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700/70">
+                {branchName ?? "Pedido online"}
+              </p>
             </div>
           </div>
           {step !== "MENU" && (

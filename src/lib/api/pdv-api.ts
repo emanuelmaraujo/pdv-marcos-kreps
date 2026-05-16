@@ -173,6 +173,7 @@ export type CreatePublicOrderPayload = {
   remember_checkout_data?: boolean;
   notes?: string;
   payment_method_code?: string;
+  branch_slug?: string;
   items: Array<{
     product_id: string;
     quantity: number;
@@ -247,6 +248,11 @@ export type PublicOrderStatusResponse = {
   transaction?: Partial<PaymentTransaction> | null;
   items?: Array<{
     id: string;
+    sequence_no?: number | null;
+    status?: string | null;
+    payment_status?: string | null;
+    item_ready_at?: string | null;
+    delivered_at?: string | null;
     product_name: string;
     product_price: number;
     quantity: number;
@@ -285,6 +291,7 @@ export type AttendantCustomerProfileResponse = {
 export type PublicCheckoutConfigResponse = {
   success: boolean;
   error?: string;
+  branch?: { id: string; code: string; name: string; slug: string } | null;
   settings: {
     public_ordering_enabled: string;
     public_ordering_start_time: string;
@@ -366,8 +373,8 @@ export const pdvApi = {
     return data as AttendantCustomerProfileResponse;
   },
 
-  getPublicCheckoutConfig: () =>
-    invokeEdgeFunction<PublicCheckoutConfigResponse>('get-public-checkout-config', {}),
+  getPublicCheckoutConfig: (branchSlug?: string) =>
+    invokeEdgeFunction<PublicCheckoutConfigResponse>('get-public-checkout-config', branchSlug ? { branch_slug: branchSlug } : {}),
 
   createMercadoPagoPayment: (payload: {
     order_id: string;
