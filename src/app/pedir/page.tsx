@@ -698,7 +698,10 @@ function PixCheckout({
 export default function PedirPublicPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const branchSlug = searchParams.get("branch") ?? undefined;
+  const _rawBranch = searchParams.get("branch");
+  // Guarda contra a string literal "undefined" que pode aparecer quando
+  // encodeURIComponent(undefined) é chamado no redirect de /pedir/[slug].
+  const branchSlug = (_rawBranch && _rawBranch !== "undefined") ? _rawBranch : undefined;
   const categoryDragScroll = useHorizontalDragScroll();
   const filterDragScroll = useHorizontalDragScroll();
   const {

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut, Menu, X } from "lucide-react";
 import { BranchSelector } from "./BranchSelector";
+import { useBranch } from "@/contexts/BranchContext";
 
 const SESSION_KEY = "pdv_login_time";
 
@@ -18,6 +19,7 @@ export function TopBar({ sidebarOpen, onSidebarToggle }: TopBarProps) {
   const pathname = usePathname();
   const supabase = createClient();
   const context = getTopBarContext(pathname);
+  const { currentBranch, branches } = useBranch();
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -51,13 +53,20 @@ export function TopBar({ sidebarOpen, onSidebarToggle }: TopBarProps) {
               {context.title}
             </p>
             <p className="hidden truncate text-[11px] font-medium text-zinc-400 sm:block">
-              {context.subtitle}
+              {currentBranch ? (
+                <span>
+                  <span className="text-brand-red font-black">{currentBranch.name}</span>
+                  <span className="mx-1 text-zinc-600">·</span>
+                  {context.subtitle}
+                </span>
+              ) : context.subtitle}
             </p>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <BranchSelector compact />
+          {/* compact em mobile, nome completo em md+ quando há múltiplas filiais */}
+          <BranchSelector compact={branches.length <= 1} />
           <button
             onClick={handleLogout}
             className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-zinc-400 transition-all hover:bg-zinc-700/50 hover:text-white active:scale-95"
