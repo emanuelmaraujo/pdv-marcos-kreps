@@ -20,11 +20,13 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Share2,
   Sparkles,
   ShoppingCart,
   Tag,
   Trash2,
   Utensils,
+  ClipboardCopy,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
@@ -57,6 +59,7 @@ const ALL_FILTER = "Todos";
 const DEFAULT_ORDERING_START = "17:00";
 const DEFAULT_ORDERING_END = "23:30";
 const INSTAGRAM_URL = "https://www.instagram.com/marcos_kreps/";
+const SITE_BASE = "https://marcoskreps.com.br";
 const PIX_WAIT_MINUTES = 5;
 const PUBLIC_ORDER_STORAGE_KEY = "pdv-public-order";
 const PUBLIC_CUSTOMER_PROFILE_KEY = "pdv-public-customer-profile";
@@ -1271,12 +1274,24 @@ export default function PedirPublicPage() {
               </p>
             </div>
           </div>
-          {step !== "MENU" && (
-            <Button variant="ghost" size="sm" className="gap-1" onClick={() => setStep("MENU")}>
-              <ChevronLeft className="h-4 w-4" />
-              Cardapio
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {orderData && step === "MENU" && (
+              <button
+                type="button"
+                onClick={() => router.push(`/pedido/${encodeURIComponent(orderData.public_token)}`)}
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-black text-emerald-700 transition-all hover:bg-emerald-100 animate-pulse"
+              >
+                <Package className="h-3.5 w-3.5" />
+                Pedido #{String(orderData.daily_number).padStart(3, "0")} em andamento
+              </button>
+            )}
+            {step !== "MENU" && (
+              <Button variant="ghost" size="sm" className="gap-1" onClick={() => setStep("MENU")}>
+                <ChevronLeft className="h-4 w-4" />
+                Cardapio
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -1828,35 +1843,84 @@ export default function PedirPublicPage() {
         </main>
       )}
 
-      {step === "PAID" && (
-        <main className="mx-auto flex max-w-xl flex-col items-center justify-center gap-5 p-8 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50">
-            <CheckCircle2 className="h-10 w-10 text-emerald-500" />
-          </div>
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Pagamento aprovado</p>
-            <h2 className="mt-1 text-2xl font-black text-zinc-900">Pedido recebido</h2>
-            <p className="mt-2 text-sm font-medium text-zinc-500">A equipe ja recebeu a confirmacao e vai preparar seu pedido.</p>
-          </div>
-          <div className="grid w-full max-w-sm gap-3">
-            {orderData && (
-              <Button
-                onClick={() => router.push(`/pedido/${encodeURIComponent(orderData.public_token)}`)}
-              >
-                Acompanhar pedido #{String(orderData.daily_number).padStart(3, "0")}
-              </Button>
+      {step === "PAID" && (() => {
+        const trackingUrl = orderData ? `${SITE_BASE}/pedido/${orderData.public_token}` : null;
+        const orderNum = orderData ? String(orderData.daily_number).padStart(3, "0") : "---";
+        const waText = trackingUrl
+          ? encodeURIComponent(`Acompanhe meu pedido #${orderNum} no Marcos Krep's:\n${trackingUrl}`)
+          : null;
+
+        return (
+          <main className="mx-auto flex max-w-md flex-col items-center gap-6 px-4 py-10 text-center">
+            {/* Ícone animado */}
+            <div className="relative flex h-24 w-24 items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-emerald-100 animate-ping opacity-30" />
+              <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-200">
+                <CheckCircle2 className="h-12 w-12 text-white" />
+              </div>
+            </div>
+
+            {/* Título */}
+            <div className="space-y-1">
+              <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Pedido confirmado</p>
+              <h2 className="text-3xl font-black text-zinc-900">#{orderNum}</h2>
+              <p className="text-sm font-medium text-zinc-500">
+                A equipe já recebeu e vai preparar seu pedido. Você será avisado pelo WhatsApp quando estiver pronto.
+              </p>
+            </div>
+
+            {/* Link de acompanhamento */}
+            {trackingUrl && (
+              <div className="w-full space-y-2 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Link de acompanhamento</p>
+                <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-xs font-bold text-zinc-600">{trackingUrl}</span>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(trackingUrl)}
+                    className="shrink-0 rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+                    title="Copiar link"
+                  >
+                    <ClipboardCopy className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             )}
-            <Button variant="outline" onClick={() => {
-              setOrderData(null);
-              setPaymentResult(null);
-              clearSavedPublicOrderSession();
-              setStep("MENU");
-            }}>
-              Fazer novo pedido
-            </Button>
-          </div>
-        </main>
-      )}
+
+            {/* Ações */}
+            <div className="grid w-full gap-3">
+              {trackingUrl && (
+                <Button
+                  onClick={() => router.push(`/pedido/${encodeURIComponent(orderData!.public_token)}`)}
+                  className="h-14 gap-2 text-base"
+                >
+                  <Package className="h-5 w-5" />
+                  Acompanhar pedido em tempo real
+                </Button>
+              )}
+              {waText && (
+                <a
+                  href={`https://wa.me/?text=${waText}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#25D366] bg-[#25D366]/10 text-sm font-black text-[#128C7E] transition-all hover:bg-[#25D366]/20 active:scale-95"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Compartilhar link no WhatsApp
+                </a>
+              )}
+              <Button variant="outline" className="h-11" onClick={() => {
+                setOrderData(null);
+                setPaymentResult(null);
+                clearSavedPublicOrderSession();
+                setStep("MENU");
+              }}>
+                Fazer novo pedido
+              </Button>
+            </div>
+          </main>
+        );
+      })()}
 
       {items.length > 0 && step === "MENU" && (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white p-4 shadow-2xl xl:hidden">

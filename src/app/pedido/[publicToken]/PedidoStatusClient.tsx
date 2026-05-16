@@ -237,9 +237,9 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                   </div>
                   <div className="space-y-2">
                     {statusData.items.map((item) => {
-                      const itemStatus = (item as any).status as string | undefined;
-                      const seqNo = (item as any).sequence_no as number | undefined;
-                      const branch = (statusData.order as any).branch as { code?: string } | undefined;
+                      const itemStatus = item.status;
+                      const seqNo = item.sequence_no;
+                      const branch = (statusData.order as { branch?: { code?: string } | null }).branch;
                       const orderNum = String(order!.daily_number).padStart(3, "0");
                       const label = seqNo != null
                         ? (branch?.code ? `${branch.code}-${orderNum}-${seqNo}` : `${orderNum}-${seqNo}`)
