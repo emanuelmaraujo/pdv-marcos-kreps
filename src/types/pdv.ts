@@ -6,12 +6,20 @@ export type OrderStatus =
   | 'AGUARDANDO_CONFIRMACAO'
   | 'AGUARDANDO_PAGAMENTO'
   | 'NA_FILA'
+  | 'PRONTO_PARCIAL'
   | 'PRONTO'
   | 'ENTREGUE'
   | 'CANCELADO'
   | 'EXPIRADO';
 
-export type PaymentStatus = 'PENDING' | 'PAID' | 'REFUNDED' | 'CANCELED' | 'COURTESY';
+export type OrderItemStatus =
+  | 'PENDING'
+  | 'IN_PREPARATION'
+  | 'READY'
+  | 'DELIVERED'
+  | 'CANCELLED';
+
+export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'REFUNDED' | 'CANCELED' | 'COURTESY';
 export type PaymentMethod = 'PIX' | 'CASH' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'PENDING' | 'COURTESY';
 export type OrderType = 'BALCAO' | 'VIAGEM';
 export type OrderSource = 'ATTENDANT' | 'QR_CODE' | 'WHATSAPP' | 'APP';
@@ -98,6 +106,16 @@ export interface OrderItem {
   observation?: string;
   total_price: number;
   created_at?: string;
+  // Per-item lifecycle (multi-filial / per-krep tracking)
+  status: OrderItemStatus;
+  sequence_no?: number;
+  prep_started_at?: string;
+  item_ready_at?: string;
+  delivered_at?: string;
+  cancelled_at?: string;
+  payment_status: PaymentStatus;
+  payment_method: PaymentMethod;
+  paid_at?: string;
   product?: Product;
   removed_ingredients?: OrderItemRemovedIngredient[];
   addons?: OrderItemAddon[];
@@ -105,9 +123,35 @@ export interface OrderItem {
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
 
+// ─── Branches ─────────────────────────────────────────────────────────────────
+
+export type BranchType = 'STORE' | 'POPUP' | 'FAIR';
+
+export interface Branch {
+  id: string;
+  code: string;          // "P", "F" — prefixo nas senhas (P-042-1)
+  slug: string;          // "principal", "feira" — URL pública /pedir/[slug]
+  name: string;
+  type: BranchType;
+  active: boolean;
+  address?: string;
+  phone?: string;
+  printer_config?: Record<string, unknown>;
+  packing_fee: number;
+  ordering_enabled: boolean;
+  ordering_start_time?: string;
+  ordering_end_time?: string;
+  whatsapp_enabled: boolean;
+  whatsapp_templates?: Record<string, { template_name?: string; language?: string; enabled?: boolean }>;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Order {
   id: string;
   daily_number: number;
+  branch_id: string;
+  branch?: Pick<Branch, 'id' | 'code' | 'name' | 'slug'>;
   public_token: string;
   type: OrderType;
   source: OrderSource;
@@ -239,7 +283,7 @@ export interface PrinterJob {
 
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 
-export type WhatsAppEventType = 'order_received' | 'order_ready';
+export type WhatsAppEventType = 'order_received' | 'order_ready' | 'order_partial_ready';
 
 export type WhatsAppDeliveryStatus =
   | 'SENT'
@@ -278,5 +322,12 @@ export interface Profile {
   role: UserRole;
   name: string;
   active: boolean;
+  home_branch_id?: string;
   created_at: string;
+}
+
+export interface ProfileBranch {
+  profile_id: string;
+  branch_id: string;
+  created_at?: string;
 }

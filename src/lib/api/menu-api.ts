@@ -17,10 +17,17 @@ export type CreateCategoryInput = Omit<Category, 'id' | 'created_at' | 'sort_ord
 export const menuApi = {
   /**
    * Fetches all active menu data needed for the POS interface.
+   * Filtra por filial quando `branchId` é fornecido (cardápio separado por filial).
    * Resolves everything in parallel for better performance.
    */
-  getMenuData: async (): Promise<MenuData> => {
+  getMenuData: async (branchId?: string | null): Promise<MenuData> => {
     const supabase = createClient();
+
+    const buildScoped = (table: string) => {
+      let q = supabase.from(table).select('*');
+      if (branchId) q = q.eq('branch_id', branchId);
+      return q;
+    };
 
     const [
       { data: categories, error: catError },
@@ -30,35 +37,12 @@ export const menuApi = {
       { data: productAddons, error: prodAddonError },
       { data: addons, error: addonError },
     ] = await Promise.all([
-      supabase
-        .from('categories')
-        .select('*')
-        .eq('active', true)
-        .order('sort_order', { ascending: true }),
-
-      supabase
-        .from('products')
-        .select('*')
-        .eq('active', true)
-        .order('name', { ascending: true }),
-
-      supabase
-        .from('ingredients')
-        .select('*')
-        .eq('active', true),
-
-      supabase
-        .from('product_ingredients')
-        .select('*'),
-
-      supabase
-        .from('product_addons')
-        .select('*'),
-
-      supabase
-        .from('addons')
-        .select('*')
-        .eq('active', true),
+      buildScoped('categories').eq('active', true).order('sort_order', { ascending: true }),
+      buildScoped('products').eq('active', true).order('name', { ascending: true }),
+      buildScoped('ingredients').eq('active', true),
+      supabase.from('product_ingredients').select('*'),
+      supabase.from('product_addons').select('*'),
+      buildScoped('addons').eq('active', true),
     ]);
 
     if (catError) throw new Error(`Failed to load categories: ${catError.message}`);
@@ -80,9 +64,14 @@ export const menuApi = {
 
   /**
    * Fetches the entire menu (active and inactive) for the management screen.
+   * Filtra por filial quando `branchId` é fornecido.
    */
-  getFullMenuData: async (): Promise<MenuData> => {
+  getFullMenuData: async (branchId?: string | null): Promise<MenuData> => {
     const supabase = createClient();
+    const scoped = (table: string) => {
+      const q = supabase.from(table).select('*');
+      return branchId ? q.eq('branch_id', branchId) : q;
+    };
 
     const [
       { data: categories, error: catError },
@@ -92,12 +81,12 @@ export const menuApi = {
       { data: productAddons, error: prodAddonError },
       { data: addons, error: addonError },
     ] = await Promise.all([
-      supabase.from('categories').select('*').order('sort_order', { ascending: true }),
-      supabase.from('products').select('*').order('name', { ascending: true }),
-      supabase.from('ingredients').select('*').order('name', { ascending: true }),
+      scoped('categories').order('sort_order', { ascending: true }),
+      scoped('products').order('name', { ascending: true }),
+      scoped('ingredients').order('name', { ascending: true }),
       supabase.from('product_ingredients').select('*'),
       supabase.from('product_addons').select('*'),
-      supabase.from('addons').select('*').order('name', { ascending: true }),
+      scoped('addons').order('name', { ascending: true }),
     ]);
 
     if (catError) throw new Error(`Failed to load categories: ${catError.message}`);
@@ -137,38 +126,41 @@ export const menuApi = {
     if (error) throw new Error(`Erro ao atualizar adicional: ${error.message}`);
   },
 
-  createProduct: async (product: CreateProductInput) => {
+  createProduct: async (product: CreateProductInput, branchId?: string | null) => {
     const supabase = createClient();
+    const payload = branchId ? { ...product, branch_id: branchId } : product;
     const { data, error } = await supabase
       .from('products')
-      .insert([product])
+      .insert([payload])
       .select()
       .single();
-      
+
     if (error) throw new Error(`Erro ao criar produto: ${error.message}`);
     return data as Product;
   },
 
-  createAddon: async (addon: CreateAddonInput) => {
+  createAddon: async (addon: CreateAddonInput, branchId?: string | null) => {
     const supabase = createClient();
+    const payload = branchId ? { ...addon, branch_id: branchId } : addon;
     const { data, error } = await supabase
       .from('addons')
-      .insert([addon])
+      .insert([payload])
       .select()
       .single();
-      
+
     if (error) throw new Error(`Erro ao criar adicional: ${error.message}`);
     return data as Addon;
   },
 
-  createCategory: async (category: CreateCategoryInput) => {
+  createCategory: async (category: CreateCategoryInput, branchId?: string | null) => {
     const supabase = createClient();
+    const payload = branchId ? { ...category, branch_id: branchId } : category;
     const { data, error } = await supabase
       .from('categories')
-      .insert([category])
+      .insert([payload])
       .select()
       .single();
-      
+
     if (error) throw new Error(`Erro ao criar categoria: ${error.message}`);
     return data as Category;
   },
@@ -235,25 +227,26 @@ export const menuApi = {
     if (insError) throw new Error(`Erro ao vincular ingredientes ao produto: ${insError.message}`);
   },
 
-  getIngredients: async (): Promise<Ingredient[]> => {
+  getIngredients: async (branchId?: string | null): Promise<Ingredient[]> => {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from('ingredients')
-      .select('*')
-      .order('name', { ascending: true });
-      
+    let query = supabase.from('ingredients').select('*').order('name', { ascending: true });
+    if (branchId) query = query.eq('branch_id', branchId);
+    const { data, error } = await query;
+
     if (error) throw new Error(`Erro ao buscar ingredientes: ${error.message}`);
     return data as Ingredient[];
   },
 
-  createIngredient: async (name: string) => {
+  createIngredient: async (name: string, branchId?: string | null) => {
     const supabase = createClient();
+    const payload: Record<string, unknown> = { name };
+    if (branchId) payload.branch_id = branchId;
     const { data, error } = await supabase
       .from('ingredients')
-      .insert([{ name }])
+      .insert([payload])
       .select()
       .single();
-      
+
     if (error) throw new Error(`Erro ao criar ingrediente: ${error.message}`);
     return data as Ingredient;
   }

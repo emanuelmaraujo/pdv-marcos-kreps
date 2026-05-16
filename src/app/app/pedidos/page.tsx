@@ -6,6 +6,7 @@ import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { createClient } from "@/lib/supabase/client";
+import { useBranch } from "@/contexts/BranchContext";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
 import { OrderDetailsModal } from "./components/OrderDetailsModal";
@@ -28,6 +29,7 @@ type TabStatus =
   | "TODOS"
   | "AGUARDANDO_CONFIRMACAO"
   | "NA_FILA"
+  | "PRONTO_PARCIAL"
   | "PRONTO"
   | "ENTREGUE"
   | "CANCELADO";
@@ -49,10 +51,11 @@ const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
   NA_FILA: 0,
   AGUARDANDO_CONFIRMACAO: 1,
   AGUARDANDO_PAGAMENTO: 2,
-  PRONTO: 3,
-  ENTREGUE: 4,
-  CANCELADO: 5,
-  EXPIRADO: 6,
+  PRONTO_PARCIAL: 3,
+  PRONTO: 4,
+  ENTREGUE: 5,
+  CANCELADO: 6,
+  EXPIRADO: 7,
 };
 
 const KANBAN_COLUMNS: KanbanColumnConfig[] = [
@@ -70,6 +73,14 @@ const KANBAN_COLUMNS: KanbanColumnConfig[] = [
     topColor: "bg-brand-red",
     headerBg: "bg-red-50 border-red-100",
     emptyText: "Fila vazia",
+    showAvgWait: true,
+  },
+  {
+    status: "PRONTO_PARCIAL",
+    label: "Pronto Parcial",
+    topColor: "bg-amber-500",
+    headerBg: "bg-amber-50 border-amber-200",
+    emptyText: "Sem pedidos parciais",
     showAvgWait: true,
   },
   {
@@ -114,9 +125,10 @@ function getMdPlusSnapshot() {
 
 function getStatusEnteredAt(order: Order): string | undefined {
   switch (order.status) {
-    case "NA_FILA":   return order.queue_entered_at ?? order.confirmed_at;
-    case "PRONTO":    return order.ready_at;
-    default:          return order.created_at;
+    case "NA_FILA":         return order.queue_entered_at ?? order.confirmed_at;
+    case "PRONTO_PARCIAL":  return order.queue_entered_at ?? order.confirmed_at;
+    case "PRONTO":          return order.ready_at;
+    default:                return order.created_at;
   }
 }
 
@@ -263,6 +275,7 @@ export default function PedidosPage() {
   const [showCancelled, setShowCancelled] = useState(false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const isMdPlus = useSyncExternalStore(subscribeMdPlus, getMdPlusSnapshot, () => false);
+  const { currentBranch } = useBranch();
 
   const selectedOrderRef = useRef<Order | null>(null);
 
@@ -278,7 +291,7 @@ export default function PedidosPage() {
     if (showLoading) setIsLoading(true);
     setError("");
     try {
-      const data = await ordersApi.getTodayOrders();
+      const data = await ordersApi.getTodayOrders(currentBranch?.id ?? null);
       setOrders(data || []);
       const current = selectedOrderRef.current;
       if (current) {
@@ -290,15 +303,18 @@ export default function PedidosPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentBranch]);
 
-  // Initial load + realtime
+  // Initial load + realtime. Refaz quando filial selecionada muda.
   useEffect(() => {
     const timer = window.setTimeout(() => fetchOrders(), 0);
     const supabase = createClient();
     const channel = supabase
       .channel("orders-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
+        fetchOrders(false);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "order_items" }, () => {
         fetchOrders(false);
       })
       .subscribe();
@@ -311,10 +327,22 @@ export default function PedidosPage() {
       await pdvApi.confirmOrder(order.id);
     } else if (order.status === "NA_FILA") {
       await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" });
+    } else if (order.status === "PRONTO_PARCIAL") {
+      // Entrega só os itens prontos. O trigger derivará o status do pedido.
+      const readyItemIds = (order.items ?? [])
+        .filter((i) => i.status === "READY")
+        .map((i) => i.id);
+      if (readyItemIds.length === 0) {
+        window.alert("Nenhum item pronto pra entregar ainda.");
+        return;
+      }
+      for (const id of readyItemIds) {
+        await pdvApi.updateOrderItemStatus({ orderItemId: id, newStatus: "DELIVERED" });
+      }
     } else if (order.status === "PRONTO") {
       if (
-        order.payment_status === "PENDING" &&
-        !window.confirm("ATENÇÃO: Pagamento PENDENTE. Confirmar entrega mesmo assim?")
+        (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") &&
+        !window.confirm("ATENÇÃO: Pagamento pendente/parcial. Confirmar entrega mesmo assim?")
       ) return;
       await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
     }
@@ -347,8 +375,10 @@ export default function PedidosPage() {
       return diff !== 0 ? diff : new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
 
+  const partialCount = getCount("PRONTO_PARCIAL");
   const tabs: { id: TabStatus; label: string; count?: number }[] = [
     { id: "NA_FILA",               label: "Na fila",    count: queueCount },
+    { id: "PRONTO_PARCIAL",        label: "Parciais",   count: partialCount },
     { id: "PRONTO",                label: "Prontos",    count: readyCount },
     { id: "AGUARDANDO_CONFIRMACAO",label: "Aguardando", count: waitingCount },
     { id: "ENTREGUE",              label: "Entregues",  count: getCount("ENTREGUE") },

@@ -66,7 +66,7 @@ serve(async (req) => {
     // 3. Buscar Pedido
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at')
+      .select('id, daily_number, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name )')
       .eq('id', order_id)
       .single();
 
@@ -113,6 +113,9 @@ serve(async (req) => {
     const printerJobsToInsert = [];
     const formatBRL = (val: number) => `R$ ${parseFloat(val as any).toFixed(2).replace('.', ',')}`;
     const timestampNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const branchCode: string | undefined = (order as any).branches?.code;
+    const branchName: string | undefined = (order as any).branches?.name;
+    const reprintOpts = { timestamp: timestampNow, mode: 'REPRINT' as const, branchCode, branchName };
 
     // Montar via KITCHEN
     if (copies.includes('KITCHEN') && kitchenItems.length > 0) {
@@ -139,11 +142,10 @@ serve(async (req) => {
       }
       content += `------------------------\n`;
       content = buildProductionReceipt(order, items, 'KITCHEN', {
-        timestamp: timestampNow,
+        ...reprintOpts,
         title: 'KREPS',
-        mode: 'REPRINT',
       });
-      printerJobsToInsert.push({ order_id: order.id, sector: 'KITCHEN', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { text: content } });
     }
 
     // Montar via JUICE_POTATO
@@ -165,11 +167,10 @@ serve(async (req) => {
       }
       content += `------------------------\n`;
       content = buildProductionReceipt(order, items, 'JUICE_POTATO', {
-        timestamp: timestampNow,
+        ...reprintOpts,
         title: 'COZINHA',
-        mode: 'REPRINT',
       });
-      printerJobsToInsert.push({ order_id: order.id, sector: 'JUICE_POTATO', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { text: content } });
     }
 
     // Montar via CUSTOMER
@@ -202,11 +203,8 @@ serve(async (req) => {
       content += `------------------------\n`;
       content += `Guarde este número para retirada.\n`;
 
-      content = buildCustomerReceipt(order, items, {
-        timestamp: timestampNow,
-        mode: 'REPRINT',
-      });
-      printerJobsToInsert.push({ order_id: order.id, sector: 'CUSTOMER', content: { text: content } });
+      content = buildCustomerReceipt(order, items, reprintOpts);
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'CUSTOMER', content: { text: content } });
     }
 
     // 6. Insert Printer Jobs and Audit Logs

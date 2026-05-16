@@ -5,6 +5,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { useCart, CartItem } from "@/features/cart/useCart";
 import { pdvApi } from "@/lib/api/pdv-api";
+import { useCurrentBranchId } from "@/contexts/BranchContext";
 import { settingsApi } from "@/lib/api/settings-api";
 import {
   CheckCircle2,
@@ -117,6 +118,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   } = useCart();
 
   const router = useRouter();
+  const currentBranchId = useCurrentBranchId();
   const [step, setStep] = useState(0); // 0=items, 1=customer, 2=payment
 
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("PIX");
@@ -258,6 +260,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
       const derivedOrderType = items.some((i) => i.is_takeout) ? "VIAGEM" : "BALCAO";
       const normalizedPhone = normalizeBrazilPhone(customerPhone);
       const payload = {
+        branch_id: currentBranchId,
         order_type: derivedOrderType,
         customer_name: customerName.trim() || undefined,
         customer_phone: normalizedPhone ?? (customerPhone.trim() || undefined),
@@ -276,6 +279,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
             : item.notes,
         })),
       };
+
+      if (!currentBranchId) {
+        setError("Selecione uma filial no menu superior antes de finalizar o pedido.");
+        setIsSubmitting(false);
+        return;
+      }
 
       if (targetOrderId) {
         const response = await pdvApi.addItemsToOrder({

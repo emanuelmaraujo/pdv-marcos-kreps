@@ -65,7 +65,7 @@ serve(async (req) => {
     // 3. Buscar e validar pedido original
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, status, payment_status, total_amount, type, customer_name, customer_phone, notes')
+      .select('id, daily_number, status, payment_status, total_amount, type, customer_name, customer_phone, notes, branch_id, branches ( code, name )')
       .eq('id', order_id)
       .single();
 
@@ -94,12 +94,15 @@ serve(async (req) => {
 
       const { data: product, error: prodErr } = await supabaseAdmin
         .from('products')
-        .select('id, name, price, sector, active')
+        .select('id, name, price, sector, active, branch_id')
         .eq('id', item.product_id)
         .single();
 
       if (prodErr || !product) throw new Error(`Produto inexistente (ID: ${item.product_id}).`);
       if (!product.active) throw new Error(`Produto ${product.name} não está ativo.`);
+      if (product.branch_id !== order.branch_id) {
+        throw new Error(`Produto ${product.name} não pertence à filial deste pedido.`);
+      }
 
       let itemTotalPrice = Number(product.price) * item.quantity;
       let removedIngredientsSnapshots = [];
@@ -239,6 +242,9 @@ serve(async (req) => {
     
     const printerJobsToInsert = [];
     const timestampNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const branchCode: string | undefined = (order as any).branches?.code;
+    const branchName: string | undefined = (order as any).branches?.name;
+    const receiptOpts = { timestamp: timestampNow, branchCode, branchName, mode: 'ADDITIONAL' as const };
 
     const header = `MARCOS KREP'S\nADICIONAL DE COMANDA\nPEDIDO #${String(order.daily_number).padStart(3, '0')}\n`;
 
@@ -257,11 +263,10 @@ serve(async (req) => {
       }
       content += `------------------------\n`;
       content = buildProductionReceipt(order, finalItemsData, 'KITCHEN', {
-        timestamp: timestampNow,
+        ...receiptOpts,
         title: 'KREPS',
-        mode: 'ADDITIONAL',
       });
-      printerJobsToInsert.push({ order_id: order.id, sector: 'KITCHEN', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { text: content } });
     }
 
     if (juicePotatoItems.length > 0 && shouldPrintJuice) {
@@ -273,11 +278,10 @@ serve(async (req) => {
       }
       content += `------------------------\n`;
       content = buildProductionReceipt(order, finalItemsData, 'JUICE_POTATO', {
-        timestamp: timestampNow,
+        ...receiptOpts,
         title: 'COZINHA',
-        mode: 'ADDITIONAL',
       });
-      printerJobsToInsert.push({ order_id: order.id, sector: 'JUICE_POTATO', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { text: content } });
     }
 
     const createdJobsResponse = [];

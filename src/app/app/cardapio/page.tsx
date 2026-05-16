@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Product, Addon, Category } from "@/types/pdv";
 import { createClient } from "@/lib/supabase/client";
+import { useCurrentBranchId } from "@/contexts/BranchContext";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { ProductModal } from "@/components/menu/ProductModal";
 import { AddonModal } from "@/components/menu/AddonModal";
@@ -31,6 +32,7 @@ type EditingState = {
 
 // ─── Main Component ─────────────────────────────────────
 export default function CardapioPage() {
+  const branchId = useCurrentBranchId();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export default function CardapioPage() {
         setIsAdmin(profile?.role === "ADMIN");
       }
 
-      const data = await menuApi.getFullMenuData();
+      const data = await menuApi.getFullMenuData(branchId);
       setMenuData(data);
       if (data.categories.length > 0 && !activeCategory) {
         setActiveCategory(data.categories[0].id);
@@ -85,7 +87,7 @@ export default function CardapioPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeCategory, addToast]);
+  }, [activeCategory, addToast, branchId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -509,7 +511,7 @@ export default function CardapioPage() {
               await menuApi.updateProduct(selectedProduct.id, data);
               addToast("success", "Produto atualizado!");
             } else {
-              await menuApi.createProduct(data as CreateProductInput);
+              await menuApi.createProduct(data as CreateProductInput, branchId);
               addToast("success", "Produto criado!");
             }
             loadMenu();
@@ -530,7 +532,7 @@ export default function CardapioPage() {
               await menuApi.updateAddon(selectedAddon.id, data);
               addToast("success", "Adicional atualizado!");
             } else {
-              await menuApi.createAddon(data as CreateAddonInput);
+              await menuApi.createAddon(data as CreateAddonInput, branchId);
               addToast("success", "Adicional criado!");
             }
             loadMenu();
@@ -551,7 +553,7 @@ export default function CardapioPage() {
               await menuApi.updateCategory(selectedCategory.id, data);
               addToast("success", "Categoria atualizada!");
             } else {
-              await menuApi.createCategory(data as CreateCategoryInput);
+              await menuApi.createCategory(data as CreateCategoryInput, branchId);
               addToast("success", "Categoria criada!");
             }
             loadMenu();

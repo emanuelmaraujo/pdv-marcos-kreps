@@ -58,7 +58,7 @@ serve(async (req) => {
     // 3. Busca o Pedido
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, status, type, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at')
+      .select('id, daily_number, status, type, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name )')
       .eq('id', order_id)
       .single();
 
@@ -116,6 +116,9 @@ serve(async (req) => {
     const createdJobsResponse = [];
     const timestampNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     const formatBRL = (val: number) => `R$ ${parseFloat(val as any).toFixed(2).replace('.', ',')}`;
+    const branchCode: string | undefined = (order as any).branches?.code;
+    const branchName: string | undefined = (order as any).branches?.name;
+    const receiptOpts = { timestamp: timestampNow, branchCode, branchName } as const;
 
     // --- Monta Via KITCHEN (Apenas se houver item KITCHEN e settings permitir) ---
     if (kitchenItems.length > 0 && shouldPrintKitchen) {
@@ -142,10 +145,10 @@ serve(async (req) => {
       content += `------------------------\n`;
 
       content = buildProductionReceipt(order, items, 'KITCHEN', {
-        timestamp: timestampNow,
+        ...receiptOpts,
         title: 'KREPS',
       });
-      printerJobsToInsert.push({ order_id: order.id, sector: 'KITCHEN', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { text: content } });
     }
 
     // --- Monta Via JUICE_POTATO (Apenas se houver item de Bebida/Batata) ---
@@ -167,10 +170,10 @@ serve(async (req) => {
       content += `------------------------\n`;
 
       content = buildProductionReceipt(order, items, 'JUICE_POTATO', {
-        timestamp: timestampNow,
+        ...receiptOpts,
         title: 'COZINHA',
       });
-      printerJobsToInsert.push({ order_id: order.id, sector: 'JUICE_POTATO', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { text: content } });
     }
 
     // --- Monta Via CUSTOMER (Para todos os setores) ---
@@ -202,8 +205,8 @@ serve(async (req) => {
       content += `------------------------\n`;
       content += `Guarde este número para retirada.\n`;
 
-      content = buildCustomerReceipt(order, items, { timestamp: timestampNow });
-      printerJobsToInsert.push({ order_id: order.id, sector: 'CUSTOMER', content: { text: content } });
+      content = buildCustomerReceipt(order, items, receiptOpts);
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'CUSTOMER', content: { text: content } });
     }
 
     // 5. Inserir os printer_jobs se a array não estiver vazia
@@ -253,10 +256,13 @@ serve(async (req) => {
     // WhatsApp: notify "novo_pedido" once order enters production (non-blocking)
     await enqueueWhatsAppMessage(supabaseAdmin, {
       orderId: order.id,
+      branchId: order.branch_id,
       eventType: 'order_received',
       phone: order.customer_phone,
       customerName: order.customer_name,
       dailyNumber: order.daily_number,
+      branchCode: branchCode ?? null,
+      branchName: branchName ?? null,
     });
 
     // 7. Retorno com sucesso

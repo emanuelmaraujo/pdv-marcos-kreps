@@ -24,6 +24,11 @@ const STATUS_COPY: Record<OrderStatus, { title: string; description: string; ton
     description: "Seu pedido ja entrou no fluxo da cozinha.",
     tone: "bg-red-50 text-brand-red border-red-100",
   },
+  PRONTO_PARCIAL: {
+    title: "Parte do pedido ja esta pronto",
+    description: "Voce pode comecar a retirar os itens prontos no balcao. O restante ainda esta sendo preparado.",
+    tone: "bg-amber-50 text-amber-800 border-amber-200",
+  },
   PRONTO: {
     title: "Pronto para retirada",
     description: "Pode se aproximar do balcao. Seu pedido esta esperando por voce.",
@@ -49,7 +54,7 @@ const STATUS_COPY: Record<OrderStatus, { title: string; description: string; ton
 const FLOW: Array<{ key: string; label: string; statuses: OrderStatus[] }> = [
   { key: "payment", label: "Pagamento", statuses: ["AGUARDANDO_PAGAMENTO"] },
   { key: "confirm", label: "Confirmacao", statuses: ["AGUARDANDO_CONFIRMACAO"] },
-  { key: "queue", label: "Preparo", statuses: ["NA_FILA"] },
+  { key: "queue", label: "Preparo", statuses: ["NA_FILA", "PRONTO_PARCIAL"] },
   { key: "ready", label: "Pronto", statuses: ["PRONTO"] },
   { key: "done", label: "Entregue", statuses: ["ENTREGUE"] },
 ];
@@ -57,7 +62,7 @@ const FLOW: Array<{ key: string; label: string; statuses: OrderStatus[] }> = [
 function getFlowIndex(status: OrderStatus) {
   if (status === "AGUARDANDO_PAGAMENTO") return 0;
   if (status === "AGUARDANDO_CONFIRMACAO") return 1;
-  if (status === "NA_FILA") return 2;
+  if (status === "NA_FILA" || status === "PRONTO_PARCIAL") return 2;
   if (status === "PRONTO") return 3;
   if (status === "ENTREGUE") return 4;
   return -1;

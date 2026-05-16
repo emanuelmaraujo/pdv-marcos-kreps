@@ -18,6 +18,8 @@ export interface CreateUserData {
   role: 'ADMIN' | 'ATTENDANT';
   password?: string;
   active?: boolean;
+  branch_ids?: string[];
+  home_branch_id?: string | null;
 }
 
 export const usersApi = {
@@ -39,7 +41,13 @@ export const usersApi = {
     return data.data;
   },
 
-  async updateUser(userData: { id: string; name: string; role: string }) {
+  async updateUser(userData: {
+    id: string;
+    name: string;
+    role: string;
+    branch_ids?: string[];
+    home_branch_id?: string | null;
+  }) {
     const { data, error } = await supabase.functions.invoke('manage-users', {
       body: { action: 'update_user', data: userData }
     });

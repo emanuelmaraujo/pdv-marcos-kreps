@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Product, Category } from "@/types/pdv";
 import { Loader2, X, Save } from "lucide-react";
+import { DuplicateProductButton } from "./DuplicateProductButton";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -46,16 +47,19 @@ export function ProductModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 gap-2">
           <h2 className="text-xl font-bold text-brand-charcoal">
             {product ? "Editar Produto" : "Novo Produto"}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
-          >
-            <X className="w-6 h-6 text-zinc-400" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {product?.id && <DuplicateProductButton productId={product.id} compact />}
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
+            >
+              <X className="w-6 h-6 text-zinc-400" />
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

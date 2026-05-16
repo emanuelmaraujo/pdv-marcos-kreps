@@ -235,6 +235,7 @@ serve(async (req) => {
     const notes = cleanText(body.notes, 500);
     const orderType = body.order_type;
     const paymentMethodCode = cleanText(body.payment_method_code, 80) ?? DEFAULT_PAYMENT_METHOD_CODE;
+    const branchSlug = cleanText(body.branch_slug, 32);
 
     if (items.length === 0) throw new Error("Carrinho vazio.");
     if (items.length > 50) throw new Error("Carrinho excede o limite de itens.");
@@ -242,6 +243,22 @@ serve(async (req) => {
     if (!customerPhone) throw new Error("Informe um WhatsApp valido com DDD.");
     if (orderType !== "BALCAO" && orderType !== "VIAGEM") {
       throw new Error("Tipo de pedido invalido.");
+    }
+    if (!branchSlug) throw new Error("branch_slug obrigatório.");
+
+    // Resolve filial pelo slug. Filial inativa nao aceita novos pedidos.
+    const { data: branch, error: branchErr } = await supabaseAdmin
+      .from("branches")
+      .select("id, code, name, active, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time")
+      .eq("slug", branchSlug)
+      .single();
+    if (branchErr || !branch) throw new Error("Filial inexistente.");
+    if (!branch.active || !branch.ordering_enabled) {
+      return jsonResponse(req, {
+        success: false,
+        error: "No momento essa unidade não está recebendo pedidos.",
+        ordering_disabled: true,
+      }, 403);
     }
 
     const { data: methodConfig, error: methodErr } = await supabaseAdmin
@@ -285,11 +302,12 @@ serve(async (req) => {
       }, 403);
     }
 
-    const orderingStart = settingString(
+    // Horários por filial sobrescrevem o global (se nulo, cai no global).
+    const orderingStart = branch.ordering_start_time ?? settingString(
       settingsData?.find((s) => s.key === "public_ordering_start_time")?.value,
       DEFAULT_ORDERING_START,
     );
-    const orderingEnd = settingString(
+    const orderingEnd = branch.ordering_end_time ?? settingString(
       settingsData?.find((s) => s.key === "public_ordering_end_time")?.value,
       DEFAULT_ORDERING_END,
     );
@@ -305,14 +323,19 @@ serve(async (req) => {
     if (orderType === "VIAGEM") {
       const applyFee = settingBool(settingsData?.find((s) => s.key === "apply_packaging_fee_for_takeout")?.value);
       if (applyFee) {
-        packingFeeValue = settingNumber(settingsData?.find((s) => s.key === "packaging_fee")?.value);
+        // Filial pode ter taxa própria (>0 sobrescreve o global).
+        const branchFee = Number(branch.packing_fee ?? 0);
+        packingFeeValue = branchFee > 0
+          ? branchFee
+          : settingNumber(settingsData?.find((s) => s.key === "packaging_fee")?.value);
       }
     }
 
     const { data: products, error: prodErr } = await supabaseAdmin
       .from("products")
-      .select("id, name, price, sector, active, category:categories(name), product_ingredients(ingredient_id)")
-      .in("id", productIds);
+      .select("id, name, price, sector, active, branch_id, category:categories(name), product_ingredients(ingredient_id)")
+      .in("id", productIds)
+      .eq("branch_id", branch.id);
 
     if (prodErr) throw new Error("Erro ao buscar produtos.");
 
@@ -392,6 +415,7 @@ serve(async (req) => {
     const { data: order, error: orderErr } = await supabaseAdmin
       .from("orders")
       .insert({
+        branch_id: branch.id,
         type: orderType,
         source: "APP",
         status: "AGUARDANDO_PAGAMENTO",

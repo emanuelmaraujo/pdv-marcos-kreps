@@ -5,30 +5,48 @@
 //   * Non-blocking: never throws. Caller code must not depend on its return.
 //   * Idempotent: the partial UNIQUE index uniq_whatsapp_messages_order_event_live
 //     on (order_id, event_type) WHERE status IN ('PENDING','SENT','SKIPPED')
-//     guarantees at most one live row per event per order. We swallow unique
-//     violations as "already enqueued".
+//     guarantees at most one live row per event per order. Unique violations are
+//     swallowed as "already enqueued".
+//   * Multi-branch: when `branchId` is provided, the branch's own configuration
+//     overrides the global one:
+//        - branches.whatsapp_enabled (toggle por filial)
+//        - branches.whatsapp_templates[event_type] = { template_name, language, enabled? }
+//     Global settings.whatsapp_enabled e settings.whatsapp_template_* permanecem
+//     como fallback quando a filial nao tem override ou quando branchId nao foi passado.
 //   * Opt-in aware: snapshots customer.whatsapp_opt_in into the row for audit (LGPD).
-//   * No PII in logs: only event_type, order_id and masked phone.
 
-export type WhatsAppEventType = "order_received" | "order_ready";
+export type WhatsAppEventType =
+  | "order_received"
+  | "order_ready"
+  | "order_partial_ready";
 
 interface EnqueuePayload {
   orderId: string;
+  branchId?: string | null;
   eventType: WhatsAppEventType;
   phone: string | null | undefined;
   customerName: string | null | undefined;
   dailyNumber: number | string | null | undefined;
+  branchCode?: string | null;       // ex.: "P", "F" — entra no payload pra renderizar P-42
+  branchName?: string | null;       // ex.: "Loja Principal" — pode entrar no template
 }
 
 const SETTING_ENABLED = "whatsapp_enabled";
-const SETTING_TEMPLATE_RECEIVED = "whatsapp_template_received";
-const SETTING_TEMPLATE_READY = "whatsapp_template_ready";
+const SETTING_TEMPLATE: Record<WhatsAppEventType, string> = {
+  order_received:      "whatsapp_template_received",
+  order_ready:         "whatsapp_template_ready",
+  order_partial_ready: "whatsapp_template_partial_ready",
+};
+const DEFAULT_TEMPLATE: Record<WhatsAppEventType, string> = {
+  order_received:      "novo_pedido",
+  order_ready:         "pedido_pronto",
+  order_partial_ready: "pedido_parcial_pronto",
+};
 
 function parseBoolSetting(value: unknown, fallback = false): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
-    const trimmed = value.replace(/^"|"$/g, "").toLowerCase();
-    return trimmed === "true";
+    return value.replace(/^"|"$/g, "").toLowerCase() === "true";
   }
   return fallback;
 }
@@ -46,15 +64,6 @@ function maskPhone(phone: string | null | undefined): string {
   return `+${digits.slice(0, 2)}***${digits.slice(-4)}`;
 }
 
-/**
- * Normalize a Brazilian phone into canonical +E.164. Accepts raw digits with or
- * without country code, with or without "+". Returns null if invalid.
- * Examples:
- *   "(61) 99999-9999" -> "+5561999999999"
- *   "61999999999"     -> "+5561999999999"
- *   "+5561999999999"  -> "+5561999999999"
- *   "5561999999999"   -> "+5561999999999"
- */
 function normalizeBrazilPhoneE164(phone: string): string | null {
   let digits = phone.replace(/\D/g, "");
   if (!digits) return null;
@@ -77,14 +86,55 @@ function firstName(name: string | null | undefined): string {
 }
 
 /**
- * Enqueue a WhatsApp transactional message. Best-effort, never throws.
- *
- * Skips silently when:
- *   - whatsapp_enabled setting is false
- *   - phone is missing / not a valid Brazilian E.164
- *   - customer has whatsapp_opt_in = false
- *   - a live row already exists for (order_id, event_type) — handled by unique index
+ * Resolve template + enabled state combinando branches.whatsapp_templates com
+ * as settings globais. Retorna `null` se o evento estiver desabilitado.
  */
+async function resolveTemplate(
+  supabaseAdmin: any,
+  branchId: string | null | undefined,
+  eventType: WhatsAppEventType,
+): Promise<{ enabled: boolean; templateName: string }> {
+  // 1) Settings globais — fallback
+  const settingKey = SETTING_TEMPLATE[eventType];
+  const { data: settings } = await supabaseAdmin
+    .from("settings")
+    .select("key, value")
+    .in("key", [SETTING_ENABLED, settingKey]);
+
+  const globalEnabled = parseBoolSetting(
+    settings?.find((s: any) => s.key === SETTING_ENABLED)?.value,
+    false,
+  );
+  let templateName = parseStringSetting(
+    settings?.find((s: any) => s.key === settingKey)?.value,
+    DEFAULT_TEMPLATE[eventType],
+  );
+  let enabled = globalEnabled;
+
+  // 2) Override por filial
+  if (branchId) {
+    const { data: branch } = await supabaseAdmin
+      .from("branches")
+      .select("whatsapp_enabled, whatsapp_templates")
+      .eq("id", branchId)
+      .maybeSingle();
+
+    if (branch) {
+      enabled = enabled && branch.whatsapp_enabled !== false;
+
+      const override = branch.whatsapp_templates?.[eventType];
+      if (override && typeof override === "object") {
+        if (override.enabled === false) enabled = false;
+        if (typeof override.template_name === "string" && override.template_name.trim()) {
+          templateName = override.template_name.trim();
+        }
+      }
+    }
+  }
+
+  return { enabled, templateName };
+}
+
 export async function enqueueWhatsAppMessage(
   supabaseAdmin: any,
   payload: EnqueuePayload,
@@ -100,59 +150,47 @@ export async function enqueueWhatsAppMessage(
       return { enqueued: false, reason: "invalid_phone" };
     }
 
-    // 1. Settings
-    const { data: settings } = await supabaseAdmin
-      .from("settings")
-      .select("key, value")
-      .in("key", [SETTING_ENABLED, SETTING_TEMPLATE_RECEIVED, SETTING_TEMPLATE_READY]);
-
-    const enabled = parseBoolSetting(
-      settings?.find((s: any) => s.key === SETTING_ENABLED)?.value,
-      false,
+    // Resolução de template/enabled com override por filial.
+    const { enabled, templateName } = await resolveTemplate(
+      supabaseAdmin,
+      payload.branchId ?? null,
+      payload.eventType,
     );
     if (!enabled) {
-      console.log(`${tag} SKIP: whatsapp_enabled=false`);
+      console.log(`${tag} SKIP: whatsapp desabilitado (global ou na filial)`);
       return { enqueued: false, reason: "feature_disabled" };
     }
 
-    const templateName = payload.eventType === "order_received"
-      ? parseStringSetting(
-        settings?.find((s: any) => s.key === SETTING_TEMPLATE_RECEIVED)?.value,
-        "novo_pedido",
-      )
-      : parseStringSetting(
-        settings?.find((s: any) => s.key === SETTING_TEMPLATE_READY)?.value,
-        "pedido_pronto",
-      );
-
-    // 2. Opt-in snapshot (look up by phone_e164; tolerate missing customer row)
+    // Opt-in snapshot.
     let optIn = true;
     const { data: customer } = await supabaseAdmin
       .from("customers")
       .select("whatsapp_opt_in")
       .eq("phone_e164", phone)
       .maybeSingle();
-    if (customer && customer.whatsapp_opt_in === false) {
-      optIn = false;
-    }
+    if (customer && customer.whatsapp_opt_in === false) optIn = false;
+
+    const messagePayload = {
+      customer_name: firstName(payload.customerName),
+      daily_number:  payload.dailyNumber ?? null,
+      branch_code:   payload.branchCode ?? null,
+      branch_name:   payload.branchName ?? null,
+    };
 
     if (!optIn) {
-      // Persist a SKIPPED row to keep audit trail; rely on unique index for dedup.
       const { error: skipErr } = await supabaseAdmin
         .from("whatsapp_messages")
         .insert({
-          order_id: payload.orderId,
+          order_id:        payload.orderId,
+          branch_id:       payload.branchId ?? null,
           phone,
-          event_type: payload.eventType,
-          message_type: payload.eventType,
-          template_name: templateName,
-          status: "SKIPPED",
+          event_type:      payload.eventType,
+          message_type:    payload.eventType,
+          template_name:   templateName,
+          status:          "SKIPPED",
           customer_opt_in: false,
-          error_message: "Cliente com whatsapp_opt_in=false",
-          payload: {
-            customer_name: firstName(payload.customerName),
-            daily_number: payload.dailyNumber ?? null,
-          },
+          error_message:   "Cliente com whatsapp_opt_in=false",
+          payload:         messagePayload,
         });
       if (skipErr && skipErr.code !== "23505") {
         console.error(`${tag} ERRO ao gravar SKIPPED:`, skipErr.message);
@@ -162,25 +200,21 @@ export async function enqueueWhatsAppMessage(
       return { enqueued: false, reason: "opt_out" };
     }
 
-    // 3. Insert PENDING. Unique partial index handles concurrent inserts.
     const { error: insertErr } = await supabaseAdmin
       .from("whatsapp_messages")
       .insert({
-        order_id: payload.orderId,
+        order_id:        payload.orderId,
+        branch_id:       payload.branchId ?? null,
         phone,
-        event_type: payload.eventType,
-        message_type: payload.eventType, // legacy column kept in sync
-        template_name: templateName,
-        status: "PENDING",
+        event_type:      payload.eventType,
+        message_type:    payload.eventType,
+        template_name:   templateName,
+        status:          "PENDING",
         customer_opt_in: true,
-        payload: {
-          customer_name: firstName(payload.customerName),
-          daily_number: payload.dailyNumber ?? null,
-        },
+        payload:         messagePayload,
       });
 
     if (insertErr) {
-      // 23505 = unique_violation — significa: ja existe linha viva (PENDING/SENT/SKIPPED).
       if (insertErr.code === "23505") {
         console.log(`${tag} SKIP: mensagem ja enfileirada (idempotencia)`);
         return { enqueued: false, reason: "duplicate" };

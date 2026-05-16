@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserProvider, useUser } from "@/contexts/UserContext";
+import { BranchProvider } from "@/contexts/BranchContext";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -93,7 +94,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <UserProvider>
-      <AppShell>{children}</AppShell>
+      <BranchProvider>
+        <AppShell>{children}</AppShell>
+      </BranchProvider>
     </UserProvider>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Order, PaymentMethod, PaymentStatus } from "@/types/pdv";
 import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
+import { OrderItemsControl } from "./OrderItemsControl";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
@@ -237,47 +238,16 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
           {/* LEFT — items + financial + history */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4 lg:border-r border-zinc-100">
 
-            {/* Items */}
-            <div>
+            {/* Items + controles por item */}
+            <div className="space-y-3">
               <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-zinc-400">
                 Itens do Pedido
               </p>
-              <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-                <div className="divide-y divide-zinc-100">
-                  {order.items?.map((item) => (
-                    <div key={item.id} className="p-4 space-y-0.5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-black text-sm text-zinc-900">
-                              {item.quantity}× {item.product?.name ?? item.product_name_snapshot}
-                            </p>
-  
-                          </div>
-                          {item.removed_ingredients && item.removed_ingredients.length > 0 && (
-                            <p className="text-[11px] font-bold text-brand-red uppercase mt-0.5">
-                              − SEM: {item.removed_ingredients.map((ri) => ri.ingredient?.name ?? ri.ingredient_name_snapshot).join(", ")}
-                            </p>
-                          )}
-                          {item.addons && item.addons.length > 0 && (
-                            <p className="text-[11px] font-bold text-emerald-600 uppercase mt-0.5">
-                              + {item.addons.map((a) => `${a.quantity}× ${a.addon?.name ?? a.addon_name_snapshot}`).join(", ")}
-                            </p>
-                          )}
-                          {item.observation && (
-                            <p className="mt-1 text-[11px] italic text-zinc-400">&ldquo;{item.observation}&rdquo;</p>
-                          )}
-                        </div>
-                        <p className="shrink-0 text-sm font-black text-zinc-700">
-                          {currency.format(item.total_price)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <OrderItemsControl order={order} onMutated={onOrderUpdated} />
 
-                {/* Financial summary */}
-                <div className="border-t border-zinc-100 bg-zinc-50/80 px-4 py-3 space-y-1.5">
+              {/* Financial summary */}
+              <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+                <div className="bg-zinc-50/80 px-4 py-3 space-y-1.5">
                   {(hasDiscount || hasPacking) && (
                     <div className="flex justify-between text-xs font-semibold text-zinc-500">
                       <span>Subtotal</span>
