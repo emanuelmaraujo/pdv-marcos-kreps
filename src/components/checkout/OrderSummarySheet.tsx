@@ -135,6 +135,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number } | null>(null);
+  const [customAmountStr, setCustomAmountStr] = useState("");
 
   // Customer profile lookup (mirrors /pedir behavior)
   const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found" | "not_found">("idle");
@@ -248,9 +249,13 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     setIsSubmitting(true);
     setError(null);
     try {
+      const customAmount = parseFloat(customAmountStr.replace(",", ".")) || 0;
+      const isPartialCash = selectedPaymentMethod === "CASH" && customAmount > 0 && customAmount < estimatedTotal;
+
       let paymentStatus = "PAID";
-      if (selectedPaymentMethod === "PENDING")  paymentStatus = "PENDING";
-      if (selectedPaymentMethod === "COURTESY") paymentStatus = "COURTESY";
+      if (selectedPaymentMethod === "PENDING")   paymentStatus = "PENDING";
+      if (selectedPaymentMethod === "COURTESY")  paymentStatus = "COURTESY";
+      if (isPartialCash)                         paymentStatus = "PENDING";
 
       let finalDiscount = undefined;
       if (hasDiscount && discountNum > 0 && discountReason.trim()) {
@@ -301,6 +306,15 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
       const response = await pdvApi.createAttendantOrder(payload);
       if (response?.success) {
         saveRecentName(customerName);
+        // Pagamento parcial em dinheiro: registra o valor recebido imediatamente
+        if (isPartialCash && customAmount > 0) {
+          await pdvApi.markPayment({
+            orderId: response.order.order_id,
+            paymentMethod: "CASH",
+            status: "PAID",
+            amount: customAmount,
+          }).catch(() => {/* não bloqueia o fluxo se falhar */});
+        }
         setSuccessData({ daily_number: response.order.daily_number, total_amount: response.order.total_amount });
         clearCart();
       } else {
@@ -619,6 +633,51 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                 ))}
               </div>
             </div>
+
+            {/* Valor recebido (só para CASH) */}
+            {selectedPaymentMethod === "CASH" && (() => {
+              const received = parseFloat(customAmountStr.replace(",", ".")) || 0;
+              const change = received > 0 ? received - estimatedTotal : null;
+              const isPartial = received > 0 && received < estimatedTotal;
+              return (
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                    Valor recebido (opcional)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-zinc-500">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder={estimatedTotal.toFixed(2).replace(".", ",")}
+                      value={customAmountStr}
+                      onChange={(e) => setCustomAmountStr(e.target.value)}
+                      className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-black focus:border-brand-red/40 focus:outline-none focus:ring-2 focus:ring-brand-red/10"
+                    />
+                    {customAmountStr && (
+                      <button type="button" onClick={() => setCustomAmountStr("")}
+                        className="text-zinc-400 hover:text-zinc-600 text-xs font-bold">
+                        limpar
+                      </button>
+                    )}
+                  </div>
+                  {change !== null && change >= 0 && (
+                    <div className="rounded-xl bg-emerald-50 px-3 py-2 flex items-center justify-between">
+                      <span className="text-xs font-bold text-emerald-700">Troco</span>
+                      <span className="text-base font-black text-emerald-700">
+                        {currency.format(change)}
+                      </span>
+                    </div>
+                  )}
+                  {isPartial && (
+                    <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                      ⚠ Valor menor que o total — pedido ficará com pagamento parcial
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Discount */}
             <div className="space-y-2">

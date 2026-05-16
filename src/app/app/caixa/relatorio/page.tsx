@@ -50,6 +50,7 @@ import { LoadingState } from "@/components/feedback/LoadingState";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { PaymentMethod } from "@/types/pdv";
+import { useBranch } from "@/contexts/BranchContext";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -212,6 +213,7 @@ const PAYMENT_META: Record<string, { icon: React.ElementType; label: string; ico
 export default function RelatorioPage() {
   const router = useRouter();
   const supabase = createClient();
+  const { currentBranchId, currentBranch } = useBranch();
 
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -254,10 +256,12 @@ export default function RelatorioPage() {
       const f = { ...filters, start_date: start.toISOString(), end_date: end.toISOString() };
       const pf = { ...filters, start_date: ps.toISOString(), end_date: pe.toISOString() };
 
+      const bf = currentBranchId ? { ...f, branch_id: currentBranchId } : f;
+      const bpf = currentBranchId ? { ...pf, branch_id: currentBranchId } : pf;
       const [cur, prev, ord] = await Promise.all([
-        reportsApi.getCashReport(f),
-        reportsApi.getCashReport(pf).catch(() => null),
-        reportsApi.getOrdersForDateRange(start.toISOString(), end.toISOString()),
+        reportsApi.getCashReport(bf),
+        reportsApi.getCashReport(bpf).catch(() => null),
+        reportsApi.getOrdersForDateRange(start.toISOString(), end.toISOString(), currentBranchId),
       ]);
       setReport(cur);
       setPrevReport(prev);
@@ -267,7 +271,7 @@ export default function RelatorioPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [period, filters]);
+  }, [period, filters, currentBranchId]);
 
   useEffect(() => {
     if (isAdmin !== true) return;
