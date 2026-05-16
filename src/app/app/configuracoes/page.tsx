@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
+import { useBranch } from "@/contexts/BranchContext";
 import {
   AlertTriangle,
   Check,
@@ -264,6 +265,7 @@ export default function ConfiguracoesSistema() {
     token_expired: false,
   });
   const { toasts, addToast, removeToast } = useToast();
+  const { currentBranch } = useBranch();
 
   const publicOrderStatus = settings.public_ordering_enabled === "true" ? "Aberto" : "Pausado";
   const printingStatus = settings.printing_enabled === "true" ? "Ativa" : "Pausada";
@@ -468,6 +470,32 @@ export default function ConfiguracoesSistema() {
               Salvar alteracoes
             </Button>
           </div>
+
+          {/* Banner de contexto de filial */}
+          {currentBranch && (
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-brand-charcoal px-2 py-0.5 text-xs font-black text-white">
+                  {currentBranch.code}
+                </span>
+                <div>
+                  <p className="text-xs font-black text-zinc-800">
+                    Você está na filial <strong>{currentBranch.name}</strong>
+                  </p>
+                  <p className="text-[11px] text-zinc-500">
+                    Estas são as configurações <strong>globais</strong> (padrão para todas as filiais).
+                    Para sobrescrever taxa de embalagem, horários, impressora e WhatsApp desta filial, use:
+                  </p>
+                </div>
+              </div>
+              <a
+                href="/app/configuracoes/filiais"
+                className="shrink-0 flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[11px] font-black text-zinc-700 hover:bg-zinc-50 whitespace-nowrap"
+              >
+                Editar filial →
+              </a>
+            </div>
+          )}
 
           <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
             <StatPill
