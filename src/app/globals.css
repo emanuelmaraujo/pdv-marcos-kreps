@@ -58,6 +58,13 @@ body {
   display: none;
 }
 
+/* Input base style — usado em forms de admin */
+.input {
+  @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900
+         focus:border-brand-red/40 focus:outline-none focus:ring-2 focus:ring-brand-red/10
+         transition-all placeholder:text-zinc-400;
+}
+
 /* Safe area padding for PWA */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .pb-safe {

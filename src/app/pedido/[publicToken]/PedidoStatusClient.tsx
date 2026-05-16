@@ -223,26 +223,79 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
 
               {statusData.items && statusData.items.length > 0 && (
                 <section className="rounded-2xl border border-amber-900/10 bg-white/95 p-4 shadow-sm">
-                  <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">Resumo</h2>
-                  <div className="mt-3 divide-y divide-zinc-100">
-                    {statusData.items.map((item) => (
-                      <div key={item.id} className="flex items-start gap-3 py-3">
-                        <span className="font-black text-zinc-500">{item.quantity}x</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-black text-zinc-900">{item.product_name}</p>
-                          {item.addons.length > 0 && (
-                            <p className="mt-0.5 text-xs font-bold text-emerald-600">
-                              + {item.addons.map((addon) => `${addon.quantity}x ${addon.name}`).join(", ")}
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-black uppercase tracking-widest text-zinc-400">Seus itens</h2>
+                    {statusData.items.length > 1 && (() => {
+                      const active = statusData.items!.filter((i) => i.status !== "CANCELLED");
+                      const done = active.filter((i) => i.status === "READY" || i.status === "DELIVERED");
+                      return (
+                        <span className="text-xs font-black text-zinc-500">
+                          {done.length}/{active.length} prontos
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div className="space-y-2">
+                    {statusData.items.map((item) => {
+                      const itemStatus = (item as any).status as string | undefined;
+                      const seqNo = (item as any).sequence_no as number | undefined;
+                      const branch = (statusData.order as any).branch as { code?: string } | undefined;
+                      const orderNum = String(order!.daily_number).padStart(3, "0");
+                      const label = seqNo != null
+                        ? (branch?.code ? `${branch.code}-${orderNum}-${seqNo}` : `${orderNum}-${seqNo}`)
+                        : null;
+
+                      const statusMeta = {
+                        PENDING:        { label: "Em preparo",    bg: "bg-zinc-100",     text: "text-zinc-500",     dot: "bg-zinc-400" },
+                        IN_PREPARATION: { label: "Em preparo",    bg: "bg-amber-50",     text: "text-amber-700",    dot: "bg-amber-400" },
+                        READY:          { label: "✓ Pronto!",     bg: "bg-emerald-50",   text: "text-emerald-700",  dot: "bg-emerald-500" },
+                        DELIVERED:      { label: "Entregue",      bg: "bg-zinc-100",     text: "text-zinc-400",     dot: "bg-zinc-300" },
+                        CANCELLED:      { label: "Cancelado",     bg: "bg-zinc-50",      text: "text-zinc-400",     dot: "bg-zinc-300" },
+                      }[itemStatus ?? "PENDING"] ?? { label: "Em preparo", bg: "bg-zinc-100", text: "text-zinc-500", dot: "bg-zinc-400" };
+
+                      const isReady    = itemStatus === "READY";
+                      const isCancelled = itemStatus === "CANCELLED";
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${
+                            isReady ? "border-emerald-200 bg-emerald-50"
+                            : isCancelled ? "border-zinc-100 bg-zinc-50 opacity-50"
+                            : "border-zinc-100 bg-zinc-50"
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {label && (
+                                <span className="shrink-0 rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] font-black text-white">
+                                  {label}
+                                </span>
+                              )}
+                              <span className={`shrink-0 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black ${statusMeta.bg} ${statusMeta.text}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
+                                {statusMeta.label}
+                              </span>
+                            </div>
+                            <p className={`mt-1 text-sm font-black ${isCancelled ? "line-through text-zinc-400" : "text-zinc-900"}`}>
+                              {item.quantity}× {item.product_name}
                             </p>
-                          )}
-                          {item.removed_ingredients.length > 0 && (
-                            <p className="mt-0.5 text-xs font-bold text-brand-red">Sem {item.removed_ingredients.join(", ")}</p>
-                          )}
-                          {item.observation && <p className="mt-0.5 text-xs italic text-zinc-400">{item.observation}</p>}
+                            {item.addons.length > 0 && (
+                              <p className="mt-0.5 text-xs font-bold text-emerald-600">
+                                + {item.addons.map((a) => `${a.quantity}x ${a.name}`).join(", ")}
+                              </p>
+                            )}
+                            {item.removed_ingredients.length > 0 && (
+                              <p className="mt-0.5 text-xs font-bold text-brand-red">Sem {item.removed_ingredients.join(", ")}</p>
+                            )}
+                            {item.observation && <p className="mt-0.5 text-xs italic text-zinc-400">&ldquo;{item.observation}&rdquo;</p>}
+                          </div>
+                          <p className={`shrink-0 text-sm font-black ${isCancelled ? "text-zinc-400 line-through" : "text-zinc-700"}`}>
+                            {currency.format(item.total_price)}
+                          </p>
                         </div>
-                        <p className="text-sm font-black text-zinc-700">{currency.format(item.total_price)}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               )}
@@ -282,10 +335,19 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                   <p className="mt-1 text-xs font-bold">Expira {formatDateTime(statusData.transaction.expires_at)}</p>
                 </div>
               )}
+              {order?.status === "PRONTO_PARCIAL" && (
+                <div className="rounded-2xl bg-amber-500 p-4 text-white">
+                  <PackageCheck className="h-6 w-6" />
+                  <p className="mt-2 text-base font-black">Parte do pedido pronta!</p>
+                  <p className="text-sm font-semibold text-amber-50">
+                    Voce pode comecar a retirar os itens prontos no balcao. Os demais estao saindo.
+                  </p>
+                </div>
+              )}
               {order?.status === "PRONTO" && (
                 <div className="rounded-2xl bg-emerald-500 p-4 text-white">
                   <PackageCheck className="h-6 w-6" />
-                  <p className="mt-2 text-lg font-black">Seu pedido esta pronto.</p>
+                  <p className="mt-2 text-lg font-black">Seu pedido esta pronto!</p>
                   <p className="text-sm font-semibold text-emerald-50">Mostre esta tela no balcao para retirar.</p>
                 </div>
               )}

@@ -7,6 +7,7 @@ import { branchesApi } from '@/lib/api/branches-api';
 interface BranchContextValue {
   branches: Branch[];
   currentBranch: Branch | null;
+  currentBranchId: string | null;
   isLoading: boolean;
   setCurrentBranch: (branchId: string, persist?: boolean) => void;
   refresh: () => Promise<void>;
@@ -61,10 +62,11 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<BranchContextValue>(() => ({
     branches,
     currentBranch,
+    currentBranchId,
     isLoading,
     setCurrentBranch,
     refresh,
-  }), [branches, currentBranch, isLoading, setCurrentBranch, refresh]);
+  }), [branches, currentBranch, currentBranchId, isLoading, setCurrentBranch, refresh]);
 
   return <BranchContext.Provider value={value}>{children}</BranchContext.Provider>;
 }
@@ -77,6 +79,6 @@ export function useBranch(): BranchContextValue {
 
 // Helper para uso em chamadas de API: garante que existe filial selecionada.
 export function useCurrentBranchId(): string | null {
-  const { currentBranch } = useBranch();
-  return currentBranch?.id ?? null;
+  const { currentBranchId } = useBranch();
+  return currentBranchId;
 }
