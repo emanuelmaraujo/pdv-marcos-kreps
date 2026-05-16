@@ -119,20 +119,24 @@ function ToggleRow({
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className="flex min-h-16 w-full items-center justify-between gap-4 border-b border-zinc-100 px-1 py-3 text-left last:border-b-0"
+      className={`flex w-full items-center justify-between gap-4 rounded-xl px-4 py-3.5 text-left transition-all ${
+        checked ? "bg-brand-red/5 ring-1 ring-brand-red/20" : "bg-zinc-50 hover:bg-zinc-100"
+      }`}
     >
       <span className="min-w-0">
-        <span className="block text-sm font-bold text-zinc-900">{label}</span>
-        {description && <span className="mt-0.5 block text-xs font-medium leading-relaxed text-zinc-500">{description}</span>}
+        <span className="block text-sm font-black text-zinc-900">{label}</span>
+        {description && (
+          <span className="mt-0.5 block text-[11px] font-medium leading-relaxed text-zinc-500">{description}</span>
+        )}
       </span>
       <span
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-          checked ? "bg-brand-red" : "bg-zinc-300"
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-all duration-200 ${
+          checked ? "bg-brand-red shadow-sm shadow-brand-red/30" : "bg-zinc-300"
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-            checked ? "translate-x-5" : "translate-x-0.5"
+          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+            checked ? "translate-x-6" : "translate-x-1"
           }`}
         />
       </span>
@@ -150,13 +154,21 @@ function Field({
   hint?: string;
 }) {
   return (
-    <label className="block space-y-1.5">
-      <span className="text-[11px] font-black uppercase tracking-wide text-zinc-500">{label}</span>
+    <label className="block space-y-2">
+      <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400">{label}</span>
       {children}
-      {hint && <span className="block text-xs font-medium leading-relaxed text-zinc-400">{hint}</span>}
+      {hint && <span className="block text-[11px] font-medium leading-relaxed text-zinc-400">{hint}</span>}
     </label>
   );
 }
+
+const SECTION_COLORS: Record<string, { bg: string; icon: string; border: string; ring: string }> = {
+  pedido:    { bg: "from-blue-600 to-blue-700",    icon: "bg-blue-500/20",   border: "border-blue-100",   ring: "ring-blue-100" },
+  embalagem: { bg: "from-amber-600 to-amber-700",  icon: "bg-amber-500/20",  border: "border-amber-100",  ring: "ring-amber-100" },
+  impressao: { bg: "from-violet-600 to-violet-700",icon: "bg-violet-500/20", border: "border-violet-100", ring: "ring-violet-100" },
+  whatsapp:  { bg: "from-emerald-600 to-emerald-700",icon:"bg-emerald-500/20",border:"border-emerald-100", ring:"ring-emerald-100" },
+  biometria: { bg: "from-zinc-700 to-zinc-800",    icon: "bg-zinc-500/20",   border: "border-zinc-100",   ring: "ring-zinc-100" },
+};
 
 function SettingsPanel({
   id,
@@ -173,18 +185,21 @@ function SettingsPanel({
   className?: string;
   children: ReactNode;
 }) {
+  const colors = SECTION_COLORS[id] ?? SECTION_COLORS.pedido;
   return (
-    <section id={id} className={`scroll-mt-24 rounded-xl border border-zinc-200 bg-white shadow-sm ${className}`}>
-      <header className="flex items-center gap-3 border-b border-zinc-100 px-4 py-4">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700">
-          <Icon className="h-5 w-5" />
-        </span>
-        <span className="min-w-0">
-          <h2 className="text-base font-black text-zinc-950">{title}</h2>
-          <p className="mt-0.5 text-xs font-medium text-zinc-500">{description}</p>
-        </span>
+    <section id={id} className={`scroll-mt-24 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm ${className}`}>
+      <header className={`bg-gradient-to-br ${colors.bg} px-5 py-5`}>
+        <div className="flex items-center gap-3">
+          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colors.icon}`}>
+            <Icon className="h-5 w-5 text-white" />
+          </span>
+          <span className="min-w-0">
+            <h2 className="text-base font-black text-white">{title}</h2>
+            <p className="mt-0.5 text-[11px] font-medium text-white/70">{description}</p>
+          </span>
+        </div>
       </header>
-      <div className="p-4">{children}</div>
+      <div className="space-y-3 p-5">{children}</div>
     </section>
   );
 }
@@ -198,16 +213,19 @@ function StatPill({
   value: string | number;
   tone?: "neutral" | "green" | "red";
 }) {
-  const toneClass = {
-    neutral: "border-zinc-200 bg-white text-zinc-800",
-    green: "border-emerald-100 bg-emerald-50 text-emerald-700",
-    red: "border-red-100 bg-red-50 text-red-700",
+  const styles = {
+    neutral: { card: "border-zinc-200 bg-white", value: "text-zinc-800", dot: "bg-zinc-400", label: "text-zinc-500" },
+    green:   { card: "border-emerald-100 bg-emerald-50", value: "text-emerald-700", dot: "bg-emerald-500", label: "text-emerald-600" },
+    red:     { card: "border-red-100 bg-red-50",   value: "text-red-700",   dot: "bg-red-500",   label: "text-red-600" },
   }[tone];
 
   return (
-    <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
-      <p className="text-lg font-black leading-none">{value}</p>
-      <p className="mt-1 text-[10px] font-black uppercase tracking-wide opacity-70">{label}</p>
+    <div className={`rounded-xl border p-3 ${styles.card}`}>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
+        <p className={`text-base font-black leading-none ${styles.value}`}>{value}</p>
+      </div>
+      <p className={`text-[10px] font-bold uppercase tracking-wide ${styles.label}`}>{label}</p>
     </div>
   );
 }
@@ -455,49 +473,52 @@ export default function ConfiguracoesSistema() {
     <div className="min-h-full bg-[#F5F7FA] pb-28">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/95 backdrop-blur md:static md:bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-5 md:px-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <header className="border-b border-zinc-200 bg-gradient-to-br from-brand-charcoal to-zinc-800">
+        <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-widest text-brand-red">Sistema</p>
-              <h1 className="mt-1 text-2xl font-black text-zinc-950">Configuracoes</h1>
-              <p className="mt-1 text-sm font-medium text-zinc-500">
-                Ajuste pedidos online, impressao, notificacoes e acesso rapido.
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>
+              <h1 className="mt-1 text-2xl font-black text-white">Configurações</h1>
+              <p className="mt-1 text-sm font-medium text-zinc-400">
+                Pedidos online, impressão, notificações e autenticação.
               </p>
             </div>
-            <Button onClick={handleSave} loading={saving} className="gap-2 md:w-auto">
+            <Button
+              onClick={handleSave}
+              loading={saving}
+              className="gap-2 bg-brand-red hover:bg-brand-red/90 text-white shadow-lg shadow-brand-red/30 md:w-auto"
+            >
               {!saving && <Save className="h-4 w-4" />}
-              Salvar alteracoes
+              Salvar alterações
             </Button>
           </div>
 
           {/* Banner de contexto de filial */}
           {currentBranch && (
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="rounded-md bg-brand-charcoal px-2 py-0.5 text-xs font-black text-white">
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-white/10 border border-white/20 px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-xs font-black text-white">
                   {currentBranch.code}
                 </span>
                 <div>
-                  <p className="text-xs font-black text-zinc-800">
-                    Você está na filial <strong>{currentBranch.name}</strong>
+                  <p className="text-xs font-black text-white">
+                    Filial ativa: <strong>{currentBranch.name}</strong>
                   </p>
-                  <p className="text-[11px] text-zinc-500">
-                    Estas são as configurações <strong>globais</strong> (padrão para todas as filiais).
-                    Para sobrescrever taxa de embalagem, horários, impressora e WhatsApp desta filial, use:
+                  <p className="text-[10px] text-white/60">
+                    Configurações globais — valem como padrão para todas as filiais
                   </p>
                 </div>
               </div>
               <a
                 href="/app/configuracoes/filiais"
-                className="shrink-0 flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-[11px] font-black text-zinc-700 hover:bg-zinc-50 whitespace-nowrap"
+                className="shrink-0 flex items-center gap-1.5 rounded-lg bg-white/15 border border-white/20 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/25 whitespace-nowrap transition-all"
               >
                 Editar filial →
               </a>
             </div>
           )}
 
-          <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
             <StatPill
               label={`Das ${settings.public_ordering_start_time} as ${settings.public_ordering_end_time}`}
               value={publicOrderStatus}
@@ -524,16 +545,19 @@ export default function ConfiguracoesSistema() {
             {SECTIONS.map((section) => {
               const Icon = section.icon;
               const active = activeSection === section.id;
+              const colors = SECTION_COLORS[section.id] ?? SECTION_COLORS.pedido;
               return (
                 <button
                   key={section.id}
                   type="button"
                   onClick={() => scrollToSection(section.id)}
-                  className={`flex h-11 shrink-0 items-center gap-2 rounded-full px-3 text-xs font-black transition-colors ${
-                    active ? "bg-zinc-950 text-white" : "border border-zinc-200 bg-white text-zinc-700"
+                  className={`flex h-10 shrink-0 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
+                    active
+                      ? `bg-gradient-to-br ${colors.bg} text-white shadow-sm`
+                      : "border border-white/30 bg-white/10 text-white hover:bg-white/20"
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                   {section.title}
                 </button>
               );
@@ -542,31 +566,45 @@ export default function ConfiguracoesSistema() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-5 px-4 py-5 md:grid-cols-[240px_1fr] md:px-6">
+      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-5 px-4 py-6 md:grid-cols-[260px_1fr] md:px-6">
         <aside className="hidden md:sticky md:top-20 md:block md:self-start">
-          <nav className="grid gap-1 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm">
-            {SECTIONS.map((section) => {
-              const Icon = section.icon;
-              const active = activeSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => scrollToSection(section.id)}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors ${
-                    active ? "bg-zinc-950 text-white" : "text-zinc-700 hover:bg-zinc-100"
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-black">{section.title}</span>
-                    <span className={`mt-0.5 block text-xs font-medium ${active ? "text-zinc-300" : "text-zinc-400"}`}>
-                      {section.description}
+          <nav className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <div className="border-b border-zinc-100 bg-zinc-50 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Seções</p>
+            </div>
+            <div className="p-2 space-y-0.5">
+              {SECTIONS.map((section) => {
+                const Icon = section.icon;
+                const active = activeSection === section.id;
+                const colors = SECTION_COLORS[section.id] ?? SECTION_COLORS.pedido;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => scrollToSection(section.id)}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
+                      active
+                        ? `bg-gradient-to-br ${colors.bg} text-white shadow-sm`
+                        : "text-zinc-600 hover:bg-zinc-50"
+                    }`}
+                  >
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                      active ? "bg-white/20" : "bg-zinc-100"
+                    }`}>
+                      <Icon className={`h-4 w-4 ${active ? "text-white" : "text-zinc-500"}`} />
                     </span>
-                  </span>
-                </button>
-              );
-            })}
+                    <span className="min-w-0">
+                      <span className={`block text-sm font-black ${active ? "text-white" : "text-zinc-800"}`}>
+                        {section.title}
+                      </span>
+                      <span className={`block text-[10px] font-medium truncate ${active ? "text-white/70" : "text-zinc-400"}`}>
+                        {section.description}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </nav>
         </aside>
 
