@@ -75,18 +75,18 @@ serve(async (req) => {
     }
 
     // 3. Parse filters
-    const { start_date, end_date, category_id, payment_method } = await req.json();
+    const { start_date, end_date, category_id, payment_method, branch_id } = await req.json();
 
     // 4. Query Orders
     let query = supabaseAdmin
       .from('orders')
       .select(`
-        id, 
-        total_amount, 
-        payment_status, 
-        payment_method, 
-        status, 
-        discount_amount, 
+        id,
+        total_amount,
+        payment_status,
+        payment_method,
+        status,
+        discount_amount,
         created_at,
         daily_number
       `);
@@ -94,6 +94,7 @@ serve(async (req) => {
     if (start_date) query = query.gte('created_at', start_date);
     if (end_date) query = query.lte('created_at', end_date);
     if (payment_method && payment_method !== 'ALL') query = query.eq('payment_method', payment_method);
+    if (branch_id) query = query.eq('branch_id', branch_id);
 
     const { data: orders, error: ordersError } = await query;
     if (ordersError) throw ordersError;

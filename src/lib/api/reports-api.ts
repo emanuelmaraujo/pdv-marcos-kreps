@@ -8,6 +8,7 @@ export interface CashReportFilters {
   end_date: string;
   category_id?: string;
   payment_method?: string;
+  branch_id?: string | null;
 }
 
 export interface ProductStat {
@@ -122,13 +123,15 @@ export const reportsApi = {
     return data;
   },
 
-  async getOrdersForDateRange(startISO: string, endISO: string): Promise<OrderRecord[]> {
-    const { data, error } = await supabase
+  async getOrdersForDateRange(startISO: string, endISO: string, branchId?: string | null): Promise<OrderRecord[]> {
+    let query = supabase
       .from("orders")
       .select("id, daily_number, status, payment_status, payment_method, total_amount, discount_amount, packing_fee, created_at")
       .gte("created_at", startISO)
       .lte("created_at", endISO)
       .order("created_at", { ascending: false });
+    if (branchId) query = query.eq("branch_id", branchId);
+    const { data, error } = await query;
     if (error) throw error;
     return (data ?? []).map((row) => ({
       ...row,

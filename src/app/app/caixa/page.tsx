@@ -32,6 +32,7 @@ import {
   cashApi,
 } from "@/lib/api/cash-api";
 import { PaymentMethod } from "@/types/pdv";
+import { useBranch } from "@/contexts/BranchContext";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -148,27 +149,28 @@ export default function CaixaPage() {
   const [error, setError] = useState("");
   const [isLive, setIsLive] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { currentBranchId, currentBranch } = useBranch();
 
   const loadCash = useCallback(async (refreshing = false) => {
     if (refreshing) setIsRefreshing(true);
     else setIsLoading(true);
     setError("");
     try {
-      setData(await cashApi.getDaySummary());
+      setData(await cashApi.getDaySummary(currentBranchId));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro ao carregar caixa");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [currentBranchId]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setIsLoading(true);
       try {
-        const next = await cashApi.getDaySummary();
+        const next = await cashApi.getDaySummary(currentBranchId);
         if (!cancelled) setData(next);
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Erro ao carregar caixa");
@@ -214,6 +216,11 @@ export default function CaixaPage() {
           <div>
             <h1 className="text-base font-black tracking-tight text-brand-charcoal sm:text-lg">
               Caixa do dia
+              {currentBranch && (
+                <span className="ml-2 rounded-md bg-brand-charcoal px-2 py-0.5 text-[11px] font-black text-white">
+                  {currentBranch.code} · {currentBranch.name}
+                </span>
+              )}
             </h1>
             <div className="flex items-center gap-2">
               {lastUpdate && (

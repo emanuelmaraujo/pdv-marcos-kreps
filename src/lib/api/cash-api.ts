@@ -152,7 +152,7 @@ function friendlyError(message: string): Error {
 }
 
 export const cashApi = {
-  getDaySummary: async (): Promise<CaixaData> => {
+  getDaySummary: async (branchId?: string | null): Promise<CaixaData> => {
     const supabase = createClient();
 
     const { start: startOfDay, end: endOfDay } = getBusinessDayRange();
@@ -172,7 +172,7 @@ export const cashApi = {
       role = (profile?.role as UserRole | undefined) ?? null;
     }
 
-    const { data: rawOrders, error: ordersError } = await supabase
+    let ordersQuery = supabase
       .from("orders")
       .select(
         "id, daily_number, status, payment_status, payment_method, discount_amount, packing_fee, total_amount, created_at, paid_at, delivered_at, cancelled_at"
@@ -180,6 +180,10 @@ export const cashApi = {
       .gte("created_at", startOfDay.toISOString())
       .lt("created_at", endOfDay.toISOString())
       .order("created_at", { ascending: false });
+
+    if (branchId) ordersQuery = ordersQuery.eq("branch_id", branchId);
+
+    const { data: rawOrders, error: ordersError } = await ordersQuery;
 
     if (ordersError) {
       throw friendlyError(`Erro ao carregar pedidos do caixa: ${ordersError.message}`);

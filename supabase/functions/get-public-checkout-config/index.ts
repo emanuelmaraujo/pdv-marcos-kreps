@@ -115,12 +115,28 @@ serve(async (req) => {
         .eq("slug", branchSlug)
         .maybeSingle();
       branch = data;
-      if (!branch || !branch.active) {
+
+      // Filial não encontrada: fallback silencioso para config global.
+      // Evita 404 que quebra a página — o cliente verá o cardápio sem contexto de filial.
+      if (!branch) {
+        console.warn(`[get-public-checkout-config] branch_slug="${branchSlug}" not found, falling back to global config`);
+        branch = null; // continua com config global
+      } else if (!branch.active) {
+        // Filial existe mas está inativa: retorna 200 com ordering_disabled para o frontend
+        // poder mostrar a mensagem "fechado" em vez de uma tela de erro.
         return jsonResponse(req, {
-          success: false,
-          error: "Filial inexistente ou inativa.",
-          ordering_disabled: true,
-        }, 404);
+          success: true,
+          branch: { id: branch.id, code: branch.code, name: branch.name, slug: branch.slug },
+          settings: {
+            public_ordering_enabled: "false",
+            public_ordering_start_time: DEFAULT_ORDERING_START,
+            public_ordering_end_time: DEFAULT_ORDERING_END,
+            packaging_fee: "0",
+            apply_packaging_fee_for_takeout: "false",
+          },
+          online_ordering_enabled: false,
+          ordering_closed_reason: "Esta unidade está temporariamente inativa.",
+        });
       }
     }
 
