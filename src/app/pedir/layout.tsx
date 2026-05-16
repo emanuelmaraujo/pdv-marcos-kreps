@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Pedir · Marcos Krep's",
@@ -10,6 +11,8 @@ export const metadata: Metadata = {
   },
 };
 
+// Suspense necessário porque /pedir/page usa useSearchParams()
+// (Next.js 16 exige boundary quando há leitura de search params em páginas)
 export default function PedirLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <Suspense>{children}</Suspense>;
 }
