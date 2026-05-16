@@ -282,7 +282,6 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                       {order.payment_status === "PARTIAL" ? "Pagamento Parcial" : "Pagamento Pendente"}
                     </span>
                   </div>
-                  {/* Pedido com múltiplos itens: permite pagar por item */}
                   {(order.items?.length ?? 0) > 1 ? (
                     <div className="flex gap-2">
                       <Button
@@ -421,7 +420,6 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
         </div>
       </div>
     </BottomSheet>
-
     {showPayItems && (
       <PayItemsModal
         order={order}
