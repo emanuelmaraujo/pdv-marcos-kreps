@@ -255,7 +255,7 @@ serve(async (req) => {
       try {
         const { data: existingCustomer } = await supabaseAdmin
           .from('customers')
-          .select('id, orders_count, name, remember_checkout_data')
+          .select('id, orders_count, name')
           .eq('id', customerPhoneE164)
           .maybeSingle();
 
