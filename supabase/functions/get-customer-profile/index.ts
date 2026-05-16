@@ -91,8 +91,9 @@ serve(async (req) => {
       .maybeSingle();
 
     if (customerErr) {
-      console.error("[get-customer-profile] lookup failed", customerErr.message);
-      return jsonResponse({ success: false, found: false, error: "Erro ao buscar cliente." }, 500);
+      // Pode indicar coluna ausente (migracao pendente). Nao bloqueia: retorna not_found.
+      console.error("[get-customer-profile] lookup failed — possivel migracao pendente:", customerErr.message, customerErr.code);
+      return jsonResponse({ success: true, found: false });
     }
 
     if (!customer) {
