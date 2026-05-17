@@ -244,15 +244,48 @@ serve(async (req) => {
     if (orderType !== "BALCAO" && orderType !== "VIAGEM") {
       throw new Error("Tipo de pedido invalido.");
     }
-    if (!branchSlug) throw new Error("branch_slug obrigatório.");
 
-    // Resolve filial pelo slug. Filial inativa nao aceita novos pedidos.
-    const { data: branch, error: branchErr } = await supabaseAdmin
-      .from("branches")
-      .select("id, code, name, active, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time")
-      .eq("slug", branchSlug)
-      .single();
-    if (branchErr || !branch) throw new Error("Filial inexistente.");
+    // Resolve filial:
+    // - Com slug: caminho normal (/pedir/{slug})
+    // - Sem slug + 1 filial ativa: usa ela (deployment de filial única)
+    // - Sem slug + 2+ filiais ativas: erro claro pedindo escolha
+    let branch: {
+      id: string;
+      code: string;
+      name: string;
+      active: boolean;
+      packing_fee: number | null;
+      ordering_enabled: boolean;
+      ordering_start_time: string | null;
+      ordering_end_time: string | null;
+    } | null = null;
+
+    if (branchSlug) {
+      const { data, error: branchErr } = await supabaseAdmin
+        .from("branches")
+        .select("id, code, name, active, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time")
+        .eq("slug", branchSlug)
+        .single();
+      if (branchErr || !data) throw new Error("Filial inexistente.");
+      branch = data;
+    } else {
+      const { data: activeBranches } = await supabaseAdmin
+        .from("branches")
+        .select("id, code, name, active, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time")
+        .eq("active", true)
+        .eq("ordering_enabled", true)
+        .limit(2);
+
+      if (!activeBranches || activeBranches.length === 0) {
+        throw new Error("Nenhuma filial disponível para pedidos.");
+      }
+      if (activeBranches.length > 1) {
+        throw new Error("Escolha uma filial para continuar.");
+      }
+      branch = activeBranches[0];
+    }
+
+    if (!branch) throw new Error("Filial inexistente.");
     if (!branch.active || !branch.ordering_enabled) {
       return jsonResponse(req, {
         success: false,
