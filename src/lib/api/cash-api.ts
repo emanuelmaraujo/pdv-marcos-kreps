@@ -264,19 +264,29 @@ export const cashApi = {
       avgDeliveryMinutes,
     };
 
+    // Breakdown baseado na tabela payments (cada linha = 1 transação real)
+    // Isso reflete corretamente pedidos com múltiplos métodos (ex: PIX + Débito no split-bill)
     const paymentBreakdown: PaymentBreakdown[] = PAYMENT_METHODS.map((method) => {
-      const matching =
-        method === "PENDING"
-          ? pending
-          : method === "COURTESY"
-            ? courtesy
-            : paid.filter((order) => order.payment_method === method);
+      if (method === "PENDING") {
+        return {
+          method,
+          label: PAYMENT_LABELS[method],
+          count: pending.length,
+          total: sumOrders(pending),
+        };
+      }
 
+      const matchingPayments = realPayments.filter(
+        (p) => p.payment_method === method &&
+               (method === "COURTESY" ? p.payment_status === "COURTESY" : p.payment_status === "PAID"),
+      );
+
+      const total = matchingPayments.reduce((sum, p) => sum + money(p.amount), 0);
       return {
         method,
         label: PAYMENT_LABELS[method],
-        count: matching.length,
-        total: sumOrders(matching),
+        count: matchingPayments.length,
+        total,
       };
     });
 
@@ -308,6 +318,19 @@ export const cashApi = {
       }
 
       orderItems = (rawItems ?? []) as OrderItemRow[];
+    }
+
+    // ── Pagamentos reais por método — usa a tabela payments (não orders.payment_method)
+    // Isso garante que pedidos pagos com métodos mistos (PIX + Débito) sejam contados corretamente.
+    interface PaymentRow { payment_method: string; amount: number | string | null; payment_status: string }
+    let realPayments: PaymentRow[] = [];
+    if (orderIdsForProducts.length > 0) {
+      const { data: rawPayments } = await supabase
+        .from("payments")
+        .select("payment_method, amount, payment_status")
+        .in("order_id", orderIdsForProducts)
+        .in("payment_status", ["PAID", "COURTESY"]);
+      realPayments = (rawPayments ?? []) as PaymentRow[];
     }
 
     const productMap = new Map<string, { quantity: number; revenue: number }>();
