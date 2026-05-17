@@ -15,7 +15,11 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Navegação principal"
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] bg-[var(--bg-surface)] pb-safe shadow-[0_-2px_12px_-2px_rgba(0,0,0,0.06)] md:hidden"
+      // bg via inline style garante opacidade total — o Tailwind arbitrary
+      // `bg-[var(--bg-surface)]` em algumas configs renderiza transparente
+      // antes do CSS custom property estar disponível.
+      style={{ backgroundColor: "var(--bg-surface)" }}
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] pb-safe shadow-[0_-2px_12px_-2px_rgba(0,0,0,0.08)] isolate md:hidden"
     >
       <div className="flex h-16 items-stretch px-1">
         {visibleItems.map((item) => {
