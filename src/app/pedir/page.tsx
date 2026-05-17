@@ -2,7 +2,7 @@
 
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   CheckCircle2,
@@ -844,9 +844,12 @@ function TimelineStep({
 export default function PedirPublicPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const _rawBranch = searchParams.get("branch");
-  // Guarda contra a string literal "undefined" que pode aparecer quando
-  // encodeURIComponent(undefined) é chamado no redirect de /pedir/[slug].
+  // Lê slug da rota /pedir/[slug] OU do search param ?branch=
+  // — assim funciona quando essa page é renderizada por /pedir/page.tsx
+  // (sem rota dinâmica) e por /pedir/[slug]/page.tsx (slug na URL).
+  const routeParams = useParams<{ slug?: string }>();
+  const _rawBranch = routeParams?.slug ?? searchParams.get("branch");
+  // Guarda contra a string literal "undefined" que pode aparecer.
   const branchSlug = (_rawBranch && _rawBranch !== "undefined") ? _rawBranch : undefined;
   const categoryDragScroll = useHorizontalDragScroll();
   const filterDragScroll = useHorizontalDragScroll();
@@ -1951,68 +1954,60 @@ export default function PedirPublicPage() {
 
       {/* ── Tela 4: INFO — dados do cliente + modalidade ───────────────── */}
       {step === "INFO" && (
-        <main className="mx-auto max-w-2xl space-y-4 p-4">
-          <ProgressSteps current={2} />
+        <main className="mx-auto max-w-2xl space-y-3 p-3 sm:p-4">
+          {/* Linha compacta: voltar + progress inline (mobile só mostra textos curtos) */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setStep("REVIEW")}
+              className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              aria-label="Voltar para itens"
+            >
+              <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+              <span className="hidden sm:inline">Voltar</span>
+            </button>
+            <div className="flex-1 min-w-0">
+              <ProgressSteps current={2} />
+            </div>
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setStep("REVIEW")}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-          >
-            <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
-            Voltar para itens
-          </button>
+          <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)]">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">Seus dados</h2>
 
-          <section className="rounded-2xl px-5 py-4 text-white shadow-[var(--shadow-sm)]" style={{ backgroundColor: "var(--bg-inverse)" }}>
-            <h2 className="text-lg font-semibold tracking-tight md:text-xl">Seus dados</h2>
-            <p className="mt-1 text-sm leading-relaxed text-white/65">
-              Identifique-se pelo WhatsApp. Já pediu antes? Preenchemos automaticamente.
-            </p>
-          </section>
-
-          <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
             <FloatingInput
-              label="Seu WhatsApp com DDD"
+              label="WhatsApp com DDD"
               value={customerPhone}
               onChange={(v) => setCustomerInfo(customerName, formatWhatsAppInput(v))}
               onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
               placeholder="(11) 99999-9999"
               type="tel"
               inputMode="tel"
-              help="Avisamos você por aqui quando o pedido for confirmado e quando ficar pronto. Para sair, responda PARAR."
+              help={!checkoutPhone ? "Já pediu antes? Preenchemos o resto pelo número." : undefined}
             />
 
-            {!checkoutPhone && (
-              <div className="rounded-xl bg-[var(--brand-light)] border border-brand-red/15 p-3 text-sm leading-relaxed text-[var(--text-primary)]">
-                Digite seu WhatsApp com DDD. Se seus dados estiverem salvos, a gente preenche o resto.
-              </div>
-            )}
-
             {checkoutPhone && profileLookupState === "checking" && (
-              <div className="flex items-center gap-2 rounded-xl bg-[var(--bg-subtle)] p-3 text-sm text-[var(--text-secondary)]">
-                <Loader2 className="h-4 w-4 animate-spin text-brand-red" />
-                Procurando dados salvos para esse WhatsApp...
+              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-red" />
+                Buscando dados salvos...
               </div>
             )}
 
             {shouldShowCheckoutDetails && (
               <>
                 {profileNotice && (
-                  <div className="rounded-xl bg-[var(--status-success-bg)] px-3 py-2 text-xs font-medium text-[var(--status-success)]">
-                    {profileNotice}
-                  </div>
+                  <p className="text-xs font-medium text-[var(--status-success)]">{profileNotice}</p>
                 )}
                 {profileLookupState === "not_found" && (
-                  <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">
-                    Não encontrei dados salvos. Complete rapidinho abaixo.
-                  </div>
+                  <p className="text-xs font-medium text-[var(--status-warning)]">
+                    Não encontrei dados salvos. Complete abaixo.
+                  </p>
                 )}
 
                 <FloatingInput
                   label="Nome completo"
                   value={customerName}
                   onChange={(v) => setCustomerInfo(v, customerPhone)}
-                  placeholder="Como podemos chamar você?"
+                  placeholder="Como te chamar?"
                 />
 
                 <FloatingInput
@@ -2024,8 +2019,8 @@ export default function PedirPublicPage() {
                 />
 
                 <div>
-                  <p className="mb-1.5 text-[11px] font-medium text-[var(--text-muted)]">Modalidade</p>
-                  <div className="flex rounded-xl bg-[var(--bg-subtle)] p-1">
+                  <p className="mb-1 text-[11px] font-medium text-[var(--text-muted)]">Modalidade</p>
+                  <div className="flex rounded-xl bg-[var(--bg-subtle)] p-0.5">
                     {([{ v: "BALCAO", label: "Comer aqui" }, { v: "VIAGEM", label: "Para levar" }] as const).map((opt) => {
                       const isActive = orderType === opt.v;
                       return (
@@ -2033,8 +2028,8 @@ export default function PedirPublicPage() {
                           key={opt.v}
                           type="button"
                           onClick={() => setOrderType(opt.v)}
-                          className={`flex-1 h-10 rounded-lg text-sm font-semibold ${
-                            isActive ? "text-white shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                          className={`flex-1 h-9 rounded-lg text-sm font-semibold ${
+                            isActive ? "text-white shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)]"
                           }`}
                           style={isActive ? { backgroundColor: "var(--bg-inverse)" } : undefined}
                         >
@@ -2049,62 +2044,49 @@ export default function PedirPublicPage() {
                   value={orderNotes}
                   onChange={(event) => setOrderNotes(event.target.value)}
                   placeholder="Alguma observação para a equipe?"
-                  className="h-20 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
+                  className="h-14 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
                 />
 
-                <label className="flex items-start gap-3 cursor-pointer text-sm text-[var(--text-secondary)] py-1">
-                  <input
-                    type="checkbox"
-                    checked={rememberCheckoutData}
-                    onChange={(event) => setRememberCheckoutData(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-brand-red"
-                  />
-                  <span>Salvar meus dados para os próximos pedidos</span>
-                </label>
-                <label className="flex items-start gap-3 cursor-pointer text-sm text-[var(--text-secondary)] py-1">
-                  <input
-                    type="checkbox"
-                    checked={marketingOptIn}
-                    onChange={(event) => setMarketingOptIn(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-brand-red"
-                  />
-                  <span>Receber promoções e novidades pelo WhatsApp</span>
-                </label>
-                {rememberCheckoutData && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
-                      setRememberCheckoutData(false);
-                      setProfileNotice("Dados salvos removidos deste dispositivo.");
-                    }}
-                    className="text-xs text-[var(--text-muted)] underline hover:text-[var(--text-secondary)] self-start"
-                  >
-                    Remover dados salvos neste dispositivo
-                  </button>
-                )}
+                {/* Consentimentos compactos lado a lado no espaço disponível */}
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={rememberCheckoutData}
+                      onChange={(event) => setRememberCheckoutData(event.target.checked)}
+                      className="h-3.5 w-3.5 accent-brand-red"
+                    />
+                    Salvar para próximos pedidos
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={marketingOptIn}
+                      onChange={(event) => setMarketingOptIn(event.target.checked)}
+                      className="h-3.5 w-3.5 accent-brand-red"
+                    />
+                    Receber novidades pelo WhatsApp
+                  </label>
+                </div>
               </>
             )}
           </section>
 
-          {/* Resumo escuro com total */}
-          <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: "var(--bg-inverse)" }}>
-            <div className="space-y-1.5 text-sm text-white/75">
-              <div className="flex items-center justify-between">
-                <span>{items.length} {items.length === 1 ? "item" : "itens"}</span>
-                <span className="tabular-nums">{currency.format(estimatedSubtotal)}</span>
-              </div>
-              {estimatedPackagingFee > 0 && (
-                <div className="flex items-center justify-between">
-                  <span>Embalagem</span>
-                  <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between border-t border-white/10 pt-3 mt-1 text-base font-semibold text-white">
-                <span>Total</span>
-                <span className="text-xl tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(estimatedTotal)}</span>
-              </div>
-            </div>
+          {/* Resumo super compacto — uma linha */}
+          <div
+            className="flex items-center justify-between rounded-xl px-4 py-2.5 text-white"
+            style={{ backgroundColor: "var(--bg-inverse)" }}
+          >
+            <span className="text-sm text-white/75">
+              {items.length} {items.length === 1 ? "item" : "itens"}
+              {estimatedPackagingFee > 0 && <span className="text-white/50"> · com embalagem</span>}
+            </span>
+            <span className="flex items-baseline gap-1">
+              <span className="text-[11px] text-white/60">Total</span>
+              <span className="text-base font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
+                {currency.format(estimatedTotal)}
+              </span>
+            </span>
           </div>
 
           {checkoutError && (

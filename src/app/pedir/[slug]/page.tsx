@@ -1,12 +1,13 @@
 // Rota pública por filial: /pedir/[slug]
-// Redireciona para /pedir?branch=[slug] mantendo a lógica de checkout centralizada.
-import { redirect } from "next/navigation";
+//
+// Em vez de redirecionar para /pedir?branch=[slug] (que apaga o slug
+// da URL e quebra deep links), renderizamos a MESMA página principal.
+// A page principal lê o slug via useParams() com fallback para
+// useSearchParams() — então funciona em ambos os caminhos:
+//   /pedir/principal       → useParams() retorna {slug: "principal"}
+//   /pedir?branch=principal → useSearchParams() retorna "principal"
+import PedirPublicPage from "../page";
 
-export default function PedirFilialPage({ params }: { params: { slug?: string } }) {
-  const slug = params.slug;
-  // Guarda contra slug ausente ou inválido (evita ?branch=undefined na URL)
-  if (!slug || slug === "undefined") {
-    redirect("/pedir");
-  }
-  redirect(`/pedir?branch=${encodeURIComponent(slug)}`);
+export default function PedirFilialPage() {
+  return <PedirPublicPage />;
 }
