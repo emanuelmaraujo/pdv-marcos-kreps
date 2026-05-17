@@ -13,6 +13,7 @@ import {
   QrCode,
   RefreshCw,
   ShoppingBag,
+  Smartphone,
   TrendingUp,
   Trophy,
   Wallet,
@@ -47,12 +48,13 @@ const PAYMENT_META: Record<PaymentMethod, {
   iconCls: string; barCls: string; cardBg: string;
   textCls: string; subtextCls: string; trackCls: string;
 }> = {
-  PIX:         { icon: QrCode,     label: "PIX",      iconCls: "bg-teal-100 text-teal-600",     barCls: "bg-teal-500",    cardBg: "bg-teal-50",    textCls: "text-teal-900",    subtextCls: "text-teal-600",    trackCls: "bg-teal-100" },
-  CASH:        { icon: Banknote,   label: "Dinheiro", iconCls: "bg-emerald-100 text-emerald-600", barCls: "bg-emerald-500", cardBg: "bg-emerald-50", textCls: "text-emerald-900", subtextCls: "text-emerald-600", trackCls: "bg-emerald-100" },
-  DEBIT_CARD:  { icon: CreditCard, label: "Débito",   iconCls: "bg-blue-100 text-blue-600",     barCls: "bg-blue-500",    cardBg: "bg-blue-50",    textCls: "text-blue-900",    subtextCls: "text-blue-600",    trackCls: "bg-blue-100" },
-  CREDIT_CARD: { icon: CreditCard, label: "Crédito",  iconCls: "bg-violet-100 text-violet-600", barCls: "bg-violet-500",  cardBg: "bg-violet-50",  textCls: "text-violet-900",  subtextCls: "text-violet-600",  trackCls: "bg-violet-100" },
-  COURTESY:    { icon: Gift,       label: "Cortesia", iconCls: "bg-pink-100 text-pink-600",     barCls: "bg-pink-400",    cardBg: "bg-pink-50",    textCls: "text-pink-900",    subtextCls: "text-pink-600",    trackCls: "bg-pink-100" },
-  PENDING:     { icon: Clock,      label: "Pendente", iconCls: "bg-amber-100 text-amber-600",   barCls: "bg-amber-400",   cardBg: "bg-amber-50",   textCls: "text-amber-900",   subtextCls: "text-amber-600",   trackCls: "bg-amber-100" },
+  PIX:         { icon: QrCode,      label: "PIX",      iconCls: "bg-teal-100 text-teal-600",     barCls: "bg-teal-500",    cardBg: "bg-teal-50",    textCls: "text-teal-900",    subtextCls: "text-teal-600",    trackCls: "bg-teal-100" },
+  CASH:        { icon: Banknote,    label: "Dinheiro", iconCls: "bg-emerald-100 text-emerald-600", barCls: "bg-emerald-500", cardBg: "bg-emerald-50", textCls: "text-emerald-900", subtextCls: "text-emerald-600", trackCls: "bg-emerald-100" },
+  DEBIT_CARD:  { icon: CreditCard,  label: "Débito",   iconCls: "bg-blue-100 text-blue-600",     barCls: "bg-blue-500",    cardBg: "bg-blue-50",    textCls: "text-blue-900",    subtextCls: "text-blue-600",    trackCls: "bg-blue-100" },
+  CREDIT_CARD: { icon: CreditCard,  label: "Crédito",  iconCls: "bg-violet-100 text-violet-600", barCls: "bg-violet-500",  cardBg: "bg-violet-50",  textCls: "text-violet-900",  subtextCls: "text-violet-600",  trackCls: "bg-violet-100" },
+  IFOOD:       { icon: Smartphone,  label: "iFood",    iconCls: "bg-orange-100 text-orange-600", barCls: "bg-orange-500",  cardBg: "bg-orange-50",  textCls: "text-orange-900",  subtextCls: "text-orange-600",  trackCls: "bg-orange-100" },
+  COURTESY:    { icon: Gift,        label: "Cortesia", iconCls: "bg-pink-100 text-pink-600",     barCls: "bg-pink-400",    cardBg: "bg-pink-50",    textCls: "text-pink-900",    subtextCls: "text-pink-600",    trackCls: "bg-pink-100" },
+  PENDING:     { icon: Clock,       label: "Pendente", iconCls: "bg-amber-100 text-amber-600",   barCls: "bg-amber-400",   cardBg: "bg-amber-50",   textCls: "text-amber-900",   subtextCls: "text-amber-600",   trackCls: "bg-amber-100" },
 };
 
 // ── Insight generation ────────────────────────────────────────────────────────
