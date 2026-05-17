@@ -288,6 +288,15 @@ export type AttendantCustomerProfileResponse = {
   };
 };
 
+export type PublicBranchStatsResponse = {
+  success: boolean;
+  error?: string;
+  /** Pedidos completados hoje na filial (ou total se branchSlug ausente). */
+  orders_today: number;
+  /** category_id → product_id mais vendido nos últimos 30 dias. */
+  top_product_by_category: Record<string, string>;
+};
+
 export type PublicCheckoutConfigResponse = {
   success: boolean;
   error?: string;
@@ -375,6 +384,14 @@ export const pdvApi = {
 
   getPublicCheckoutConfig: (branchSlug?: string) =>
     invokeEdgeFunction<PublicCheckoutConfigResponse>('get-public-checkout-config', branchSlug ? { branch_slug: branchSlug } : {}),
+
+  // Métricas públicas para social proof do /pedir (orders_today + mais vendidos).
+  // Falha silenciosa: se o edge não responder, a UI cai num estado sem stats.
+  getPublicBranchStats: (branchSlug?: string): Promise<PublicBranchStatsResponse> =>
+    invokeEdgeFunction<PublicBranchStatsResponse>(
+      'get-public-branch-stats',
+      branchSlug ? { branch_slug: branchSlug } : {},
+    ).catch(() => ({ success: false, orders_today: 0, top_product_by_category: {} })),
 
   createMercadoPagoPayment: (payload: {
     order_id: string;
