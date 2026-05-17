@@ -41,8 +41,10 @@ jobs:
           for fn in \
             add-items-to-order \
             cash-report \
+            change-payment-method \
             confirm-order \
             create-attendant-order \
+            edit-order-item \
             get-customer-profile \
             manage-users \
             mark-payment \

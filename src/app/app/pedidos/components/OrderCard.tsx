@@ -51,17 +51,6 @@ interface Props {
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-function getStatusEnteredAt(order: Order): string | undefined {
-  switch (order.status) {
-    case "NA_FILA":         return order.queue_entered_at ?? order.confirmed_at;
-    case "PRONTO_PARCIAL":  return order.queue_entered_at ?? order.confirmed_at;
-    case "PRONTO":          return order.ready_at;
-    case "ENTREGUE":        return order.delivered_at;
-    case "CANCELADO":       return order.cancelled_at;
-    default:                return order.created_at;
-  }
-}
-
 function ElapsedTimer({ since, now }: { since: string; now: number }) {
   const elapsed = Math.floor((now - new Date(since).getTime()) / 1000 / 60);
   const colorClass =
@@ -100,18 +89,29 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
   const itemCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const firstItems = order.items?.slice(0, 3) ?? [];
   const extraItems = Math.max((order.items?.length ?? 0) - 3, 0);
-  const showTimer = ACTIVE_STATUSES.includes(order.status);
-  const timerSince = getStatusEnteredAt(order);
+  const isActive = ACTIVE_STATUSES.includes(order.status);
   const latestTransaction = order.transactions
     ?.slice()
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
 
-  // Urgency level based on elapsed time for active orders
-  const elapsed = showTimer && timerSince
-    ? Math.floor((now - new Date(timerSince).getTime()) / 1000 / 60)
-    : 0;
-  const isUrgent  = showTimer && elapsed >= 20;
-  const isWarning = showTimer && elapsed >= 10 && elapsed < 20;
+  // Ponto de partida: quando entrou na fila. Usado como base de tempo em TODOS os estados.
+  const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
+
+  // Timer ao vivo — só para pedidos ativos, contando desde a entrada na fila
+  const activeElapsedMin = isActive && queueEnteredAt
+    ? Math.floor((now - new Date(queueEnteredAt).getTime()) / 1000 / 60)
+    : null;
+
+  // Tempo estático para pedidos entregues: da fila até a entrega
+  const deliveredElapsedMin = order.status === "ENTREGUE" && order.delivered_at && queueEnteredAt
+    ? Math.round((new Date(order.delivered_at).getTime() - new Date(queueEnteredAt).getTime()) / 60000)
+    : null;
+
+  const elapsed = activeElapsedMin ?? 0;
+  const isUrgent  = isActive && elapsed >= 20;
+  const isWarning = isActive && elapsed >= 10 && elapsed < 20;
+  // Banner/borda de pagamento pendente só para pedidos ainda ativos
+  const showPendingPayBanner = isPendingPayment && isActive && order.status !== "CANCELADO";
 
   const quickActionConfig =
     order.status === "AGUARDANDO_CONFIRMACAO"
@@ -139,7 +139,7 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
     ? "border-[var(--status-danger)]/40 ring-2 ring-[var(--status-danger)]/20"
     : isWarning
     ? "border-[var(--status-warning)]/40 ring-1 ring-[var(--status-warning)]/20"
-    : isPendingPayment
+    : showPendingPayBanner
     ? "border-[var(--status-warning)]/30 ring-1 ring-[var(--status-warning)]/10"
     : "border-[var(--border)]";
 
@@ -179,7 +179,15 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 <OrderStatusBadge status={order.status} />
-                {showTimer && timerSince && <ElapsedTimer since={timerSince} now={now} />}
+                {activeElapsedMin !== null && <ElapsedTimer since={queueEnteredAt!} now={now} />}
+                {deliveredElapsedMin !== null && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--status-neutral-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+                    <Clock className="h-2.5 w-2.5" />
+                    {deliveredElapsedMin < 60
+                      ? `${deliveredElapsedMin}min`
+                      : `${Math.floor(deliveredElapsedMin / 60)}h${deliveredElapsedMin % 60}m`}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -281,8 +289,8 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
         </div>
       </div>
 
-      {/* Pending payment banner */}
-      {isPendingPayment && order.status !== "CANCELADO" && (
+      {/* Pending payment banner — só para pedidos ainda ativos */}
+      {showPendingPayBanner && (
         <div className="bg-[var(--status-warning-bg)] px-4 py-1.5 text-center">
           <span className="text-[11px] font-semibold text-[var(--status-warning)]">
             Aguardando pagamento

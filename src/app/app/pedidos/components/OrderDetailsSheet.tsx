@@ -1,10 +1,11 @@
-import { Order, PaymentMethod, PaymentStatus } from "@/types/pdv";
+import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
 import { PayItemsModal } from "./PayItemsModal";
+import { EditOrderItemSheet } from "./EditOrderItemSheet";
 import { useState } from "react";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
@@ -23,6 +24,7 @@ import {
   Banknote,
   CreditCard,
   Gift,
+  Smartphone,
 } from "lucide-react";
 
 interface Props {
@@ -82,6 +84,7 @@ const PAYMENT_METHOD_CONFIG: Record<
   CASH:        { label: "Dinheiro",     Icon: Banknote,    colors: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
   DEBIT_CARD:  { label: "Débito",       Icon: CreditCard,  colors: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" },
   CREDIT_CARD: { label: "Crédito",      Icon: CreditCard,  colors: "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" },
+  IFOOD:       { label: "iFood",        Icon: Smartphone,  colors: "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100" },
   COURTESY:    { label: "Cortesia",     Icon: Gift,        colors: "border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100" },
   PENDING:     { label: "Pendente",     Icon: Clock,       colors: "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100" },
 };
@@ -94,6 +97,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [cancelReason, setCancelReason] = useState("");
   const [showPaymentSelection, setShowPaymentSelection] = useState(false);
   const [showPayItems, setShowPayItems] = useState(false);
+  const [showChangeMethod, setShowChangeMethod] = useState(false);
+  const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
 
   if (!order) return null;
 
@@ -125,6 +130,11 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   };
   const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
     handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: order.total_amount }));
+  const onChangeMethod = (method: PaymentMethod) =>
+    handleAction(async () => {
+      await pdvApi.changePaymentMethod({ orderId: order.id, paymentMethod: method });
+      setShowChangeMethod(false);
+    });
   const onReprint = () =>
     handleAction(() => pdvApi.reprintOrder({
       orderId: order.id,
@@ -141,6 +151,17 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const hasPacking  = order.packing_fee > 0;
   const subtotal = order.total_amount + order.discount_amount - order.packing_fee;
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
+  const isPaid = order.payment_status === "PAID" || order.payment_status === "COURTESY";
+
+  const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
+  const elapsedMin = isENTREGUE && order.delivered_at && queueEnteredAt
+    ? Math.round((new Date(order.delivered_at).getTime() - new Date(queueEnteredAt).getTime()) / 60000)
+    : null;
+  const elapsedLabel = elapsedMin !== null
+    ? elapsedMin < 60
+      ? `${elapsedMin} min`
+      : `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}min`
+    : null;
 
   return (
     <>
@@ -176,6 +197,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 <p className="mt-1 text-sm text-zinc-300">
                   <Clock size={12} className="inline mr-1 opacity-70" />
                   Criado às {fmt(order.created_at)}
+                  {elapsedLabel && (
+                    <span className="ml-2 font-black text-emerald-400">{elapsedLabel}</span>
+                  )}
                 </p>
               </div>
               <div className="flex flex-col items-end gap-2">
@@ -207,12 +231,12 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
         {/* Items com controles por item */}
         <div className="space-y-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Itens do Pedido</p>
-          <OrderItemsControl order={order} onMutated={onOrderUpdated} />
+          <OrderItemsControl order={order} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
 
           {/* Financial summary */}
           <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
             <div className="bg-zinc-50/80 p-4 space-y-2">
-              {hasDiscount && (
+              {(hasDiscount || hasPacking) && (
                 <div className="flex justify-between text-xs font-semibold text-zinc-500">
                   <span>Subtotal</span>
                   <span>{currency.format(subtotal)}</span>
@@ -242,7 +266,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
 
         {/* Actions */}
         <div className="space-y-3">
-          {!showPaymentSelection && !showCancelReason && (
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && (
             <>
               {/* Primary status action */}
               {order.status === "AGUARDANDO_CONFIRMACAO" && (
@@ -323,6 +347,18 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </Button>
               )}
 
+              {/* Alterar pagamento */}
+              {isPaid && !isCANCELADO && (
+                <Button
+                  variant="outline"
+                  className="h-12 w-full rounded-2xl border-2 font-black text-xs text-zinc-600 gap-2"
+                  onClick={() => setShowChangeMethod(true)}
+                  disabled={isLoading}
+                >
+                  <ArrowLeft size={14} className="rotate-180" /> ALTERAR PAGAMENTO
+                </Button>
+              )}
+
               {/* Secondary actions */}
               <div className="grid grid-cols-2 gap-3">
                 {["NA_FILA", "PRONTO", "ENTREGUE"].includes(order.status) && (
@@ -349,6 +385,41 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
             </>
           )}
 
+          {/* Change payment method */}
+          {showChangeMethod && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowChangeMethod(false)} className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100">
+                  <ArrowLeft size={18} />
+                </button>
+                <h4 className="text-sm font-black uppercase tracking-widest text-zinc-900">Alterar Pagamento</h4>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {(["PIX", "DEBIT_CARD", "CREDIT_CARD", "CASH"] as PaymentMethod[]).map((method) => {
+                  const { label, Icon, colors } = PAYMENT_METHOD_CONFIG[method];
+                  const isCurrent = order.payment_method === method;
+                  return (
+                    <button
+                      key={method}
+                      onClick={() => onChangeMethod(method)}
+                      disabled={isLoading || isCurrent}
+                      className={`flex items-center justify-center gap-2 h-14 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${colors} ${isCurrent ? "ring-2 ring-current ring-offset-1 opacity-70" : ""}`}
+                    >
+                      <Icon size={16} /> {label}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => onChangeMethod("IFOOD")}
+                  disabled={isLoading || order.payment_method === "IFOOD"}
+                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${PAYMENT_METHOD_CONFIG.IFOOD.colors} ${order.payment_method === "IFOOD" ? "ring-2 ring-current ring-offset-1 opacity-70" : ""}`}
+                >
+                  <Smartphone size={16} /> IFOOD
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Payment selection */}
           {showPaymentSelection && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
@@ -372,6 +443,13 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                     </button>
                   );
                 })}
+                <button
+                  onClick={() => onMarkPayment("IFOOD", "PAID")}
+                  disabled={isLoading}
+                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${PAYMENT_METHOD_CONFIG.IFOOD.colors}`}
+                >
+                  <Smartphone size={16} /> IFOOD
+                </button>
                 <button
                   onClick={() => onMarkPayment("COURTESY", "COURTESY")}
                   disabled={isLoading}
@@ -425,6 +503,14 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
         order={order}
         onClose={() => setShowPayItems(false)}
         onPaid={() => { setShowPayItems(false); onOrderUpdated(); onClose(); }}
+      />
+    )}
+    {editingItem && (
+      <EditOrderItemSheet
+        item={editingItem}
+        isOpen={true}
+        onClose={() => setEditingItem(null)}
+        onSaved={() => { setEditingItem(null); onOrderUpdated(); }}
       />
     )}
     </>

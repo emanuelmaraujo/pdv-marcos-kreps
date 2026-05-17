@@ -21,6 +21,7 @@ const METHODS: {
   { value: 'CASH',        label: 'Dinheiro', short: 'Dinheiro', Icon: Banknote,    colors: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' },
   { value: 'DEBIT_CARD',  label: 'Débito',   short: 'Débito',   Icon: CreditCard,  colors: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' },
   { value: 'CREDIT_CARD', label: 'Crédito',  short: 'Crédito',  Icon: Wallet,      colors: 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100' },
+  { value: 'IFOOD',       label: 'iFood',    short: 'iFood',    Icon: Smartphone,  colors: 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100' },
   { value: 'COURTESY',    label: 'Cortesia', short: 'Cortesia', Icon: CheckCircle2,colors: 'border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100' },
 ];
 

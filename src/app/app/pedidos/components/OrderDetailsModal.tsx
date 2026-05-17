@@ -1,11 +1,14 @@
 "use client";
 
+"use client";
+
 import { useEffect, useState } from "react";
-import { Order, PaymentMethod, PaymentStatus } from "@/types/pdv";
+import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
 import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
 import { PayItemsModal } from "./PayItemsModal";
+import { EditOrderItemSheet } from "./EditOrderItemSheet";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
@@ -13,7 +16,7 @@ import {
   X, PlusCircle, Printer, CheckCircle2, Package, XCircle,
   AlertTriangle, ArrowLeft, Utensils, ShoppingBag,
   QrCode, Banknote, CreditCard, Gift, ChevronDown, ChevronUp,
-  History,
+  History, Smartphone,
 } from "lucide-react";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -49,15 +52,15 @@ function TimelineConnector({ done }: { done: boolean }) {
 }
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; Icon: React.ElementType; color: string }[] = [
-  { value: "PIX",         label: "PIX",      Icon: QrCode,    color: "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100" },
-  { value: "CASH",        label: "Dinheiro", Icon: Banknote,  color: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
-  { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard, color: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" },
-  { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard, color: "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" },
+  { value: "PIX",         label: "PIX",      Icon: QrCode,      color: "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100" },
+  { value: "CASH",        label: "Dinheiro", Icon: Banknote,    color: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
+  { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard,  color: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" },
+  { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard,  color: "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" },
 ];
 
 const PAYMENT_LABEL: Record<string, string> = {
   PIX: "PIX", CASH: "Dinheiro", DEBIT_CARD: "Débito",
-  CREDIT_CARD: "Crédito", COURTESY: "Cortesia", PENDING: "Pendente",
+  CREDIT_CARD: "Crédito", IFOOD: "iFood", COURTESY: "Cortesia", PENDING: "Pendente",
 };
 
 interface Props {
@@ -76,6 +79,8 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [showPaymentSelection, setShowPaymentSelection] = useState(false);
   const [showPayItems, setShowPayItems] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showChangeMethod, setShowChangeMethod] = useState(false);
+  const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
 
   // Close on Escape
   useEffect(() => {
@@ -92,6 +97,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
       setShowCancelReason(false);
       setCancelReason("");
       setShowPaymentSelection(false);
+      setShowChangeMethod(false);
       setShowHistory(false);
     }, 0);
 
@@ -128,6 +134,11 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   };
   const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
     handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: order.total_amount }));
+  const onChangeMethod = (method: PaymentMethod) =>
+    handleAction(async () => {
+      await pdvApi.changePaymentMethod({ orderId: order.id, paymentMethod: method });
+      setShowChangeMethod(false);
+    });
   const onReprint = () =>
     handleAction(() => pdvApi.reprintOrder({
       orderId: order.id,
@@ -142,6 +153,17 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const hasPacking   = order.packing_fee > 0;
   const subtotal     = order.total_amount + order.discount_amount - order.packing_fee;
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
+  const isPaid       = order.payment_status === "PAID" || order.payment_status === "COURTESY";
+
+  const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
+  const elapsedMin = isENTREGUE && order.delivered_at && queueEnteredAt
+    ? Math.round((new Date(order.delivered_at).getTime() - new Date(queueEnteredAt).getTime()) / 60000)
+    : null;
+  const elapsedLabel = elapsedMin !== null
+    ? elapsedMin < 60
+      ? `${elapsedMin} min`
+      : `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}min`
+    : null;
 
   const historyEvents = [
     { label: "Criado",     time: order.created_at },
@@ -197,6 +219,9 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   {order.type === "BALCAO" ? "Balcão" : "Para Viagem"} ·{" "}
                   {order.source === "ATTENDANT" ? "Atendente" : order.source === "QR_CODE" ? "QR Code" : order.source === "APP" ? "App" : "WhatsApp"} ·{" "}
                   Criado às {fmt(order.created_at)}
+                  {elapsedLabel && (
+                    <span className="ml-1 font-black text-emerald-400"> · {elapsedLabel}</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -245,7 +270,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
               <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-zinc-400">
                 Itens do Pedido
               </p>
-              <OrderItemsControl order={order} onMutated={onOrderUpdated} />
+              <OrderItemsControl order={order} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
 
               {/* Financial summary */}
               <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -333,7 +358,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
             )}
 
             {/* ─ Default actions ─ */}
-            {!showPaymentSelection && !showCancelReason && (
+            {!showPaymentSelection && !showCancelReason && !showChangeMethod && (
               <>
                 {/* Primary status CTA */}
                 {order.status === "AGUARDANDO_CONFIRMACAO" && (
@@ -416,6 +441,18 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
 
                 <hr className="border-zinc-200" />
 
+                {/* Alterar forma de pagamento */}
+                {isPaid && !isCANCELADO && (
+                  <Button
+                    variant="outline"
+                    className="h-11 w-full rounded-2xl border-2 text-xs font-black text-zinc-600 gap-2"
+                    onClick={() => setShowChangeMethod(true)}
+                    disabled={isLoading}
+                  >
+                    <ArrowLeft size={14} className="rotate-180" /> ALTERAR PAGAMENTO
+                  </Button>
+                )}
+
                 {/* Secondary actions */}
                 {["NA_FILA", "PRONTO", "ENTREGUE"].includes(order.status) && (
                   <Button
@@ -447,6 +484,42 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
               </>
             )}
 
+            {/* ─ Change payment method ─ */}
+            {showChangeMethod && (
+              <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-150">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowChangeMethod(false)}
+                    className="rounded-xl p-1.5 text-zinc-400 hover:bg-zinc-200 transition-colors"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <h4 className="text-xs font-black uppercase tracking-widest text-zinc-700">
+                    Alterar Forma de Pagamento
+                  </h4>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {PAYMENT_METHODS.map(({ value, label, Icon, color }) => (
+                    <button
+                      key={value}
+                      onClick={() => onChangeMethod(value)}
+                      disabled={isLoading}
+                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 text-xs font-black transition-all active:scale-95 disabled:opacity-50 ${color} ${order.payment_method === value ? "ring-2 ring-offset-1 ring-current" : ""}`}
+                    >
+                      <Icon size={18} /> {label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => onChangeMethod("IFOOD")}
+                  disabled={isLoading}
+                  className={`flex w-full items-center justify-center gap-2 h-12 rounded-2xl border-2 border-orange-200 bg-orange-50 text-orange-700 text-xs font-black hover:bg-orange-100 transition-all active:scale-95 disabled:opacity-50 ${order.payment_method === "IFOOD" ? "ring-2 ring-offset-1 ring-current opacity-70" : ""}`}
+                >
+                  <Smartphone size={15} /> IFOOD
+                </button>
+              </div>
+            )}
+
             {/* ─ Payment selection ─ */}
             {showPaymentSelection && (
               <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-150">
@@ -473,6 +546,13 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                     </button>
                   ))}
                 </div>
+                <button
+                  onClick={() => onMarkPayment("IFOOD", "PAID")}
+                  disabled={isLoading}
+                  className="flex w-full items-center justify-center gap-2 h-12 rounded-2xl border-2 border-orange-200 bg-orange-50 text-orange-700 text-xs font-black hover:bg-orange-100 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Smartphone size={15} /> IFOOD
+                </button>
                 <button
                   onClick={() => onMarkPayment("COURTESY", "COURTESY")}
                   disabled={isLoading}
@@ -521,6 +601,14 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
           order={order}
           onClose={() => setShowPayItems(false)}
           onPaid={() => { setShowPayItems(false); onOrderUpdated(); onClose(); }}
+        />
+      )}
+      {editingItem && (
+        <EditOrderItemSheet
+          item={editingItem}
+          isOpen={true}
+          onClose={() => setEditingItem(null)}
+          onSaved={() => { setEditingItem(null); onOrderUpdated(); }}
         />
       )}
     </>

@@ -22,7 +22,7 @@ const corsHeaders = {
 };
 
 const VALID_STATUSES = ["PENDING", "PAID", "REFUNDED", "CANCELED", "COURTESY"] as const;
-const VALID_METHODS  = ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "PENDING", "COURTESY"] as const;
+const VALID_METHODS  = ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD", "PENDING", "COURTESY"] as const;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
