@@ -59,8 +59,11 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   const [paidCount, setPaidCount] = useState(0);
 
   const selectedItems = unpaidItems.filter((i) => selected.has(i.id));
-  const batchTotal = selectedItems.reduce((s, i) => s + Number(i.total_price), 0);
   const isAll = selected.size === unpaidItems.length && unpaidItems.length > 0;
+  // packing_fee fica no pedido, não rateado por item; cobrado apenas quando todos os itens
+  // são pagos em lote (scope = undefined em mark-payment).
+  const packingFeeAmount = Number(order.packing_fee ?? 0);
+  const batchTotal = selectedItems.reduce((s, i) => s + Number(i.total_price), 0) + (isAll ? packingFeeAmount : 0);
 
   // ── Pagar 1 item direto (modo por pessoa) ─────────────────────────────────
   async function payOneItem(item: OrderItem, method: PaymentMethod) {
@@ -114,7 +117,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   const dailyNum = String(order.daily_number).padStart(3, '0');
   const branchCode = order.branch?.code;
   const orderLabel = branchCode ? `${branchCode}-${dailyNum}` : `#${dailyNum}`;
-  const pendingTotal = unpaidItems.reduce((s, i) => s + Number(i.total_price), 0);
+  const pendingTotal = unpaidItems.reduce((s, i) => s + Number(i.total_price), 0) + packingFeeAmount;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center">
@@ -294,6 +297,14 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
                   );
                 })}
               </div>
+
+              {/* Taxa de embalagem — só visível quando todos os itens selecionados */}
+              {isAll && packingFeeAmount > 0 && (
+                <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <span className="text-xs font-bold text-amber-700">Taxa de embalagem (para levar)</span>
+                  <span className="text-sm font-black text-amber-700">{currency.format(packingFeeAmount)}</span>
+                </div>
+              )}
 
               {/* Método de pagamento */}
               {selected.size > 0 && (
