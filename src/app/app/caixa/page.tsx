@@ -43,13 +43,17 @@ const timeFormatter = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute
 
 // ── Payment config ────────────────────────────────────────────────────────────
 
-const PAYMENT_META: Record<PaymentMethod, { icon: React.ElementType; label: string; iconCls: string; barCls: string }> = {
-  PIX:         { icon: QrCode,     label: "PIX",     iconCls: "bg-teal-50 text-teal-600",     barCls: "bg-teal-500" },
-  CASH:        { icon: Banknote,   label: "Dinheiro", iconCls: "bg-emerald-50 text-emerald-600", barCls: "bg-emerald-500" },
-  DEBIT_CARD:  { icon: CreditCard, label: "Débito",  iconCls: "bg-blue-50 text-blue-600",     barCls: "bg-blue-500" },
-  CREDIT_CARD: { icon: CreditCard, label: "Crédito", iconCls: "bg-violet-50 text-violet-600", barCls: "bg-violet-500" },
-  COURTESY:    { icon: Gift,       label: "Cortesia", iconCls: "bg-pink-50 text-pink-600",     barCls: "bg-pink-400" },
-  PENDING:     { icon: Clock,      label: "Pendente", iconCls: "bg-amber-50 text-amber-600",   barCls: "bg-amber-400" },
+const PAYMENT_META: Record<PaymentMethod, {
+  icon: React.ElementType; label: string;
+  iconCls: string; barCls: string; cardBg: string;
+  textCls: string; subtextCls: string; trackCls: string;
+}> = {
+  PIX:         { icon: QrCode,     label: "PIX",      iconCls: "bg-teal-100 text-teal-600",     barCls: "bg-teal-500",    cardBg: "bg-teal-50",    textCls: "text-teal-900",    subtextCls: "text-teal-600",    trackCls: "bg-teal-100" },
+  CASH:        { icon: Banknote,   label: "Dinheiro", iconCls: "bg-emerald-100 text-emerald-600", barCls: "bg-emerald-500", cardBg: "bg-emerald-50", textCls: "text-emerald-900", subtextCls: "text-emerald-600", trackCls: "bg-emerald-100" },
+  DEBIT_CARD:  { icon: CreditCard, label: "Débito",   iconCls: "bg-blue-100 text-blue-600",     barCls: "bg-blue-500",    cardBg: "bg-blue-50",    textCls: "text-blue-900",    subtextCls: "text-blue-600",    trackCls: "bg-blue-100" },
+  CREDIT_CARD: { icon: CreditCard, label: "Crédito",  iconCls: "bg-violet-100 text-violet-600", barCls: "bg-violet-500",  cardBg: "bg-violet-50",  textCls: "text-violet-900",  subtextCls: "text-violet-600",  trackCls: "bg-violet-100" },
+  COURTESY:    { icon: Gift,       label: "Cortesia", iconCls: "bg-pink-100 text-pink-600",     barCls: "bg-pink-400",    cardBg: "bg-pink-50",    textCls: "text-pink-900",    subtextCls: "text-pink-600",    trackCls: "bg-pink-100" },
+  PENDING:     { icon: Clock,      label: "Pendente", iconCls: "bg-amber-100 text-amber-600",   barCls: "bg-amber-400",   cardBg: "bg-amber-50",   textCls: "text-amber-900",   subtextCls: "text-amber-600",   trackCls: "bg-amber-100" },
 };
 
 // ── Insight generation ────────────────────────────────────────────────────────
@@ -325,64 +329,58 @@ function DayHero({ data }: { data: CaixaData }) {
     : 0;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-brand-charcoal px-6 py-7 shadow-lg md:px-8 md:py-8">
-      {/* Background glow */}
-      <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-brand-red/25 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-16 left-0 h-40 w-40 rounded-full bg-white/5 blur-2xl" />
+    <div className="relative overflow-hidden rounded-3xl bg-[#111113] shadow-xl">
+      {/* Glow decorations */}
+      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-red/20 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-8 h-32 w-32 rounded-full bg-violet-500/10 blur-2xl" />
 
-      <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+      <div className="relative px-6 py-8 md:px-8 md:py-10">
+        {/* Label */}
+        <p className="text-[11px] font-black uppercase tracking-[0.15em] text-zinc-500">Recebido hoje</p>
+
         {/* Main number */}
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-            Recebido hoje
-          </p>
-          <p className="mt-1.5 text-4xl font-black tracking-tight text-white md:text-5xl">
-            {currency.format(summary.totalRecebido)}
-          </p>
-          <p className="mt-2 text-sm font-medium text-zinc-400">
-            {summary.totalPedidos} pedidos · {paidPct}% pagos
-            {summary.peakHour && (
-              <> · Pico <span className="text-zinc-300">{String(summary.peakHour.start).padStart(2, "0")}h</span></>
-            )}
-          </p>
+        <p className="mt-2 text-5xl font-black tracking-tight text-white md:text-6xl">
+          {currency.format(summary.totalRecebido)}
+        </p>
+
+        {/* Sub stats row */}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Stat label="Bruto" value={currency.format(summary.totalBruto)} />
+          {summary.pedidosPendentes > 0 && (
+            <Stat label="Pendente" value={currency.format(summary.totalPendente)} warn />
+          )}
+          {summary.totalDescontos > 0 && (
+            <Stat label="Descontos" value={`-${currency.format(summary.totalDescontos)}`} />
+          )}
+          <Stat label="Ticket médio" value={currency.format(summary.ticketMedio)} />
+          {summary.peakHour && (
+            <Stat label="Pico" value={`${String(summary.peakHour.start).padStart(2,"0")}h`} />
+          )}
         </div>
 
-        {/* Mini stats */}
-        <div className="grid grid-cols-3 gap-2 sm:min-w-[260px]">
-          <HeroMini label="Bruto" value={currency.format(summary.totalBruto)} />
-          <HeroMini
-            label="Pendente"
-            value={currency.format(summary.totalPendente)}
-            highlight={summary.pedidosPendentes > 0}
-          />
-          <HeroMini label="Ticket" value={currency.format(summary.ticketMedio)} />
-        </div>
-      </div>
-
-      {/* Paid progress bar */}
-      <div className="relative mt-6">
-        <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full rounded-full bg-white/50 transition-all duration-700"
-            style={{ width: `${paidPct}%` }}
-          />
-        </div>
-        <div className="mt-1.5 flex justify-between text-[10px] font-medium text-zinc-500">
-          <span>{summary.pedidosPagos} pagos</span>
-          <span>{summary.totalPedidos} total</span>
+        {/* Progress bar */}
+        <div className="mt-6 space-y-2">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-white/8">
+            <div
+              className="h-full rounded-full bg-white/30 transition-all duration-700"
+              style={{ width: `${paidPct}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[11px] font-semibold text-zinc-600">
+            <span>{summary.pedidosPagos} de {summary.totalPedidos} pedidos pagos</span>
+            <span className="text-white/50">{paidPct}%</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function HeroMini({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div className="rounded-xl bg-white/8 p-2.5 ring-1 ring-white/10">
-      <p className="text-[9px] font-bold uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className={`mt-0.5 truncate text-xs font-black ${highlight ? "text-amber-300" : "text-white"}`}>
-        {value}
-      </p>
+    <div className="rounded-2xl bg-white/6 px-3.5 py-2.5 ring-1 ring-white/8">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">{label}</p>
+      <p className={`mt-0.5 text-sm font-black ${warn ? "text-amber-300" : "text-white"}`}>{value}</p>
     </div>
   );
 }
@@ -391,23 +389,50 @@ function HeroMini({ label, value, highlight }: { label: string; value: string; h
 
 function StatusStrip({ data }: { data: CaixaData }) {
   const { summary } = data;
-  const chips = [
-    { label: "Pagos",       count: summary.pedidosPagos,       cls: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
-    { label: "Pendentes",   count: summary.pedidosPendentes,   cls: summary.pedidosPendentes > 0 ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-zinc-50 text-zinc-400 border-zinc-100", dot: summary.pedidosPendentes > 0 ? "bg-amber-400" : "bg-zinc-300" },
-    { label: "Cancelados",  count: summary.pedidosCancelados,  cls: summary.pedidosCancelados > 0 ? "bg-red-50 text-red-700 border-red-200" : "bg-zinc-50 text-zinc-400 border-zinc-100", dot: summary.pedidosCancelados > 0 ? "bg-red-500" : "bg-zinc-300" },
-    { label: "Cortesias",   count: summary.pedidosCortesia,    cls: summary.pedidosCortesia > 0 ? "bg-violet-50 text-violet-700 border-violet-200" : "bg-zinc-50 text-zinc-400 border-zinc-100", dot: summary.pedidosCortesia > 0 ? "bg-violet-500" : "bg-zinc-300" },
+  const tiles = [
+    {
+      label: "Pagos",
+      count: summary.pedidosPagos,
+      bg: "bg-emerald-50",
+      text: "text-emerald-700",
+      num: "text-emerald-800",
+      dot: "bg-emerald-500",
+    },
+    {
+      label: "Pendentes",
+      count: summary.pedidosPendentes,
+      bg: summary.pedidosPendentes > 0 ? "bg-amber-50" : "bg-zinc-50",
+      text: summary.pedidosPendentes > 0 ? "text-amber-700" : "text-zinc-400",
+      num: summary.pedidosPendentes > 0 ? "text-amber-900" : "text-zinc-400",
+      dot: summary.pedidosPendentes > 0 ? "bg-amber-400" : "bg-zinc-300",
+    },
+    {
+      label: "Cancelados",
+      count: summary.pedidosCancelados,
+      bg: summary.pedidosCancelados > 0 ? "bg-red-50" : "bg-zinc-50",
+      text: summary.pedidosCancelados > 0 ? "text-red-600" : "text-zinc-400",
+      num: summary.pedidosCancelados > 0 ? "text-red-800" : "text-zinc-400",
+      dot: summary.pedidosCancelados > 0 ? "bg-red-500" : "bg-zinc-300",
+    },
+    {
+      label: "Cortesias",
+      count: summary.pedidosCortesia,
+      bg: summary.pedidosCortesia > 0 ? "bg-violet-50" : "bg-zinc-50",
+      text: summary.pedidosCortesia > 0 ? "text-violet-600" : "text-zinc-400",
+      num: summary.pedidosCortesia > 0 ? "text-violet-800" : "text-zinc-400",
+      dot: summary.pedidosCortesia > 0 ? "bg-violet-500" : "bg-zinc-300",
+    },
   ];
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-0.5 hide-scrollbar">
-      {chips.map((chip) => (
-        <div
-          key={chip.label}
-          className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-bold ${chip.cls}`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${chip.dot}`} />
-          {chip.label}
-          <span className="font-black">{chip.count}</span>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {tiles.map((t) => (
+        <div key={t.label} className={`flex items-center gap-3 rounded-2xl ${t.bg} px-4 py-3.5`}>
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${t.dot}`} />
+          <div className="min-w-0">
+            <p className={`text-[10px] font-bold uppercase tracking-wide ${t.text}`}>{t.label}</p>
+            <p className={`text-2xl font-black leading-none ${t.num}`}>{t.count}</p>
+          </div>
         </div>
       ))}
     </div>
@@ -416,30 +441,29 @@ function StatusStrip({ data }: { data: CaixaData }) {
 
 // ── Insights ──────────────────────────────────────────────────────────────────
 
-const INSIGHT_STYLE: Record<InsightSeverity, { wrap: string; icon: string }> = {
-  positive: { wrap: "border-emerald-100 bg-emerald-50",  icon: "text-emerald-600" },
-  info:     { wrap: "border-blue-100 bg-blue-50",        icon: "text-blue-600" },
-  warning:  { wrap: "border-amber-100 bg-amber-50",      icon: "text-amber-600" },
+const INSIGHT_STYLE: Record<InsightSeverity, { wrap: string; icon: string; border: string }> = {
+  positive: { wrap: "bg-emerald-50", icon: "text-emerald-600", border: "border-l-emerald-400" },
+  info:     { wrap: "bg-blue-50",    icon: "text-blue-600",    border: "border-l-blue-400" },
+  warning:  { wrap: "bg-amber-50",   icon: "text-amber-600",   border: "border-l-amber-400" },
 };
 
 function InsightsSection({ insights }: { insights: DayInsight[] }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1.5 px-0.5">
-        <Info className="h-3.5 w-3.5 text-zinc-400" />
-        <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Insights do dia</p>
+    <div className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+      <div className="border-b border-zinc-100 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <Info className="h-4 w-4 text-zinc-400" />
+          <p className="text-sm font-black text-zinc-700">Insights do dia</p>
+        </div>
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="divide-y divide-zinc-100">
         {insights.map((insight, i) => {
           const style = INSIGHT_STYLE[insight.severity];
           const Icon = insight.icon;
           return (
-            <div
-              key={i}
-              className={`flex items-start gap-3 rounded-2xl border p-4 ${style.wrap}`}
-            >
+            <div key={i} className={`flex items-start gap-4 border-l-4 ${style.border} ${style.wrap} px-5 py-4`}>
               <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${style.icon}`} />
-              <p className="text-sm font-medium leading-snug text-zinc-700">{insight.text}</p>
+              <p className="text-sm font-medium leading-relaxed text-zinc-700">{insight.text}</p>
             </div>
           );
         })}
@@ -452,164 +476,114 @@ function InsightsSection({ insights }: { insights: DayInsight[] }) {
 
 function DayMetricsPanel({ data }: { data: CaixaData }) {
   const { summary, topProducts } = data;
-
-  if (summary.totalPedidos === 0) {
-    return (
-      <Card className="border-zinc-100 shadow-sm">
-        <CardContent className="px-4 py-5">
-          <p className="text-sm font-medium text-zinc-500">Sem vendas registradas ainda.</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (summary.totalPedidos === 0) return null;
 
   const peakLabel = summary.peakHour
-    ? `${String(summary.peakHour.start).padStart(2, "0")}h–${String((summary.peakHour.start + 1) % 24).padStart(2, "0")}h · ${summary.peakHour.orderCount} pedido${summary.peakHour.orderCount !== 1 ? "s" : ""}`
-    : "—";
-
-  const avgLabel = summary.avgDeliveryMinutes != null
-    ? `${summary.avgDeliveryMinutes} min`
-    : "—";
+    ? `${String(summary.peakHour.start).padStart(2, "0")}h–${String((summary.peakHour.start + 1) % 24).padStart(2, "0")}h`
+    : null;
 
   const topThree = topProducts.slice(0, 3);
 
   return (
-    <section className="space-y-2">
-      <div className="flex items-center gap-1.5 px-0.5">
-        <BarChart3 className="h-3.5 w-3.5 text-zinc-400" />
-        <p className="text-xs font-bold uppercase tracking-wide text-zinc-400">Hoje em números</p>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          icon={ShoppingBag}
-          label="Crepes vendidos"
-          value={String(summary.crepesSold)}
-        />
-        <MetricCard
-          icon={Zap}
-          label="Horário de pico"
-          value={peakLabel}
-        />
-        <MetricCard
-          icon={Clock}
-          label="Tempo médio de entrega"
-          value={avgLabel}
-        />
-        <MetricCard
-          icon={Trophy}
-          label="Top 3 crepes do dia"
-          empty={topThree.length === 0}
-        >
-          {topThree.length === 0 ? (
-            <p className="mt-1 text-sm font-medium text-zinc-400">—</p>
-          ) : (
-            <ol className="mt-1 space-y-0.5">
-              {topThree.map((p, i) => (
-                <li key={p.name} className="truncate text-sm font-semibold text-brand-charcoal">
-                  {i + 1}. {p.name} · <span className="font-bold text-zinc-500">{p.quantity} un</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </MetricCard>
-      </div>
-    </section>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <MetricCard icon={ShoppingBag} label="Crepes vendidos" value={String(summary.crepesSold)} color="text-brand-red" />
+      {peakLabel && <MetricCard icon={Zap} label="Hora de pico" value={peakLabel} color="text-amber-600" />}
+      {summary.avgDeliveryMinutes != null && (
+        <MetricCard icon={Clock} label="Tempo médio" value={`${summary.avgDeliveryMinutes}min`} color="text-blue-600" />
+      )}
+      {topThree.length > 0 && (
+        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200/80 col-span-2 sm:col-span-1">
+          <div className="flex items-center gap-2 mb-2.5">
+            <Trophy className="h-3.5 w-3.5 text-amber-500" />
+            <p className="text-[10px] font-black uppercase tracking-wide text-zinc-400">Mais vendidos</p>
+          </div>
+          <ol className="space-y-1.5">
+            {topThree.map((p, i) => (
+              <li key={p.name} className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-zinc-700 truncate">{i + 1}. {p.name}</span>
+                <span className="shrink-0 text-[11px] font-black text-zinc-400">{p.quantity}×</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
   );
 }
 
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  children,
-  empty,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value?: string;
-  children?: React.ReactNode;
-  empty?: boolean;
+function MetricCard({ icon: Icon, label, value, color }: {
+  icon: React.ElementType; label: string; value: string; color: string;
 }) {
   return (
-    <Card className="border-zinc-100 shadow-sm">
-      <CardContent className="px-4 py-3.5">
-        <div className="flex items-center gap-1.5">
-          <Icon className="h-3.5 w-3.5 text-zinc-400" />
-          <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">{label}</p>
-        </div>
-        {children ?? (
-          <p className={`mt-1 text-xl font-black ${empty ? "text-zinc-400" : "text-brand-charcoal"}`}>
-            {value}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200/80">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Icon className={`h-3.5 w-3.5 ${color}`} />
+        <p className="text-[10px] font-black uppercase tracking-wide text-zinc-400">{label}</p>
+      </div>
+      <p className="text-2xl font-black text-zinc-900">{value}</p>
+    </div>
   );
 }
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 
 function PaymentsCard({ items, received }: { items: PaymentBreakdown[]; received: number }) {
-  const active = items.filter((i) => i.count > 0 && i.method !== "PENDING" && i.method !== "COURTESY");
+  const active = items.filter((i) => i.count > 0 && i.method !== "PENDING");
   const pending = items.find((i) => i.method === "PENDING" && i.count > 0);
-
   if (active.length === 0 && !pending) return null;
 
   return (
-    <Card className="overflow-hidden border-zinc-100 shadow-sm">
-      <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3.5">
-        <Wallet className="h-4 w-4 text-brand-charcoal" />
-        <h2 className="text-sm font-black text-brand-charcoal">Formas de pagamento</h2>
+    <div className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80">
+      <div className="border-b border-zinc-100 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <Wallet className="h-4 w-4 text-zinc-500" />
+          <h2 className="text-sm font-black text-zinc-800">Formas de pagamento</h2>
+        </div>
       </div>
-      <CardContent className="divide-y divide-zinc-50 p-0">
+
+      <div className="p-4 space-y-2">
+        {/* Método cards */}
         {active.map((item) => {
           const meta = PAYMENT_META[item.method];
           const Icon = meta.icon;
           const pct = received > 0 ? Math.round((item.total / received) * 100) : 0;
           return (
-            <div key={item.method} className="px-4 py-3.5">
-              <div className="flex items-center gap-3">
-                <span className={`shrink-0 rounded-xl p-2 ${meta.iconCls}`}>
-                  <Icon className="h-4 w-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-sm font-bold text-brand-charcoal">{meta.label}</p>
-                    <p className="shrink-0 text-sm font-black text-brand-charcoal">{currency.format(item.total)}</p>
+            <div key={item.method} className={`flex items-center gap-4 rounded-2xl px-4 py-3.5 ${meta.cardBg}`}>
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.iconCls}`}>
+                <Icon className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div>
+                    <p className={`text-sm font-black ${meta.textCls}`}>{meta.label}</p>
+                    <p className={`text-[11px] font-medium ${meta.subtextCls}`}>{item.count} pedido{item.count !== 1 ? "s" : ""}</p>
                   </div>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
-                      <div
-                        className={`h-full rounded-full ${meta.barCls} transition-all duration-500`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <span className="w-8 shrink-0 text-right text-[11px] font-bold text-zinc-400">{pct}%</span>
-                  </div>
+                  <p className={`text-lg font-black ${meta.textCls}`}>{currency.format(item.total)}</p>
+                </div>
+                <div className={`h-1.5 w-full overflow-hidden rounded-full ${meta.trackCls}`}>
+                  <div className={`h-full rounded-full transition-all duration-700 ${meta.barCls}`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
-              <p className="mt-0.5 pl-11 text-[11px] font-medium text-zinc-400">{item.count} pedido{item.count !== 1 ? "s" : ""}</p>
+              <span className={`shrink-0 text-xs font-black ${meta.subtextCls} w-8 text-right`}>{pct}%</span>
             </div>
           );
         })}
 
-        {/* Pending row */}
+        {/* Pending */}
         {pending && (
-          <div className="flex items-center justify-between gap-3 bg-amber-50/60 px-4 py-3.5">
-            <div className="flex items-center gap-3">
-              <span className="shrink-0 rounded-xl bg-amber-50 p-2 text-amber-600">
-                <Clock className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-bold text-amber-800">Pendente</p>
-                <p className="text-[11px] font-medium text-amber-600">{pending.count} pedido{pending.count !== 1 ? "s" : ""} aguardando</p>
-              </div>
+          <div className="flex items-center gap-4 rounded-2xl bg-amber-50 px-4 py-3.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+              <Clock className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-amber-800">Pendente</p>
+              <p className="text-[11px] font-medium text-amber-600">{pending.count} pedido{pending.count !== 1 ? "s" : ""}</p>
             </div>
-            <p className="text-sm font-black text-amber-700">{currency.format(pending.total)}</p>
+            <p className="text-lg font-black text-amber-700">{currency.format(pending.total)}</p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -619,18 +593,18 @@ function AdminCTA() {
   return (
     <Link
       href="/app/caixa/relatorio"
-      className="group flex items-center justify-between gap-4 rounded-2xl border border-brand-charcoal bg-brand-charcoal px-5 py-4 shadow-sm transition-all hover:bg-brand-charcoal/90 hover:shadow-md active:scale-[0.98]"
+      className="group flex items-center justify-between gap-4 rounded-3xl bg-[#111113] px-6 py-5 shadow-lg transition-all hover:shadow-xl active:scale-[0.98]"
     >
-      <div className="flex items-center gap-3">
-        <span className="rounded-xl bg-white/15 p-2.5">
-          <BarChart3 className="h-4 w-4 text-white" />
+      <div className="flex items-center gap-4">
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
+          <BarChart3 className="h-5 w-5 text-white" />
         </span>
         <div>
           <p className="text-sm font-black text-white">Relatório gerencial</p>
-          <p className="text-xs font-medium text-zinc-400">Análise completa de vendas e operação</p>
+          <p className="text-xs font-medium text-zinc-500">Análise completa de vendas e operação</p>
         </div>
       </div>
-      <ArrowRight className="h-4 w-4 shrink-0 text-zinc-400 transition-transform group-hover:translate-x-1" />
+      <ArrowRight className="h-5 w-5 shrink-0 text-zinc-500 transition-transform group-hover:translate-x-1" />
     </Link>
   );
 }

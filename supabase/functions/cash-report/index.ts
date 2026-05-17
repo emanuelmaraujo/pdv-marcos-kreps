@@ -1,22 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-// Origin-aware CORS — restringe às origens configuradas quando disponível.
-// Consistente com as demais Edge Functions do projeto.
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
-  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
-  const allowed = configured.split(",").map((o) => o.trim()).filter(Boolean);
-  const allowOrigin =
-    configured === "*" || !origin || allowed.includes(origin)
-      ? (origin || "*")
-      : (allowed[0] ?? "*");
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
-  };
+// cash-report é protegida por JWT de ADMIN — wildcard CORS é seguro
+// (Authorization headers não são auto-enviados pelo browser cross-origin).
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function getCorsHeaders(_req: Request) {
+  return corsHeaders;
 }
 
 /**
