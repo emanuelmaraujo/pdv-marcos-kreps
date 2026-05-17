@@ -24,6 +24,7 @@ import {
   Banknote,
   CreditCard,
   Gift,
+  Smartphone,
 } from "lucide-react";
 
 interface Props {
@@ -83,6 +84,7 @@ const PAYMENT_METHOD_CONFIG: Record<
   CASH:        { label: "Dinheiro",     Icon: Banknote,    colors: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
   DEBIT_CARD:  { label: "Débito",       Icon: CreditCard,  colors: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" },
   CREDIT_CARD: { label: "Crédito",      Icon: CreditCard,  colors: "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" },
+  IFOOD:       { label: "iFood",        Icon: Smartphone,  colors: "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100" },
   COURTESY:    { label: "Cortesia",     Icon: Gift,        colors: "border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100" },
   PENDING:     { label: "Pendente",     Icon: Clock,       colors: "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100" },
 };
@@ -407,6 +409,13 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                     </button>
                   );
                 })}
+                <button
+                  onClick={() => onChangeMethod("IFOOD")}
+                  disabled={isLoading || order.payment_method === "IFOOD"}
+                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${PAYMENT_METHOD_CONFIG.IFOOD.colors} ${order.payment_method === "IFOOD" ? "ring-2 ring-current ring-offset-1 opacity-70" : ""}`}
+                >
+                  <Smartphone size={16} /> IFOOD
+                </button>
               </div>
             </div>
           )}
@@ -434,6 +443,13 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                     </button>
                   );
                 })}
+                <button
+                  onClick={() => onMarkPayment("IFOOD", "PAID")}
+                  disabled={isLoading}
+                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${PAYMENT_METHOD_CONFIG.IFOOD.colors}`}
+                >
+                  <Smartphone size={16} /> IFOOD
+                </button>
                 <button
                   onClick={() => onMarkPayment("COURTESY", "COURTESY")}
                   disabled={isLoading}

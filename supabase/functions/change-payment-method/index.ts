@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const VALID_METHODS = ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "COURTESY"] as const;
+const VALID_METHODS = ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD", "COURTESY"] as const;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
