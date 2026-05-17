@@ -417,14 +417,129 @@ export const pdvApi = {
     return data as AttendantCustomerProfileResponse;
   },
 
-  getPublicCheckoutConfig: (branchSlug?: string) =>
-    invokeEdgeFunction<PublicCheckoutConfigResponse>('get-public-checkout-config', branchSlug ? { branch_slug: branchSlug } : {}),
+  getPublicCheckoutConfig: async (branchSlug?: string): Promise<PublicCheckoutConfigResponse> => {
+    try {
+      return await invokeEdgeFunction<PublicCheckoutConfigResponse>(
+        'get-public-checkout-config',
+        branchSlug ? { branch_slug: branchSlug } : {},
+      );
+    } catch {
+      const supabase = createClient();
+      const [{ data: settingsData, error: settingsError }, branchResult] = await Promise.all([
+        supabase
+          .from('settings')
+          .select('key, value')
+          .in('key', [
+            'public_ordering_enabled',
+            'public_ordering_start_time',
+            'public_ordering_end_time',
+            'packaging_fee',
+            'apply_packaging_fee_for_takeout',
+          ]),
+        branchSlug
+          ? supabase
+            .from('branches')
+            .select('id, code, name, slug, active, ordering_enabled, ordering_start_time, ordering_end_time, packing_fee')
+            .eq('slug', branchSlug)
+            .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
 
-  // Lista pública de filiais ativas com pedidos online habilitados.
-  // Usado pelo landing /pedir (picker). Falha silenciosa: retorna lista vazia.
-  getPublicBranches: (): Promise<PublicBranchesResponse> =>
-    invokeEdgeFunction<PublicBranchesResponse>('list-public-branches', {})
-      .catch(() => ({ success: false, branches: [] })),
+      if (settingsError) {
+        return {
+          success: false,
+          error: settingsError.message,
+          settings: {
+            public_ordering_enabled: 'false',
+            public_ordering_start_time: '17:00',
+            public_ordering_end_time: '23:30',
+            packaging_fee: '0',
+            apply_packaging_fee_for_takeout: 'false',
+          },
+          online_ordering_enabled: false,
+          ordering_closed_reason: 'Nao foi possivel carregar as configuracoes de pedido.',
+        };
+      }
+
+      if (branchResult.error) {
+        return {
+          success: false,
+          error: branchResult.error.message,
+          settings: {
+            public_ordering_enabled: 'false',
+            public_ordering_start_time: '17:00',
+            public_ordering_end_time: '23:30',
+            packaging_fee: '0',
+            apply_packaging_fee_for_takeout: 'false',
+          },
+          online_ordering_enabled: false,
+          ordering_closed_reason: 'Filial inexistente.',
+        };
+      }
+
+      const readSetting = (key: string, fallback: string) => {
+        const value = settingsData?.find((setting) => setting.key === key)?.value;
+        if (value === null || value === undefined) return fallback;
+        if (typeof value === 'string') return value.replace(/^"|"$/g, '');
+        return String(value);
+      };
+      const branch = branchResult.data as {
+        id: string;
+        code: string;
+        name: string;
+        slug: string;
+        active?: boolean;
+        ordering_enabled?: boolean;
+        ordering_start_time?: string | null;
+        ordering_end_time?: string | null;
+        packing_fee?: number | string | null;
+      } | null;
+      const publicOrderingEnabled = readSetting('public_ordering_enabled', 'true') === 'true';
+      const branchEnabled = !branch || (branch.active !== false && branch.ordering_enabled !== false);
+      const start = branch?.ordering_start_time ?? readSetting('public_ordering_start_time', '17:00');
+      const end = branch?.ordering_end_time ?? readSetting('public_ordering_end_time', '23:30');
+      const packagingFee = branch?.packing_fee !== null && branch?.packing_fee !== undefined
+        ? String(branch.packing_fee)
+        : readSetting('packaging_fee', '0');
+
+      return {
+        success: true,
+        branch: branch ? { id: branch.id, code: branch.code, name: branch.name, slug: branch.slug } : null,
+        settings: {
+          public_ordering_enabled: String(publicOrderingEnabled),
+          public_ordering_start_time: start,
+          public_ordering_end_time: end,
+          packaging_fee: packagingFee,
+          apply_packaging_fee_for_takeout: readSetting('apply_packaging_fee_for_takeout', 'false'),
+        },
+        online_ordering_enabled: publicOrderingEnabled && branchEnabled,
+        ordering_closed_reason: branchEnabled ? '' : 'No momento essa unidade nao esta recebendo pedidos.',
+      };
+    }
+  },
+
+  // Lista publica de filiais ativas com pedidos online habilitados.
+  // Usado pelo landing /pedir (picker). Se a Edge Function ainda nao estiver
+  // publicada, cai para leitura direta da tabela publica `branches`.
+  getPublicBranches: async (): Promise<PublicBranchesResponse> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('branches')
+      .select('id, code, name, slug, type, address, ordering_start_time, ordering_end_time')
+      .eq('active', true)
+      .eq('ordering_enabled', true)
+      .order('name', { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      return { success: true, branches: data as PublicBranch[] };
+    }
+
+    try {
+      return await invokeEdgeFunction<PublicBranchesResponse>('list-public-branches', {});
+    } catch {
+      return { success: false, error: error?.message, branches: [] };
+    }
+  },
 
   // Recupera pedidos ATIVOS recentes (≤4h) de um telefone — para o
   // cliente que perdeu o link de acompanhamento.

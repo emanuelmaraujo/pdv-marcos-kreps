@@ -62,9 +62,11 @@ export default function AppDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    ordersApi
-      .getTodayOrders(currentBranchId)
+    void Promise.resolve()
+      .then(() => {
+        if (!cancelled) setLoading(true);
+        return ordersApi.getTodayOrders(currentBranchId);
+      })
       .then((data) => { if (!cancelled) setOrders(data || []); })
       .catch(() => { if (!cancelled) setOrders([]); })
       .finally(() => { if (!cancelled) setLoading(false); });

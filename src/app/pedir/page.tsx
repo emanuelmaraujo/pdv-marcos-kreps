@@ -843,7 +843,6 @@ function TimelineStep({
 }
 
 export default function PedirPublicPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   // Lê slug da rota /pedir/[slug] OU do search param ?branch=
   // — assim funciona quando essa page é renderizada por /pedir/page.tsx
@@ -858,6 +857,12 @@ export default function PedirPublicPage() {
   if (!branchSlug) {
     return <PedirLanding />;
   }
+
+  return <PedirBranchPage branchSlug={branchSlug} />;
+}
+
+function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
+  const router = useRouter();
   const categoryDragScroll = useHorizontalDragScroll();
   const filterDragScroll = useHorizontalDragScroll();
   const {
@@ -877,7 +882,6 @@ export default function PedirPublicPage() {
   } = useCart();
 
   const [menuData, setMenuData] = useState<MenuData | null>(null);
-  const [branchId, setBranchId] = useState<string | null>(null);
   const [branchName, setBranchName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   /** Social proof: pedidos hoje + produto top por categoria. Falha silenciosa. */
@@ -895,7 +899,6 @@ export default function PedirPublicPage() {
     end: DEFAULT_ORDERING_END,
   });
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [removedIngredientIds, setRemovedIngredientIds] = useState<Set<string>>(new Set());
@@ -929,7 +932,6 @@ export default function PedirPublicPage() {
         const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
         if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
         const resolvedBranchId = config.branch?.id ?? null;
-        setBranchId(resolvedBranchId);
         setBranchName(config.branch?.name ?? null);
         const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
@@ -954,7 +956,6 @@ export default function PedirPublicPage() {
     }
 
     loadMenu();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearCart, branchSlug]);
 
   // Carrega métricas de social proof (orders_today + top product por categoria).
@@ -1021,7 +1022,7 @@ export default function PedirPublicPage() {
     return () => {
       cancelled = true;
     };
-  }, [clearCart]);
+  }, [branchSlug, clearCart]);
 
   useEffect(() => {
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
@@ -1113,7 +1114,7 @@ export default function PedirPublicPage() {
 
     const interval = window.setInterval(recheck, 60_000);
     return () => window.clearInterval(interval);
-  }, [clearCart]);
+  }, [branchSlug, clearCart]);
 
   useEffect(() => {
     if (!orderData || step === "PAID") return;
@@ -1138,9 +1139,6 @@ export default function PedirPublicPage() {
 
   const menuIndexes = useMemo(() => buildMenuIndexes(menuData), [menuData]);
 
-  const selectedCategory = useMemo(() => {
-    return menuData?.categories.find((category) => category.id === selectedCategoryId);
-  }, [menuData, selectedCategoryId]);
 
   // Mapa { categoryId → produtos } na ordem das categorias
   const productsByCategory = useMemo(() => {
@@ -1262,7 +1260,7 @@ export default function PedirPublicPage() {
   const estimatedPackagingFee = orderType === "VIAGEM" && applyPackagingFeeForTakeout ? packagingFee : 0;
   const estimatedTotal = estimatedSubtotal + estimatedPackagingFee;
   const checkoutPhone = useMemo(() => normalizeBrazilPhone(customerPhone), [customerPhone]);
-  const shouldShowCheckoutDetails = !!checkoutPhone && profileLookupState !== "checking";
+  const isProfileChecking = !!checkoutPhone && profileLookupState === "checking";
   const selectedAddonCount = useMemo(() => {
     let count = 0;
     selectedAddons.forEach((qty) => {
@@ -1360,12 +1358,8 @@ export default function PedirPublicPage() {
       return;
     }
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
-    if (!normalizedPhone) {
+    if (customerPhone.trim() && !normalizedPhone) {
       setCheckoutError("Informe um WhatsApp valido com DDD.");
-      return;
-    }
-    if (!customerName.trim()) {
-      setCheckoutError("Informe seu nome para continuar.");
       return;
     }
     if (customerEmail.trim() && !isValidEmail(customerEmail)) {
@@ -1377,11 +1371,11 @@ export default function PedirPublicPage() {
     try {
       const response = await pdvApi.createPublicOrder({
         order_type: orderType,
-        customer_name: customerName.trim(),
-        customer_phone: normalizedPhone,
+        customer_name: customerName.trim() || undefined,
+        customer_phone: normalizedPhone ?? undefined,
         customer_email: customerEmail.trim() || undefined,
-        marketing_opt_in: marketingOptIn,
-        remember_checkout_data: rememberCheckoutData,
+        marketing_opt_in: !!normalizedPhone && marketingOptIn,
+        remember_checkout_data: !!normalizedPhone && !!customerName.trim() && rememberCheckoutData,
         notes: orderNotes.trim() || undefined,
         payment_method_code: PAYMENT_METHOD_CODE,
         branch_slug: branchSlug,
@@ -1397,7 +1391,7 @@ export default function PedirPublicPage() {
       });
 
       setOrderData(response.order);
-      if (rememberCheckoutData) {
+      if (rememberCheckoutData && normalizedPhone && customerName.trim()) {
         savePublicProfile({
           phone_e164: normalizedPhone,
           name: customerName.trim(),
@@ -2005,36 +1999,39 @@ export default function PedirPublicPage() {
             <h2 className="text-base font-semibold text-[var(--text-primary)]">Seus dados</h2>
 
             <FloatingInput
-              label="WhatsApp com DDD"
+              label="WhatsApp com DDD (opcional)"
               value={customerPhone}
               onChange={(v) => setCustomerInfo(customerName, formatWhatsAppInput(v))}
               onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
               placeholder="(11) 99999-9999"
               type="tel"
               inputMode="tel"
-              help={!checkoutPhone ? "Já pediu antes? Preenchemos o resto pelo número." : undefined}
+              help="Opcional. Usamos o WhatsApp para enviar atualizacoes do pedido."
             />
 
-            {checkoutPhone && profileLookupState === "checking" && (
+            <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">
+              Voce pode comprar sem preencher seus dados. Se informar o WhatsApp, ele sera usado para avisos de status do pedido.
+            </div>
+
+            {isProfileChecking && (
               <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-red" />
                 Buscando dados salvos...
               </div>
             )}
 
-            {shouldShowCheckoutDetails && (
-              <>
+            <>
                 {profileNotice && (
                   <p className="text-xs font-medium text-[var(--status-success)]">{profileNotice}</p>
                 )}
-                {profileLookupState === "not_found" && (
+                {checkoutPhone && profileLookupState === "not_found" && (
                   <p className="text-xs font-medium text-[var(--status-warning)]">
                     Não encontrei dados salvos. Complete abaixo.
                   </p>
                 )}
 
                 <FloatingInput
-                  label="Nome completo"
+                  label="Nome (opcional)"
                   value={customerName}
                   onChange={(v) => setCustomerInfo(v, customerPhone)}
                   placeholder="Como te chamar?"
@@ -2082,13 +2079,15 @@ export default function PedirPublicPage() {
                   <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                     <input
                       type="checkbox"
-                      checked={rememberCheckoutData}
+                      checked={rememberCheckoutData && !!checkoutPhone && !!customerName.trim()}
                       onChange={(event) => setRememberCheckoutData(event.target.checked)}
+                      disabled={!checkoutPhone || !customerName.trim()}
                       className="h-3.5 w-3.5 accent-brand-red"
                     />
                     Salvar para próximos pedidos
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                  {checkoutPhone && (
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                     <input
                       type="checkbox"
                       checked={marketingOptIn}
@@ -2096,10 +2095,10 @@ export default function PedirPublicPage() {
                       className="h-3.5 w-3.5 accent-brand-red"
                     />
                     Receber novidades pelo WhatsApp
-                  </label>
+                    </label>
+                  )}
                 </div>
-              </>
-            )}
+            </>
           </section>
 
           {/* Resumo super compacto — uma linha */}
@@ -2128,7 +2127,7 @@ export default function PedirPublicPage() {
           <button
             type="button"
             onClick={handleCreateOrder}
-            disabled={isSubmittingOrder || !shouldShowCheckoutDetails || !customerName.trim()}
+            disabled={isSubmittingOrder}
             className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
             style={{ height: 52 }}
           >
@@ -2293,7 +2292,7 @@ export default function PedirPublicPage() {
 
             {/* Notificação WhatsApp */}
             <div className="rounded-xl px-3 py-2.5 text-sm" style={{ backgroundColor: "var(--status-success-bg)", color: "var(--status-success)" }}>
-              Você receberá uma mensagem no WhatsApp quando seu pedido estiver pronto.
+              Se voce informou WhatsApp, enviaremos uma mensagem quando seu pedido estiver pronto.
             </div>
 
             {/* Link de acompanhamento */}
