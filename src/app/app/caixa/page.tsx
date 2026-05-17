@@ -33,6 +33,8 @@ import {
 } from "@/lib/api/cash-api";
 import { PaymentMethod } from "@/types/pdv";
 import { useBranch } from "@/contexts/BranchContext";
+import { useUser } from "@/contexts/UserContext";
+import { useRouter } from "next/navigation";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -150,6 +152,15 @@ export default function CaixaPage() {
   const [isLive, setIsLive] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { currentBranchId, currentBranch } = useBranch();
+  const { isAdmin, isLoading: userLoading } = useUser();
+  const router = useRouter();
+
+  // Somente ADMIN pode ver o caixa
+  useEffect(() => {
+    if (!userLoading && !isAdmin) {
+      router.replace("/app/pedidos");
+    }
+  }, [isAdmin, userLoading, router]);
 
   const loadCash = useCallback(async (refreshing = false) => {
     if (refreshing) setIsRefreshing(true);
