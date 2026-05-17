@@ -527,9 +527,11 @@ function MetricCard({ icon: Icon, label, value, color }: {
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 
-function PaymentsCard({ items, received }: { items: PaymentBreakdown[]; received: number }) {
+function PaymentsCard({ items }: { items: PaymentBreakdown[]; received: number }) {
   const active = items.filter((i) => i.count > 0 && i.method !== "PENDING");
   const pending = items.find((i) => i.method === "PENDING" && i.count > 0);
+  // Denominador = soma dos pagamentos reais (não orders.total_amount) para % sempre 100%
+  const totalPaid = active.reduce((sum, i) => sum + i.total, 0);
   if (active.length === 0 && !pending) return null;
 
   return (
@@ -546,7 +548,7 @@ function PaymentsCard({ items, received }: { items: PaymentBreakdown[]; received
         {active.map((item) => {
           const meta = PAYMENT_META[item.method];
           const Icon = meta.icon;
-          const pct = received > 0 ? Math.round((item.total / received) * 100) : 0;
+          const pct = totalPaid > 0 ? Math.round((item.total / totalPaid) * 100) : 0;
           return (
             <div key={item.method} className={`flex items-center gap-4 rounded-2xl px-4 py-3.5 ${meta.cardBg}`}>
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.iconCls}`}>

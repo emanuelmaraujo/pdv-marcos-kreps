@@ -429,8 +429,12 @@ serve(async (req) => {
       });
     }
 
-    const paymentBreakdown = Array.from(paymentBreakdownMap.values())
-      .map(p => ({ ...p, percent: summary.received > 0 ? (p.total / summary.received) * 100 : 0 }))
+    const paymentBreakdownRaw = Array.from(paymentBreakdownMap.values());
+    // Percentual calculado sobre a soma real dos pagamentos (não de orders.total_amount)
+    // Garante que PIX+Débito+Dinheiro sempre soma 100%, mesmo com split-bill.
+    const totalPayments = paymentBreakdownRaw.reduce((s, p) => s + p.total, 0);
+    const paymentBreakdown = paymentBreakdownRaw
+      .map(p => ({ ...p, percent: totalPayments > 0 ? (p.total / totalPayments) * 100 : 0 }))
       .sort((a, b) => b.total - a.total);
 
     const financial_attention = {
