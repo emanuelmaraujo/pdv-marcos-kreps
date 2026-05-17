@@ -24,8 +24,12 @@ import {
   Tag,
   ChevronDown,
   ChevronUp,
+  Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { PayItemsModal } from "@/app/app/pedidos/components/PayItemsModal";
+import { Order } from "@/types/pdv";
+import { useBranch } from "@/contexts/BranchContext";
 
 // ─── Phone helpers (mirror /pedir page) ───────────────────────────────────────
 
@@ -119,7 +123,10 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
 
   const router = useRouter();
   const currentBranchId = useCurrentBranchId();
+  const { currentBranch } = useBranch();
   const [step, setStep] = useState(0); // 0=items, 1=customer, 2=payment
+  const [splitBill, setSplitBill] = useState(false);
+  const [splitOrder, setSplitOrder] = useState<Order | null>(null); // pedido criado, esperando split
 
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("PIX");
   const [hasDiscount, setHasDiscount] = useState(false);
@@ -256,6 +263,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
       if (selectedPaymentMethod === "PENDING")   paymentStatus = "PENDING";
       if (selectedPaymentMethod === "COURTESY")  paymentStatus = "COURTESY";
       if (isPartialCash)                         paymentStatus = "PENDING";
+      if (splitBill)                             paymentStatus = "PENDING";
 
       let finalDiscount = undefined;
       if (hasDiscount && discountNum > 0 && discountReason.trim()) {
@@ -306,15 +314,28 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
       const response = await pdvApi.createAttendantOrder(payload);
       if (response?.success) {
         saveRecentName(customerName);
-        // Pagamento parcial em dinheiro: registra o valor recebido imediatamente
+
+        if (splitBill) {
+          // Modo dividir conta: busca o pedido completo com itens para o PayItemsModal
+          const fullOrder = await pdvApi.getOrder(response.order.order_id).catch(() => null);
+          if (fullOrder) {
+            clearCart();
+            setSplitOrder(fullOrder);
+            return; // PayItemsModal vai cuidar do resto
+          }
+          // fallback se busca falhar: vai pra tela de sucesso normalmente
+        }
+
+        // Pagamento parcial em dinheiro
         if (isPartialCash && customAmount > 0) {
           await pdvApi.markPayment({
             orderId: response.order.order_id,
             paymentMethod: "CASH",
             status: "PAID",
             amount: customAmount,
-          }).catch(() => {/* não bloqueia o fluxo se falhar */});
+          }).catch(() => {});
         }
+
         setSuccessData({ daily_number: response.order.daily_number, total_amount: response.order.total_amount });
         clearCart();
       } else {
@@ -400,6 +421,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   const STEPS = ["Itens", "Cliente", "Pagamento"];
 
   return (
+    <>
     <BottomSheet isOpen={isOpen} onClose={handleClose} title="Novo Pedido">
       <div className="flex flex-col min-h-[60vh]">
 
@@ -612,72 +634,126 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         {step === 2 && (
           <div className="flex-1 space-y-5 px-4 pb-4">
 
-            {/* Payment method grid */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Forma de Pagamento</p>
-              <div className="grid grid-cols-3 gap-2">
-                {PAYMENT_METHODS.map(({ value, label, Icon, color }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setSelectedPaymentMethod(value)}
-                    className={`flex flex-col items-center gap-1.5 rounded-2xl border-2 px-2 py-3 text-[10px] font-black uppercase tracking-wide transition-all active:scale-95 ${
-                      selectedPaymentMethod === value
-                        ? `${color} ring-2`
-                        : "border-zinc-100 bg-white text-zinc-400 hover:border-zinc-200"
-                    }`}
-                  >
-                    <Icon className="h-5 w-5" />
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Dividir conta toggle — só aparece quando há 2+ itens */}
+            {items.length > 1 && (
+              <button
+                type="button"
+                onClick={() => { setSplitBill((v) => !v); }}
+                className={`flex w-full items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition-all ${
+                  splitBill
+                    ? "border-brand-red bg-brand-red/5 ring-2 ring-brand-red/10"
+                    : "border-zinc-200 bg-white hover:border-zinc-300"
+                }`}
+              >
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${splitBill ? "bg-brand-red text-white" : "bg-zinc-100 text-zinc-500"}`}>
+                  <Users className="h-4.5 w-4.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-sm font-black ${splitBill ? "text-brand-red" : "text-zinc-900"}`}>
+                    Dividir conta por pessoa
+                  </span>
+                  <span className="block text-[11px] text-zinc-500">
+                    Cada um paga o próprio krepe com o método que quiser
+                  </span>
+                </span>
+                <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${splitBill ? "bg-brand-red" : "bg-zinc-200"}`}>
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${splitBill ? "translate-x-4" : "translate-x-0.5"}`} />
+                </span>
+              </button>
+            )}
 
-            {/* Valor recebido (só para CASH) */}
-            {selectedPaymentMethod === "CASH" && (() => {
-              const received = parseFloat(customAmountStr.replace(",", ".")) || 0;
-              const change = received > 0 ? received - estimatedTotal : null;
-              const isPartial = received > 0 && received < estimatedTotal;
-              return (
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                    Valor recebido (opcional)
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-black text-zinc-500">R$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder={estimatedTotal.toFixed(2).replace(".", ",")}
-                      value={customAmountStr}
-                      onChange={(e) => setCustomAmountStr(e.target.value)}
-                      className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-black focus:border-brand-red/40 focus:outline-none focus:ring-2 focus:ring-brand-red/10"
-                    />
-                    {customAmountStr && (
-                      <button type="button" onClick={() => setCustomAmountStr("")}
-                        className="text-zinc-400 hover:text-zinc-600 text-xs font-bold">
-                        limpar
+            {/* Forma de pagamento + valor recebido — ocultos quando dividir conta */}
+            {!splitBill && (
+              <>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Forma de Pagamento</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PAYMENT_METHODS.map(({ value, label, Icon, color }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSelectedPaymentMethod(value)}
+                        className={`flex flex-col items-center gap-1.5 rounded-2xl border-2 px-2 py-3 text-[10px] font-black uppercase tracking-wide transition-all active:scale-95 ${
+                          selectedPaymentMethod === value
+                            ? `${color} ring-2`
+                            : "border-zinc-100 bg-white text-zinc-400 hover:border-zinc-200"
+                        }`}
+                      >
+                        <Icon className="h-5 w-5" />
+                        {label}
                       </button>
-                    )}
+                    ))}
                   </div>
-                  {change !== null && change >= 0 && (
-                    <div className="rounded-xl bg-emerald-50 px-3 py-2 flex items-center justify-between">
-                      <span className="text-xs font-bold text-emerald-700">Troco</span>
-                      <span className="text-base font-black text-emerald-700">
-                        {currency.format(change)}
-                      </span>
+                </div>
+
+                {/* Valor recebido (só para CASH) */}
+                {selectedPaymentMethod === "CASH" && (() => {
+                  const received = parseFloat(customAmountStr.replace(",", ".")) || 0;
+                  const change = received > 0 ? received - estimatedTotal : null;
+                  const isPartial = received > 0 && received < estimatedTotal;
+                  return (
+                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                        Valor recebido (opcional)
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-zinc-500">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder={estimatedTotal.toFixed(2).replace(".", ",")}
+                          value={customAmountStr}
+                          onChange={(e) => setCustomAmountStr(e.target.value)}
+                          className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-black focus:border-brand-red/40 focus:outline-none focus:ring-2 focus:ring-brand-red/10"
+                        />
+                        {customAmountStr && (
+                          <button type="button" onClick={() => setCustomAmountStr("")}
+                            className="text-zinc-400 hover:text-zinc-600 text-xs font-bold">
+                            limpar
+                          </button>
+                        )}
+                      </div>
+                      {change !== null && change >= 0 && (
+                        <div className="rounded-xl bg-emerald-50 px-3 py-2 flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-700">Troco</span>
+                          <span className="text-base font-black text-emerald-700">
+                            {currency.format(change)}
+                          </span>
+                        </div>
+                      )}
+                      {isPartial && (
+                        <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                          ⚠ Valor menor que o total — pedido ficará com pagamento parcial
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {isPartial && (
-                    <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
-                      ⚠ Valor menor que o total — pedido ficará com pagamento parcial
-                    </div>
+                  );
+                })()}
+              </>
+            )}
+
+            {/* Dividir conta — preview quando ativo */}
+            {splitBill && (
+              <div className="rounded-2xl border border-brand-red/20 bg-brand-red/5 p-4 space-y-2">
+                <p className="text-xs font-black text-brand-red">Dividir conta ativado</p>
+                <p className="text-[11px] text-zinc-600">
+                  O pedido será criado como <strong>pendente</strong>. Na próxima tela, cada pessoa escolhe o método para pagar o próprio item.
+                </p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {items.slice(0, 4).map((item, i) => (
+                    <span key={i} className="rounded-lg bg-white border border-brand-red/20 px-2 py-1 text-[10px] font-bold text-zinc-700">
+                      {item.quantity}× {item.product.name.split(' ')[0]}
+                    </span>
+                  ))}
+                  {items.length > 4 && (
+                    <span className="rounded-lg bg-white border border-zinc-200 px-2 py-1 text-[10px] font-bold text-zinc-500">
+                      +{items.length - 4} mais
+                    </span>
                   )}
                 </div>
-              );
-            })()}
+              </div>
+            )}
 
             {/* Discount */}
             <div className="space-y-2">
@@ -765,16 +841,40 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                 <ChevronLeft size={16} /> Voltar
               </Button>
               <Button
-                className="flex-1 h-14 text-base font-black bg-brand-red hover:bg-brand-red/90 shadow-lg shadow-brand-red/20 gap-2 active:scale-[0.98]"
+                className={`flex-1 h-14 text-base font-black shadow-lg gap-2 active:scale-[0.98] ${
+                  splitBill
+                    ? "bg-brand-red hover:bg-brand-red/90 shadow-brand-red/20"
+                    : "bg-brand-red hover:bg-brand-red/90 shadow-brand-red/20"
+                }`}
                 onClick={handleCheckout}
                 disabled={isSubmitting || items.length === 0}
               >
-                {isSubmitting ? "PROCESSANDO..." : "CONFIRMAR PEDIDO"}
+                {isSubmitting ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> PROCESSANDO...</>
+                ) : splitBill ? (
+                  <><Users className="h-5 w-5" /> CRIAR E DIVIDIR</>
+                ) : "CONFIRMAR PEDIDO"}
               </Button>
             </div>
           </div>
         )}
       </div>
     </BottomSheet>
+
+    {/* PayItemsModal após criar pedido em modo "dividir conta" */}
+    {splitOrder && (
+      <PayItemsModal
+        order={splitOrder}
+        onClose={() => {
+          setSplitOrder(null);
+          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount });
+        }}
+        onPaid={() => {
+          setSplitOrder(null);
+          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount });
+        }}
+      />
+    )}
+    </>
   );
 }
