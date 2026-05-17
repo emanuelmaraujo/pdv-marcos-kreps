@@ -1510,9 +1510,12 @@ export default function PedirPublicPage() {
 
   return (
     <div className="min-h-screen pb-32 text-[var(--text-primary)]" style={{ backgroundColor: "var(--bg-base)" }}>
+      {/* Header sticky. Fundo sólido (não translúcido) + transform: translateZ(0)
+         para criar uma compositor layer própria — evita o flicker/shake que
+         o backdrop-blur causava ao rolar com outros elementos sticky abaixo. */}
       <header
-        className="sticky top-0 z-40 border-b border-[var(--border)] px-4 py-3 shadow-[var(--shadow-sm)] backdrop-blur"
-        style={{ backgroundColor: "rgba(255, 251, 246, 0.92)" }}
+        className="sticky top-0 z-40 border-b border-[var(--border)] px-4 py-3 shadow-[var(--shadow-sm)]"
+        style={{ backgroundColor: "var(--bg-surface)", transform: "translateZ(0)" }}
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -1611,13 +1614,12 @@ export default function PedirPublicPage() {
             </div>
           </section>
 
-          {/* Tabs sticky — colado abaixo do header (h-14).
-             Mobile: fundo em superfície branca (contraste com bege da página)
-             + sombra sutil para destacar a elevação durante scroll.
-             Pílulas mais compactas pra caber mais categorias no viewport. */}
+          {/* Tabs sticky — colado abaixo do header do /pedir.
+             Header h-11 logo + py-3 = ~68px no mobile, sm:h-12 = ~72px no sm+.
+             Usamos ~70px que cobre ambos sem deixar gap visível. */}
           <div
-            className="sticky top-14 z-30 -mx-4 px-3 py-2 border-b border-[var(--border)] shadow-[var(--shadow-sm)]"
-            style={{ backgroundColor: "var(--bg-surface)" }}
+            className="sticky top-[68px] sm:top-[72px] z-30 -mx-4 px-3 py-2 border-b border-[var(--border)] shadow-[var(--shadow-sm)]"
+            style={{ backgroundColor: "var(--bg-surface)", transform: "translateZ(0)" }}
           >
             <section
               {...categoryDragScroll}
