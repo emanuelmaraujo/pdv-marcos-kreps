@@ -1467,51 +1467,74 @@ export default function PedirPublicPage() {
 
   if (!onlineOrderingEnabled) {
     return (
-      <div className="flex min-h-screen flex-col bg-[#FFF7ED] text-brand-charcoal">
-        <header className="border-b border-amber-900/10 bg-[#fffaf2]/95 px-4 py-3 shadow-sm">
+      <div className="flex min-h-screen flex-col text-[var(--text-primary)]" style={{ backgroundColor: "var(--bg-base)" }}>
+        <header
+          className="border-b border-[var(--border)] px-4 py-3 shadow-[var(--shadow-sm)]"
+          style={{ backgroundColor: "var(--bg-surface)" }}
+        >
           <div className="mx-auto flex max-w-xl items-center gap-3">
             <Image
               src="/logo.png"
               alt="Marcos Krep's"
-              width={56}
-              height={56}
-              className="h-14 w-14 shrink-0 rounded-xl"
+              width={48}
+              height={48}
+              className="h-11 w-11 shrink-0 rounded-full ring-2 ring-[var(--border)]"
               priority
             />
-            <div>
-              <h1 className="text-base font-black text-brand-charcoal">Marcos Krep&apos;s</h1>
-              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700/70">
-                {branchName ?? "Pedido online"}
+            <div className="min-w-0">
+              <h1 className="text-base font-bold text-[var(--text-primary)] truncate">Marcos Krep&apos;s</h1>
+              <p className="text-xs font-medium text-[var(--text-secondary)] truncate">
+                {branchName ? `Pedido online · ${branchName}` : "Pedido online"}
               </p>
             </div>
           </div>
         </header>
-        <main className="mx-auto flex max-w-xl flex-1 flex-col items-center justify-center gap-5 p-8 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
-            <Clock className="h-10 w-10" />
+        <main className="mx-auto flex max-w-md flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
+          <div
+            className="flex h-20 w-20 items-center justify-center rounded-2xl"
+            style={{ backgroundColor: "var(--status-warning-bg, #FFFBEB)", color: "var(--status-warning, #D97706)" }}
+          >
+            <Clock className="h-10 w-10" strokeWidth={1.75} />
           </div>
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-brand-red">Pedidos pausados</p>
-            <h2 className="mt-2 text-2xl font-black text-zinc-950">No momento nao estamos recebendo pedidos.</h2>
-            <p className="mt-3 text-sm font-semibold leading-relaxed text-zinc-600">
-              {orderingClosedReason || `O atendimento online funciona das ${orderingSchedule.start} as ${orderingSchedule.end}.`}
+            <p className="text-xs font-semibold text-brand-red">Pedidos pausados</p>
+            <h2 className="mt-2 text-2xl font-bold text-[var(--text-primary)] leading-tight">
+              No momento não estamos recebendo pedidos.
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
+              {orderingClosedReason || `O atendimento online funciona das ${orderingSchedule.start} às ${orderingSchedule.end}.`}
             </p>
-            <p className="mt-3 text-sm font-semibold leading-relaxed text-zinc-600">
-              Enquanto isso, siga o Marcos Krep&apos;s no Instagram para acompanhar novidades e avisos.
+            <p className="mt-3 text-sm leading-relaxed text-[var(--text-secondary)]">
+              Enquanto isso, siga o Marcos Krep&apos;s no Instagram para acompanhar novidades.
             </p>
           </div>
-          <div className="grid w-full max-w-xs gap-3">
+          <div className="grid w-full max-w-xs gap-2">
+            {/* Primária: voltar ao landing pra escolher outra filial ou acompanhar pedido */}
+            <button
+              type="button"
+              onClick={() => router.push("/pedir")}
+              className="flex items-center justify-center gap-2 rounded-full bg-brand-red px-4 text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
+              style={{ height: 48 }}
+            >
+              <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+              Voltar para escolher
+            </button>
             <a
               href={INSTAGRAM_URL}
               target="_blank"
               rel="noreferrer"
-              className="flex h-12 items-center justify-center rounded-xl bg-brand-red px-4 text-sm font-black uppercase tracking-wide text-white shadow-lg shadow-brand-red/20"
+              className="flex items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] active:scale-[0.98]"
+              style={{ height: 44 }}
             >
               Seguir no Instagram
             </a>
-            <Button variant="outline" onClick={() => window.location.reload()}>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="text-xs font-medium text-[var(--text-muted)] underline hover:text-[var(--text-secondary)] mt-1"
+            >
               Verificar novamente
-            </Button>
+            </button>
           </div>
         </main>
       </div>
