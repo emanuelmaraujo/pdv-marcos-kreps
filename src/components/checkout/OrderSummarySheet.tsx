@@ -286,6 +286,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         items: items.map((item) => ({
           product_id: item.product.id,
           quantity: item.quantity,
+          is_takeout: item.is_takeout ?? false,
           removed_ingredient_ids: item.removed_ingredients,
           addons: item.addons.map((a) => ({ addon_id: a.addon_id, quantity: a.quantity })),
           notes: item.is_takeout

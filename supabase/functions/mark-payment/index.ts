@@ -68,7 +68,7 @@ serve(async (req) => {
     // Lê o pedido via JWT (RLS valida que o user opera a filial).
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
-      .select("id, branch_id, daily_number, status, total_amount")
+      .select("id, branch_id, daily_number, status, total_amount, packing_fee")
       .eq("id", order_id)
       .single();
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
@@ -107,6 +107,9 @@ serve(async (req) => {
 
       targetItemIds = (items ?? []).map((i) => i.id);
       targetTotal   = (items ?? []).reduce((sum, i) => sum + Number(i.total_price ?? 0), 0);
+      // Ao pagar o pedido inteiro (sem subset de itens), inclui a taxa de embalagem
+      // que fica em orders.packing_fee (não rateada por item).
+      targetTotal  += Number((order as any).packing_fee ?? 0);
     }
 
     // Para PAID, exige bate-confere financeiro com o subset.
