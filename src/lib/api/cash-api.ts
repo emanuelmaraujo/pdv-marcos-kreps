@@ -264,6 +264,19 @@ export const cashApi = {
       avgDeliveryMinutes,
     };
 
+    // ── Pagamentos reais por método (deve vir ANTES do paymentBreakdown)
+    const allOrderIds = nonCancelled.map((o) => o.id);
+    type PaymentRow = { payment_method: string; amount: number | string | null; payment_status: string };
+    let realPayments: PaymentRow[] = [];
+    if (allOrderIds.length > 0) {
+      const { data: rawPayments } = await supabase
+        .from("payments")
+        .select("payment_method, amount, payment_status")
+        .in("order_id", allOrderIds)
+        .in("payment_status", ["PAID", "COURTESY"]);
+      realPayments = (rawPayments ?? []) as PaymentRow[];
+    }
+
     // Breakdown baseado na tabela payments (cada linha = 1 transação real)
     // Isso reflete corretamente pedidos com múltiplos métodos (ex: PIX + Débito no split-bill)
     const paymentBreakdown: PaymentBreakdown[] = PAYMENT_METHODS.map((method) => {
@@ -318,19 +331,6 @@ export const cashApi = {
       }
 
       orderItems = (rawItems ?? []) as OrderItemRow[];
-    }
-
-    // ── Pagamentos reais por método — usa a tabela payments (não orders.payment_method)
-    // Isso garante que pedidos pagos com métodos mistos (PIX + Débito) sejam contados corretamente.
-    interface PaymentRow { payment_method: string; amount: number | string | null; payment_status: string }
-    let realPayments: PaymentRow[] = [];
-    if (orderIdsForProducts.length > 0) {
-      const { data: rawPayments } = await supabase
-        .from("payments")
-        .select("payment_method, amount, payment_status")
-        .in("order_id", orderIdsForProducts)
-        .in("payment_status", ["PAID", "COURTESY"]);
-      realPayments = (rawPayments ?? []) as PaymentRow[];
     }
 
     const productMap = new Map<string, { quantity: number; revenue: number }>();
