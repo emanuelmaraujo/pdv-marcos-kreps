@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/nav-items";
+import { useUser } from "@/contexts/UserContext";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -11,6 +12,8 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const { isAdmin } = useUser();
+  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <>
@@ -36,7 +39,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       >
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5" role="navigation">
-          {navItems.map((item) => {
+          {visibleItems.map((item) => {
             const isActive =
               item.href === "/app"
                 ? pathname === "/app"

@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navItems } from "@/lib/nav-items";
+import { useUser } from "@/contexts/UserContext";
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { isAdmin } = useUser();
+  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <nav
@@ -13,7 +16,7 @@ export function BottomNav() {
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white pb-safe shadow-[0_-2px_12px_-2px_rgba(0,0,0,0.08)] md:hidden"
     >
       <div className="flex h-16 items-stretch px-1">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive =
             item.href === "/app"
               ? pathname === "/app"
