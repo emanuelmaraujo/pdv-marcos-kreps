@@ -131,8 +131,8 @@ function logDbError(context: string, error: any) {
 }
 
 async function registerCustomer(supabaseAdmin: any, payload: {
-  customerPhone: string;
-  customerName: string;
+  customerPhone: string | null;
+  customerName: string | null;
   customerEmail: string | null;
   orderType: "BALCAO" | "VIAGEM";
   marketingOptIn: boolean;
@@ -149,6 +149,8 @@ async function registerCustomer(supabaseAdmin: any, payload: {
     nowIso,
   } = payload;
 
+  if (!customerPhone) return null;
+
   const { data: existingCustomer, error: existingCustomerErr } = await supabaseAdmin
     .from("customers")
     .select("orders_count, marketing_opt_in, marketing_opt_in_at")
@@ -162,7 +164,7 @@ async function registerCustomer(supabaseAdmin: any, payload: {
   const baseCustomer = {
     id: customerPhone,
     phone_e164: customerPhone,
-    name: customerName,
+    name: customerName || "Cliente",
     last_seen_at: nowIso,
     last_order_at: nowIso,
     orders_count: Number(existingCustomer?.orders_count ?? 0) + 1,
@@ -239,8 +241,7 @@ serve(async (req) => {
 
     if (items.length === 0) throw new Error("Carrinho vazio.");
     if (items.length > 50) throw new Error("Carrinho excede o limite de itens.");
-    if (!customerName) throw new Error("Informe seu nome para continuar.");
-    if (!customerPhone) throw new Error("Informe um WhatsApp valido com DDD.");
+    if (body.customer_phone && !customerPhone) throw new Error("Informe um WhatsApp valido com DDD.");
     if (orderType !== "BALCAO" && orderType !== "VIAGEM") {
       throw new Error("Tipo de pedido invalido.");
     }

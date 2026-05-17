@@ -16,10 +16,12 @@ export function useTheme(): { theme: Theme; toggle: () => void; setTheme: (t: Th
   const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
-    const stored = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_KEY)) as Theme | null;
-    const initial: Theme = stored ?? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setThemeState(initial);
-    applyTheme(initial);
+    const initial = getInitialTheme();
+    const timer = window.setTimeout(() => {
+      setThemeState(initial);
+      applyTheme(initial);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const setTheme = (t: Theme) => {
@@ -31,6 +33,12 @@ export function useTheme(): { theme: Theme; toggle: () => void; setTheme: (t: Th
   const toggle = () => setTheme(theme === "light" ? "dark" : "light");
 
   return { theme, toggle, setTheme };
+}
+
+function getInitialTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+  const stored = (typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_KEY)) as Theme | null;
+  return stored ?? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 }
 
 function applyTheme(t: Theme) {
