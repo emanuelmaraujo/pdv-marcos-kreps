@@ -124,12 +124,10 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
 
   const onConfirm = () => handleAction(() => pdvApi.confirmOrder(order.id));
   const onReady   = () => handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
-  const onDeliver = () => {
-    if (order.payment_status === "PENDING") {
-      if (!window.confirm("ATENÇÃO: Pagamento PENDENTE. Confirmar entrega mesmo assim?")) return;
-    }
+  const onDeliver = () =>
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" }));
-  };
+  const onRevertToQueue = () =>
+    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "NA_FILA" }));
   const onCancel = () => {
     if (!cancelReason.trim()) { setErrorMsg("Motivo obrigatório."); return; }
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }));
@@ -382,13 +380,24 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </Button>
                 )}
                 {order.status === "PRONTO" && (
-                  <Button
-                    className="h-14 w-full rounded-2xl bg-emerald-500 text-base font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
-                    onClick={onDeliver}
-                    disabled={isLoading}
-                  >
-                    <CheckCircle2 size={18} /> ENTREGAR PEDIDO
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      className="h-14 flex-1 rounded-2xl bg-emerald-500 text-base font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
+                      onClick={onDeliver}
+                      disabled={isLoading}
+                    >
+                      <CheckCircle2 size={18} /> ENTREGAR
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-14 rounded-2xl border-2 border-zinc-300 text-xs font-black text-zinc-500 hover:bg-zinc-100 gap-1 px-3"
+                      onClick={onRevertToQueue}
+                      disabled={isLoading}
+                      title="Voltar para Na Fila"
+                    >
+                      <ArrowLeft size={14} /> NA FILA
+                    </Button>
+                  </div>
                 )}
 
                 {/* Payment pending / partial alert */}

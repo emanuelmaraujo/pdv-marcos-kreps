@@ -58,7 +58,7 @@ serve(async (req) => {
     const { order_id, status, reason, force_delivery } = await req.json();
     if (!order_id) throw new Error("order_id ausente.");
 
-    const validStatuses = ["PRONTO", "ENTREGUE", "CANCELADO"];
+    const validStatuses = ["PRONTO", "ENTREGUE", "CANCELADO", "NA_FILA"];
     if (!validStatuses.includes(status)) {
       throw new Error(`status inválido. Permitidos: ${validStatuses.join(", ")}`);
     }
@@ -83,8 +83,10 @@ serve(async (req) => {
     // Tabela de transições permitidas a nível de pedido.
     let allowed = false;
     if (status === "PRONTO") {
-      // Aceita partir de NA_FILA ou PRONTO_PARCIAL ("força tudo pronto").
       if (cur === "NA_FILA" || cur === "PRONTO_PARCIAL") allowed = true;
+    } else if (status === "NA_FILA") {
+      // Permite reverter PRONTO → NA_FILA (pedido marcado como pronto por engano).
+      if (cur === "PRONTO") allowed = true;
     } else if (status === "ENTREGUE") {
       if (cur === "PRONTO" || cur === "PRONTO_PARCIAL") allowed = true;
     } else if (status === "CANCELADO") {
@@ -96,16 +98,6 @@ serve(async (req) => {
       throw new Error(`Transição inválida ${cur} -> ${status}.`);
     }
 
-    // Para ENTREGUE: trava pendência de pagamento (igual ao comportamento atual),
-    // checando agora payment_status derivado.
-    if (status === "ENTREGUE") {
-      if (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") {
-        if (!(force_delivery === true && profile.role === "ADMIN")) {
-          throw new Error("Pedido com pagamento pendente/parcial. Confirme antes de entregar.");
-        }
-      }
-    }
-
     if (status === "CANCELADO" && (!reason || !reason.trim())) {
       throw new Error("Motivo (reason) é obrigatório para cancelar o pedido.");
     }
@@ -113,7 +105,15 @@ serve(async (req) => {
     const now = new Date().toISOString();
 
     // ── Aplica a mudança nos itens; o trigger derivará orders.status ────────
-    if (status === "PRONTO") {
+    if (status === "NA_FILA") {
+      // Reverte itens READY → PENDING para que o trigger mova o pedido de volta a NA_FILA.
+      const { error: itemsErr } = await supabaseAdmin
+        .from("order_items")
+        .update({ status: "PENDING", item_ready_at: null })
+        .eq("order_id", order.id)
+        .eq("status", "READY");
+      if (itemsErr) throw new Error(`Erro ao reverter itens: ${itemsErr.message}`);
+    } else if (status === "PRONTO") {
       const { error: itemsErr } = await supabaseAdmin
         .from("order_items")
         .update({ status: "READY", item_ready_at: now })
