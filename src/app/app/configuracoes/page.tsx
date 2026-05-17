@@ -119,28 +119,34 @@ function ToggleRow({
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className={`flex w-full items-center justify-between gap-4 rounded-xl px-4 py-3.5 text-left transition-all ${
-        checked ? "bg-brand-red/5 ring-1 ring-brand-red/20" : "bg-zinc-50 hover:bg-zinc-100"
-      }`}
+      className="group flex w-full items-center justify-between gap-4 py-4 text-left transition-colors hover:bg-zinc-50 px-1 rounded-lg"
     >
       <span className="min-w-0">
-        <span className="block text-sm font-black text-zinc-900">{label}</span>
+        <span className="block text-sm font-bold text-zinc-900 group-hover:text-zinc-700">{label}</span>
         {description && (
-          <span className="mt-0.5 block text-[11px] font-medium leading-relaxed text-zinc-500">{description}</span>
+          <span className="mt-0.5 block text-xs font-medium leading-relaxed text-zinc-500">{description}</span>
         )}
       </span>
       <span
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-all duration-200 ${
-          checked ? "bg-brand-red shadow-sm shadow-brand-red/30" : "bg-zinc-300"
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-all duration-200 ${
+          checked ? "bg-brand-red shadow-sm shadow-brand-red/20" : "bg-zinc-200"
         }`}
       >
         <span
-          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-            checked ? "translate-x-6" : "translate-x-1"
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+            checked ? "translate-x-5" : "translate-x-0.5"
           }`}
         />
       </span>
     </button>
+  );
+}
+
+function ToggleGroup({ children }: { children: ReactNode }) {
+  return (
+    <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white px-4">
+      {children}
+    </div>
   );
 }
 
@@ -154,21 +160,25 @@ function Field({
   hint?: string;
 }) {
   return (
-    <label className="block space-y-2">
+    <label className="block space-y-1.5">
       <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400">{label}</span>
       {children}
-      {hint && <span className="block text-[11px] font-medium leading-relaxed text-zinc-400">{hint}</span>}
+      {hint && <span className="block text-[11px] leading-relaxed text-zinc-400">{hint}</span>}
     </label>
   );
 }
 
-const SECTION_COLORS: Record<string, { bg: string; icon: string; border: string; ring: string }> = {
-  pedido:    { bg: "from-blue-600 to-blue-700",    icon: "bg-blue-500/20",   border: "border-blue-100",   ring: "ring-blue-100" },
-  embalagem: { bg: "from-amber-600 to-amber-700",  icon: "bg-amber-500/20",  border: "border-amber-100",  ring: "ring-amber-100" },
-  impressao: { bg: "from-violet-600 to-violet-700",icon: "bg-violet-500/20", border: "border-violet-100", ring: "ring-violet-100" },
-  whatsapp:  { bg: "from-emerald-600 to-emerald-700",icon:"bg-emerald-500/20",border:"border-emerald-100", ring:"ring-emerald-100" },
-  biometria: { bg: "from-zinc-700 to-zinc-800",    icon: "bg-zinc-500/20",   border: "border-zinc-100",   ring: "ring-zinc-100" },
+// Accent colors for section icons (cleaner than gradient headers)
+const SECTION_ACCENT: Record<string, { iconBg: string; iconColor: string; navActive: string }> = {
+  pedido:    { iconBg: "bg-blue-100",    iconColor: "text-blue-600",    navActive: "bg-blue-500/20 text-blue-200 border-l-2 border-blue-400" },
+  embalagem: { iconBg: "bg-amber-100",   iconColor: "text-amber-600",   navActive: "bg-amber-500/20 text-amber-200 border-l-2 border-amber-400" },
+  impressao: { iconBg: "bg-violet-100",  iconColor: "text-violet-600",  navActive: "bg-violet-500/20 text-violet-200 border-l-2 border-violet-400" },
+  whatsapp:  { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", navActive: "bg-emerald-500/20 text-emerald-200 border-l-2 border-emerald-400" },
+  biometria: { iconBg: "bg-zinc-100",    iconColor: "text-zinc-600",    navActive: "bg-white/10 text-white border-l-2 border-zinc-400" },
 };
+
+// Keep SECTION_COLORS as alias for nav mobile pills (uses bg gradient)
+const SECTION_COLORS = SECTION_ACCENT;
 
 function SettingsPanel({
   id,
@@ -185,21 +195,19 @@ function SettingsPanel({
   className?: string;
   children: ReactNode;
 }) {
-  const colors = SECTION_COLORS[id] ?? SECTION_COLORS.pedido;
+  const accent = SECTION_ACCENT[id] ?? SECTION_ACCENT.pedido;
   return (
-    <section id={id} className={`scroll-mt-24 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm ${className}`}>
-      <header className={`bg-gradient-to-br ${colors.bg} px-5 py-5`}>
-        <div className="flex items-center gap-3">
-          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colors.icon}`}>
-            <Icon className="h-5 w-5 text-white" />
-          </span>
-          <span className="min-w-0">
-            <h2 className="text-base font-black text-white">{title}</h2>
-            <p className="mt-0.5 text-[11px] font-medium text-white/70">{description}</p>
-          </span>
-        </div>
+    <section id={id} className={`scroll-mt-24 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 ${className}`}>
+      <header className="flex items-center gap-4 border-b border-zinc-100 px-6 py-5">
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${accent.iconBg}`}>
+          <Icon className={`h-5 w-5 ${accent.iconColor}`} />
+        </span>
+        <span className="min-w-0">
+          <h2 className="text-sm font-black text-zinc-950">{title}</h2>
+          <p className="mt-0.5 text-[11px] font-medium text-zinc-400">{description}</p>
+        </span>
       </header>
-      <div className="space-y-3 p-5">{children}</div>
+      <div className="px-6 py-5">{children}</div>
     </section>
   );
 }
@@ -208,24 +216,42 @@ function StatPill({
   label,
   value,
   tone = "neutral",
+  light = false,
 }: {
   label: string;
   value: string | number;
   tone?: "neutral" | "green" | "red";
+  light?: boolean;
 }) {
-  const styles = {
-    neutral: { card: "border-zinc-200 bg-white", value: "text-zinc-800", dot: "bg-zinc-400", label: "text-zinc-500" },
-    green:   { card: "border-emerald-100 bg-emerald-50", value: "text-emerald-700", dot: "bg-emerald-500", label: "text-emerald-600" },
-    red:     { card: "border-red-100 bg-red-50",   value: "text-red-700",   dot: "bg-red-500",   label: "text-red-600" },
-  }[tone];
+  if (light) {
+    // Light variant for use inside white content panels
+    const styles = {
+      neutral: { card: "border-zinc-200 bg-zinc-50", value: "text-zinc-700", dot: "bg-zinc-400", label: "text-zinc-500" },
+      green:   { card: "border-emerald-100 bg-emerald-50", value: "text-emerald-700", dot: "bg-emerald-500", label: "text-emerald-600" },
+      red:     { card: "border-red-100 bg-red-50", value: "text-red-700", dot: "bg-red-500", label: "text-red-600" },
+    }[tone];
+    return (
+      <div className={`rounded-xl border px-3 py-2.5 ${styles.card}`}>
+        <div className="flex items-center gap-1.5">
+          <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
+          <p className={`text-sm font-black leading-none ${styles.value}`}>{value}</p>
+        </div>
+        <p className={`mt-1 text-[10px] font-medium truncate ${styles.label}`}>{label}</p>
+      </div>
+    );
+  }
+
+  // Dark sidebar variant
+  const dot = { neutral: "bg-zinc-500", green: "bg-emerald-400", red: "bg-red-400" }[tone];
+  const valueColor = { neutral: "text-zinc-200", green: "text-emerald-300", red: "text-red-300" }[tone];
 
   return (
-    <div className={`rounded-xl border p-3 ${styles.card}`}>
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
-        <p className={`text-base font-black leading-none ${styles.value}`}>{value}</p>
+    <div className="rounded-xl bg-white/8 px-3 py-2.5 border border-white/10">
+      <div className="flex items-center gap-1.5">
+        <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+        <p className={`text-xs font-black leading-none ${valueColor}`}>{value}</p>
       </div>
-      <p className={`text-[10px] font-bold uppercase tracking-wide ${styles.label}`}>{label}</p>
+      <p className="mt-1 text-[10px] font-medium text-zinc-500 truncate">{label}</p>
     </div>
   );
 }
@@ -470,91 +496,41 @@ export default function ConfiguracoesSistema() {
   }
 
   return (
-    <div className="min-h-full bg-[#F5F7FA] pb-28">
+    <div className="min-h-full bg-[#F5F7FA]">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <header className="border-b border-zinc-200 bg-gradient-to-br from-brand-charcoal to-zinc-800">
-        <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      {/* ─── Mobile header (dark, compact) ─────────────────────── */}
+      <header className="border-b border-zinc-700/50 bg-brand-charcoal md:hidden">
+        <div className="px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>
-              <h1 className="mt-1 text-2xl font-black text-white">Configurações</h1>
-              <p className="mt-1 text-sm font-medium text-zinc-400">
-                Pedidos online, impressão, notificações e autenticação.
-              </p>
+              <h1 className="text-xl font-black text-white">Configurações</h1>
             </div>
             <Button
               onClick={handleSave}
               loading={saving}
-              className="gap-2 bg-brand-red hover:bg-brand-red/90 text-white shadow-lg shadow-brand-red/30 md:w-auto"
+              className="shrink-0 gap-2 bg-brand-red hover:bg-brand-red/90 text-white text-sm"
             >
-              {!saving && <Save className="h-4 w-4" />}
-              Salvar alterações
+              {!saving && <Save className="h-3.5 w-3.5" />}
+              Salvar
             </Button>
           </div>
 
-          {/* Banner de contexto de filial */}
-          {currentBranch && (
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-white/10 border border-white/20 px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20 text-xs font-black text-white">
-                  {currentBranch.code}
-                </span>
-                <div>
-                  <p className="text-xs font-black text-white">
-                    Filial ativa: <strong>{currentBranch.name}</strong>
-                  </p>
-                  <p className="text-[10px] text-white/60">
-                    Configurações globais — valem como padrão para todas as filiais
-                  </p>
-                </div>
-              </div>
-              <a
-                href="/app/configuracoes/filiais"
-                className="shrink-0 flex items-center gap-1.5 rounded-lg bg-white/15 border border-white/20 px-3 py-1.5 text-[11px] font-black text-white hover:bg-white/25 whitespace-nowrap transition-all"
-              >
-                Editar filial →
-              </a>
-            </div>
-          )}
-
-          <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
-            <StatPill
-              label={`Das ${settings.public_ordering_start_time} as ${settings.public_ordering_end_time}`}
-              value={publicOrderStatus}
-              tone={settings.public_ordering_enabled === "true" ? "green" : "red"}
-            />
-            <StatPill
-              label={`${settings.printer_host}:${settings.printer_port}`}
-              value={printingStatus}
-              tone={settings.printing_enabled === "true" ? "green" : "red"}
-            />
-            <StatPill
-              label={printWorkerStatus.lastSeen}
-              value={`Pi ${printWorkerStatus.value}`}
-              tone={printWorkerStatus.tone}
-            />
-            <StatPill
-              label={`${whatsappStats.pending} pendentes`}
-              value={whatsappStatus}
-              tone={settings.whatsapp_enabled === "true" ? "green" : "neutral"}
-            />
-          </div>
-
-          <nav className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden">
+          {/* Mobile tabs */}
+          <nav className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-3">
             {SECTIONS.map((section) => {
               const Icon = section.icon;
               const active = activeSection === section.id;
-              const colors = SECTION_COLORS[section.id] ?? SECTION_COLORS.pedido;
               return (
                 <button
                   key={section.id}
                   type="button"
                   onClick={() => scrollToSection(section.id)}
-                  className={`flex h-10 shrink-0 items-center gap-2 rounded-xl px-3.5 text-xs font-black transition-all ${
+                  className={`flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-black transition-all ${
                     active
-                      ? `bg-gradient-to-br ${colors.bg} text-white shadow-sm`
-                      : "border border-white/30 bg-white/10 text-white hover:bg-white/20"
+                      ? "bg-brand-red text-white shadow-sm"
+                      : "border border-white/20 bg-white/10 text-zinc-300 hover:bg-white/20 hover:text-white"
                   }`}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -566,47 +542,119 @@ export default function ConfiguracoesSistema() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-5 px-4 py-6 md:grid-cols-[260px_1fr] md:px-6">
-        <aside className="hidden md:sticky md:top-20 md:block md:self-start">
-          <nav className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-            <div className="border-b border-zinc-100 bg-zinc-50 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Seções</p>
+      {/* ─── Desktop two-panel layout ───────────────────────────── */}
+      <div className="hidden md:flex md:min-h-[calc(100vh-3.5rem)]">
+
+        {/* Left panel — dark sidebar unified with app header */}
+        <aside className="sticky top-14 h-[calc(100vh-3.5rem)] w-[260px] shrink-0 flex flex-col overflow-y-auto bg-brand-charcoal border-r border-zinc-700/60">
+          {/* Identity */}
+          <div className="border-b border-zinc-700/60 px-5 py-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>
+            <h1 className="mt-1 text-lg font-black text-white">Configurações</h1>
+            <p className="mt-0.5 text-[11px] font-medium text-zinc-400">
+              Pedidos online, impressão, notificações e autenticação.
+            </p>
+          </div>
+
+          {/* Branch badge */}
+          {currentBranch && (
+            <div className="border-b border-zinc-700/60 px-5 py-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-red/20 text-[11px] font-black text-brand-red">
+                  {currentBranch.code}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-black text-white">{currentBranch.name}</p>
+                  <p className="text-[10px] text-zinc-500">Configurações globais</p>
+                </div>
+              </div>
+              <a
+                href="/app/configuracoes/filiais"
+                className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-[11px] font-bold text-zinc-300 transition-all hover:bg-zinc-700 hover:text-white w-full"
+              >
+                Editar filial →
+              </a>
             </div>
-            <div className="p-2 space-y-0.5">
-              {SECTIONS.map((section) => {
-                const Icon = section.icon;
-                const active = activeSection === section.id;
-                const colors = SECTION_COLORS[section.id] ?? SECTION_COLORS.pedido;
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => scrollToSection(section.id)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
-                      active
-                        ? `bg-gradient-to-br ${colors.bg} text-white shadow-sm`
-                        : "text-zinc-600 hover:bg-zinc-50"
-                    }`}
-                  >
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                      active ? "bg-white/20" : "bg-zinc-100"
-                    }`}>
-                      <Icon className={`h-4 w-4 ${active ? "text-white" : "text-zinc-500"}`} />
+          )}
+
+          {/* Navigation */}
+          <nav className="flex-1 px-3 py-3 space-y-0.5">
+            {SECTIONS.map((section) => {
+              const Icon = section.icon;
+              const active = activeSection === section.id;
+              const accent = SECTION_ACCENT[section.id] ?? SECTION_ACCENT.pedido;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => scrollToSection(section.id)}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
+                    active
+                      ? `${accent.navActive} shadow-sm`
+                      : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
+                  }`}
+                >
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all ${
+                    active ? "bg-white/15" : "bg-zinc-800"
+                  }`}>
+                    <Icon className={`h-4 w-4 transition-colors ${active ? "text-white" : "text-zinc-500"}`} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className={`block text-sm font-black transition-colors ${active ? "" : "text-zinc-300"}`}>
+                      {section.title}
                     </span>
-                    <span className="min-w-0">
-                      <span className={`block text-sm font-black ${active ? "text-white" : "text-zinc-800"}`}>
-                        {section.title}
-                      </span>
-                      <span className={`block text-[10px] font-medium truncate ${active ? "text-white/70" : "text-zinc-400"}`}>
-                        {section.description}
-                      </span>
+                    <span className={`block text-[10px] font-medium truncate ${active ? "opacity-70" : "text-zinc-500"}`}>
+                      {section.description}
                     </span>
-                  </button>
-                );
-              })}
-            </div>
+                  </span>
+                </button>
+              );
+            })}
           </nav>
+
+          {/* Status pills */}
+          <div className="border-t border-zinc-700/60 px-4 py-4 space-y-2">
+            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 px-1">Status atual</p>
+            <div className="grid grid-cols-2 gap-2">
+              <StatPill
+                label={`${settings.public_ordering_start_time}–${settings.public_ordering_end_time}`}
+                value={publicOrderStatus}
+                tone={settings.public_ordering_enabled === "true" ? "green" : "red"}
+              />
+              <StatPill
+                label={printWorkerStatus.lastSeen}
+                value={`Pi ${printWorkerStatus.value}`}
+                tone={printWorkerStatus.tone}
+              />
+              <StatPill
+                label={`${settings.printer_host}:${settings.printer_port}`}
+                value={printingStatus}
+                tone={settings.printing_enabled === "true" ? "green" : "red"}
+              />
+              <StatPill
+                label={`${whatsappStats.pending} pendentes`}
+                value={whatsappStatus}
+                tone={settings.whatsapp_enabled === "true" ? "green" : "neutral"}
+              />
+            </div>
+          </div>
+
+          {/* Save button */}
+          <div className="border-t border-zinc-700/60 px-4 py-4">
+            <Button
+              onClick={handleSave}
+              loading={saving}
+              className="w-full gap-2 bg-brand-red hover:bg-brand-red/90 text-white shadow-lg shadow-brand-red/20"
+            >
+              {!saving && <Save className="h-4 w-4" />}
+              Salvar alterações
+            </Button>
+          </div>
         </aside>
+
+        {/* Right panel — clean content area */}
+        <main className="flex-1 overflow-y-auto bg-[#F5F7FA]">
+          <div className="mx-auto max-w-3xl space-y-6 px-6 py-6">
 
         <div className="space-y-5">
           <SettingsPanel
@@ -616,8 +664,9 @@ export default function ConfiguracoesSistema() {
             description="Controle quando clientes podem criar pedidos pelo cardapio publico."
             className={activeSection === "pedido" ? "block" : "hidden md:block"}
           >
-            <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
-              <div>
+            <div className="space-y-5">
+            <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
+              <ToggleGroup>
                 <ToggleRow
                   checked={settings.public_ordering_enabled === "true"}
                   onChange={() => toggle("public_ordering_enabled")}
@@ -630,7 +679,7 @@ export default function ConfiguracoesSistema() {
                   label="Cobrar taxa em pedidos para viagem"
                   description="Aplica automaticamente a taxa de embalagem quando o cliente selecionar para levar."
                 />
-              </div>
+              </ToggleGroup>
               <div className="space-y-3 rounded-xl border border-zinc-100 bg-zinc-50 p-3">
                 <div className="flex items-center gap-2 text-zinc-700">
                   <Clock className="h-4 w-4" />
@@ -666,6 +715,7 @@ export default function ConfiguracoesSistema() {
                 </Field>
               </div>
             </div>
+            </div>{/* end space-y-5 pedido */}
           </SettingsPanel>
 
           <SettingsPanel
@@ -675,14 +725,16 @@ export default function ConfiguracoesSistema() {
             description="Defina como a taxa de viagem entra no pedido."
             className={activeSection === "embalagem" ? "block" : "hidden md:block"}
           >
-            <div className="grid gap-4 md:grid-cols-2">
-              <ToggleRow
-                checked={settings.apply_packaging_fee_for_takeout === "true"}
-                onChange={() => toggle("apply_packaging_fee_for_takeout")}
-                label="Cobrar em pedidos para viagem"
-                description="Mantem o calculo centralizado no backend e no caixa."
-              />
-              <Field label="Valor da taxa">
+            <div className="space-y-5">
+              <ToggleGroup>
+                <ToggleRow
+                  checked={settings.apply_packaging_fee_for_takeout === "true"}
+                  onChange={() => toggle("apply_packaging_fee_for_takeout")}
+                  label="Cobrar em pedidos para viagem"
+                  description="Mantem o calculo centralizado no backend e no caixa."
+                />
+              </ToggleGroup>
+              <Field label="Valor da taxa (R$)">
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -742,11 +794,11 @@ export default function ConfiguracoesSistema() {
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-3">
+              <ToggleGroup>
                 <ToggleRow
                   checked={settings.printing_enabled === "true"}
                   onChange={() => toggle("printing_enabled")}
-                  label="Impressao ativada"
+                  label="Impressão ativada"
                   description="Habilita o envio de jobs para a impressora."
                 />
                 <ToggleRow
@@ -759,15 +811,15 @@ export default function ConfiguracoesSistema() {
                   checked={settings.print_juice_potato_copy === "true"}
                   onChange={() => toggle("print_juice_potato_copy")}
                   label="Via sucos e batatas"
-                  description="Separa producao de bebidas, sucos e batatas."
+                  description="Separa produção de bebidas, sucos e batatas."
                 />
                 <ToggleRow
                   checked={settings.print_customer_copy === "true"}
                   onChange={() => toggle("print_customer_copy")}
                   label="Via do cliente"
-                  description="Copia de conferencia para entrega ou retirada."
+                  description="Cópia de conferência para entrega ou retirada."
                 />
-              </div>
+              </ToggleGroup>
 
               <div className="grid gap-4 border-t border-zinc-100 pt-4 md:grid-cols-2 lg:grid-cols-4">
                 <Field label="Endereco IP">
@@ -839,19 +891,21 @@ export default function ConfiguracoesSistema() {
                 </div>
               )}
 
-              <ToggleRow
-                checked={settings.whatsapp_enabled === "true"}
-                onChange={() => toggle("whatsapp_enabled")}
-                label="Integracao WhatsApp"
-                description="Envia novo_pedido (quando entra na fila) e pedido_pronto (quando fica pronto)."
-              />
+              <ToggleGroup>
+                <ToggleRow
+                  checked={settings.whatsapp_enabled === "true"}
+                  onChange={() => toggle("whatsapp_enabled")}
+                  label="Integração WhatsApp"
+                  description="Envia novo_pedido (quando entra na fila) e pedido_pronto (quando fica pronto)."
+                />
+              </ToggleGroup>
 
               <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-                <StatPill label="Pendentes" value={whatsappStats.pending} />
-                <StatPill label="Enviadas (24h)" value={whatsappStats.sent_24h} tone="green" />
-                <StatPill label="Entregues (24h)" value={whatsappStats.delivered_24h} tone="green" />
-                <StatPill label="Lidas (24h)" value={whatsappStats.read_24h} tone="green" />
-                <StatPill label="Falhas (24h)" value={whatsappStats.failed_24h} tone="red" />
+                <StatPill light label="Pendentes" value={whatsappStats.pending} />
+                <StatPill light label="Enviadas (24h)" value={whatsappStats.sent_24h} tone="green" />
+                <StatPill light label="Entregues (24h)" value={whatsappStats.delivered_24h} tone="green" />
+                <StatPill light label="Lidas (24h)" value={whatsappStats.read_24h} tone="green" />
+                <StatPill light label="Falhas (24h)" value={whatsappStats.failed_24h} tone="red" />
               </div>
 
               <div className="grid gap-4 border-t border-zinc-100 pt-4 md:grid-cols-2">
@@ -940,20 +994,19 @@ export default function ConfiguracoesSistema() {
           >
             <BiometricManager />
           </SettingsPanel>
-        </div>
-      </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-zinc-200 bg-white/95 p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3">
-          <div className="hidden min-w-0 flex-1 md:block">
-            <p className="text-sm font-black text-zinc-900">Salvar configuracoes</p>
-            <p className="text-xs font-medium text-zinc-500">As alteracoes so entram em vigor depois de salvar.</p>
-          </div>
-          <Button onClick={handleSave} loading={saving} className="w-full gap-2 md:w-auto">
-            {!saving && <Check className="h-4 w-4" />}
-            Salvar alteracoes
-          </Button>
-        </div>
+          </div>{/* end space-y-5 panels */}
+          </div>{/* end max-w-3xl */}
+        </main>{/* end right panel */}
+
+      </div>{/* end desktop two-panel */}
+
+      {/* Mobile: save bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-zinc-200 bg-white/95 p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur md:hidden">
+        <Button onClick={handleSave} loading={saving} className="w-full gap-2">
+          {!saving && <Check className="h-4 w-4" />}
+          Salvar alterações
+        </Button>
       </div>
     </div>
   );
