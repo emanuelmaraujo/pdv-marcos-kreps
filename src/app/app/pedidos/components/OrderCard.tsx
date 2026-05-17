@@ -110,8 +110,8 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
   const elapsed = activeElapsedMin ?? 0;
   const isUrgent  = isActive && elapsed >= 20;
   const isWarning = isActive && elapsed >= 10 && elapsed < 20;
-  // Banner/borda de pagamento pendente só para pedidos ainda ativos
-  const showPendingPayBanner = isPendingPayment && isActive && order.status !== "CANCELADO";
+  // Banner/borda de pagamento pendente para pedidos ativos E para entregues não pagos
+  const showPendingPayBanner = isPendingPayment && order.status !== "CANCELADO" && order.status !== "EXPIRADO";
 
   const quickActionConfig =
     order.status === "AGUARDANDO_CONFIRMACAO"

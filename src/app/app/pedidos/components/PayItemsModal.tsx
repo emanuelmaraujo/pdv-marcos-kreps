@@ -211,7 +211,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
                     </div>
 
                     {/* Botões de método inline */}
-                    <div className={`grid grid-cols-5 gap-1.5 transition-opacity ${isBusy ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className={`grid grid-cols-3 gap-1.5 transition-opacity ${isBusy ? 'opacity-50 pointer-events-none' : ''}`}>
                       {METHODS.map(({ value, short, Icon, colors }) => (
                         <button
                           key={value}
@@ -311,7 +311,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
               {selected.size > 0 && (
                 <div className="space-y-2.5">
                   <p className="text-[11px] font-black uppercase tracking-widest text-zinc-400">Forma de pagamento</p>
-                  <div className="grid grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-3 gap-1.5">
                     {METHODS.map(({ value, short, Icon, colors }) => (
                       <button
                         key={value}

@@ -56,6 +56,8 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string; Icon: React.Elemen
   { value: "CASH",        label: "Dinheiro", Icon: Banknote,    color: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
   { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard,  color: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" },
   { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard,  color: "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" },
+  { value: "IFOOD",       label: "iFood",    Icon: Smartphone,  color: "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100" },
+  { value: "COURTESY",    label: "Cortesia", Icon: Gift,        color: "border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100" },
 ];
 
 const PAYMENT_LABEL: Record<string, string> = {
@@ -476,7 +478,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 )}
 
                 {["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(order.status) &&
-                  !["NA_FILA", "PRONTO", "AGUARDANDO_CONFIRMACAO"].includes(order.status) && (
+                  !(isENTREGUE && (order.payment_status === "PENDING" || order.payment_status === "PARTIAL")) && (
                   <p className="py-4 text-center text-xs font-bold text-zinc-400">
                     Pedido finalizado
                   </p>
@@ -498,25 +500,18 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                     Alterar Forma de Pagamento
                   </h4>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {PAYMENT_METHODS.map(({ value, label, Icon, color }) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {PAYMENT_METHODS.filter(m => m.value !== "COURTESY").map(({ value, label, Icon, color }) => (
                     <button
                       key={value}
                       onClick={() => onChangeMethod(value)}
                       disabled={isLoading}
-                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 text-xs font-black transition-all active:scale-95 disabled:opacity-50 ${color} ${order.payment_method === value ? "ring-2 ring-offset-1 ring-current" : ""}`}
+                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 text-xs font-black transition-all active:scale-95 disabled:opacity-50 ${color} ${order.payment_method === value ? "ring-2 ring-offset-1 ring-current opacity-70" : ""}`}
                     >
                       <Icon size={18} /> {label}
                     </button>
                   ))}
                 </div>
-                <button
-                  onClick={() => onChangeMethod("IFOOD")}
-                  disabled={isLoading}
-                  className={`flex w-full items-center justify-center gap-2 h-12 rounded-2xl border-2 border-orange-200 bg-orange-50 text-orange-700 text-xs font-black hover:bg-orange-100 transition-all active:scale-95 disabled:opacity-50 ${order.payment_method === "IFOOD" ? "ring-2 ring-offset-1 ring-current opacity-70" : ""}`}
-                >
-                  <Smartphone size={15} /> IFOOD
-                </button>
               </div>
             )}
 
@@ -534,11 +529,11 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                     Forma de Pagamento
                   </h4>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {PAYMENT_METHODS.map(({ value, label, Icon, color }) => (
                     <button
                       key={value}
-                      onClick={() => onMarkPayment(value, "PAID")}
+                      onClick={() => onMarkPayment(value, value === "COURTESY" ? "COURTESY" : "PAID")}
                       disabled={isLoading}
                       className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 text-xs font-black transition-all active:scale-95 disabled:opacity-50 ${color}`}
                     >
@@ -546,20 +541,6 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                     </button>
                   ))}
                 </div>
-                <button
-                  onClick={() => onMarkPayment("IFOOD", "PAID")}
-                  disabled={isLoading}
-                  className="flex w-full items-center justify-center gap-2 h-12 rounded-2xl border-2 border-orange-200 bg-orange-50 text-orange-700 text-xs font-black hover:bg-orange-100 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <Smartphone size={15} /> IFOOD
-                </button>
-                <button
-                  onClick={() => onMarkPayment("COURTESY", "COURTESY")}
-                  disabled={isLoading}
-                  className="flex w-full items-center justify-center gap-2 h-12 rounded-2xl border-2 border-pink-200 bg-pink-50 text-pink-700 text-xs font-black hover:bg-pink-100 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <Gift size={15} /> CORTESIA
-                </button>
               </div>
             )}
 
