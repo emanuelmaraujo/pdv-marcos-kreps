@@ -288,6 +288,24 @@ export type AttendantCustomerProfileResponse = {
   };
 };
 
+export type PublicOrderLookupItem = {
+  public_token: string;
+  daily_number: number;
+  status: string;
+  payment_status: string;
+  total_amount: number;
+  created_at: string;
+  branch_name: string | null;
+  branch_code: string | null;
+  branch_slug: string | null;
+};
+
+export type PublicOrderLookupResponse = {
+  success: boolean;
+  error?: string;
+  orders: PublicOrderLookupItem[];
+};
+
 export type PublicBranch = {
   id: string;
   code: string;
@@ -407,6 +425,16 @@ export const pdvApi = {
   getPublicBranches: (): Promise<PublicBranchesResponse> =>
     invokeEdgeFunction<PublicBranchesResponse>('list-public-branches', {})
       .catch(() => ({ success: false, branches: [] })),
+
+  // Recupera pedidos ATIVOS recentes (≤4h) de um telefone — para o
+  // cliente que perdeu o link de acompanhamento.
+  lookupPublicOrdersByPhone: (phone: string): Promise<PublicOrderLookupResponse> =>
+    invokeEdgeFunction<PublicOrderLookupResponse>('lookup-orders-by-phone', { phone })
+      .catch((err) => ({
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao buscar pedidos.',
+        orders: [],
+      })),
 
   // Métricas públicas para social proof do /pedir (orders_today + mais vendidos).
   // Falha silenciosa: se o edge não responder, a UI cai num estado sem stats.
