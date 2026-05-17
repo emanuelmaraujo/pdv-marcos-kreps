@@ -116,6 +116,81 @@
 :root          { color-scheme: light; }
 [data-theme="dark"] { color-scheme: dark; }
 
+/* ─────────────────────────────────────────────────────────────────
+   Public context — /pedir (cliente final)
+   Identidade visual diferente do PDV interno: paleta quente
+   (bege + marrom) que transmite calor de creperia. Os tokens são
+   sobrescritos apenas dentro de [data-context="public"], então
+   componentes compartilhados se adaptam automaticamente.
+   ───────────────────────────────────────────────────────────────── */
+[data-context="public"] {
+  /* Brand mantém o mesmo vermelho — é a marca */
+  --brand:            #E73335;
+  --brand-hover:      #C62020;
+  --brand-dark:       #B91C1C;
+  --brand-light:      #FFF0F0;
+
+  /* Superfícies quentes */
+  --bg-base:          #FAF5EE;   /* bege quente da página */
+  --bg-surface:       #FFFFFF;   /* cards e modais */
+  --bg-subtle:        #F3EDE4;   /* fundos alternativos */
+  --bg-inverse:       #1E1008;   /* hero/dark — marrom quase preto */
+
+  /* Texto sobre fundo claro / quente */
+  --text-primary:     #1A0F0A;
+  --text-secondary:   #6B5B4E;
+  --text-muted:       #A89080;
+  --text-on-inverse:  #FFFFFF;
+
+  /* Bordas com matiz quente */
+  --border:           rgba(30, 16, 8, 0.08);
+  --border-strong:    rgba(30, 16, 8, 0.16);
+
+  /* Acento ámbar — usar com moderação (apenas valores totais e alertas positivos) */
+  --accent:           #F5A623;
+
+  /* Compat shadcn */
+  --background:           var(--bg-base);
+  --foreground:           var(--text-primary);
+  --card:                 var(--bg-surface);
+  --card-foreground:      var(--text-primary);
+  --muted:                var(--bg-subtle);
+  --muted-foreground:     var(--text-secondary);
+
+  /* Sombras com matiz quente para combinar com bege */
+  --shadow-sm:   0 1px 3px rgba(30, 16, 8, 0.08);
+  --shadow-md:   0 4px 12px rgba(30, 16, 8, 0.10);
+  --shadow-lg:   0 8px 24px rgba(30, 16, 8, 0.12);
+
+  /* Status ligeiramente ajustados para harmonia com bege */
+  --status-success-bg:  #ECFDF3;
+  --status-warning-bg:  #FEF6E4;
+  --status-danger-bg:   #FEF1F1;
+  --status-info-bg:     #EFF4FB;
+}
+
+[data-context="public"] body,
+body[data-context="public"] {
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* Tipografia do /pedir — Plus Jakarta Sans carregada via next/font no layout */
+[data-context="public"] {
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+}
+
+/* Shimmer mais quente que o skeleton padrão do PDV — combina com o bege */
+@keyframes shimmer-warm {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+[data-context="public"] .skeleton {
+  background: linear-gradient(90deg, #EDE8E0 25%, #F5F0E8 50%, #EDE8E0 75%);
+  background-size: 200% 100%;
+  animation: shimmer-warm 1.5s ease-in-out infinite;
+}
+
 @theme inline {
   /* Cores semânticas expostas ao Tailwind */
   --color-background:        var(--background);
