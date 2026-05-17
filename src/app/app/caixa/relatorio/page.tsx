@@ -50,6 +50,7 @@ import { LoadingState } from "@/components/feedback/LoadingState";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { PaymentMethod } from "@/types/pdv";
+import { getBusinessDayRange } from "@/lib/utils/business-day";
 import { useBranch } from "@/contexts/BranchContext";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -98,13 +99,22 @@ const PERIOD_LABELS: Record<Period, string> = {
 
 function computeDates(period: Period): { start: Date; end: Date } {
   const now = new Date();
+  // "Hoje" e "Ontem" usam o mesmo dia comercial do caixa (03h–02:59h Brasília)
+  // para que ambas as telas mostrem os mesmos pedidos.
+  if (period === "today") {
+    const bd = getBusinessDayRange(now);
+    return { start: bd.start, end: bd.end };
+  }
+  if (period === "yesterday") {
+    // Dia comercial anterior = start do dia de hoje - 24h
+    const todayBd = getBusinessDayRange(now);
+    const yesterdayStart = new Date(todayBd.start.getTime() - 24 * 60 * 60 * 1000);
+    return { start: yesterdayStart, end: todayBd.start };
+  }
+
   const start = new Date();
   const end = new Date();
   switch (period) {
-    case "yesterday":
-      start.setDate(now.getDate() - 1); start.setHours(0, 0, 0, 0);
-      end.setDate(now.getDate() - 1);   end.setHours(23, 59, 59, 999);
-      break;
     case "last7":
       start.setDate(now.getDate() - 7); start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
@@ -117,7 +127,7 @@ function computeDates(period: Period): { start: Date; end: Date } {
       start.setDate(1); start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
       break;
-    default: // today
+    default:
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
   }
@@ -129,10 +139,14 @@ function computePrevDates(period: Period): { start: Date; end: Date } {
   const start = new Date();
   const end = new Date();
   switch (period) {
-    case "today":
-      start.setDate(now.getDate() - 1); start.setHours(0, 0, 0, 0);
-      end.setDate(now.getDate() - 1);   end.setHours(23, 59, 59, 999);
+    case "today": {
+      // Período anterior = dia comercial de ontem
+      const todayBd = getBusinessDayRange(now);
+      const ystStart = new Date(todayBd.start.getTime() - 24 * 60 * 60 * 1000);
+      start.setTime(ystStart.getTime());
+      end.setTime(todayBd.start.getTime());
       break;
+    }
     case "yesterday":
       start.setDate(now.getDate() - 2); start.setHours(0, 0, 0, 0);
       end.setDate(now.getDate() - 2);   end.setHours(23, 59, 59, 999);
