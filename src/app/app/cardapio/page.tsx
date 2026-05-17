@@ -278,7 +278,7 @@ export default function CardapioPage() {
   // ─── Loading ─────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex flex-col h-full bg-background">
+      <div className="flex flex-col h-full bg-[var(--bg-base)]">
         <div className="flex min-h-[50vh] flex-1 items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-brand-red" />
         </div>
@@ -289,17 +289,17 @@ export default function CardapioPage() {
   // ─── Error ───────────────────────────────────────────
   if (error) {
     return (
-      <div className="flex flex-col h-full bg-background">
+      <div className="flex flex-col h-full bg-[var(--bg-base)]">
         <div className="p-4 md:p-6">
-          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+          <div className="bg-[var(--status-danger-bg)] border border-[var(--status-danger)]/30 text-[var(--status-danger)] p-4 rounded-xl flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" strokeWidth={1.75} />
             <p className="text-sm font-medium">{error}</p>
           </div>
           <button
             onClick={loadMenu}
-            className="mt-4 w-full py-3 bg-white border border-zinc-200 rounded-xl font-medium text-zinc-700 hover:bg-zinc-50 active:scale-[0.97] transition-transform"
+            className="mt-4 w-full py-3 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-[0.97]"
           >
-            Tentar Novamente
+            Tentar novamente
           </button>
         </div>
       </div>
@@ -314,13 +314,13 @@ export default function CardapioPage() {
 
   // ─── Render ──────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden">
+    <div className="flex flex-col h-full bg-[var(--bg-base)] overflow-hidden">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* Role Banner */}
       {!isAdmin && (
-        <div className="flex items-start gap-2 border-b border-amber-100 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800 md:px-6">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2 border-b border-[var(--border)] bg-[var(--status-warning-bg)] px-4 py-3 text-xs font-medium text-[var(--status-warning)] md:px-6">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={1.75} />
           <span>
             Seu perfil permite visualizar apenas itens disponíveis. Alterações no
             cardápio são restritas ao administrador.
@@ -330,88 +330,75 @@ export default function CardapioPage() {
 
       {/* ADMIN Action Buttons */}
       {isAdmin && (
-        <div className="flex gap-2 overflow-x-auto border-b border-zinc-100 bg-white px-4 py-3 md:flex-wrap md:px-6 hide-scrollbar">
+        <div className="flex gap-2 overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 md:flex-wrap md:px-6 hide-scrollbar">
           <button
             onClick={() => {
               setSelectedProduct(null);
               setIsProductModalOpen(true);
             }}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-brand-red text-white rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-brand-red text-white rounded-xl text-xs font-semibold shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-95"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Novo Produto
+            <Plus className="w-3.5 h-3.5" strokeWidth={2} />
+            Novo produto
           </button>
           <button
             onClick={() => {
               setSelectedAddon(null);
               setIsAddonModalOpen(true);
             }}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-brand-charcoal text-white rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] rounded-xl text-xs font-semibold hover:bg-[var(--bg-subtle)] active:scale-95"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Novo Adicional
+            <Plus className="w-3.5 h-3.5" strokeWidth={2} />
+            Novo adicional
           </button>
           <button
             onClick={() => {
               setSelectedCategory(null);
               setIsCategoryModalOpen(true);
             }}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-zinc-100 text-zinc-700 rounded-lg text-xs font-bold border border-zinc-200 active:scale-95 transition-all"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] rounded-xl text-xs font-semibold hover:bg-[var(--bg-subtle)] active:scale-95"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Nova Categoria
+            <Plus className="w-3.5 h-3.5" strokeWidth={2} />
+            Nova categoria
           </button>
         </div>
       )}
 
       {/* Main Tabs */}
-      <div className="sticky top-14 z-20 border-b border-zinc-200 bg-white">
-        <div className="m-3 flex rounded-xl bg-zinc-100 p-1 md:mx-6 md:max-w-xl">
-          <button
-            onClick={() => setMainTab("products")}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-              mainTab === "products"
-                ? "bg-white text-brand-charcoal shadow-sm"
-                : "text-zinc-500"
-            }`}
-          >
-            Produtos
-          </button>
-          <button
-            onClick={() => setMainTab("addons")}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-              mainTab === "addons"
-                ? "bg-white text-brand-charcoal shadow-sm"
-                : "text-zinc-500"
-            }`}
-          >
-            Adicionais
-          </button>
-          <button
-            onClick={() => setMainTab("categories")}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-              mainTab === "categories"
-                ? "bg-white text-brand-charcoal shadow-sm"
-                : "text-zinc-500"
-            }`}
-          >
-            Categorias
-          </button>
+      <div className="sticky top-14 z-20 border-b border-[var(--border)] bg-[var(--bg-surface)]">
+        <div className="m-3 flex rounded-full bg-[var(--bg-subtle)] p-1 md:mx-6 md:max-w-xl">
+          {(["products", "addons", "categories"] as const).map((tab) => {
+            const labels = { products: "Produtos", addons: "Adicionais", categories: "Categorias" };
+            const active = mainTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setMainTab(tab)}
+                className={`flex-1 py-2 text-xs font-semibold rounded-full ${
+                  active
+                    ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {labels[tab]}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Sub-Tabs (only for products) */}
       {mainTab === "products" && (
-        <div className="overflow-x-auto border-b border-zinc-200 bg-white hide-scrollbar">
+        <div className="overflow-x-auto border-b border-[var(--border)] bg-[var(--bg-surface)] hide-scrollbar">
           <div className="flex min-w-max gap-2 px-4 py-3 md:px-6">
             {menuData.categories.map((category) => (
               <button
                 key={category.id}
                 onClick={() => setActiveCategory(category.id)}
-                className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all border ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold ${
                   activeCategory === category.id
-                    ? "bg-brand-charcoal text-white border-brand-charcoal shadow-sm"
-                    : "bg-white text-zinc-500 border-zinc-200 hover:bg-zinc-50"
+                    ? "bg-brand-charcoal text-white"
+                    : "bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 {category.name}
@@ -683,10 +670,10 @@ function ProductList({
         return (
           <div
             key={product.id}
-            className={`bg-white border rounded-2xl p-4 transition-all ${
+            className={`bg-[var(--bg-surface)] border rounded-2xl p-4 ${
               isInactive
-                ? "border-red-200 bg-red-50/60"
-                : "border-zinc-200 hover:border-zinc-300"
+                ? "border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)]/40"
+                : "border-[var(--border)] hover:border-[var(--border-strong)]"
             } ${isSaving ? "opacity-70 pointer-events-none" : ""}`}
           >
             {/* Top row */}
@@ -697,70 +684,59 @@ function ProductList({
                   <InlineInput
                     value={editing!.value}
                     onChange={onEditChange}
-                    onSave={() =>
-                      onSaveField(product, "name", editing!.value)
-                    }
+                    onSave={() => onSaveField(product, "name", editing!.value)}
                     onCancel={onCancelEdit}
-                    className="text-lg font-bold"
+                    className="text-lg font-semibold"
                   />
                 ) : (
                   <div className="flex items-center gap-1.5 group">
                     <h3
-                      className={`font-bold text-sm leading-snug ${
+                      className={`font-semibold text-sm leading-snug ${
                         isInactive
-                          ? "text-zinc-400 line-through decoration-zinc-300"
-                          : "text-brand-charcoal"
+                          ? "text-[var(--text-muted)] line-through"
+                          : "text-[var(--text-primary)]"
                       }`}
                     >
                       {product.name}
                     </h3>
                     {isAdmin && (
                       <button
-                        onClick={() =>
-                          onStartEdit(product.id, "name", product.name)
-                        }
-                        className="p-1 rounded-md text-zinc-300 hover:text-zinc-600 hover:bg-zinc-100 opacity-0 group-hover:opacity-100 transition-all"
+                        onClick={() => onStartEdit(product.id, "name", product.name)}
+                        className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] opacity-0 group-hover:opacity-100"
                         title="Editar nome"
                       >
-                        <Pencil className="w-3.5 h-3.5" />
+                        <Pencil className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
                     )}
                   </div>
                 )}
 
-                {/* Price */}
+                {/* Price — brand-red per brief, R$ menor */}
                 {isEditingPrice ? (
                   <div className="mt-1">
                     <InlineInput
                       value={editing!.value}
                       onChange={onEditChange}
-                      onSave={() =>
-                        onSaveField(product, "price", editing!.value)
-                      }
+                      onSave={() => onSaveField(product, "price", editing!.value)}
                       onCancel={onCancelEdit}
                       prefix="R$"
                       inputMode="decimal"
-                      className="text-base font-semibold text-amber-600"
+                      className="text-base font-semibold text-brand-red"
                     />
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 mt-1 group">
-                    <p className="text-amber-600 font-semibold">
-                      R$ {product.price.toFixed(2)}
+                    <p className="text-brand-red font-semibold text-base tabular-nums">
+                      <span className="text-xs mr-0.5 opacity-70 font-medium">R$</span>
+                      {product.price.toFixed(2).replace(".", ",")}
                     </p>
                     {isAdmin && (
                       <button
-                        onClick={() =>
-                          onStartEdit(
-                            product.id,
-                            "price",
-                            product.price.toFixed(2)
-                          )
-                        }
-                        className="p-1 rounded-md text-zinc-300 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
+                        onClick={() => onStartEdit(product.id, "price", product.price.toFixed(2))}
+                        className="p-1 rounded-md text-[var(--text-muted)] hover:text-brand-red hover:bg-[var(--status-danger-bg)] opacity-0 group-hover:opacity-100"
                         title="Editar preço"
                       >
-                        <Pencil className="w-3.5 h-3.5" />
+                        <Pencil className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
                     )}
                   </div>
@@ -768,12 +744,12 @@ function ProductList({
 
                 {/* Sector + Status badges */}
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <span className="text-[11px] px-2 py-0.5 bg-zinc-100 text-zinc-500 rounded-md font-medium">
+                  <span className="text-[11px] px-2 py-0.5 bg-[var(--bg-subtle)] text-[var(--text-secondary)] rounded-full font-medium">
                     {sectorLabel(product.sector)}
                   </span>
                   {isInactive && (
-                    <span className="text-[11px] px-2 py-0.5 bg-red-100 text-red-700 rounded-md font-bold flex items-center gap-1">
-                      <PackageX className="w-3 h-3" />
+                    <span className="text-[11px] px-2 py-0.5 bg-[var(--status-danger-bg)] text-[var(--status-danger)] rounded-full font-semibold flex items-center gap-1">
+                      <PackageX className="w-3 h-3" strokeWidth={1.75} />
                       Indisponível
                     </span>
                   )}
@@ -782,71 +758,65 @@ function ProductList({
 
               {/* Management buttons */}
               {isAdmin && (
-                <div className="flex gap-2">
-                  <div className="flex flex-col gap-2">
-                    <button
-                      onClick={() => onEditProduct(product)}
-                      className="p-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 active:scale-90 transition-all"
-                      title="Editar detalhes"
-                    >
-                      <Settings2 className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => onToggle(product)}
-                      disabled={isSaving}
-                      className={`p-2.5 rounded-xl border flex items-center justify-center transition-all active:scale-90 ${
-                        isSaving ? "opacity-50 cursor-not-allowed" : ""
-                      } ${
-                        product.active
-                          ? "bg-white border-zinc-200 text-red-500 hover:bg-red-50 hover:border-red-200"
-                          : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-                      }`}
-                      title={
-                        product.active
-                          ? "Marcar como indisponível"
-                          : "Marcar como disponível"
-                      }
-                    >
-                      {isSaving ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : product.active ? (
-                        <PackageX className="w-5 h-5" />
-                      ) : (
-                        <CheckCircle2 className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => onEditProduct(product)}
+                    className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-90"
+                    title="Editar detalhes"
+                  >
+                    <Settings2 className="w-5 h-5" strokeWidth={1.75} />
+                  </button>
+                  <button
+                    onClick={() => onToggle(product)}
+                    disabled={isSaving}
+                    className={`p-2.5 rounded-xl border flex items-center justify-center active:scale-90 ${
+                      isSaving ? "opacity-50 cursor-not-allowed" : ""
+                    } ${
+                      product.active
+                        ? "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)]"
+                        : "border-[var(--status-success)]/30 bg-[var(--status-success-bg)] text-[var(--status-success)] hover:opacity-90"
+                    }`}
+                    title={product.active ? "Marcar como indisponível" : "Marcar como disponível"}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : product.active ? (
+                      <PackageX className="w-5 h-5" strokeWidth={1.75} />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5" strokeWidth={1.75} />
+                    )}
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Bottom configuration row */}
+            {/* Bottom configuration row — outline compacto per brief */}
             {isAdmin && (
               <div className="mt-3 flex gap-2 overflow-x-auto hide-scrollbar">
                 <button
                   onClick={() => onConfigureAddons(product)}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 text-zinc-600 rounded-lg text-[10px] font-bold border border-zinc-200 hover:bg-zinc-200 transition-all"
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] rounded-full text-xs font-semibold hover:bg-[var(--bg-subtle)]"
                 >
-                  <PlusCircle className="w-3 h-3" />
-                  Vincular Adicionais
+                  <PlusCircle className="w-3 h-3" strokeWidth={1.75} />
+                  Vincular adicionais
                 </button>
                 <button
                   onClick={() => onConfigureIngredients(product)}
-                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 text-zinc-600 rounded-lg text-[10px] font-bold border border-zinc-200 hover:bg-zinc-200 transition-all"
+                  className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] rounded-full text-xs font-semibold hover:bg-[var(--bg-subtle)]"
                 >
-                  <PlusCircle className="w-3 h-3" />
-                  Gerenciar Ingredientes
+                  <PlusCircle className="w-3 h-3" strokeWidth={1.75} />
+                  Gerenciar ingredientes
                 </button>
               </div>
             )}
 
             {/* Ingredients */}
             {myIngredientNames.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-zinc-100">
-                <p className="text-[10px] font-bold text-zinc-400 mb-1 uppercase tracking-wider">
+              <div className="mt-3 pt-3 border-t border-[var(--border)]">
+                <p className="text-[11px] font-medium text-[var(--text-muted)] mb-1">
                   Ingredientes
                 </p>
-                <p className="text-sm text-zinc-500 leading-snug">
+                <p className="text-sm text-[var(--text-secondary)] leading-snug">
                   {myIngredientNames.join(", ")}
                 </p>
               </div>

@@ -5,46 +5,47 @@ interface Props {
   className?: string;
 }
 
-export function OrderStatusBadge({ status, className = "" }: Props) {
-  const map: Record<OrderStatus, { label: string; classes: string }> = {
-    AGUARDANDO_CONFIRMACAO: { 
-      label: "Aguardando", 
-      classes: "bg-blue-50 text-blue-600 border-blue-100" 
-    },
-    AGUARDANDO_PAGAMENTO: { 
-      label: "Aguardando pgto", 
-      classes: "bg-brand-amber/10 text-brand-amber border-brand-amber/20" 
-    },
-    NA_FILA: {
-      label: "Na Fila",
-      classes: "bg-brand-red/10 text-brand-red border-brand-red/20"
-    },
-    PRONTO_PARCIAL: {
-      label: "Pronto Parcial",
-      classes: "bg-amber-100 text-amber-700 border-amber-300"
-    },
-    PRONTO: {
-      label: "Pronto",
-      classes: "bg-emerald-50 text-emerald-600 border-emerald-100"
-    },
-    ENTREGUE: { 
-      label: "Entregue", 
-      classes: "bg-zinc-100 text-zinc-500 border-zinc-200" 
-    },
-    CANCELADO: { 
-      label: "Cancelado", 
-      classes: "bg-red-50 text-red-500 border-red-100" 
-    },
-    EXPIRADO: { 
-      label: "Expirado", 
-      classes: "bg-zinc-100 text-zinc-400 border-zinc-200" 
-    },
-  };
+const MAP: Record<OrderStatus, { label: string; classes: string }> = {
+  AGUARDANDO_CONFIRMACAO: {
+    label: "Aguardando",
+    classes: "bg-[var(--status-warning-bg)] text-[var(--status-warning)]",
+  },
+  AGUARDANDO_PAGAMENTO: {
+    label: "Aguardando pgto",
+    classes: "bg-[var(--status-warning-bg)] text-[var(--status-warning)]",
+  },
+  NA_FILA: {
+    label: "Na fila",
+    classes: "bg-[var(--status-info-bg)] text-[var(--status-info)]",
+  },
+  PRONTO_PARCIAL: {
+    label: "Pronto parcial",
+    classes: "bg-[var(--status-warning-bg)] text-[var(--status-warning)]",
+  },
+  PRONTO: {
+    label: "Pronto",
+    classes: "bg-[var(--status-success-bg)] text-[var(--status-success)]",
+  },
+  ENTREGUE: {
+    label: "Entregue",
+    classes: "bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]",
+  },
+  CANCELADO: {
+    label: "Cancelado",
+    classes: "bg-[var(--status-danger-bg)] text-[var(--status-danger)]",
+  },
+  EXPIRADO: {
+    label: "Expirado",
+    classes: "bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]",
+  },
+};
 
-  const config = map[status] || { label: status, classes: "bg-zinc-100 text-zinc-500 border-zinc-200" };
-  
+export function OrderStatusBadge({ status, className = "" }: Props) {
+  const config = MAP[status] ?? MAP.EXPIRADO;
   return (
-    <span className={`px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-wider inline-flex items-center justify-center ${config.classes} ${className}`}>
+    <span
+      className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${config.classes} ${className}`}
+    >
       {config.label}
     </span>
   );

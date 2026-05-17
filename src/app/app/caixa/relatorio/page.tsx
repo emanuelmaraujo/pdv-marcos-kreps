@@ -319,7 +319,7 @@ export default function RelatorioPage() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-zinc-50">
+    <div className="flex h-full flex-col bg-[var(--bg-base)]">
       {/* ── Control panel ── */}
       <ControlPanel
         period={period}
@@ -376,26 +376,27 @@ function ControlPanel({
     onFilterChange({ ...filters, category_id: "ALL", payment_method: "ALL" });
 
   return (
-    <div className="border-b border-zinc-200 bg-white">
+    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)]">
       {/* Row 1: navigation + refresh */}
       <div className="flex items-center gap-3 px-4 py-3 md:px-6">
         <button
           onClick={onBack}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 text-zinc-500 transition-colors hover:bg-zinc-50 active:scale-95"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-95"
+          aria-label="Voltar"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
         </button>
 
         {/* Period pills */}
-        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto hide-scrollbar rounded-xl border border-zinc-100 bg-zinc-50 p-1">
+        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto hide-scrollbar rounded-full bg-[var(--bg-subtle)] p-1">
           {(["today", "yesterday", "last7", "last30", "thisMonth"] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => onPeriodChange(p)}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-black transition-all ${
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
                 period === p
-                  ? "bg-brand-charcoal text-white shadow-sm"
-                  : "text-zinc-500 hover:text-zinc-700"
+                  ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               }`}
             >
               {PERIOD_LABELS[p]}
@@ -406,19 +407,19 @@ function ControlPanel({
         <button
           onClick={onRefresh}
           disabled={isLoading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 disabled:opacity-40 active:scale-95"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] disabled:opacity-40 active:scale-95"
           title="Atualizar"
         >
           {isLoading
             ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <RefreshCw className="h-4 w-4" />}
+            : <RefreshCw className="h-4 w-4" strokeWidth={1.75} />}
         </button>
       </div>
 
       {/* Row 2: secondary filters */}
-      <div className="flex items-center gap-2 overflow-x-auto border-t border-zinc-100 px-4 pb-3 pt-2 hide-scrollbar md:px-6">
-        <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400">
-          <Filter className="h-3 w-3" /> Filtros
+      <div className="flex items-center gap-2 overflow-x-auto border-t border-[var(--border)] px-4 pb-3 pt-2 hide-scrollbar md:px-6">
+        <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)]">
+          <Filter className="h-3 w-3" strokeWidth={1.75} /> Filtros
         </span>
 
         {/* Category filter */}
@@ -448,9 +449,9 @@ function ControlPanel({
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
-            className="shrink-0 inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] font-black text-red-600 transition-colors hover:bg-red-100"
+            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-[var(--status-danger-bg)] px-2.5 py-1.5 text-xs font-semibold text-[var(--status-danger)] hover:opacity-90"
           >
-            <XCircle className="h-3 w-3" />
+            <XCircle className="h-3 w-3" strokeWidth={1.75} />
             Limpar
           </button>
         )}
@@ -492,7 +493,7 @@ function FilterChip({
 
 function SectionNav({ active, onChange }: { active: Section; onChange: (s: Section) => void }) {
   return (
-    <div className="border-b border-zinc-200 bg-white">
+    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)]">
       <div className="flex overflow-x-auto hide-scrollbar">
         {SECTIONS.map((s) => {
           const Icon = s.icon;
@@ -501,15 +502,15 @@ function SectionNav({ active, onChange }: { active: Section; onChange: (s: Secti
             <button
               key={s.id}
               onClick={() => onChange(s.id)}
-              className={`relative inline-flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-bold transition-colors md:px-5 ${
-                isActive ? "text-brand-charcoal" : "text-zinc-400 hover:text-zinc-600"
+              className={`relative inline-flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-semibold md:px-5 ${
+                isActive ? "text-[var(--text-primary)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4" strokeWidth={isActive ? 2 : 1.75} />
               <span className="hidden sm:inline">{s.label}</span>
               <span className="sm:hidden">{s.short}</span>
               {isActive && (
-                <span className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-brand-charcoal" />
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-red" />
               )}
             </button>
           );

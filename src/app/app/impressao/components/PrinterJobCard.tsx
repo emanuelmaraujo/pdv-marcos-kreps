@@ -25,10 +25,12 @@ const SECTOR_LABEL: Record<PrinterJob["sector"], string> = {
   CUSTOMER:    "Cliente",
 };
 
+/* Cores do badge por setor — mantidas como identidade do setor (não status).
+   Kreps = brand red (a marca), Cozinha = info, Cliente = neutral. */
 const SECTOR_COLOR: Record<PrinterJob["sector"], string> = {
   KITCHEN:     "bg-brand-red/10 text-brand-red",
-  JUICE_POTATO:"bg-violet-100 text-violet-700",
-  CUSTOMER:    "bg-blue-100 text-blue-700",
+  JUICE_POTATO:"bg-[var(--status-info-bg)] text-[var(--status-info)]",
+  CUSTOMER:    "bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]",
 };
 
 function fmt(date?: string) {
@@ -59,87 +61,84 @@ export function PrinterJobCard({ job, onJobUpdated }: Props) {
   const isPrinted = job.status === "PRINTED";
 
   const cardBg = isFailed
-    ? "bg-red-50 border-red-200"
+    ? "bg-[var(--status-danger-bg)] border-[var(--status-danger)]/30"
     : isPending
-    ? "bg-amber-50/60 border-amber-200"
-    : "bg-white border-zinc-200";
+    ? "bg-[var(--status-warning-bg)]/60 border-[var(--status-warning)]/30"
+    : "bg-[var(--bg-surface)] border-[var(--border)]";
 
   return (
-    <div className={`overflow-hidden rounded-2xl border shadow-sm ${cardBg}`}>
+    <div className={`overflow-hidden rounded-2xl border shadow-[var(--shadow-sm)] ${cardBg}`}>
       {/* ── Header row ─────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-4 py-3">
-        {/* Status icon */}
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-          isFailed  ? "bg-red-100 text-red-600"
-          : isPending ? "bg-amber-100 text-amber-700"
-          : "bg-emerald-100 text-emerald-700"
+          isFailed  ? "bg-[var(--status-danger)]/15 text-[var(--status-danger)]"
+          : isPending ? "bg-[var(--status-warning)]/15 text-[var(--status-warning)]"
+          : "bg-[var(--status-success)]/15 text-[var(--status-success)]"
         }`}>
-          {isFailed  ? <AlertTriangle className="h-4 w-4" />
-          : isPrinted ? <CheckCircle2 className="h-4 w-4" />
-          : <Printer className="h-4 w-4" />}
+          {isFailed  ? <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
+          : isPrinted ? <CheckCircle2 className="h-4 w-4" strokeWidth={1.75} />
+          : <Printer className="h-4 w-4" strokeWidth={1.75} />}
         </span>
 
-        {/* Order info */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-black text-zinc-900">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-base font-semibold text-[var(--text-primary)] tabular-nums">
               #{job.order?.daily_number ?? "--"}
             </span>
             <PrintStatusBadge status={job.status} />
-            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${SECTOR_COLOR[job.sector]}`}>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${SECTOR_COLOR[job.sector]}`}>
               {SECTOR_LABEL[job.sector]}
             </span>
           </div>
-          <div className="mt-0.5 flex items-center gap-3 text-[11px] text-zinc-500">
+          <div className="mt-0.5 flex items-center gap-3 text-[11px] text-[var(--text-muted)]">
             <span className="flex items-center gap-1">
-              <User className="h-3 w-3" />
+              <User className="h-3 w-3" strokeWidth={1.75} />
               {job.order?.customer_name || "Sem identificação"}
             </span>
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
+            <span className="flex items-center gap-1 tabular-nums">
+              <Clock className="h-3 w-3" strokeWidth={1.75} />
               {fmt(isPrinted ? (job.printed_at || job.created_at) : job.created_at)}
             </span>
           </div>
         </div>
 
-        {/* Value */}
-        <span className="shrink-0 text-sm font-black text-zinc-700">
+        <span className="shrink-0 text-sm font-semibold text-[var(--text-primary)] tabular-nums">
           {currency.format(job.order?.total_amount || 0)}
         </span>
       </div>
 
       {/* ── Error message ───────────────────────────────────────── */}
       {isFailed && job.error_message && (
-        <div className="mx-4 mb-3 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700">
+        <div className="mx-4 mb-3 rounded-xl border border-[var(--status-danger)]/30 bg-[var(--bg-surface)] px-3 py-2 text-xs font-medium text-[var(--status-danger)]">
           {job.error_message}
         </div>
       )}
 
       {/* ── Feedback ────────────────────────────────────────────── */}
       {feedback && (
-        <div className={`mx-4 mb-3 rounded-xl px-3 py-2 text-xs font-bold ${
+        <div className={`mx-4 mb-3 rounded-xl px-3 py-2 text-xs font-semibold ${
           feedback.toLowerCase().includes("erro")
-            ? "bg-red-100 text-red-700"
-            : "bg-emerald-100 text-emerald-700"
+            ? "bg-[var(--status-danger-bg)] text-[var(--status-danger)]"
+            : "bg-[var(--status-success-bg)] text-[var(--status-success)]"
         }`}>
           {feedback}
         </div>
       )}
 
       {/* ── Action bar ─────────────────────────────────────────── */}
-      <div className="border-t border-zinc-100 px-4 py-2.5">
+      <div className="border-t border-[var(--border)] px-4 py-2.5">
         <button
           onClick={handleReprint}
           disabled={isReprinting}
-          className={`flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-black transition-all active:scale-[0.98] disabled:opacity-50 ${
+          className={`flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold active:scale-[0.98] disabled:opacity-50 ${
             isFailed
-              ? "bg-red-600 text-white hover:bg-red-700"
-              : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+              ? "bg-[var(--status-danger)] text-white hover:opacity-90"
+              : "border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
           }`}
         >
           {isReprinting
             ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : <Copy className="h-3.5 w-3.5" />}
+            : <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />}
           {isReprinting ? "Solicitando..." : "Reimprimir"}
         </button>
       </div>

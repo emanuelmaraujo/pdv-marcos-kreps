@@ -81,6 +81,13 @@ serve(async (req) => {
           throw new Error('Campos obrigatórios ausentes (email, senha, nome, perfil).');
         }
 
+        const ALLOWED_EMAIL_DOMAIN = 'marcoskreps.com.br';
+        const isLocalSupabase = /localhost|127\.0\.0\.1/.test(supabaseUrl);
+        const emailOk = String(email).trim().toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`);
+        if (!isLocalSupabase && !emailOk) {
+          throw new Error(`Apenas e-mails @${ALLOWED_EMAIL_DOMAIN} podem ser cadastrados.`);
+        }
+
         const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email,
           password,

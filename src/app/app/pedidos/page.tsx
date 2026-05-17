@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
 import { pdvApi } from "@/lib/api/pdv-api";
@@ -11,6 +12,7 @@ import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
 import { OrderDetailsModal } from "./components/OrderDetailsModal";
 import {
+  ClipboardList,
   Clock,
   CreditCard,
   PackageCheck,
@@ -62,40 +64,40 @@ const KANBAN_COLUMNS: KanbanColumnConfig[] = [
   {
     status: "AGUARDANDO_CONFIRMACAO",
     label: "Aguardando",
-    topColor: "bg-blue-500",
-    headerBg: "bg-blue-50 border-blue-100",
+    topColor: "bg-[var(--status-warning)]",
+    headerBg: "bg-[var(--status-warning-bg)] border-transparent",
     emptyText: "Sem pedidos aguardando",
     showAvgWait: true,
   },
   {
     status: "NA_FILA",
-    label: "Na Fila",
-    topColor: "bg-brand-red",
-    headerBg: "bg-red-50 border-red-100",
+    label: "Na fila",
+    topColor: "bg-[var(--status-info)]",
+    headerBg: "bg-[var(--status-info-bg)] border-transparent",
     emptyText: "Fila vazia",
     showAvgWait: true,
   },
   {
     status: "PRONTO_PARCIAL",
-    label: "Pronto Parcial",
-    topColor: "bg-amber-500",
-    headerBg: "bg-amber-50 border-amber-200",
+    label: "Pronto parcial",
+    topColor: "bg-[var(--status-warning)]",
+    headerBg: "bg-[var(--status-warning-bg)] border-transparent",
     emptyText: "Sem pedidos parciais",
     showAvgWait: true,
   },
   {
     status: "PRONTO",
     label: "Prontos",
-    topColor: "bg-brand-amber",
-    headerBg: "bg-amber-50 border-amber-100",
+    topColor: "bg-[var(--status-success)]",
+    headerBg: "bg-[var(--status-success-bg)] border-transparent",
     emptyText: "Nenhum pedido pronto",
     showAvgWait: true,
   },
   {
     status: "ENTREGUE",
     label: "Entregues",
-    topColor: "bg-emerald-500",
-    headerBg: "bg-emerald-50 border-emerald-100",
+    topColor: "bg-[var(--status-neutral)]",
+    headerBg: "bg-[var(--status-neutral-bg)] border-transparent",
     emptyText: "Nenhum entregue ainda",
     showAvgWait: false,
   },
@@ -104,8 +106,8 @@ const KANBAN_COLUMNS: KanbanColumnConfig[] = [
 const CANCELLED_COLUMN: KanbanColumnConfig = {
   status: "CANCELADO",
   label: "Cancelados",
-  topColor: "bg-zinc-400",
-  headerBg: "bg-zinc-100 border-zinc-200",
+  topColor: "bg-[var(--status-danger)]",
+  headerBg: "bg-[var(--status-danger-bg)] border-transparent",
   emptyText: "Nenhum cancelado",
   showAvgWait: false,
 };
@@ -145,24 +147,25 @@ function getAvgWaitMinutes(orders: Order[], now: number): number | null {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function QuickMetric({
-  icon: Icon, label, value, detail, tone = "zinc",
+  icon: Icon, label, value, detail, tone = "neutral",
 }: {
-  icon: LucideIcon; label: string; value: string | number; detail: string; tone?: "zinc" | "red" | "emerald" | "blue";
+  icon: LucideIcon; label: string; value: string | number; detail: string;
+  tone?: "neutral" | "brand" | "success" | "info";
 }) {
   const toneClass = {
-    zinc:    "bg-zinc-50 text-zinc-700",
-    red:     "bg-red-50 text-brand-red",
-    emerald: "bg-emerald-50 text-emerald-700",
-    blue:    "bg-blue-50 text-blue-700",
+    neutral: "bg-[var(--bg-subtle)] text-[var(--text-primary)]",
+    brand:   "bg-[var(--status-danger-bg)] text-brand-red",
+    success: "bg-[var(--status-success-bg)] text-[var(--status-success)]",
+    info:    "bg-[var(--status-info-bg)] text-[var(--status-info)]",
   };
   return (
     <div className={`flex h-11 min-w-0 items-center gap-2 rounded-xl px-3 ${toneClass[tone]}`}>
-      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
       <div className="min-w-0 leading-tight">
-        <p className="truncate text-[9px] font-black uppercase tracking-wide opacity-70">{label}</p>
-        <p className="truncate text-sm font-black">
+        <p className="truncate text-[10px] font-medium opacity-70">{label}</p>
+        <p className="truncate text-sm font-semibold">
           {value}
-          <span className="ml-1 text-[9px] font-bold opacity-60">{detail}</span>
+          <span className="ml-1 text-[10px] font-medium opacity-60">{detail}</span>
         </p>
       </div>
     </div>
@@ -173,13 +176,17 @@ function OrderTab({ active, label, count, onClick }: { active: boolean; label: s
   return (
     <button
       onClick={onClick}
-      className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 text-[11px] font-black uppercase tracking-wide transition-all ${
-        active ? "bg-brand-red text-white shadow-sm" : "text-zinc-500 hover:bg-white hover:text-zinc-700"
+      className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-xs font-semibold ${
+        active
+          ? "bg-brand-red text-white shadow-[var(--shadow-sm)]"
+          : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]"
       }`}
     >
       <span>{label}</span>
       {count !== undefined && (
-        <span className={`rounded-md px-1.5 py-0.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-white text-zinc-500"}`}>
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+          active ? "bg-white/20 text-white" : "bg-[var(--bg-surface)] text-[var(--text-muted)]"
+        }`}>
           {count}
         </span>
       )}
@@ -189,9 +196,12 @@ function OrderTab({ active, label, count, onClick }: { active: boolean; label: s
 
 function AvgWaitBadge({ minutes }: { minutes: number | null }) {
   if (minutes === null) return null;
-  const color = minutes >= 20 ? "text-red-600" : minutes >= 10 ? "text-amber-600" : "text-emerald-600";
+  const color =
+    minutes >= 20 ? "text-[var(--status-danger)]"
+    : minutes >= 10 ? "text-[var(--status-warning)]"
+    : "text-[var(--status-success)]";
   return (
-    <span className={`flex items-center gap-1 text-[10px] font-black ${color}`}>
+    <span className={`flex items-center gap-1 text-[10px] font-semibold ${color}`}>
       <Clock className="h-3 w-3" />
       ~{minutes}min
     </span>
@@ -220,16 +230,16 @@ function KanbanColumn({
   const avgWait = config.showAvgWait ? getAvgWaitMinutes(filtered, now) : null;
 
   return (
-    <div className="flex min-w-[260px] max-w-[320px] flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100/60">
-      {/* Column header */}
-      <div className={`shrink-0 border-b px-3 py-2.5 ${config.headerBg}`}>
-        <div className="flex items-center justify-between gap-2">
+    <div className="flex min-w-[260px] max-w-[320px] flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)]/60">
+      {/* Column header — borda superior colorida + fundo suave do status */}
+      <div className={`relative shrink-0 px-3 py-2.5 ${config.headerBg}`}>
+        <div className={`absolute inset-x-0 top-0 h-1 ${config.topColor}`} />
+        <div className="flex items-center justify-between gap-2 pt-1">
           <div className="flex items-center gap-2">
-            <div className={`h-2.5 w-2.5 rounded-full ${config.topColor}`} />
-            <span className="text-xs font-black uppercase tracking-widest text-zinc-700">
+            <span className="text-xs font-semibold text-[var(--text-primary)]">
               {config.label}
             </span>
-            <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-black text-zinc-600 shadow-sm">
+            <span className="rounded-full bg-[var(--bg-surface)]/80 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)]">
               {filtered.length}
             </span>
           </div>
@@ -241,10 +251,10 @@ function KanbanColumn({
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 scrollbar-thin scrollbar-thumb-zinc-300 scrollbar-track-transparent">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
-            <div className="mb-2 rounded-full bg-zinc-200 p-3">
-              <ShoppingBag className="h-4 w-4 text-zinc-400" />
+            <div className="mb-2 rounded-full bg-[var(--bg-subtle)] p-3">
+              <ShoppingBag className="h-4 w-4 text-[var(--text-muted)]" strokeWidth={1.75} />
             </div>
-            <p className="text-[11px] font-bold text-zinc-400">{config.emptyText}</p>
+            <p className="text-xs font-medium text-[var(--text-muted)]">{config.emptyText}</p>
           </div>
         ) : (
           filtered.map((order) => (
@@ -392,39 +402,39 @@ export default function PedidosPage() {
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col bg-[#F5F7FA]">
+    <div className="flex flex-col bg-[var(--bg-base)]">
 
       {/* ── Shared header ──────────────────────────────────────── */}
-      <section className="z-20 -mx-3 border-b border-zinc-200 bg-white/95 px-3 py-3 shadow-sm backdrop-blur md:sticky md:top-14 md:mx-0 md:rounded-2xl md:border md:px-4 md:py-3">
+      <section className="z-20 -mx-3 border-b border-[var(--border)] bg-[var(--bg-surface)]/95 px-3 py-3 shadow-[var(--shadow-sm)] backdrop-blur md:sticky md:top-14 md:mx-0 md:rounded-2xl md:border md:px-4 md:py-3">
 
         {/* Search + metrics row */}
         <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
           <div className="relative min-w-0 flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" strokeWidth={1.75} />
             <input
               type="text"
               placeholder="Buscar número ou cliente..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-full rounded-xl border border-zinc-100 bg-zinc-100 pl-10 pr-4 text-sm font-bold text-zinc-800 transition-all placeholder:text-zinc-400 focus:border-brand-red/30 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-red/10"
+              className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] pl-10 pr-4 text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"
             />
           </div>
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <QuickMetric icon={ShoppingBag} label="Hoje"     value={orders.length}              detail="pedidos" />
-            <QuickMetric icon={Clock}       label="Fila"     value={queueCount + waitingCount}  detail="em preparo" tone="red" />
-            <QuickMetric icon={PackageCheck}label="Prontos"  value={readyCount}                 detail="retirada"   tone="emerald" />
-            <QuickMetric icon={CreditCard}  label="Recebido" value={currency.format(receivedTotal)} detail={`${pendingPayCount} pend.`} tone="blue" />
+            <QuickMetric icon={Clock}       label="Fila"     value={queueCount + waitingCount}  detail="em preparo" tone="brand" />
+            <QuickMetric icon={PackageCheck}label="Prontos"  value={readyCount}                 detail="retirada"   tone="success" />
+            <QuickMetric icon={CreditCard}  label="Recebido" value={currency.format(receivedTotal)} detail={`${pendingPayCount} pend.`} tone="info" />
 
             {/* Live badge */}
-            <div className="hidden md:flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 h-11 border border-emerald-100">
-              <Radio className={`h-3 w-3 text-emerald-500 ${!isLoading ? "animate-pulse" : ""}`} />
-              <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Ao vivo</span>
+            <div className="hidden md:flex items-center gap-1.5 rounded-xl bg-[var(--status-success-bg)] px-3 h-11">
+              <Radio className={`h-3 w-3 text-[var(--status-success)] ${!isLoading ? "animate-pulse" : ""}`} />
+              <span className="text-[11px] font-semibold text-[var(--status-success)]">Ao vivo</span>
             </div>
 
             <button
               onClick={() => fetchOrders()}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-[11px] font-black uppercase text-zinc-600 shadow-sm transition-all hover:bg-zinc-50 active:scale-95"
+              className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)] hover:bg-[var(--bg-subtle)] active:scale-95"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-brand-red" : ""}`} />
               <span className="hidden sm:inline">Atualizar</span>
@@ -433,7 +443,7 @@ export default function PedidosPage() {
         </div>
 
         {/* Tabs — mobile/tablet only */}
-        <div className="mt-2.5 flex gap-1.5 overflow-x-auto rounded-xl bg-zinc-100 p-1 hide-scrollbar lg:hidden">
+        <div className="mt-2.5 flex gap-1.5 overflow-x-auto rounded-full bg-[var(--bg-subtle)] p-1 hide-scrollbar lg:hidden">
           <OrderTab active={activeTab === "TODOS"} label="Todos" count={orders.length} onClick={() => setActiveTab("TODOS")} />
           {tabs.map((tab) => (
             <OrderTab key={tab.id} active={activeTab === tab.id} label={tab.label} count={tab.count} onClick={() => setActiveTab(tab.id)} />
@@ -444,10 +454,10 @@ export default function PedidosPage() {
         <div className="mt-2.5 hidden items-center justify-end gap-3 lg:flex">
           <button
             onClick={() => setShowCancelled((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-all ${
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
               showCancelled
-                ? "bg-zinc-700 text-white"
-                : "border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"
+                ? "bg-[var(--bg-inverse)] text-white"
+                : "border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
             }`}
           >
             {showCancelled ? <EyeOff size={12} /> : <Eye size={12} />}
@@ -477,21 +487,23 @@ export default function PedidosPage() {
       {/* ── Mobile/Tablet grid (<lg) ─────────────────────────── */}
       <div className="flex-1 pb-6 pt-10 md:pt-12 lg:hidden">
         {isLoading && orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-zinc-200 bg-white p-12 text-zinc-400 mx-3">
-            <RefreshCw size={28} className="animate-spin text-brand-red" />
-            <p className="text-sm font-bold uppercase tracking-widest">Sincronizando pedidos...</p>
+          <div className="grid grid-cols-1 gap-3 px-3 md:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-40 w-full" />
+            ))}
           </div>
         ) : error ? (
-          <div className="mx-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-center">
-            <p className="text-sm font-bold text-red-700">{error}</p>
-            <button onClick={() => fetchOrders()} className="mt-2 text-xs font-black uppercase tracking-widest text-red-500">
+          <div className="mx-3 rounded-2xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] p-4 text-center">
+            <p className="text-sm font-semibold text-[var(--status-danger)]">{error}</p>
+            <button onClick={() => fetchOrders()} className="mt-2 text-xs font-semibold text-[var(--status-danger)] underline">
               Tentar novamente
             </button>
           </div>
         ) : filteredOrders.length === 0 ? (
-          <div className="py-12">
+          <div className="px-3 py-12">
             <EmptyState
-              title={searchQuery ? "Nenhum resultado" : "Tudo limpo por aqui"}
+              icon={ClipboardList}
+              title={searchQuery ? "Nenhum pedido encontrado" : "Tudo em dia por aqui"}
               description={searchQuery ? "Tente buscar por outro termo." : "Não há pedidos para o status selecionado."}
             />
           </div>

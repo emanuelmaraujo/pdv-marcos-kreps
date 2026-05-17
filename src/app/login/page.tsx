@@ -17,6 +17,19 @@ import Image from "next/image";
 const SESSION_KEY = "pdv_login_time";
 const SESSION_MAX_MS = 24 * 60 * 60 * 1000;
 
+const ALLOWED_EMAIL_DOMAIN = "marcoskreps.com.br";
+
+function isLocalhost(): boolean {
+  if (typeof window === "undefined") return false;
+  const h = window.location.hostname;
+  return h === "localhost" || h === "127.0.0.1" || h.endsWith(".local");
+}
+
+function isAllowedEmail(email: string): boolean {
+  if (isLocalhost()) return true;
+  return email.trim().toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`);
+}
+
 function storeLoginTime() {
   localStorage.setItem(SESSION_KEY, Date.now().toString());
 }
@@ -46,6 +59,9 @@ export default function LoginPage() {
 
   const signInAndRedirect = useCallback(
     async (emailVal: string, passwordVal: string) => {
+      if (!isAllowedEmail(emailVal)) {
+        throw new Error(`Apenas e-mails @${ALLOWED_EMAIL_DOMAIN} podem acessar o sistema.`);
+      }
       const { error } = await supabase.auth.signInWithPassword({
         email: emailVal,
         password: passwordVal,
