@@ -16,14 +16,16 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   ArrowRight,
+  CheckCircle2,
   Clock,
+  Loader2,
   MapPin,
   Package,
   ShoppingBag,
   Store,
   Tent,
 } from "lucide-react";
-import { pdvApi, PublicBranch } from "@/lib/api/pdv-api";
+import { pdvApi, PublicBranch, PublicOrderLookupItem } from "@/lib/api/pdv-api";
 
 const BRANCH_TYPE_META: Record<string, { label: string; icon: typeof Store }> = {
   STORE: { label: "Loja",   icon: Store },
@@ -52,12 +54,31 @@ function extractToken(input: string): string | null {
   return match ? match[1] : null;
 }
 
+/** Detecta se o input é um número de telefone (apenas dígitos + parens/espaços/hífen/+). */
+function looksLikePhone(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed) return false;
+  // Se tem apenas dígitos e separadores comuns, é telefone
+  return /^[\d\s()+-]+$/.test(trimmed);
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  AGUARDANDO_PAGAMENTO: "Aguardando pagamento",
+  AGUARDANDO_CONFIRMACAO: "Em confirmação",
+  NA_FILA: "Em preparo",
+  PRONTO_PARCIAL: "Pronto parcial",
+  PRONTO: "Pronto pra retirada",
+};
+
 export function PedirLanding() {
   const router = useRouter();
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [loading, setLoading] = useState(true);
   const [trackingInput, setTrackingInput] = useState("");
   const [trackingError, setTrackingError] = useState("");
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  /** Quando lookup por telefone retorna 2+ pedidos, mostramos picker. */
+  const [trackingMatches, setTrackingMatches] = useState<PublicOrderLookupItem[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,15 +90,46 @@ export function PedirLanding() {
     return () => { cancelled = true; };
   }, []);
 
-  function handleTrack(e: React.FormEvent) {
+  async function handleTrack(e: React.FormEvent) {
     e.preventDefault();
-    const token = extractToken(trackingInput);
-    if (!token) {
-      setTrackingError("Cole o link completo ou o código do pedido (32 caracteres).");
+    setTrackingError("");
+    setTrackingMatches(null);
+    const input = trackingInput.trim();
+    if (!input) return;
+
+    // 1) Tenta extrair token de URL/código primeiro (caso o cliente colou link)
+    const token = extractToken(input);
+    if (token) {
+      router.push(`/pedido/${token}`);
       return;
     }
-    setTrackingError("");
-    router.push(`/pedido/${token}`);
+
+    // 2) Se parece telefone, faz lookup
+    if (looksLikePhone(input)) {
+      setTrackingLoading(true);
+      try {
+        const res = await pdvApi.lookupPublicOrdersByPhone(input);
+        if (!res.success) {
+          setTrackingError(res.error || "WhatsApp inválido. Use DDD + número.");
+          return;
+        }
+        if (res.orders.length === 0) {
+          setTrackingError("Nenhum pedido ativo encontrado nas últimas 4h para esse WhatsApp.");
+          return;
+        }
+        if (res.orders.length === 1) {
+          router.push(`/pedido/${res.orders[0].public_token}`);
+          return;
+        }
+        // 2+ pedidos → mostra picker
+        setTrackingMatches(res.orders);
+      } finally {
+        setTrackingLoading(false);
+      }
+      return;
+    }
+
+    setTrackingError("Use o WhatsApp (DDD + número) ou cole o link do pedido.");
   }
 
   return (
@@ -119,34 +171,88 @@ export function PedirLanding() {
             </div>
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">Já fez um pedido?</h2>
-              <p className="text-xs text-[var(--text-secondary)]">Cole o link ou o código pra acompanhar</p>
+              <p className="text-xs text-[var(--text-secondary)]">Use seu WhatsApp ou cole o link</p>
             </div>
           </div>
 
-          <form onSubmit={handleTrack} className="space-y-2">
-            <input
-              type="text"
-              value={trackingInput}
-              onChange={(e) => { setTrackingInput(e.target.value); setTrackingError(""); }}
-              placeholder="Link do pedido ou código"
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-            {trackingError && (
-              <p className="text-xs text-[var(--status-danger)]">{trackingError}</p>
-            )}
-            <button
-              type="submit"
-              disabled={!trackingInput.trim()}
-              className="w-full flex items-center justify-center gap-1.5 rounded-full bg-[var(--bg-inverse)] text-white text-sm font-semibold hover:opacity-90 active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
-              style={{ height: 44 }}
-            >
-              Acompanhar pedido
-              <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
-            </button>
-          </form>
+          {trackingMatches ? (
+            // Picker: cliente tem 2+ pedidos ativos, escolhe qual acompanhar
+            <div className="space-y-2">
+              <p className="text-xs text-[var(--text-secondary)]">
+                Encontrei {trackingMatches.length} pedidos ativos. Escolha qual abrir:
+              </p>
+              <ul className="space-y-1.5">
+                {trackingMatches.map((order) => (
+                  <li key={order.public_token}>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/pedido/${order.public_token}`)}
+                      className="w-full flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-2.5 text-left hover:bg-[var(--bg-surface)] hover:border-[var(--border-strong)] active:scale-[0.99]"
+                    >
+                      <span
+                        className="flex h-9 min-w-9 px-1.5 items-center justify-center rounded-lg text-xs font-bold text-white tabular-nums"
+                        style={{ backgroundColor: "var(--bg-inverse)" }}
+                      >
+                        #{String(order.daily_number).padStart(3, "0")}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                          {STATUS_LABEL[order.status] ?? order.status}
+                        </p>
+                        <p className="text-xs text-[var(--text-secondary)] truncate">
+                          {order.branch_name ?? "Marcos Krep's"} · {new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-[var(--text-muted)]" strokeWidth={1.75} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => { setTrackingMatches(null); setTrackingInput(""); }}
+                className="text-xs text-[var(--text-muted)] underline hover:text-[var(--text-secondary)] mt-1"
+              >
+                Voltar e procurar de novo
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleTrack} className="space-y-2">
+              <input
+                type="text"
+                value={trackingInput}
+                onChange={(e) => { setTrackingInput(e.target.value); setTrackingError(""); }}
+                placeholder="(11) 99999-9999 ou link do pedido"
+                inputMode="tel"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              {trackingError && (
+                <p className="text-xs text-[var(--status-danger)]">{trackingError}</p>
+              )}
+              <button
+                type="submit"
+                disabled={!trackingInput.trim() || trackingLoading}
+                className="w-full flex items-center justify-center gap-1.5 rounded-full bg-[var(--bg-inverse)] text-white text-sm font-semibold hover:opacity-90 active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
+                style={{ height: 44 }}
+              >
+                {trackingLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
+                ) : (
+                  <>
+                    Acompanhar pedido
+                    <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
+                  </>
+                )}
+              </button>
+              <p className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] pt-0.5">
+                <CheckCircle2 className="h-3 w-3" strokeWidth={1.75} />
+                Busca apenas pedidos ativos das últimas 4h
+              </p>
+            </form>
+          )}
         </section>
 
         {/* ── Lista de filiais ───────────────────────────────────── */}
