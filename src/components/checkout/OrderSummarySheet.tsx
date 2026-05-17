@@ -279,8 +279,9 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         customer_phone: normalizedPhone ?? (customerPhone.trim() || undefined),
         remember_checkout_data: normalizedPhone ? rememberCustomerData : false,
         notes: orderNotes.trim() || undefined,
-        payment_method: selectedPaymentMethod,
+        payment_method: splitBill ? "PENDING" : selectedPaymentMethod,
         payment_status: paymentStatus,
+        split_bill: splitBill || undefined, // flag para o edge function não imprimir antes do pagamento
         discount: finalDiscount,
         items: items.map((item) => ({
           product_id: item.product.id,

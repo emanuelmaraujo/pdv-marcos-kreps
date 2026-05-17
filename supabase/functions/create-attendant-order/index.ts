@@ -97,7 +97,12 @@ serve(async (req) => {
       payment_method, payment_status, discount, items,
       remember_checkout_data,
       branch_id,
+      split_bill,
     } = await req.json();
+
+    // split_bill: cria em AGUARDANDO_PAGAMENTO e pula impressão
+    // A impressão acontece automaticamente em mark-payment quando tudo for pago
+    const isSplitBill = split_bill === true;
 
     if (!items || items.length === 0) throw new Error('O carrinho está vazio.');
     if (!branch_id) throw new Error('branch_id é obrigatório.');
@@ -310,7 +315,8 @@ serve(async (req) => {
         branch_id: branch.id,
         source: 'ATTENDANT',
         type: order_type,
-        status: 'NA_FILA',
+        // split_bill: fica em AGUARDANDO_PAGAMENTO até todos pagarem → mark-payment imprime depois
+        status: isSplitBill ? 'AGUARDANDO_PAGAMENTO' : 'NA_FILA',
         customer_name: customer_name || null,
         customer_phone: customerPhoneE164 ?? (customer_phone || null),
         customer_id: customerId,
@@ -321,8 +327,8 @@ serve(async (req) => {
         payment_method: payment_method,
         payment_status: payment_status,
         created_by: user.id,
-        confirmed_by: user.id, // O atendente já confirmou no ato
-        confirmed_at: nowIso,
+        confirmed_by: isSplitBill ? null : user.id, // confirmação acontece após pagamento no split
+        confirmed_at: isSplitBill ? null : nowIso,
         paid_at: paidAt
       })
       .select('id, daily_number')
@@ -402,8 +408,9 @@ serve(async (req) => {
       }
     }
 
-    // 9. Fila de Impressão (como já nasce NA_FILA, precisamos imprimir)
-    const printingEnabled = settingBool(settings['printing_enabled'], true);
+    // 9. Fila de Impressão
+    // split_bill: NÃO imprime agora — mark-payment dispara a impressão quando tudo for pago
+    const printingEnabled = !isSplitBill && settingBool(settings['printing_enabled'], true);
     const shouldPrintCustomer = printingEnabled && settingBool(settings['print_customer_copy']);
     const shouldPrintKitchen = printingEnabled && settingBool(settings['print_kitchen_copy']);
     const shouldPrintJuice = printingEnabled && settingBool(settings['print_juice_potato_copy']);

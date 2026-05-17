@@ -176,12 +176,77 @@ serve(async (req) => {
       },
     });
 
-    // Relê pedido pra devolver o status derivado.
+    // Relê pedido pra ver se ficou totalmente pago (após trigger derivar payment_status)
     const { data: orderAfter } = await supabaseAdmin
       .from("orders")
-      .select("id, daily_number, payment_status, payment_method, paid_at")
+      .select("id, daily_number, status, payment_status, payment_method, paid_at, branch_id, branches(code, name)")
       .eq("id", order.id)
       .single();
+
+    // ── Auto-confirmar pedidos de split-bill quando todos os itens são pagos ──────
+    // Quando o pedido foi criado em AGUARDANDO_PAGAMENTO (dividir conta) e agora
+    // ficou com payment_status = PAID, movemos para NA_FILA e criamos os printer_jobs.
+    if (
+      orderAfter?.status === "AGUARDANDO_PAGAMENTO" &&
+      (orderAfter?.payment_status === "PAID" || orderAfter?.payment_status === "COURTESY")
+    ) {
+      const nowIso = new Date().toISOString();
+      const branchCode = (orderAfter as any).branches?.code as string | undefined;
+      const branchName = (orderAfter as any).branches?.name as string | undefined;
+
+      // Busca itens e settings para montar as vias
+      const [{ data: items }, { data: settingsData }] = await Promise.all([
+        supabaseAdmin.from("order_items").select(`
+          id, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector, sequence_no,
+          order_item_removed_ingredients(ingredient_name_snapshot),
+          order_item_addons(addon_name_snapshot, quantity, addon_price_snapshot)
+        `).eq("order_id", order.id),
+        supabaseAdmin.from("settings").select("key, value").in("key", ["printing_enabled", "print_kitchen_copy", "print_juice_potato_copy", "print_customer_copy"]),
+      ]);
+
+      const settingBoolFn = (v: unknown, fb = false) => {
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") return v.trim().toLowerCase() === "true";
+        return fb;
+      };
+      const find = (k: string) => settingsData?.find((s: any) => s.key === k)?.value;
+      const printingEnabled = settingBoolFn(find("printing_enabled"), true);
+      const ts = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+      const printerJobs: any[] = [];
+      if (printingEnabled && items) {
+        const kitchen = items.filter((i: any) => i.production_sector === "KITCHEN");
+        const juice = items.filter((i: any) => i.production_sector === "JUICE_POTATO");
+        if (kitchen.length > 0 && settingBoolFn(find("print_kitchen_copy"), true)) {
+          const { buildProductionReceipt } = await import("../_shared/print-format.ts");
+          const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes };
+          printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "KITCHEN", content: { text: buildProductionReceipt(orderObj, items, "KITCHEN", { timestamp: ts, title: "KREPS", branchCode, branchName }) } });
+        }
+        if (juice.length > 0 && settingBoolFn(find("print_juice_potato_copy"), true)) {
+          const { buildProductionReceipt } = await import("../_shared/print-format.ts");
+          const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes };
+          printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "JUICE_POTATO", content: { text: buildProductionReceipt(orderObj, items, "JUICE_POTATO", { timestamp: ts, title: "COZINHA", branchCode, branchName }) } });
+        }
+        if (settingBoolFn(find("print_customer_copy"))) {
+          const { buildCustomerReceipt } = await import("../_shared/print-format.ts");
+          const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes, packing_fee: order.packing_fee, discount_amount: order.discount_amount, total_amount: order.total_amount, payment_status: order.payment_status, payment_method: payment_method };
+          printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "CUSTOMER", content: { text: buildCustomerReceipt(orderObj, items, { timestamp: ts, branchCode, branchName }) } });
+        }
+      }
+
+      // Move para NA_FILA + printer jobs
+      await Promise.all([
+        supabaseAdmin.from("orders").update({
+          status: "NA_FILA",
+          confirmed_by: user.id,
+          confirmed_at: nowIso,
+          queue_entered_at: nowIso,
+        }).eq("id", order.id),
+        printerJobs.length > 0
+          ? supabaseAdmin.from("printer_jobs").insert(printerJobs)
+          : Promise.resolve(),
+      ]);
+    }
 
     return new Response(
       JSON.stringify({ success: true, order: orderAfter, items_paid: targetItemIds.length }),
