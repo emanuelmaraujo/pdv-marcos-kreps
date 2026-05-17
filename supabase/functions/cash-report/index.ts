@@ -100,13 +100,32 @@ serve(async (req) => {
 
     if (start_date) query = query.gte('created_at', start_date);
     if (end_date) query = query.lte('created_at', end_date);
-    if (payment_method && payment_method !== 'ALL') query = query.eq('payment_method', payment_method);
     if (branch_id) query = query.eq('branch_id', branch_id);
+    // Nota: filtro payment_method é aplicado depois, via tabela payments (suporte a split-bill)
 
     const { data: orders, error: ordersError } = await query;
     if (ordersError) throw ordersError;
 
-    const cancellations = (orders || []).filter(o => o.status === 'CANCELADO').length;
+    // 4.1 Query Payments — usada para breakdown correto por método (split-bill pode ter métodos mistos)
+    const allOrderIds = (orders || []).map((o: any) => o.id);
+    let paymentsData: any[] = [];
+    if (allOrderIds.length > 0) {
+      const { data: rawPayments } = await supabaseAdmin
+        .from('payments')
+        .select('order_id, payment_method, amount, payment_status')
+        .in('order_id', allOrderIds)
+        .in('payment_status', ['PAID', 'COURTESY']);
+      paymentsData = rawPayments ?? [];
+    }
+
+    // Se filtro por método, mantém só pedidos que têm ao menos 1 pagamento nesse método
+    const filteredOrders = (payment_method && payment_method !== 'ALL')
+      ? (orders || []).filter((o: any) => paymentsData.some(
+          (p) => p.order_id === o.id && p.payment_method === payment_method
+        ))
+      : (orders || []);
+
+    const cancellations = filteredOrders.filter((o: any) => o.status === 'CANCELADO').length;
 
     // 5. Query Order Items
     let itemsQuery = supabaseAdmin
@@ -125,7 +144,7 @@ serve(async (req) => {
           )
         )
       `)
-      .in('order_id', (orders || []).map(o => o.id));
+      .in('order_id', filteredOrders.map((o: any) => o.id));
 
     const { data: items, error: itemsError } = await itemsQuery;
     if (itemsError) throw itemsError;
@@ -154,7 +173,7 @@ serve(async (req) => {
       canceled: 0,
       gross_sales: 0,
       discounts: 0,
-      total_orders: orders?.length || 0,
+      total_orders: filteredOrders.length,
       paid_orders: 0,
       average_ticket: 0,
     };
@@ -175,7 +194,7 @@ serve(async (req) => {
       : (items || []);
 
     // 7.2 Calculate order metrics
-    (orders || []).forEach(order => {
+    filteredOrders.forEach((order: any) => {
       const orderDate = new Date(order.created_at);
       const weekday = WEEKDAYS[orderDate.getDay()];
       const hour = orderDate.getHours();
@@ -230,20 +249,33 @@ serve(async (req) => {
         if (order.payment_status === 'PAID') hData.received += orderValue;
         hourlyMap.set(hourRange, hData);
 
-        // Payment
-        const pMethod = order.payment_method;
-        const pData = paymentBreakdownMap.get(pMethod) || { method: pMethod, total: 0, count: 0 };
-        pData.count++;
-        if (order.payment_status === 'PAID') pData.total += orderValue;
-        paymentBreakdownMap.set(pMethod, pData);
+        // Payment breakdown — usa tabela payments para suportar split-bill com métodos mistos
+        // (cada linha = 1 transação real, pode haver PIX + Débito no mesmo pedido)
+        const orderPayments = paymentsData.filter((p: any) => p.order_id === order.id);
+        if (orderPayments.length > 0) {
+          orderPayments.forEach((p: any) => {
+            const pMethod = p.payment_method;
+            const pData = paymentBreakdownMap.get(pMethod) || { method: pMethod, total: 0, count: 0 };
+            pData.count++;
+            pData.total += Number(p.amount || 0);
+            paymentBreakdownMap.set(pMethod, pData);
+          });
+        } else if (order.payment_status === 'PAID') {
+          // Fallback para pedidos sem linha na tabela payments (legado)
+          const pMethod = order.payment_method;
+          const pData = paymentBreakdownMap.get(pMethod) || { method: pMethod, total: 0, count: 0 };
+          pData.count++;
+          pData.total += orderValue;
+          paymentBreakdownMap.set(pMethod, pData);
+        }
       }
     });
 
     summary.average_ticket = summary.paid_orders > 0 ? summary.received / summary.paid_orders : 0;
 
     // 7.3 Items & Rankings
-    filteredItems.forEach(item => {
-      const order = orders?.find(o => o.id === item.order_id);
+    filteredItems.forEach((item: any) => {
+      const order = filteredOrders.find((o: any) => o.id === item.order_id);
       if (!order || order.status === 'CANCELADO') return;
 
       const name = item.product_name_snapshot;
@@ -356,7 +388,7 @@ serve(async (req) => {
 
     // 8.4 Late Night Specialty (Top product after 22h)
     const lateItems = (items || []).filter(item => {
-      const order = orders?.find(o => o.id === item.order_id);
+      const order = filteredOrders.find((o: any) => o.id === item.order_id);
       if (!order) return false;
       const hour = new Date(order.created_at).getHours();
       return hour >= 22 || hour < 5;
@@ -402,9 +434,9 @@ serve(async (req) => {
       .sort((a, b) => b.total - a.total);
 
     const financial_attention = {
-      discount_orders: (orders || []).filter(o => Number(o.discount_amount || 0) > 0).length,
+      discount_orders: filteredOrders.filter((o: any) => Number(o.discount_amount || 0) > 0).length,
       discount_total: summary.discounts,
-      courtesy_orders: (orders || []).filter(o => o.payment_status === 'COURTESY').length,
+      courtesy_orders: filteredOrders.filter((o: any) => o.payment_status === 'COURTESY').length,
       courtesy_total: summary.courtesy,
       canceled_orders: cancellations,
       canceled_total: summary.canceled,
