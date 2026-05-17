@@ -1611,15 +1611,17 @@ export default function PedirPublicPage() {
             </div>
           </section>
 
-          {/* Tabs sticky — colado abaixo do header (h-14). Atualiza ativo via
-             scroll-spy; clicar faz scroll suave + bypass do spy. */}
+          {/* Tabs sticky — colado abaixo do header (h-14).
+             Mobile: fundo em superfície branca (contraste com bege da página)
+             + sombra sutil para destacar a elevação durante scroll.
+             Pílulas mais compactas pra caber mais categorias no viewport. */}
           <div
-            className="sticky top-14 z-30 -mx-4 px-4 py-2 border-b border-[var(--border)]"
-            style={{ backgroundColor: "var(--bg-base)" }}
+            className="sticky top-14 z-30 -mx-4 px-3 py-2 border-b border-[var(--border)] shadow-[var(--shadow-sm)]"
+            style={{ backgroundColor: "var(--bg-surface)" }}
           >
             <section
               {...categoryDragScroll}
-              className="flex cursor-grab select-none gap-2 overflow-x-auto hide-scrollbar"
+              className="flex cursor-grab select-none gap-1.5 overflow-x-auto hide-scrollbar"
             >
               {menuData?.categories.map((category) => {
                 const isActive = selectedCategoryId === category.id;
@@ -1628,10 +1630,10 @@ export default function PedirPublicPage() {
                     key={category.id}
                     ref={(el) => { tabRefs.current[category.id] = el; }}
                     onClick={() => scrollToCategory(category.id)}
-                    className={`h-10 shrink-0 rounded-full px-4 text-sm font-medium ${
+                    className={`h-8 shrink-0 rounded-full px-3 text-[13px] font-semibold ${
                       isActive
                         ? "bg-brand-red text-white shadow-[var(--shadow-sm)]"
-                        : "bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        : "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
                     }`}
                   >
                     {category.name}
