@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { PedirLanding } from "./PedirLanding";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { Addon, Ingredient, Product } from "@/types/pdv";
@@ -851,6 +852,12 @@ export default function PedirPublicPage() {
   const _rawBranch = routeParams?.slug ?? searchParams.get("branch");
   // Guarda contra a string literal "undefined" que pode aparecer.
   const branchSlug = (_rawBranch && _rawBranch !== "undefined") ? _rawBranch : undefined;
+
+  // Sem slug → renderiza a landing pública (picker de filial + tracking).
+  // Esse caminho é o "hub" pra divulgar /pedir e deixar o cliente escolher.
+  if (!branchSlug) {
+    return <PedirLanding />;
+  }
   const categoryDragScroll = useHorizontalDragScroll();
   const filterDragScroll = useHorizontalDragScroll();
   const {

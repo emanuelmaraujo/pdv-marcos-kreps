@@ -288,6 +288,23 @@ export type AttendantCustomerProfileResponse = {
   };
 };
 
+export type PublicBranch = {
+  id: string;
+  code: string;
+  name: string;
+  slug: string;
+  type: string;
+  address?: string | null;
+  ordering_start_time?: string | null;
+  ordering_end_time?: string | null;
+};
+
+export type PublicBranchesResponse = {
+  success: boolean;
+  error?: string;
+  branches: PublicBranch[];
+};
+
 export type PublicBranchStatsResponse = {
   success: boolean;
   error?: string;
@@ -384,6 +401,12 @@ export const pdvApi = {
 
   getPublicCheckoutConfig: (branchSlug?: string) =>
     invokeEdgeFunction<PublicCheckoutConfigResponse>('get-public-checkout-config', branchSlug ? { branch_slug: branchSlug } : {}),
+
+  // Lista pública de filiais ativas com pedidos online habilitados.
+  // Usado pelo landing /pedir (picker). Falha silenciosa: retorna lista vazia.
+  getPublicBranches: (): Promise<PublicBranchesResponse> =>
+    invokeEdgeFunction<PublicBranchesResponse>('list-public-branches', {})
+      .catch(() => ({ success: false, branches: [] })),
 
   // Métricas públicas para social proof do /pedir (orders_today + mais vendidos).
   // Falha silenciosa: se o edge não responder, a UI cai num estado sem stats.
