@@ -32,13 +32,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           "hidden md:flex flex-col",
           "fixed left-0 top-14 z-40",
           "h-[calc(100vh-3.5rem)] w-[220px] lg:w-60",
-          "bg-brand-charcoal border-r border-zinc-700/60",
+          "bg-[var(--bg-inverse)] border-r border-white/[0.06]",
           "transition-transform duration-300",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         ].join(" ")}
       >
         {/* Nav items */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5" role="navigation">
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1" role="navigation">
           {visibleItems.map((item) => {
             const isActive =
               item.href === "/app"
@@ -53,14 +53,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 onClick={onClose}
                 aria-current={isActive ? "page" : undefined}
                 className={[
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-full text-sm font-medium",
                   isActive
-                    ? "bg-brand-red text-white"
-                    : "text-zinc-400 hover:bg-zinc-700/50 hover:text-white",
+                    ? "bg-brand-red text-white shadow-[var(--shadow-sm)]"
+                    : "text-zinc-400 hover:bg-white/[0.07] hover:text-white",
                 ].join(" ")}
               >
                 <Icon
-                  className={`h-5 w-5 shrink-0 ${isActive ? "stroke-[2.5]" : ""}`}
+                  className={`h-5 w-5 shrink-0 ${isActive ? "stroke-[2]" : "stroke-[1.75]"}`}
                 />
                 <span>{item.name}</span>
               </Link>
@@ -69,8 +69,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="shrink-0 px-3 py-3 border-t border-zinc-700/60">
-          <p className="text-[10px] text-zinc-600 text-center">PDV Marcos Krep&apos;s · v1.0</p>
+        <div className="shrink-0 px-3 py-3 border-t border-white/[0.06]">
+          <p className="text-[10px] text-zinc-500 text-center">PDV Marcos Krep&apos;s · v1.0</p>
         </div>
       </aside>
     </>

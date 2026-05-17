@@ -47,6 +47,26 @@ const EMPTY: BranchInput = {
   packing_fee: 0, ordering_enabled: true, whatsapp_enabled: true,
 };
 
+/* Cor estável de avatar derivada do id da filial — mesma filial sempre
+   recebe a mesma cor, sem usar preto. Paleta calma (não brand) para não
+   competir com os CTAs vermelhos. */
+const AVATAR_PALETTE = [
+  "#2563EB", "#0891B2", "#0F766E", "#16A34A", "#65A30D",
+  "#CA8A04", "#EA580C", "#DC2626", "#DB2777", "#9333EA",
+  "#6366F1", "#0D9488",
+];
+
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function avatarStyleFor(id: string, code: string) {
+  const idx = hashString(id || code) % AVATAR_PALETTE.length;
+  return { bg: AVATAR_PALETTE[idx] };
+}
+
 function slugify(name: string): string {
   return name.toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -155,79 +175,95 @@ export default function FiliaisPage() {
 
       <header className="flex items-center justify-between gap-2">
         <div>
-          <h1 className="text-lg font-black tracking-tight text-zinc-900">Filiais</h1>
-          <p className="text-xs text-zinc-500">
+          <h1 className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">Filiais</h1>
+          <p className="text-xs text-[var(--text-secondary)]">
             Cada filial tem cardápio, impressoras e numeração próprios.
-            Senha exibida como <strong className="text-zinc-700">P-042-1</strong>.
+            Senha exibida como <strong className="text-[var(--text-primary)]">P-042-1</strong>.
           </p>
         </div>
         <Button onClick={openCreate} className="gap-2">
-          <Plus className="h-4 w-4" /> Nova filial
+          <Plus className="h-4 w-4" strokeWidth={2} /> Nova filial
         </Button>
       </header>
 
       {/* Lista */}
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-zinc-500 py-8 justify-center">
+        <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] py-8 justify-center">
           <Loader2 className="h-4 w-4 animate-spin" /> Carregando filiais...
         </div>
       ) : branches.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-zinc-200 bg-white p-10 text-center text-sm text-zinc-500">
+        <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-10 text-center text-sm text-[var(--text-secondary)]">
           Nenhuma filial cadastrada ainda.
         </div>
       ) : (
         <div className="space-y-2">
-          {branches.map((b) => (
-            <div
-              key={b.id}
-              className={`flex items-center gap-3 rounded-2xl border bg-white p-3 shadow-sm transition-all ${
-                b.id === currentBranchId ? 'border-brand-red/40 ring-2 ring-brand-red/10' : 'border-zinc-200'
-              }`}
-            >
-              <div className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-brand-charcoal text-white">
-                <span className="text-xs font-black leading-none">{b.code}</span>
-                <span className="text-[9px] font-medium leading-none text-zinc-400 mt-0.5">
-                  {TYPE_OPTIONS.find((t) => t.value === b.type)?.label.split(' ')[0]}
-                </span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="truncate text-sm font-black text-zinc-900">{b.name}</p>
-                  {b.id === currentBranchId && (
-                    <span className="flex items-center gap-1 rounded-full bg-brand-red/10 px-2 py-0.5 text-[10px] font-black text-brand-red">
-                      <Check className="h-2.5 w-2.5" /> Ativa
-                    </span>
-                  )}
-                  {!b.active && (
-                    <span className="rounded-md bg-red-100 px-1.5 py-0.5 text-[10px] font-black text-red-700">Inativa</span>
-                  )}
-                </div>
-                <p className="truncate text-[11px] text-zinc-400 mt-0.5">
-                  /pedir/<span className="font-bold text-zinc-600">{b.slug}</span>
-                  {b.ordering_start_time && b.ordering_end_time && (
-                    <span className="ml-2">· {b.ordering_start_time}–{b.ordering_end_time}</span>
-                  )}
-                  {!b.ordering_enabled && <span className="ml-2 text-amber-600">· pedidos offline</span>}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => toggleActive(b)}
-                className={`flex h-8 items-center gap-1 rounded-lg px-2.5 text-[10px] font-black uppercase shrink-0 ${
-                  b.active ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-zinc-100 text-zinc-500 hover:bg-zinc-200'
+          {branches.map((b) => {
+            const isCurrent = b.id === currentBranchId;
+            const avatar = avatarStyleFor(b.id, b.code);
+            return (
+              <div
+                key={b.id}
+                className={`flex items-center gap-3 rounded-2xl border bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)] ${
+                  isCurrent
+                    ? 'border-[var(--status-info)]/30 ring-1 ring-[var(--status-info)]/15'
+                    : 'border-[var(--border)]'
                 }`}
               >
-                <Power className="h-3 w-3" /> {b.active ? 'Ativa' : 'Inativa'}
-              </button>
-              <button
-                type="button"
-                onClick={() => openEdit(b)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-              >
-                <Edit3 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
+                {/* Avatar com cor gerada consistente por filial */}
+                <div
+                  className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl text-white"
+                  style={{ backgroundColor: avatar.bg }}
+                >
+                  <span className="text-xs font-semibold leading-none">{b.code}</span>
+                  <span className="text-[9px] font-medium leading-none opacity-80 mt-0.5">
+                    {TYPE_OPTIONS.find((t) => t.value === b.type)?.label.split(' ')[0]}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{b.name}</p>
+                    {isCurrent && (
+                      <span className="flex items-center gap-1 rounded-full bg-[var(--status-info-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--status-info)]">
+                        <Check className="h-2.5 w-2.5" strokeWidth={2} /> Sessão atual
+                      </span>
+                    )}
+                    {b.active ? (
+                      <span className="rounded-full bg-[var(--status-success-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--status-success)]">Ativa</span>
+                    ) : (
+                      <span className="rounded-full bg-[var(--status-neutral-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--status-neutral)]">Inativa</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    /pedir/<span className="font-semibold text-[var(--text-secondary)]">{b.slug}</span>
+                    {b.ordering_start_time && b.ordering_end_time && (
+                      <span className="ml-2">· {b.ordering_start_time}–{b.ordering_end_time}</span>
+                    )}
+                    {!b.ordering_enabled && <span className="ml-2 text-[var(--status-warning)]">· pedidos offline</span>}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleActive(b)}
+                  className={`flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-semibold shrink-0 ${
+                    b.active
+                      ? 'bg-[var(--status-success-bg)] text-[var(--status-success)] hover:opacity-90'
+                      : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)]'
+                  }`}
+                  aria-label={b.active ? 'Desativar filial' : 'Reativar filial'}
+                >
+                  <Power className="h-3 w-3" strokeWidth={1.75} /> {b.active ? 'Ativa' : 'Inativa'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openEdit(b)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)]"
+                  aria-label="Editar filial"
+                >
+                  <Edit3 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 

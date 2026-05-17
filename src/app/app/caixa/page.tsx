@@ -24,8 +24,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { LoadingState } from "@/components/feedback/LoadingState";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   CaixaData,
   PaymentBreakdown,
@@ -224,30 +223,30 @@ export default function CaixaPage() {
   const insights = useMemo(() => (data ? buildInsights(data) : []), [data]);
 
   return (
-    <div className="flex h-full flex-col bg-zinc-50">
+    <div className="flex h-full flex-col bg-[var(--bg-base)]">
       {/* Header */}
-      <header className="border-b border-zinc-200 bg-white px-4 py-3 md:px-6">
+      <header className="border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 md:px-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-base font-black tracking-tight text-brand-charcoal sm:text-lg">
+            <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)] sm:text-lg">
               Caixa do dia
               {currentBranch && (
-                <span className="ml-2 rounded-md bg-brand-charcoal px-2 py-0.5 text-[11px] font-black text-white">
+                <span className="ml-2 rounded-full bg-brand-charcoal px-2 py-0.5 text-[11px] font-semibold text-white">
                   {currentBranch.code} · {currentBranch.name}
                 </span>
               )}
             </h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mt-0.5">
               {lastUpdate && (
-                <p className="text-[11px] font-medium text-zinc-400">
+                <p className="text-[11px] text-[var(--text-muted)]">
                   Atualizado às {lastUpdate}
                 </p>
               )}
               {isLive && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--status-success-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--status-success)]">
                   <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--status-success)] opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--status-success)]" />
                   </span>
                   ao vivo
                 </span>
@@ -257,8 +256,8 @@ export default function CaixaPage() {
           <div className="flex items-center gap-2">
             {data?.role === "ADMIN" && (
               <Link href="/app/caixa/relatorio">
-                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand-charcoal px-3 text-xs font-black text-white transition-all hover:bg-brand-charcoal/90 active:scale-[0.97] sm:px-4">
-                  <BarChart3 className="h-3.5 w-3.5" />
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand-charcoal px-3 text-xs font-semibold text-white hover:bg-brand-black active:scale-[0.97] sm:px-4">
+                  <BarChart3 className="h-3.5 w-3.5" strokeWidth={1.75} />
                   <span className="hidden sm:inline">Relatório</span>
                 </span>
               </Link>
@@ -266,11 +265,11 @@ export default function CaixaPage() {
             <button
               onClick={() => loadCash(true)}
               disabled={isLoading || isRefreshing}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 transition-all hover:bg-zinc-50 active:scale-[0.97] disabled:opacity-50 sm:px-4"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-[0.97] disabled:opacity-50 sm:px-4"
             >
               {isRefreshing
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : <RefreshCw className="h-3.5 w-3.5" />}
+                : <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} />}
               <span className="hidden sm:inline">Atualizar</span>
             </button>
           </div>
@@ -281,7 +280,15 @@ export default function CaixaPage() {
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-5xl space-y-4 px-4 pb-28 pt-5 md:px-6 md:pt-6">
           {isLoading && !data ? (
-            <LoadingState message="Carregando resumo do dia..." />
+            <div className="space-y-4">
+              <Skeleton className="h-48 w-full rounded-3xl" />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-20" />
+                ))}
+              </div>
+              <Skeleton className="h-32 w-full rounded-3xl" />
+            </div>
           ) : error ? (
             <ErrorState
               title="Não foi possível carregar o caixa"
@@ -290,6 +297,7 @@ export default function CaixaPage() {
             />
           ) : !data ? null : data.summary.totalPedidos === 0 ? (
             <EmptyState
+              icon={Banknote}
               title="Sem vendas hoje"
               description="Os pedidos do dia aparecerão aqui assim que forem criados."
             />
@@ -329,21 +337,19 @@ function DayHero({ data }: { data: CaixaData }) {
     : 0;
 
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-[#111113] shadow-xl">
-      {/* Glow decorations */}
-      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-red/20 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 left-8 h-32 w-32 rounded-full bg-violet-500/10 blur-2xl" />
+    <div className="relative overflow-hidden rounded-3xl bg-[var(--bg-inverse)] shadow-[var(--shadow-lg)]">
+      {/* Glow decorations sutis */}
+      <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-red/15 blur-3xl" />
 
       <div className="relative px-6 py-8 md:px-8 md:py-10">
-        {/* Label */}
-        <p className="text-[11px] font-black uppercase tracking-[0.15em] text-zinc-500">Recebido hoje</p>
+        <p className="text-[11px] font-semibold text-zinc-400">Recebido hoje</p>
 
-        {/* Main number */}
-        <p className="mt-2 text-5xl font-black tracking-tight text-white md:text-6xl">
-          {currency.format(summary.totalRecebido)}
+        {/* Valor principal — R$ menor que o valor (brief) */}
+        <p className="mt-2 text-5xl font-semibold tracking-tight text-white md:text-6xl tabular-nums">
+          <span className="text-2xl text-zinc-400 mr-1 font-medium">R$</span>
+          {currency.format(summary.totalRecebido).replace("R$", "").trim()}
         </p>
 
-        {/* Sub stats row */}
         <div className="mt-5 flex flex-wrap gap-2">
           <Stat label="Bruto" value={currency.format(summary.totalBruto)} />
           {summary.pedidosPendentes > 0 && (
@@ -360,13 +366,13 @@ function DayHero({ data }: { data: CaixaData }) {
 
         {/* Progress bar */}
         <div className="mt-6 space-y-2">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/8">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-white/[0.08]">
             <div
-              className="h-full rounded-full bg-white/30 transition-all duration-700"
-              style={{ width: `${paidPct}%` }}
+              className="h-full rounded-full bg-white/30"
+              style={{ width: `${paidPct}%`, transition: "width 700ms ease" }}
             />
           </div>
-          <div className="flex justify-between text-[11px] font-semibold text-zinc-600">
+          <div className="flex justify-between text-[11px] font-medium text-zinc-500">
             <span>{summary.pedidosPagos} de {summary.totalPedidos} pedidos pagos</span>
             <span className="text-white/50">{paidPct}%</span>
           </div>
@@ -378,9 +384,9 @@ function DayHero({ data }: { data: CaixaData }) {
 
 function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div className="rounded-2xl bg-white/6 px-3.5 py-2.5 ring-1 ring-white/8">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-600">{label}</p>
-      <p className={`mt-0.5 text-sm font-black ${warn ? "text-amber-300" : "text-white"}`}>{value}</p>
+    <div className="rounded-2xl bg-white/[0.06] px-3.5 py-2.5 ring-1 ring-white/[0.08]">
+      <p className="text-[11px] text-zinc-500">{label}</p>
+      <p className={`mt-0.5 text-sm font-semibold tabular-nums ${warn ? "text-amber-300" : "text-white"}`}>{value}</p>
     </div>
   );
 }
@@ -389,52 +395,36 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
 
 function StatusStrip({ data }: { data: CaixaData }) {
   const { summary } = data;
-  const tiles = [
-    {
-      label: "Pagos",
-      count: summary.pedidosPagos,
-      bg: "bg-emerald-50",
-      text: "text-emerald-700",
-      num: "text-emerald-800",
-      dot: "bg-emerald-500",
-    },
-    {
-      label: "Pendentes",
-      count: summary.pedidosPendentes,
-      bg: summary.pedidosPendentes > 0 ? "bg-amber-50" : "bg-zinc-50",
-      text: summary.pedidosPendentes > 0 ? "text-amber-700" : "text-zinc-400",
-      num: summary.pedidosPendentes > 0 ? "text-amber-900" : "text-zinc-400",
-      dot: summary.pedidosPendentes > 0 ? "bg-amber-400" : "bg-zinc-300",
-    },
-    {
-      label: "Cancelados",
-      count: summary.pedidosCancelados,
-      bg: summary.pedidosCancelados > 0 ? "bg-red-50" : "bg-zinc-50",
-      text: summary.pedidosCancelados > 0 ? "text-red-600" : "text-zinc-400",
-      num: summary.pedidosCancelados > 0 ? "text-red-800" : "text-zinc-400",
-      dot: summary.pedidosCancelados > 0 ? "bg-red-500" : "bg-zinc-300",
-    },
-    {
-      label: "Cortesias",
-      count: summary.pedidosCortesia,
-      bg: summary.pedidosCortesia > 0 ? "bg-violet-50" : "bg-zinc-50",
-      text: summary.pedidosCortesia > 0 ? "text-violet-600" : "text-zinc-400",
-      num: summary.pedidosCortesia > 0 ? "text-violet-800" : "text-zinc-400",
-      dot: summary.pedidosCortesia > 0 ? "bg-violet-500" : "bg-zinc-300",
-    },
+  // Per brief: Pagos=success, Pendentes=warning, Cancelados=danger, Cortesias=neutral
+  // Mesmo tamanho visual em todos (não esmaecer os zerados).
+  const tiles: { label: string; count: number; tone: "success" | "warning" | "danger" | "neutral" }[] = [
+    { label: "Pagos",      count: summary.pedidosPagos,       tone: "success" },
+    { label: "Pendentes",  count: summary.pedidosPendentes,   tone: "warning" },
+    { label: "Cancelados", count: summary.pedidosCancelados,  tone: "danger"  },
+    { label: "Cortesias",  count: summary.pedidosCortesia,    tone: "neutral" },
   ];
+
+  const toneMap = {
+    success: { bg: "bg-[var(--status-success-bg)]", fg: "text-[var(--status-success)]" },
+    warning: { bg: "bg-[var(--status-warning-bg)]", fg: "text-[var(--status-warning)]" },
+    danger:  { bg: "bg-[var(--status-danger-bg)]",  fg: "text-[var(--status-danger)]"  },
+    neutral: { bg: "bg-[var(--status-neutral-bg)]", fg: "text-[var(--status-neutral)]" },
+  };
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {tiles.map((t) => (
-        <div key={t.label} className={`flex items-center gap-3 rounded-2xl ${t.bg} px-4 py-3.5`}>
-          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${t.dot}`} />
-          <div className="min-w-0">
-            <p className={`text-[10px] font-bold uppercase tracking-wide ${t.text}`}>{t.label}</p>
-            <p className={`text-2xl font-black leading-none ${t.num}`}>{t.count}</p>
+      {tiles.map((t) => {
+        const m = toneMap[t.tone];
+        return (
+          <div key={t.label} className={`flex items-center gap-3 rounded-2xl ${m.bg} px-4 py-3.5`}>
+            <span className={`h-2 w-2 shrink-0 rounded-full ${m.fg.replace("text-", "bg-")}`} />
+            <div className="min-w-0">
+              <p className={`text-[11px] font-medium ${m.fg}`}>{t.label}</p>
+              <p className={`text-2xl font-semibold leading-none tabular-nums ${m.fg}`}>{t.count}</p>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -442,28 +432,28 @@ function StatusStrip({ data }: { data: CaixaData }) {
 // ── Insights ──────────────────────────────────────────────────────────────────
 
 const INSIGHT_STYLE: Record<InsightSeverity, { wrap: string; icon: string; border: string }> = {
-  positive: { wrap: "bg-emerald-50", icon: "text-emerald-600", border: "border-l-emerald-400" },
-  info:     { wrap: "bg-blue-50",    icon: "text-blue-600",    border: "border-l-blue-400" },
-  warning:  { wrap: "bg-amber-50",   icon: "text-amber-600",   border: "border-l-amber-400" },
+  positive: { wrap: "bg-[var(--status-success-bg)]", icon: "text-[var(--status-success)]", border: "border-l-[var(--status-success)]" },
+  info:     { wrap: "bg-[var(--status-info-bg)]",    icon: "text-[var(--status-info)]",    border: "border-l-[var(--status-info)]" },
+  warning:  { wrap: "bg-[var(--status-warning-bg)]", icon: "text-[var(--status-warning)]", border: "border-l-[var(--status-warning)]" },
 };
 
 function InsightsSection({ insights }: { insights: DayInsight[] }) {
   return (
-    <div className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80">
-      <div className="border-b border-zinc-100 px-5 py-4">
+    <div className="overflow-hidden rounded-3xl bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
+      <div className="border-b border-[var(--border)] px-5 py-3.5">
         <div className="flex items-center gap-2">
-          <Info className="h-4 w-4 text-zinc-400" />
-          <p className="text-sm font-black text-zinc-700">Insights do dia</p>
+          <Info className="h-4 w-4 text-[var(--text-muted)]" strokeWidth={1.75} />
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Insights do dia</p>
         </div>
       </div>
-      <div className="divide-y divide-zinc-100">
+      <div className="divide-y divide-[var(--border)]">
         {insights.map((insight, i) => {
           const style = INSIGHT_STYLE[insight.severity];
           const Icon = insight.icon;
           return (
-            <div key={i} className={`flex items-start gap-4 border-l-4 ${style.border} ${style.wrap} px-5 py-4`}>
-              <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${style.icon}`} />
-              <p className="text-sm font-medium leading-relaxed text-zinc-700">{insight.text}</p>
+            <div key={i} className={`flex items-start gap-3 border-l-4 ${style.border} ${style.wrap} px-5 py-3.5`}>
+              <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${style.icon}`} strokeWidth={1.75} />
+              <p className="text-sm leading-relaxed text-[var(--text-primary)]">{insight.text}</p>
             </div>
           );
         })}
@@ -487,21 +477,21 @@ function DayMetricsPanel({ data }: { data: CaixaData }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <MetricCard icon={ShoppingBag} label="Crepes vendidos" value={String(summary.crepesSold)} color="text-brand-red" />
-      {peakLabel && <MetricCard icon={Zap} label="Hora de pico" value={peakLabel} color="text-amber-600" />}
+      {peakLabel && <MetricCard icon={Zap} label="Hora de pico" value={peakLabel} color="text-[var(--status-warning)]" />}
       {summary.avgDeliveryMinutes != null && (
-        <MetricCard icon={Clock} label="Tempo médio" value={`${summary.avgDeliveryMinutes}min`} color="text-blue-600" />
+        <MetricCard icon={Clock} label="Tempo médio" value={`${summary.avgDeliveryMinutes}min`} color="text-[var(--status-info)]" />
       )}
       {topThree.length > 0 && (
-        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200/80 col-span-2 sm:col-span-1">
-          <div className="flex items-center gap-2 mb-2.5">
-            <Trophy className="h-3.5 w-3.5 text-amber-500" />
-            <p className="text-[10px] font-black uppercase tracking-wide text-zinc-400">Mais vendidos</p>
+        <div className="rounded-2xl bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)] col-span-2 sm:col-span-1">
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <Trophy className="h-3.5 w-3.5 text-[var(--status-warning)]" strokeWidth={1.75} />
+            <p className="text-[11px] font-medium text-[var(--text-muted)]">Mais vendidos</p>
           </div>
           <ol className="space-y-1.5">
             {topThree.map((p, i) => (
               <li key={p.name} className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-zinc-700 truncate">{i + 1}. {p.name}</span>
-                <span className="shrink-0 text-[11px] font-black text-zinc-400">{p.quantity}×</span>
+                <span className="text-xs font-medium text-[var(--text-primary)] truncate">{i + 1}. {p.name}</span>
+                <span className="shrink-0 text-[11px] font-semibold text-[var(--text-muted)] tabular-nums">{p.quantity}×</span>
               </li>
             ))}
           </ol>
@@ -515,12 +505,12 @@ function MetricCard({ icon: Icon, label, value, color }: {
   icon: React.ElementType; label: string; value: string; color: string;
 }) {
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-zinc-200/80">
+    <div className="rounded-2xl bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
       <div className="flex items-center gap-1.5 mb-1.5">
-        <Icon className={`h-3.5 w-3.5 ${color}`} />
-        <p className="text-[10px] font-black uppercase tracking-wide text-zinc-400">{label}</p>
+        <Icon className={`h-3.5 w-3.5 ${color}`} strokeWidth={1.75} />
+        <p className="text-[11px] font-medium text-[var(--text-muted)]">{label}</p>
       </div>
-      <p className="text-2xl font-black text-zinc-900">{value}</p>
+      <p className="text-2xl font-semibold text-[var(--text-primary)] tabular-nums">{value}</p>
     </div>
   );
 }
@@ -535,16 +525,15 @@ function PaymentsCard({ items }: { items: PaymentBreakdown[]; received: number }
   if (active.length === 0 && !pending) return null;
 
   return (
-    <div className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80">
-      <div className="border-b border-zinc-100 px-5 py-4">
+    <div className="overflow-hidden rounded-3xl bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
+      <div className="border-b border-[var(--border)] px-5 py-3.5">
         <div className="flex items-center gap-2">
-          <Wallet className="h-4 w-4 text-zinc-500" />
-          <h2 className="text-sm font-black text-zinc-800">Formas de pagamento</h2>
+          <Wallet className="h-4 w-4 text-[var(--text-muted)]" strokeWidth={1.75} />
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Formas de pagamento</h2>
         </div>
       </div>
 
       <div className="p-4 space-y-2">
-        {/* Método cards */}
         {active.map((item) => {
           const meta = PAYMENT_META[item.method];
           const Icon = meta.icon;
@@ -552,36 +541,36 @@ function PaymentsCard({ items }: { items: PaymentBreakdown[]; received: number }
           return (
             <div key={item.method} className={`flex items-center gap-4 rounded-2xl px-4 py-3.5 ${meta.cardBg}`}>
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${meta.iconCls}`}>
-                <Icon className="h-5 w-5" />
+                <Icon className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <div>
-                    <p className={`text-sm font-black ${meta.textCls}`}>{meta.label}</p>
-                    <p className={`text-[11px] font-medium ${meta.subtextCls}`}>{item.count} pedido{item.count !== 1 ? "s" : ""}</p>
+                    <p className={`text-sm font-semibold ${meta.textCls}`}>{meta.label}</p>
+                    <p className={`text-[11px] ${meta.subtextCls}`}>{item.count} pedido{item.count !== 1 ? "s" : ""}</p>
                   </div>
-                  <p className={`text-lg font-black ${meta.textCls}`}>{currency.format(item.total)}</p>
+                  <p className={`text-base font-semibold tabular-nums ${meta.textCls}`}>{currency.format(item.total)}</p>
                 </div>
                 <div className={`h-1.5 w-full overflow-hidden rounded-full ${meta.trackCls}`}>
-                  <div className={`h-full rounded-full transition-all duration-700 ${meta.barCls}`} style={{ width: `${pct}%` }} />
+                  <div className={`h-full rounded-full ${meta.barCls}`} style={{ width: `${pct}%`, transition: "width 700ms ease" }} />
                 </div>
               </div>
-              <span className={`shrink-0 text-xs font-black ${meta.subtextCls} w-8 text-right`}>{pct}%</span>
+              <span className={`shrink-0 text-xs font-semibold ${meta.subtextCls} w-9 text-right tabular-nums`}>{pct}%</span>
             </div>
           );
         })}
 
         {/* Pending */}
         {pending && (
-          <div className="flex items-center gap-4 rounded-2xl bg-amber-50 px-4 py-3.5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-              <Clock className="h-5 w-5" />
+          <div className="flex items-center gap-4 rounded-2xl bg-[var(--status-warning-bg)] px-4 py-3.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--status-warning)]/15 text-[var(--status-warning)]">
+              <Clock className="h-5 w-5" strokeWidth={1.75} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-black text-amber-800">Pendente</p>
-              <p className="text-[11px] font-medium text-amber-600">{pending.count} pedido{pending.count !== 1 ? "s" : ""}</p>
+              <p className="text-sm font-semibold text-[var(--status-warning)]">Pendente</p>
+              <p className="text-[11px] text-[var(--status-warning)] opacity-80">{pending.count} pedido{pending.count !== 1 ? "s" : ""}</p>
             </div>
-            <p className="text-lg font-black text-amber-700">{currency.format(pending.total)}</p>
+            <p className="text-base font-semibold text-[var(--status-warning)] tabular-nums">{currency.format(pending.total)}</p>
           </div>
         )}
       </div>
@@ -595,18 +584,18 @@ function AdminCTA() {
   return (
     <Link
       href="/app/caixa/relatorio"
-      className="group flex items-center justify-between gap-4 rounded-3xl bg-[#111113] px-6 py-5 shadow-lg transition-all hover:shadow-xl active:scale-[0.98]"
+      className="group flex items-center justify-between gap-4 rounded-3xl bg-[var(--bg-inverse)] px-6 py-5 shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] active:scale-[0.98]"
     >
       <div className="flex items-center gap-4">
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
-          <BarChart3 className="h-5 w-5 text-white" />
+          <BarChart3 className="h-5 w-5 text-white" strokeWidth={1.75} />
         </span>
         <div>
-          <p className="text-sm font-black text-white">Relatório gerencial</p>
-          <p className="text-xs font-medium text-zinc-500">Análise completa de vendas e operação</p>
+          <p className="text-sm font-semibold text-white">Relatório gerencial</p>
+          <p className="text-xs text-zinc-400">Análise completa de vendas e operação</p>
         </div>
       </div>
-      <ArrowRight className="h-5 w-5 shrink-0 text-zinc-500 transition-transform group-hover:translate-x-1" />
+      <ArrowRight className="h-5 w-5 shrink-0 text-zinc-400 group-hover:translate-x-1 transition-transform" strokeWidth={1.75} />
     </Link>
   );
 }

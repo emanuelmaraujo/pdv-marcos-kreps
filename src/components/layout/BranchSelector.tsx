@@ -25,7 +25,7 @@ export function BranchSelector({ compact = false }: { compact?: boolean }) {
 
   if (isLoading) {
     return (
-      <div className="flex h-9 items-center gap-2 rounded-lg bg-zinc-700/40 px-3 text-xs text-zinc-400">
+      <div className="flex h-9 items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-3 text-xs text-[var(--text-muted)]">
         <Building2 className="h-3.5 w-3.5 animate-pulse" />
         <span>Carregando filiais...</span>
       </div>
@@ -40,8 +40,8 @@ export function BranchSelector({ compact = false }: { compact?: boolean }) {
   if (branches.length === 1) {
     const b = branches[0];
     return (
-      <div className="flex h-9 items-center gap-2 rounded-lg bg-zinc-700/40 px-3 text-xs font-bold text-white">
-        <span className="rounded-md bg-brand-red px-1.5 py-0.5 text-[10px] font-black">{b.code}</span>
+      <div className="flex h-9 items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-3 text-xs font-semibold text-[var(--text-primary)]">
+        <span className="rounded-md bg-brand-red px-1.5 py-0.5 text-[10px] font-bold text-white">{b.code}</span>
         {!compact && <span className="truncate max-w-[140px]">{b.name}</span>}
       </div>
     );
@@ -52,11 +52,11 @@ export function BranchSelector({ compact = false }: { compact?: boolean }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 items-center gap-2 rounded-lg bg-zinc-700/40 px-3 text-xs font-bold text-white transition-all hover:bg-zinc-700/70"
+        className="flex h-9 items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-3 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]/80"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="rounded-md bg-brand-red px-1.5 py-0.5 text-[10px] font-black">
+        <span className="rounded-md bg-brand-red px-1.5 py-0.5 text-[10px] font-bold text-white">
           {currentBranch?.code ?? '–'}
         </span>
         {!compact && (
@@ -64,7 +64,7 @@ export function BranchSelector({ compact = false }: { compact?: boolean }) {
             {currentBranch?.name ?? 'Filial'}
           </span>
         )}
-        <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
+        <ChevronDown className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
       </button>
 
       {open && (

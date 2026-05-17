@@ -1,43 +1,173 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────
+   Design tokens — Marcos Krep's PDV
+   Atualizar tokens aqui propaga para Tailwind (via @theme inline)
+   e para qualquer componente que use var(--token).
+   ───────────────────────────────────────────────────────────────── */
 :root {
-  --background: #f4f4f5;
-  --foreground: #18181b;
-  --primary: #E73335;
-  --primary-foreground: #ffffff;
-  --muted: #f4f4f5;
-  --muted-foreground: #71717a;
-  --card: #ffffff;
-  --card-foreground: #18181b;
-  --border: #e4e4e7;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --brand-red: #E73335;
-  --brand-red-dark: #B91C1C;
-  --brand-yellow: #FFE11A;
-  --brand-amber: #FACC15;
-  --brand-charcoal: #2F2F31;
-  --brand-black: #111111;
+  /* Brand (mantido — #E73335 em produção) */
+  --brand:            #E73335;
+  --brand-hover:      #C62828;
+  --brand-dark:       #B91C1C;
+
+  /* Acentos secundários da marca */
+  --brand-yellow:     #FFE11A;
+  --brand-amber:      #FACC15;
+  --brand-charcoal:   #2F2F31;
+  --brand-black:      #111111;
+
+  /* Superfícies */
+  --bg-base:          #F7F7F8;   /* fundo da página */
+  --bg-surface:       #FFFFFF;   /* cards e painéis */
+  --bg-subtle:        #F0F0F2;   /* fundos alternativos, inputs */
+  --bg-inverse:       #1A1A1F;   /* sidebar, hero cards (quase preto) */
+
+  /* Texto */
+  --text-primary:     #0F0F10;
+  --text-secondary:   #5C5C66;
+  --text-muted:       #9999A6;
+  --text-on-inverse:  #FFFFFF;
+
+  /* Bordas */
+  --border:           rgba(0, 0, 0, 0.08);
+  --border-strong:    rgba(0, 0, 0, 0.14);
+
+  /* Status — usar APENAS para os respectivos significados */
+  --status-success:     #16A34A;
+  --status-success-bg:  #F0FDF4;
+  --status-warning:     #D97706;
+  --status-warning-bg:  #FFFBEB;
+  --status-danger:      #DC2626;
+  --status-danger-bg:   #FEF2F2;
+  --status-info:        #2563EB;
+  --status-info-bg:     #EFF6FF;
+  --status-neutral:     #6B7280;
+  --status-neutral-bg:  #F3F4F6;
+
+  /* Radius */
+  --radius-sm:    6px;
+  --radius-md:    10px;
+  --radius-lg:    14px;
+  --radius-xl:    20px;
+  --radius-full:  999px;
+
+  /* Sombras — apenas funcionais */
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md:   0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg:   0 4px 16px rgba(0, 0, 0, 0.10);
+
+  /* ── Aliases shadcn-style (compat com primitivos existentes) ───── */
+  --background:           var(--bg-base);
+  --foreground:           var(--text-primary);
+  --primary:              var(--brand);
+  --primary-foreground:   #FFFFFF;
+  --muted:                var(--bg-subtle);
+  --muted-foreground:     var(--text-secondary);
+  --card:                 var(--bg-surface);
+  --card-foreground:      var(--text-primary);
+  --destructive:          var(--status-danger);
+  --destructive-foreground: #FFFFFF;
+
+  /* Aliases brand-red (compat — todo código antigo usa brand-red) */
+  --brand-red:        var(--brand);
+  --brand-red-dark:   var(--brand-dark);
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   Dark theme — overrides via [data-theme="dark"] no <html>.
+   Status colors mantém a mesma família mas levemente mais saturados
+   para contraste contra fundo escuro.
+   ───────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg-base:          #0E0E10;   /* fundo da página */
+  --bg-surface:       #18181B;   /* cards e painéis */
+  --bg-subtle:        #232327;   /* inputs, fundos alternativos */
+  --bg-inverse:       #18181B;   /* sidebar continua dark (no light também era dark) */
+
+  --text-primary:     #F4F4F5;
+  --text-secondary:   #A1A1AA;
+  --text-muted:       #71717A;
+  --text-on-inverse:  #FFFFFF;
+
+  --border:           rgba(255, 255, 255, 0.08);
+  --border-strong:    rgba(255, 255, 255, 0.16);
+
+  /* Status — bgs ligeiramente translúcidos sobre dark para legibilidade */
+  --status-success:     #4ADE80;
+  --status-success-bg:  rgba(74, 222, 128, 0.12);
+  --status-warning:     #FBBF24;
+  --status-warning-bg:  rgba(251, 191, 36, 0.12);
+  --status-danger:      #F87171;
+  --status-danger-bg:   rgba(248, 113, 113, 0.12);
+  --status-info:        #60A5FA;
+  --status-info-bg:     rgba(96, 165, 250, 0.12);
+  --status-neutral:     #A1A1AA;
+  --status-neutral-bg:  rgba(161, 161, 170, 0.12);
+
+  /* Sombras mais discretas no dark — borda já dá o relevo */
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md:   0 2px 8px rgba(0, 0, 0, 0.30);
+  --shadow-lg:   0 4px 16px rgba(0, 0, 0, 0.40);
+}
+
+/* Permitir que o user-agent informe color-scheme para inputs nativos
+   (date pickers, scrollbars) se ajustarem ao tema. */
+:root          { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
+  /* Cores semânticas expostas ao Tailwind */
+  --color-background:        var(--background);
+  --color-foreground:        var(--foreground);
+  --color-primary:           var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
+  --color-muted:             var(--muted);
+  --color-muted-foreground:  var(--muted-foreground);
+  --color-card:              var(--card);
+  --color-card-foreground:   var(--card-foreground);
+  --color-border:            var(--border);
+  --color-destructive:       var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --color-brand-red: var(--brand-red);
-  --color-brand-red-dark: var(--brand-red-dark);
-  --color-brand-yellow: var(--brand-yellow);
-  --color-brand-amber: var(--brand-amber);
-  --color-brand-charcoal: var(--brand-charcoal);
-  --color-brand-black: var(--brand-black);
+
+  /* Surface */
+  --color-surface:           var(--bg-surface);
+  --color-subtle:            var(--bg-subtle);
+  --color-inverse:           var(--bg-inverse);
+
+  /* Texto */
+  --color-text-primary:      var(--text-primary);
+  --color-text-secondary:    var(--text-secondary);
+  --color-text-muted:        var(--text-muted);
+
+  /* Status */
+  --color-success:           var(--status-success);
+  --color-success-bg:        var(--status-success-bg);
+  --color-warning:           var(--status-warning);
+  --color-warning-bg:        var(--status-warning-bg);
+  --color-danger:            var(--status-danger);
+  --color-danger-bg:         var(--status-danger-bg);
+  --color-info:              var(--status-info);
+  --color-info-bg:           var(--status-info-bg);
+  --color-neutral:           var(--status-neutral);
+  --color-neutral-bg:        var(--status-neutral-bg);
+
+  /* Brand */
+  --color-brand:             var(--brand);
+  --color-brand-hover:       var(--brand-hover);
+  --color-brand-dark:        var(--brand-dark);
+  --color-brand-red:         var(--brand);
+  --color-brand-red-dark:    var(--brand-dark);
+  --color-brand-yellow:      var(--brand-yellow);
+  --color-brand-amber:       var(--brand-amber);
+  --color-brand-charcoal:    var(--brand-charcoal);
+  --color-brand-black:       var(--brand-black);
+
+  /* Radius e sombras NÃO são re-expostos ao Tailwind para não sobrescrever
+     a escala built-in (rounded-md/lg/xl, shadow-sm/md/lg).
+     Use diretamente como var(--radius-md), var(--shadow-md) etc quando
+     precisar do token PDV específico. */
+
   --font-sans: var(--font-inter);
 }
 
@@ -49,6 +179,18 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Transições padrão — 150ms ease-out para hover/active */
+@layer base {
+  button,
+  a {
+    transition: background-color 150ms ease-out,
+                color 150ms ease-out,
+                border-color 150ms ease-out,
+                box-shadow 150ms ease-out,
+                transform 150ms ease-out;
+  }
+}
+
 /* Hide scrollbar for horizontal scroll areas */
 .hide-scrollbar {
   -ms-overflow-style: none;
@@ -58,11 +200,31 @@ body {
   display: none;
 }
 
-/* Input base style — usado em forms de admin */
+/* Input base — usado em forms de admin */
 .input {
   @apply w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900
          focus:border-brand-red/40 focus:outline-none focus:ring-2 focus:ring-brand-red/10
          transition-all placeholder:text-zinc-400;
+}
+
+/* Skeleton — pulse 1.5s para placeholders de loading */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.skeleton {
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+/* Fade-in 200ms — usado em troca de telas / conteúdo */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 200ms ease both;
 }
 
 /* Safe area padding for PWA */

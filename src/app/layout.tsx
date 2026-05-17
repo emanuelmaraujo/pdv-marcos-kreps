@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -38,7 +39,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} h-full antialiased`}>
+    <html lang="pt-BR" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        {/* Aplica o tema antes do React montar para evitar flash do tema errado */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

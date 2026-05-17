@@ -5,38 +5,39 @@ interface Props {
   className?: string;
 }
 
-export function PaymentStatusBadge({ status, className = "" }: Props) {
-  const map: Record<PaymentStatus, { label: string; classes: string }> = {
-    PENDING: {
-      label: "Pendente",
-      classes: "bg-brand-amber text-brand-charcoal border-brand-amber shadow-sm"
-    },
-    PARTIAL: {
-      label: "Parcial",
-      classes: "bg-blue-100 text-blue-700 border-blue-300 shadow-sm"
-    },
-    PAID: {
-      label: "Pago",
-      classes: "bg-emerald-500 text-white border-emerald-500 shadow-sm"
-    },
-    REFUNDED: { 
-      label: "Estornado", 
-      classes: "bg-zinc-100 text-zinc-500 border-zinc-200" 
-    },
-    CANCELED: { 
-      label: "Cancelado", 
-      classes: "bg-red-500 text-white border-red-500" 
-    },
-    COURTESY: { 
-      label: "Cortesia", 
-      classes: "bg-brand-charcoal text-white border-brand-charcoal" 
-    },
-  };
+const MAP: Record<PaymentStatus, { label: string; classes: string }> = {
+  PENDING: {
+    label: "Pendente",
+    classes: "bg-[var(--status-warning-bg)] text-[var(--status-warning)]",
+  },
+  PARTIAL: {
+    label: "Parcial",
+    classes: "bg-[var(--status-info-bg)] text-[var(--status-info)]",
+  },
+  PAID: {
+    label: "Pago",
+    classes: "bg-[var(--status-success-bg)] text-[var(--status-success)]",
+  },
+  REFUNDED: {
+    label: "Estornado",
+    classes: "bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]",
+  },
+  CANCELED: {
+    label: "Cancelado",
+    classes: "bg-[var(--status-danger-bg)] text-[var(--status-danger)]",
+  },
+  COURTESY: {
+    label: "Cortesia",
+    classes: "bg-brand-charcoal text-white",
+  },
+};
 
-  const config = map[status] || { label: status, classes: "bg-zinc-100 text-zinc-500 border-zinc-200" };
-  
+export function PaymentStatusBadge({ status, className = "" }: Props) {
+  const config = MAP[status] ?? MAP.PENDING;
   return (
-    <span className={`px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase tracking-widest inline-flex items-center justify-center ${config.classes} ${className}`}>
+    <span
+      className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${config.classes} ${className}`}
+    >
       {config.label}
     </span>
   );

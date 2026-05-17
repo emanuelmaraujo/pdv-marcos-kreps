@@ -2,7 +2,10 @@ import * as React from "react"
 
 export function Card({ className = '', children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`rounded-2xl border border-zinc-100 bg-white text-card-foreground shadow-sm ${className}`} {...props}>
+    <div
+      className={`rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)] ${className}`}
+      {...props}
+    >
       {children}
     </div>
   )
@@ -18,7 +21,7 @@ export function CardHeader({ className = '', children, ...props }: React.HTMLAtt
 
 export function CardTitle({ className = '', children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3 className={`font-bold leading-none tracking-tight text-brand-charcoal ${className}`} {...props}>
+    <h3 className={`font-semibold leading-none tracking-tight text-[var(--text-primary)] ${className}`} {...props}>
       {children}
     </h3>
   )
