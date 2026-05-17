@@ -698,9 +698,10 @@ function PixCheckout({
 
 // ── UI helpers do /pedir ──────────────────────────────────────────────────
 
-/** Progress indicator no topo das telas pós-cardápio (steps 2–4). */
-function ProgressSteps({ current }: { current: 0 | 1 | 2 | 3 }) {
-  const steps = ["Cardápio", "Revisão", "Pagamento", "Acompanhar"];
+/** Progress indicator no topo das telas pós-cardápio.
+ * 5 steps: Cardápio (0), Itens (1), Dados (2), Pagamento (3), Pronto (4). */
+function ProgressSteps({ current }: { current: 0 | 1 | 2 | 3 | 4 }) {
+  const steps = ["Cardápio", "Itens", "Dados", "Pagamento", "Pronto"];
   return (
     <nav aria-label="Progresso do pedido" className="flex items-center gap-2">
       {steps.map((label, i) => {
@@ -891,7 +892,7 @@ export default function PedirPublicPage() {
   const [selectedAddons, setSelectedAddons] = useState<Map<string, number>>(new Map());
   const [quantity, setQuantity] = useState(1);
   const [itemNotes, setItemNotes] = useState("");
-  const [step, setStep] = useState<"MENU" | "CHECKOUT" | "PAYMENT" | "PAID">("MENU");
+  const [step, setStep] = useState<"MENU" | "REVIEW" | "INFO" | "PAYMENT" | "PAID">("MENU");
   const [customerEmail, setCustomerEmail] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [rememberCheckoutData, setRememberCheckoutData] = useState(false);
@@ -1131,26 +1132,94 @@ export default function PedirPublicPage() {
     return menuData?.categories.find((category) => category.id === selectedCategoryId);
   }, [menuData, selectedCategoryId]);
 
-  const categoryProducts = useMemo(() => {
-    if (!menuData || !selectedCategoryId) return [];
-    return menuData.products.filter((product) => product.category_id === selectedCategoryId);
-  }, [menuData, selectedCategoryId]);
-
-  const categoryFilters = useMemo(() => {
-    if (!selectedCategory || !menuIndexes) return [ALL_FILTER];
-    const tags = new Set<string>();
-    for (const product of categoryProducts) {
-      getProductTags(product, selectedCategory.name, menuIndexes).forEach((tag) => tags.add(tag));
+  // Mapa { categoryId → produtos } na ordem das categorias
+  const productsByCategory = useMemo(() => {
+    const map: Record<string, Product[]> = {};
+    if (!menuData) return map;
+    for (const c of menuData.categories) {
+      map[c.id] = menuData.products.filter((p) => p.category_id === c.id);
     }
-    return [ALL_FILTER, ...Array.from(tags)];
-  }, [categoryProducts, menuIndexes, selectedCategory]);
+    return map;
+  }, [menuData]);
 
-  const filteredProducts = useMemo(() => {
-    if (selectedFilter === ALL_FILTER || !selectedCategory) return categoryProducts;
-    return categoryProducts.filter((product) =>
-      getProductTags(product, selectedCategory.name, menuIndexes).includes(selectedFilter),
-    );
-  }, [categoryProducts, menuIndexes, selectedCategory, selectedFilter]);
+  // Filtros por categoria — só faz sentido mostrar quando há 2+ tags
+  const filtersByCategory = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    if (!menuData) return map;
+    for (const c of menuData.categories) {
+      const tags = new Set<string>();
+      for (const p of (productsByCategory[c.id] ?? [])) {
+        getProductTags(p, c.name, menuIndexes).forEach((t) => tags.add(t));
+      }
+      map[c.id] = tags.size >= 2 ? [ALL_FILTER, ...Array.from(tags)] : [];
+    }
+    return map;
+  }, [menuData, productsByCategory, menuIndexes]);
+
+  // Filtro ativo por categoria (default: Todos)
+  const [filterByCategory, setFilterByCategory] = useState<Record<string, string>>({});
+  const setCategoryFilter = useCallback((categoryId: string, filter: string) => {
+    setFilterByCategory((prev) => ({ ...prev, [categoryId]: filter }));
+  }, []);
+
+  // Refs para section / tab — usados pelo scroll-spy e pelo scroll programático
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const suppressSpyRef = useRef(false);
+
+  // Scroll-spy: atualiza categoria ativa conforme o usuário rola.
+  // Capture phase pega scroll de qualquer container aninhado.
+  useEffect(() => {
+    if (!menuData) return;
+    let raf = 0;
+    const TRIGGER_OFFSET = 180; // abaixo do header (56) + tabs sticky (~110)
+
+    function pickActive() {
+      raf = 0;
+      if (suppressSpyRef.current) return;
+      let bestId: string | null = null;
+      let bestTop = -Infinity;
+      for (const [id, el] of Object.entries(sectionRefs.current)) {
+        if (!el) continue;
+        const top = el.getBoundingClientRect().top;
+        if (top <= TRIGGER_OFFSET && top > bestTop) {
+          bestTop = top;
+          bestId = id;
+        }
+      }
+      if (bestId) setSelectedCategoryId(bestId);
+    }
+    function onScroll() {
+      if (raf) return;
+      raf = window.requestAnimationFrame(pickActive);
+    }
+    pickActive();
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("resize", onScroll);
+      if (raf) window.cancelAnimationFrame(raf);
+    };
+  }, [menuData]);
+
+  // Scroll suave até a section + bypass do scroll-spy
+  const scrollToCategory = useCallback((categoryId: string) => {
+    const el = sectionRefs.current[categoryId];
+    if (!el) return;
+    suppressSpyRef.current = true;
+    setSelectedCategoryId(categoryId);
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => { suppressSpyRef.current = false; }, 700);
+  }, []);
+
+  // Centraliza horizontalmente a tab ativa
+  useEffect(() => {
+    if (!selectedCategoryId) return;
+    const el = tabRefs.current[selectedCategoryId];
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [selectedCategoryId]);
 
   const productDefaultIngredients = useMemo(() => {
     if (!selectedProduct || !menuIndexes) return [];
@@ -1529,7 +1598,7 @@ export default function PedirPublicPage() {
               {items.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setStep("CHECKOUT")}
+                  onClick={() => setStep("REVIEW")}
                   className="hidden md:flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-left hover:bg-white/15"
                 >
                   <ShoppingCart className="h-5 w-5 text-white" strokeWidth={1.75} />
@@ -1542,130 +1611,148 @@ export default function PedirPublicPage() {
             </div>
           </section>
 
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="min-w-0 space-y-4">
-          {/* Tabs de categoria — pills com cor brand no ativo */}
-          <section
-            {...categoryDragScroll}
-            className="flex cursor-grab select-none gap-2 overflow-x-auto hide-scrollbar"
+          {/* Tabs sticky — colado abaixo do header (h-14). Atualiza ativo via
+             scroll-spy; clicar faz scroll suave + bypass do spy. */}
+          <div
+            className="sticky top-14 z-30 -mx-4 px-4 py-2 border-b border-[var(--border)]"
+            style={{ backgroundColor: "var(--bg-base)" }}
           >
-            {menuData?.categories.map((category) => {
-              const isActive = selectedCategoryId === category.id;
-              return (
-                <button
-                  key={category.id}
-                  onClick={() => {
-                    setSelectedCategoryId(category.id);
-                    setSelectedFilter(ALL_FILTER);
-                  }}
-                  className={`h-10 shrink-0 rounded-full px-4 text-sm font-medium ${
-                    isActive
-                      ? "bg-brand-red text-white shadow-[var(--shadow-sm)]"
-                      : "bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                  }`}
-                >
-                  {category.name}
-                </button>
-              );
-            })}
-          </section>
-
-          {/* Filtros por ingrediente/tag — chips muito menores */}
-          {categoryFilters.length > 1 && (
             <section
-              {...filterDragScroll}
-              className="flex cursor-grab select-none gap-1.5 overflow-x-auto pb-1 hide-scrollbar"
+              {...categoryDragScroll}
+              className="flex cursor-grab select-none gap-2 overflow-x-auto hide-scrollbar"
             >
-              {categoryFilters.map((filter) => {
-                const isActive = selectedFilter === filter;
+              {menuData?.categories.map((category) => {
+                const isActive = selectedCategoryId === category.id;
                 return (
                   <button
-                    key={filter}
-                    type="button"
-                    onClick={() => setSelectedFilter(filter)}
-                    className={`flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-medium ${
+                    key={category.id}
+                    ref={(el) => { tabRefs.current[category.id] = el; }}
+                    onClick={() => scrollToCategory(category.id)}
+                    className={`h-10 shrink-0 rounded-full px-4 text-sm font-medium ${
                       isActive
-                        ? "bg-[var(--brand-light)] text-brand-red border border-brand-red/30"
-                        : "border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+                        ? "bg-brand-red text-white shadow-[var(--shadow-sm)]"
+                        : "bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                     }`}
                   >
-                    {filter === ALL_FILTER ? <Search className="h-3 w-3" strokeWidth={1.75} /> : <Tag className="h-3 w-3" strokeWidth={1.75} />}
-                    {filter}
+                    {category.name}
                   </button>
                 );
               })}
             </section>
-          )}
+          </div>
 
-          {/* Grid de cards de produto */}
-          <section className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-            {filteredProducts.map((product) => {
-              const { code, title } = splitProductName(product.name);
-              const tags = getProductTags(product, selectedCategory?.name, menuIndexes);
-              const summary = getProductSummary(product, selectedCategory?.name, menuIndexes);
-              const categoryKind = getCategoryKind(selectedCategory?.name);
-              const isMostOrdered = publicStats.topByCategory[product.category_id ?? ""] === product.id;
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="min-w-0 space-y-6">
+          {/* Render TODAS as categorias como sections — usuário rola entre elas */}
+          {menuData?.categories.map((category) => {
+            const categoryProducts = productsByCategory[category.id] ?? [];
+            if (categoryProducts.length === 0) return null;
+            const filters = filtersByCategory[category.id] ?? [];
+            const activeFilter = filterByCategory[category.id] ?? ALL_FILTER;
+            const visibleProducts = filters.length === 0 || activeFilter === ALL_FILTER
+              ? categoryProducts
+              : categoryProducts.filter((p) => getProductTags(p, category.name, menuIndexes).includes(activeFilter));
 
-              return (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => openCustomization(product)}
-                  className="group relative flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] hover:border-[var(--border-strong)] active:scale-[0.98]"
-                >
-                  {/* Badge "Mais pedido" — canto superior direito */}
-                  {isMostOrdered && (
-                    <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
-                      🔥 Mais pedido
-                    </span>
-                  )}
+            return (
+              <section
+                key={category.id}
+                ref={(el) => { sectionRefs.current[category.id] = el; }}
+                data-category-id={category.id}
+                className="scroll-mt-32"
+              >
+                <h2 className="text-lg font-bold text-[var(--text-primary)] tracking-tight mb-3">{category.name}</h2>
 
-                  <div className="flex items-start gap-3">
-                    {/* Thumbnail ilustrado por categoria — nunca placeholder genérico */}
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-brand-red">
-                      {categoryKind === "SAVORY" ? (
-                        <Flame className="h-6 w-6" strokeWidth={1.75} />
-                      ) : categoryKind === "SWEET" ? (
-                        <Sparkles className="h-6 w-6" strokeWidth={1.75} />
-                      ) : categoryKind === "DRINK" ? (
-                        <Package className="h-6 w-6" strokeWidth={1.75} />
-                      ) : (
-                        <Utensils className="h-6 w-6" strokeWidth={1.75} />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {code && (
-                          <span className="text-[11px] font-medium text-[var(--text-muted)] tabular-nums">
-                            #{code}
-                          </span>
-                        )}
-                        {tags[0] && tags[0] !== "Outros" && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-light)] px-2 py-0.5 text-[10px] font-semibold text-brand-red">
-                            {tags[0] === "Vegetariano" ? <Leaf className="h-2.5 w-2.5" strokeWidth={1.75} /> : <Flame className="h-2.5 w-2.5" strokeWidth={1.75} />}
-                            {tags[0]}
-                          </span>
-                        )}
-                      </div>
-                      <h2 className="mt-1 line-clamp-2 text-base font-semibold leading-tight text-[var(--text-primary)]">{title}</h2>
-                      <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-[var(--text-secondary)]">{summary}</p>
-                    </div>
+                {/* Filtros — só aparecem quando há 2+ tags */}
+                {filters.length > 0 && (
+                  <section
+                    {...filterDragScroll}
+                    className="flex cursor-grab select-none gap-1.5 overflow-x-auto pb-3 hide-scrollbar"
+                  >
+                    {filters.map((filter) => {
+                      const isActive = activeFilter === filter;
+                      return (
+                        <button
+                          key={filter}
+                          type="button"
+                          onClick={() => setCategoryFilter(category.id, filter)}
+                          className={`flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-medium ${
+                            isActive
+                              ? "bg-[var(--brand-light)] text-brand-red border border-brand-red/30"
+                              : "border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+                          }`}
+                        >
+                          {filter === ALL_FILTER ? <Search className="h-3 w-3" strokeWidth={1.75} /> : <Tag className="h-3 w-3" strokeWidth={1.75} />}
+                          {filter}
+                        </button>
+                      );
+                    })}
+                  </section>
+                )}
+
+                {visibleProducts.length === 0 ? (
+                  <p className="text-sm text-[var(--text-muted)] py-2">Nenhum item para esse filtro.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                    {visibleProducts.map((product) => {
+                      const { code, title } = splitProductName(product.name);
+                      const tags = getProductTags(product, category.name, menuIndexes);
+                      const summary = getProductSummary(product, category.name, menuIndexes);
+                      const categoryKind = getCategoryKind(category.name);
+                      const isMostOrdered = publicStats.topByCategory[product.category_id ?? ""] === product.id;
+
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => openCustomization(product)}
+                          className="group relative flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] hover:border-[var(--border-strong)] active:scale-[0.98]"
+                        >
+                          {isMostOrdered && (
+                            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
+                              🔥 Mais pedido
+                            </span>
+                          )}
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-brand-red">
+                              {categoryKind === "SAVORY" ? <Flame className="h-6 w-6" strokeWidth={1.75} />
+                              : categoryKind === "SWEET" ? <Sparkles className="h-6 w-6" strokeWidth={1.75} />
+                              : categoryKind === "DRINK" ? <Package className="h-6 w-6" strokeWidth={1.75} />
+                              : <Utensils className="h-6 w-6" strokeWidth={1.75} />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {code && (
+                                  <span className="text-[11px] font-medium text-[var(--text-muted)] tabular-nums">#{code}</span>
+                                )}
+                                {tags[0] && tags[0] !== "Outros" && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-light)] px-2 py-0.5 text-[10px] font-semibold text-brand-red">
+                                    {tags[0] === "Vegetariano" ? <Leaf className="h-2.5 w-2.5" strokeWidth={1.75} /> : <Flame className="h-2.5 w-2.5" strokeWidth={1.75} />}
+                                    {tags[0]}
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-tight text-[var(--text-primary)]">{title}</h3>
+                              <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-[var(--text-secondary)]">{summary}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between mt-auto">
+                            <p className="text-lg font-bold text-brand-red tabular-nums">
+                              <span className="text-xs mr-0.5 font-medium opacity-70">R$</span>
+                              {product.price.toFixed(2).replace(".", ",")}
+                            </p>
+                            <span className="flex h-11 items-center gap-1 rounded-full bg-brand-red px-4 text-sm font-semibold text-white shadow-[var(--shadow-sm)] group-hover:bg-brand-red-dark">
+                              <Plus className="h-4 w-4" strokeWidth={2} />
+                              Montar
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-
-                  <div className="flex items-center justify-between mt-auto">
-                    <p className="text-lg font-bold text-brand-red tabular-nums">
-                      <span className="text-xs mr-0.5 font-medium opacity-70">R$</span>
-                      {product.price.toFixed(2).replace(".", ",")}
-                    </p>
-                    <span className="flex h-11 items-center gap-1 rounded-full bg-brand-red px-4 text-sm font-semibold text-white shadow-[var(--shadow-sm)] group-hover:bg-brand-red-dark">
-                      <Plus className="h-4 w-4" strokeWidth={2} />
-                      Montar
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </section>
+                )}
+              </section>
+            );
+          })}
             </div>
 
             <aside className="hidden xl:block">
@@ -1717,7 +1804,7 @@ export default function PedirPublicPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setStep("CHECKOUT")}
+                        onClick={() => setStep("REVIEW")}
                         className="mt-3 flex w-full h-12 items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
                       >
                         <CreditCard className="h-4 w-4" strokeWidth={1.75} />
@@ -1738,7 +1825,7 @@ export default function PedirPublicPage() {
             >
               <button
                 type="button"
-                onClick={() => setStep("CHECKOUT")}
+                onClick={() => setStep("REVIEW")}
                 className="w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-[var(--shadow-lg)] active:scale-[0.98]"
                 style={{ backgroundColor: "var(--bg-inverse)" }}
               >
@@ -1765,258 +1852,280 @@ export default function PedirPublicPage() {
         </main>
       )}
 
-      {step === "CHECKOUT" && (
-        <main className="mx-auto max-w-6xl space-y-4 p-4 xl:px-6">
-          {/* Progress indicator — 4 steps, brand-red no atual + concluído */}
+      {/* ── Tela 3: REVIEW — só a revisão dos itens do pedido ──────────── */}
+      {step === "REVIEW" && (
+        <main className="mx-auto max-w-2xl space-y-4 p-4">
           <ProgressSteps current={1} />
 
           <section className="rounded-2xl px-5 py-4 text-white shadow-[var(--shadow-sm)]" style={{ backgroundColor: "var(--bg-inverse)" }}>
             <h2 className="text-lg font-semibold tracking-tight md:text-xl">Confira seu pedido</h2>
             <p className="mt-1 text-sm leading-relaxed text-white/65">
-              Seu pedido só vai para preparo depois que o pagamento for confirmado.
+              Revise os itens. Em seguida você informa seus dados e paga.
             </p>
           </section>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
-            <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="text-base font-semibold text-[var(--text-primary)]">Seu pedido</h2>
-                <button
-                  type="button"
-                  onClick={() => setStep("MENU")}
-                  className="text-xs font-semibold text-brand-red hover:text-brand-red-dark"
-                >
-                  + Adicionar mais
-                </button>
-              </div>
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-base font-semibold text-[var(--text-primary)]">Seus itens</h2>
+              <button
+                type="button"
+                onClick={() => setStep("MENU")}
+                className="text-xs font-semibold text-brand-red hover:text-brand-red-dark"
+              >
+                + Adicionar mais
+              </button>
+            </div>
 
-              <div className="mt-3 divide-y divide-[var(--border)]">
-                {items.map((item) => (
-                  <div key={item.id} className="flex items-start gap-3 py-3">
-                    <span className="rounded-md bg-[var(--bg-inverse)] px-2 py-0.5 text-xs font-semibold text-white shrink-0 tabular-nums">{item.quantity}×</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">{item.product.name}</p>
-                      {item.addons.length > 0 && (
-                        <p className="mt-0.5 text-xs text-[var(--status-success)]">
-                          + {item.addons.map((addon) => `${addon.quantity}× ${addon.addon_name}`).join(", ")}
-                        </p>
-                      )}
-                      {item.notes && <p className="mt-0.5 text-xs italic text-[var(--text-muted)]">{item.notes}</p>}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">
-                        {currency.format((item.product.price + item.addons.reduce((s, a) => s + a.price * a.quantity, 0)) * item.quantity)}
-                      </span>
-                      <button
-                        type="button"
-                        className="rounded-lg bg-[var(--bg-subtle)] p-2 text-[var(--text-secondary)] hover:bg-[var(--border)] ml-2"
-                        onClick={() => openCustomization(item.product, item)}
-                        aria-label="Editar item"
-                      >
-                        <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-lg bg-[var(--status-danger-bg)] p-2 text-[var(--status-danger)] hover:opacity-80"
-                        onClick={() => removeItem(item.id)}
-                        aria-label="Remover item"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      </button>
-                    </div>
+            <div className="mt-3 divide-y divide-[var(--border)]">
+              {items.map((item) => (
+                <div key={item.id} className="flex items-start gap-3 py-3">
+                  <span className="rounded-md bg-[var(--bg-inverse)] px-2 py-0.5 text-xs font-semibold text-white shrink-0 tabular-nums">{item.quantity}×</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">{item.product.name}</p>
+                    {item.addons.length > 0 && (
+                      <p className="mt-0.5 text-xs text-[var(--status-success)]">
+                        + {item.addons.map((addon) => `${addon.quantity}× ${addon.addon_name}`).join(", ")}
+                      </p>
+                    )}
+                    {item.notes && <p className="mt-0.5 text-xs italic text-[var(--text-muted)]">{item.notes}</p>}
                   </div>
-                ))}
-              </div>
-
-              <div className="mt-4 rounded-2xl bg-[var(--bg-subtle)] p-4">
-                <div className="flex items-center justify-between text-sm font-semibold text-[var(--text-primary)]">
-                  <span>Subtotal dos itens</span>
-                  <span className="text-lg tabular-nums">{currency.format(estimatedSubtotal)}</span>
-                </div>
-                {estimatedPackagingFee > 0 && (
-                  <div className="mt-1.5 flex items-center justify-between text-xs text-[var(--text-secondary)]">
-                    <span>Embalagem para viagem</span>
-                    <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)] lg:sticky lg:top-24">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold text-[var(--text-primary)]">Seus dados</h2>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-secondary)]">
-                    Já pediu antes? Seus dados aparecem automaticamente pelo número.
-                  </p>
-                </div>
-                {profileLookupState === "checking" && <Loader2 className="h-4 w-4 animate-spin text-brand-red shrink-0" />}
-              </div>
-
-              <FloatingInput
-                label="Seu WhatsApp com DDD"
-                value={customerPhone}
-                onChange={(v) => setCustomerInfo(customerName, formatWhatsAppInput(v))}
-                onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
-                placeholder="(11) 99999-9999"
-                type="tel"
-                inputMode="tel"
-                help="Avisamos você por aqui quando o pedido for confirmado e quando ficar pronto. Para sair, responda PARAR."
-              />
-
-              {!checkoutPhone && (
-                <div className="rounded-xl bg-[var(--brand-light)] border border-brand-red/15 p-3 text-sm leading-relaxed text-[var(--text-primary)]">
-                  Digite seu WhatsApp com DDD. Se seus dados estiverem salvos, a gente preenche o resto.
-                </div>
-              )}
-
-              {checkoutPhone && profileLookupState === "checking" && (
-                <div className="flex items-center gap-2 rounded-xl bg-[var(--bg-subtle)] p-3 text-sm text-[var(--text-secondary)]">
-                  <Loader2 className="h-4 w-4 animate-spin text-brand-red" />
-                  Procurando dados salvos para esse WhatsApp...
-                </div>
-              )}
-
-              {shouldShowCheckoutDetails && (
-                <>
-                  {profileNotice && (
-                    <div className="rounded-xl bg-[var(--status-success-bg)] px-3 py-2 text-xs font-medium text-[var(--status-success)]">
-                      {profileNotice}
-                    </div>
-                  )}
-
-                  {profileLookupState === "not_found" && (
-                    <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">
-                      Não encontrei dados salvos. Complete rapidinho abaixo.
-                    </div>
-                  )}
-
-                  <FloatingInput
-                    label="Nome completo"
-                    value={customerName}
-                    onChange={(v) => setCustomerInfo(v, customerPhone)}
-                    placeholder="Como podemos chamar você?"
-                  />
-
-                  <FloatingInput
-                    label="E-mail (opcional)"
-                    value={customerEmail}
-                    onChange={setCustomerEmail}
-                    placeholder="usado no PIX"
-                    type="email"
-                  />
-
-                  {/* Segmented control — não dois botões separados */}
-                  <div>
-                    <p className="mb-1.5 text-[11px] font-medium text-[var(--text-muted)]">Modalidade</p>
-                    <div className="flex rounded-xl bg-[var(--bg-subtle)] p-1">
-                      {([{ v: "BALCAO", label: "Comer aqui" }, { v: "VIAGEM", label: "Para levar" }] as const).map((opt) => {
-                        const isActive = orderType === opt.v;
-                        return (
-                          <button
-                            key={opt.v}
-                            type="button"
-                            onClick={() => setOrderType(opt.v)}
-                            className={`flex-1 h-10 rounded-lg text-sm font-semibold ${
-                              isActive
-                                ? "text-white shadow-[var(--shadow-sm)]"
-                                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                            }`}
-                            style={isActive ? { backgroundColor: "var(--bg-inverse)" } : undefined}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <textarea
-                    value={orderNotes}
-                    onChange={(event) => setOrderNotes(event.target.value)}
-                    placeholder="Alguma observação para a equipe?"
-                    className="h-20 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
-                  />
-
-                  <label className="flex items-start gap-3 cursor-pointer text-sm text-[var(--text-secondary)] py-1">
-                    <input
-                      type="checkbox"
-                      checked={rememberCheckoutData}
-                      onChange={(event) => setRememberCheckoutData(event.target.checked)}
-                      className="mt-0.5 h-4 w-4 accent-brand-red"
-                    />
-                    <span>Salvar meus dados para os próximos pedidos</span>
-                  </label>
-                  <label className="flex items-start gap-3 cursor-pointer text-sm text-[var(--text-secondary)] py-1">
-                    <input
-                      type="checkbox"
-                      checked={marketingOptIn}
-                      onChange={(event) => setMarketingOptIn(event.target.checked)}
-                      className="mt-0.5 h-4 w-4 accent-brand-red"
-                    />
-                    <span>Receber promoções e novidades pelo WhatsApp</span>
-                  </label>
-                  {rememberCheckoutData && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">
+                      {currency.format((item.product.price + item.addons.reduce((s, a) => s + a.price * a.quantity, 0)) * item.quantity)}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
-                        setRememberCheckoutData(false);
-                        setProfileNotice("Dados salvos removidos deste dispositivo.");
-                      }}
-                      className="text-xs text-[var(--text-muted)] underline hover:text-[var(--text-secondary)] self-start"
+                      className="rounded-lg bg-[var(--bg-subtle)] p-2 text-[var(--text-secondary)] hover:bg-[var(--border)] ml-2"
+                      onClick={() => openCustomization(item.product, item)}
+                      aria-label="Editar item"
                     >
-                      Remover dados salvos neste dispositivo
+                      <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
                     </button>
-                  )}
-
-                  {/* Resumo escuro com total em ámbar */}
-                  <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: "var(--bg-inverse)" }}>
-                    <div className="space-y-1.5 text-sm text-white/75">
-                      <div className="flex items-center justify-between">
-                        <span>Itens</span>
-                        <span className="tabular-nums">{currency.format(estimatedSubtotal)}</span>
-                      </div>
-                      {estimatedPackagingFee > 0 && (
-                        <div className="flex items-center justify-between">
-                          <span>Embalagem</span>
-                          <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between border-t border-white/10 pt-3 mt-1 text-base font-semibold text-white">
-                        <span>Total</span>
-                        <span className="text-xl tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(estimatedTotal)}</span>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-[var(--status-danger-bg)] p-2 text-[var(--status-danger)] hover:opacity-80"
+                      onClick={() => removeItem(item.id)}
+                      aria-label="Remover item"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    </button>
                   </div>
+                </div>
+              ))}
+            </div>
 
-                  {checkoutError && (
-                    <div className="rounded-2xl bg-[var(--status-danger-bg)] p-3 text-sm font-medium text-[var(--status-danger)]">
-                      {checkoutError}
-                    </div>
-                  )}
+            <div className="mt-4 rounded-2xl bg-[var(--bg-subtle)] p-4 space-y-1.5">
+              <div className="flex items-center justify-between text-sm text-[var(--text-secondary)]">
+                <span>Subtotal</span>
+                <span className="tabular-nums">{currency.format(estimatedSubtotal)}</span>
+              </div>
+              {estimatedPackagingFee > 0 && (
+                <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+                  <span>Embalagem para viagem</span>
+                  <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-2 border-t border-[var(--border)] text-sm font-semibold text-[var(--text-primary)]">
+                <span>Total</span>
+                <span className="text-xl tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(estimatedTotal)}</span>
+              </div>
+            </div>
+          </section>
 
+          <button
+            type="button"
+            onClick={() => setStep("INFO")}
+            disabled={items.length === 0}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98] disabled:opacity-45"
+            style={{ height: 52 }}
+          >
+            Continuar
+            <ChevronRight className="h-5 w-5" strokeWidth={2} />
+          </button>
+        </main>
+      )}
+
+      {/* ── Tela 4: INFO — dados do cliente + modalidade ───────────────── */}
+      {step === "INFO" && (
+        <main className="mx-auto max-w-2xl space-y-4 p-4">
+          <ProgressSteps current={2} />
+
+          <button
+            type="button"
+            onClick={() => setStep("REVIEW")}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+            Voltar para itens
+          </button>
+
+          <section className="rounded-2xl px-5 py-4 text-white shadow-[var(--shadow-sm)]" style={{ backgroundColor: "var(--bg-inverse)" }}>
+            <h2 className="text-lg font-semibold tracking-tight md:text-xl">Seus dados</h2>
+            <p className="mt-1 text-sm leading-relaxed text-white/65">
+              Identifique-se pelo WhatsApp. Já pediu antes? Preenchemos automaticamente.
+            </p>
+          </section>
+
+          <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+            <FloatingInput
+              label="Seu WhatsApp com DDD"
+              value={customerPhone}
+              onChange={(v) => setCustomerInfo(customerName, formatWhatsAppInput(v))}
+              onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
+              placeholder="(11) 99999-9999"
+              type="tel"
+              inputMode="tel"
+              help="Avisamos você por aqui quando o pedido for confirmado e quando ficar pronto. Para sair, responda PARAR."
+            />
+
+            {!checkoutPhone && (
+              <div className="rounded-xl bg-[var(--brand-light)] border border-brand-red/15 p-3 text-sm leading-relaxed text-[var(--text-primary)]">
+                Digite seu WhatsApp com DDD. Se seus dados estiverem salvos, a gente preenche o resto.
+              </div>
+            )}
+
+            {checkoutPhone && profileLookupState === "checking" && (
+              <div className="flex items-center gap-2 rounded-xl bg-[var(--bg-subtle)] p-3 text-sm text-[var(--text-secondary)]">
+                <Loader2 className="h-4 w-4 animate-spin text-brand-red" />
+                Procurando dados salvos para esse WhatsApp...
+              </div>
+            )}
+
+            {shouldShowCheckoutDetails && (
+              <>
+                {profileNotice && (
+                  <div className="rounded-xl bg-[var(--status-success-bg)] px-3 py-2 text-xs font-medium text-[var(--status-success)]">
+                    {profileNotice}
+                  </div>
+                )}
+                {profileLookupState === "not_found" && (
+                  <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">
+                    Não encontrei dados salvos. Complete rapidinho abaixo.
+                  </div>
+                )}
+
+                <FloatingInput
+                  label="Nome completo"
+                  value={customerName}
+                  onChange={(v) => setCustomerInfo(v, customerPhone)}
+                  placeholder="Como podemos chamar você?"
+                />
+
+                <FloatingInput
+                  label="E-mail (opcional)"
+                  value={customerEmail}
+                  onChange={setCustomerEmail}
+                  placeholder="usado no PIX"
+                  type="email"
+                />
+
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium text-[var(--text-muted)]">Modalidade</p>
+                  <div className="flex rounded-xl bg-[var(--bg-subtle)] p-1">
+                    {([{ v: "BALCAO", label: "Comer aqui" }, { v: "VIAGEM", label: "Para levar" }] as const).map((opt) => {
+                      const isActive = orderType === opt.v;
+                      return (
+                        <button
+                          key={opt.v}
+                          type="button"
+                          onClick={() => setOrderType(opt.v)}
+                          className={`flex-1 h-10 rounded-lg text-sm font-semibold ${
+                            isActive ? "text-white shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                          }`}
+                          style={isActive ? { backgroundColor: "var(--bg-inverse)" } : undefined}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <textarea
+                  value={orderNotes}
+                  onChange={(event) => setOrderNotes(event.target.value)}
+                  placeholder="Alguma observação para a equipe?"
+                  className="h-20 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
+                />
+
+                <label className="flex items-start gap-3 cursor-pointer text-sm text-[var(--text-secondary)] py-1">
+                  <input
+                    type="checkbox"
+                    checked={rememberCheckoutData}
+                    onChange={(event) => setRememberCheckoutData(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-brand-red"
+                  />
+                  <span>Salvar meus dados para os próximos pedidos</span>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer text-sm text-[var(--text-secondary)] py-1">
+                  <input
+                    type="checkbox"
+                    checked={marketingOptIn}
+                    onChange={(event) => setMarketingOptIn(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-brand-red"
+                  />
+                  <span>Receber promoções e novidades pelo WhatsApp</span>
+                </label>
+                {rememberCheckoutData && (
                   <button
                     type="button"
-                    onClick={handleCreateOrder}
-                    disabled={isSubmittingOrder}
-                    className="flex w-full h-13 items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
-                    style={{ height: 52 }}
+                    onClick={() => {
+                      localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+                      setRememberCheckoutData(false);
+                      setProfileNotice("Dados salvos removidos deste dispositivo.");
+                    }}
+                    className="text-xs text-[var(--text-muted)] underline hover:text-[var(--text-secondary)] self-start"
                   >
-                    {isSubmittingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" strokeWidth={1.75} />}
-                    Continuar para pagamento
+                    Remover dados salvos neste dispositivo
                   </button>
-                </>
+                )}
+              </>
+            )}
+          </section>
+
+          {/* Resumo escuro com total */}
+          <div className="rounded-2xl p-4 text-white" style={{ backgroundColor: "var(--bg-inverse)" }}>
+            <div className="space-y-1.5 text-sm text-white/75">
+              <div className="flex items-center justify-between">
+                <span>{items.length} {items.length === 1 ? "item" : "itens"}</span>
+                <span className="tabular-nums">{currency.format(estimatedSubtotal)}</span>
+              </div>
+              {estimatedPackagingFee > 0 && (
+                <div className="flex items-center justify-between">
+                  <span>Embalagem</span>
+                  <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
+                </div>
               )}
-            </section>
+              <div className="flex items-center justify-between border-t border-white/10 pt-3 mt-1 text-base font-semibold text-white">
+                <span>Total</span>
+                <span className="text-xl tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(estimatedTotal)}</span>
+              </div>
+            </div>
           </div>
+
+          {checkoutError && (
+            <div className="rounded-2xl bg-[var(--status-danger-bg)] p-3 text-sm font-medium text-[var(--status-danger)]">
+              {checkoutError}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleCreateOrder}
+            disabled={isSubmittingOrder || !shouldShowCheckoutDetails || !customerName.trim()}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
+            style={{ height: 52 }}
+          >
+            {isSubmittingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" strokeWidth={1.75} />}
+            Continuar para pagamento
+          </button>
         </main>
       )}
 
       {step === "PAYMENT" && orderData && (
         <main className="mx-auto max-w-3xl space-y-4 p-4">
-          {/* Progress indicator — step 2 (Pagamento) */}
-          <ProgressSteps current={2} />
+          {/* Progress indicator — step 3 (Pagamento) */}
+          <ProgressSteps current={3} />
 
           {/* Selos de confiança — obrigatórios no topo */}
           <section
@@ -2138,8 +2247,8 @@ export default function PedirPublicPage() {
 
         return (
           <main className="mx-auto flex max-w-md flex-col gap-5 px-4 py-8">
-            {/* Progress final */}
-            <ProgressSteps current={3} />
+            {/* Progress final — step 4 (Pronto) */}
+            <ProgressSteps current={4} />
 
             {/* Ícone confirmação */}
             <div className="flex flex-col items-center text-center gap-3 mt-2">
