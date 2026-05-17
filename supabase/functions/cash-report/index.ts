@@ -1,10 +1,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Origin-aware CORS — restringe às origens configuradas quando disponível.
+// Consistente com as demais Edge Functions do projeto.
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
+  const allowed = configured.split(",").map((o) => o.trim()).filter(Boolean);
+  const allowOrigin =
+    configured === "*" || !origin || allowed.includes(origin)
+      ? (origin || "*")
+      : (allowed[0] ?? "*");
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
 
 /**
  * Normalizes and classifies products into operational groups.
@@ -33,7 +46,7 @@ function classifyProductGroup(productName: string, categoryName: string): string
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -44,7 +57,7 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Não autenticado' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
         status: 401
       });
     }
@@ -55,7 +68,7 @@ serve(async (req) => {
 
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Token inválido ou expirado' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
         status: 401
       });
     }
@@ -69,7 +82,7 @@ serve(async (req) => {
 
     if (profileError || !profile || profile.role !== 'ADMIN' || !profile.active) {
       return new Response(JSON.stringify({ error: 'Acesso negado: Apenas administradores ativos.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
         status: 403
       });
     }

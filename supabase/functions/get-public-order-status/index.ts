@@ -382,7 +382,8 @@ serve(async (req) => {
       },
       transaction,
       items: (items ?? []).map((item: any) => ({
-        id: item.id,
+        // item.id (UUID interno) não é exposto ao público — desnecessário para o cliente
+        // e reduz superfície de ataque caso a validação server-side mude no futuro.
         sequence_no: item.sequence_no,
         status: item.status,
         payment_status: item.payment_status,
