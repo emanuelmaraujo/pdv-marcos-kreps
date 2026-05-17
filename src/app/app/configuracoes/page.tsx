@@ -119,22 +119,22 @@ function ToggleRow({
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className="group flex w-full items-center justify-between gap-4 py-4 text-left transition-colors hover:bg-zinc-50 px-1 rounded-lg"
+      className="group flex w-full items-start justify-between gap-5 py-4 text-left"
     >
       <span className="min-w-0">
-        <span className="block text-sm font-bold text-zinc-900 group-hover:text-zinc-700">{label}</span>
+        <span className="block text-sm font-semibold text-zinc-800 group-hover:text-zinc-600 transition-colors">{label}</span>
         {description && (
-          <span className="mt-0.5 block text-xs font-medium leading-relaxed text-zinc-500">{description}</span>
+          <span className="mt-1 block text-xs leading-relaxed text-zinc-400">{description}</span>
         )}
       </span>
       <span
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-all duration-200 ${
-          checked ? "bg-brand-red shadow-sm shadow-brand-red/20" : "bg-zinc-200"
+        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-all duration-300 ${
+          checked ? "bg-brand-red shadow-md shadow-brand-red/25" : "bg-zinc-200"
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-            checked ? "translate-x-5" : "translate-x-0.5"
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-300 ${
+            checked ? "translate-x-5 shadow-md" : "translate-x-0.5"
           }`}
         />
       </span>
@@ -144,7 +144,7 @@ function ToggleRow({
 
 function ToggleGroup({ children }: { children: ReactNode }) {
   return (
-    <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white px-4">
+    <div className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-100 bg-zinc-50/60 px-4">
       {children}
     </div>
   );
@@ -197,17 +197,20 @@ function SettingsPanel({
 }) {
   const accent = SECTION_ACCENT[id] ?? SECTION_ACCENT.pedido;
   return (
-    <section id={id} className={`scroll-mt-24 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 ${className}`}>
-      <header className="flex items-center gap-4 border-b border-zinc-100 px-6 py-5">
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${accent.iconBg}`}>
+    <section
+      id={id}
+      className={`scroll-mt-6 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80 ${className}`}
+    >
+      <header className="flex items-center gap-4 px-6 py-5">
+        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm ${accent.iconBg} ring-1 ring-black/5`}>
           <Icon className={`h-5 w-5 ${accent.iconColor}`} />
         </span>
-        <span className="min-w-0">
-          <h2 className="text-sm font-black text-zinc-950">{title}</h2>
-          <p className="mt-0.5 text-[11px] font-medium text-zinc-400">{description}</p>
+        <span className="min-w-0 flex-1">
+          <h2 className="text-sm font-black text-zinc-900">{title}</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">{description}</p>
         </span>
       </header>
-      <div className="px-6 py-5">{children}</div>
+      <div className="border-t border-zinc-100 px-6 py-5">{children}</div>
     </section>
   );
 }
@@ -496,167 +499,167 @@ export default function ConfiguracoesSistema() {
   }
 
   return (
-    <div className="min-h-full bg-[#F5F7FA]">
+    <div className="min-h-full bg-zinc-50">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* ─── Mobile header (dark, compact) ─────────────────────── */}
-      <header className="border-b border-zinc-700/50 bg-brand-charcoal md:hidden">
-        <div className="px-4 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>
-              <h1 className="text-xl font-black text-white">Configurações</h1>
-            </div>
-            <Button
-              onClick={handleSave}
-              loading={saving}
-              className="shrink-0 gap-2 bg-brand-red hover:bg-brand-red/90 text-white text-sm"
-            >
-              {!saving && <Save className="h-3.5 w-3.5" />}
-              Salvar
-            </Button>
-          </div>
-
-          {/* Mobile tabs */}
-          <nav className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-3">
-            {SECTIONS.map((section) => {
-              const Icon = section.icon;
-              const active = activeSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => scrollToSection(section.id)}
-                  className={`flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-black transition-all ${
-                    active
-                      ? "bg-brand-red text-white shadow-sm"
-                      : "border border-white/20 bg-white/10 text-zinc-300 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {section.title}
-                </button>
-              );
-            })}
-          </nav>
+      {/* ── Sidebar fixa (desktop) ──────────────────────────────────── */}
+      {/* Sidebar settings: no md começa na left-0 do conteúdo; no lg precisa offset do sidebar do app (240px = lg:left-60) */}
+      <aside className="fixed left-0 top-14 z-20 hidden h-[calc(100vh-3.5rem)] w-72 flex-col overflow-y-auto bg-[#1C1C1E] md:flex lg:left-60 border-r border-zinc-800/80">
+        {/* Identity */}
+        <div className="px-6 pt-6 pb-4">
+          <p className="text-[9px] font-black uppercase tracking-[0.15em] text-brand-red">Painel de controle</p>
+          <h1 className="mt-1.5 text-xl font-black text-white">Configurações</h1>
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+            Pedidos, impressão, notificações e autenticação.
+          </p>
         </div>
+
+        {/* Branch badge */}
+        {currentBranch && (
+          <div className="mx-4 mb-4 overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-white/8">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-red/15 text-[11px] font-black text-brand-red ring-1 ring-brand-red/20">
+                {currentBranch.code}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-black text-white">{currentBranch.name}</p>
+                <p className="text-[10px] text-zinc-500">Configurações globais</p>
+              </div>
+            </div>
+            <a
+              href="/app/configuracoes/filiais"
+              className="flex items-center justify-center border-t border-white/6 px-4 py-2.5 text-[11px] font-bold text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              Editar filial →
+            </a>
+          </div>
+        )}
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 space-y-0.5">
+          {SECTIONS.map((section) => {
+            const Icon = section.icon;
+            const active = activeSection === section.id;
+            const accent = SECTION_ACCENT[section.id] ?? SECTION_ACCENT.pedido;
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => scrollToSection(section.id)}
+                className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all duration-150 ${
+                  active
+                    ? "bg-white/10 shadow-sm ring-1 ring-white/10"
+                    : "hover:bg-white/5"
+                }`}
+              >
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all ${
+                  active ? `${accent.iconBg}` : "bg-zinc-800 group-hover:bg-zinc-700"
+                }`}>
+                  <Icon className={`h-4 w-4 transition-colors ${active ? accent.iconColor : "text-zinc-500 group-hover:text-zinc-400"}`} />
+                </span>
+                <span className="min-w-0">
+                  <span className={`block text-sm font-bold transition-colors ${active ? "text-white" : "text-zinc-300 group-hover:text-white"}`}>
+                    {section.title}
+                  </span>
+                  <span className={`block text-[10px] leading-tight transition-colors ${active ? "text-zinc-400" : "text-zinc-600"}`}>
+                    {section.description}
+                  </span>
+                </span>
+                {active && <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-brand-red" />}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Status */}
+        <div className="mx-4 mt-4 overflow-hidden rounded-2xl bg-zinc-800/40 ring-1 ring-white/6">
+          <p className="border-b border-white/6 px-4 py-2.5 text-[9px] font-black uppercase tracking-widest text-zinc-600">Status do sistema</p>
+          <div className="grid grid-cols-2 gap-px bg-white/6">
+            <StatPill label={`${settings.public_ordering_start_time}–${settings.public_ordering_end_time}`} value={publicOrderStatus} tone={settings.public_ordering_enabled === "true" ? "green" : "red"} />
+            <StatPill label={printWorkerStatus.lastSeen} value={`Pi ${printWorkerStatus.value}`} tone={printWorkerStatus.tone} />
+            <StatPill label={`${settings.printer_host}:${settings.printer_port}`} value={printingStatus} tone={settings.printing_enabled === "true" ? "green" : "red"} />
+            <StatPill label={`${whatsappStats.pending} pendentes`} value={whatsappStatus} tone={settings.whatsapp_enabled === "true" ? "green" : "neutral"} />
+          </div>
+        </div>
+
+        {/* Save */}
+        <div className="p-4 pt-3">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-red px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-red/25 transition-all hover:bg-brand-red/90 active:scale-[0.98] disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? "Salvando..." : "Salvar alterações"}
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Mobile header (sticky, dark) ─────────────────────────────── */}
+      <header className="sticky top-0 z-10 border-b border-zinc-800 bg-[#1C1C1E] md:hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>
+            <h1 className="text-base font-black text-white">Configurações</h1>
+          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-brand-red px-3.5 py-2 text-xs font-black text-white transition-all active:scale-95 disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Salvar
+          </button>
+        </div>
+
+        {/* Branch indicator — mobile */}
+        {currentBranch && (
+          <div className="flex items-center justify-between gap-2 border-t border-zinc-800 px-4 py-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-red/20 text-[9px] font-black text-brand-red">
+                {currentBranch.code}
+              </span>
+              <p className="text-[11px] font-bold text-zinc-300">{currentBranch.name}</p>
+            </div>
+            <a href="/app/configuracoes/filiais" className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300">
+              Editar →
+            </a>
+          </div>
+        )}
+
+        {/* Mobile section tabs */}
+        <nav className="-mx-0 flex gap-1.5 overflow-x-auto px-3 pb-3 pt-2">
+          {SECTIONS.map((section) => {
+            const Icon = section.icon;
+            const active = activeSection === section.id;
+            const accent = SECTION_ACCENT[section.id] ?? SECTION_ACCENT.pedido;
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => scrollToSection(section.id)}
+                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-all ${
+                  active
+                    ? `${accent.iconBg} ${accent.iconColor} ring-1 ring-inset ring-current/20`
+                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{section.title}</span>
+              </button>
+            );
+          })}
+        </nav>
       </header>
 
-      {/* ─── Desktop two-panel layout ───────────────────────────── */}
-      <div className="hidden md:flex md:min-h-[calc(100vh-3.5rem)]">
+      {/* ── Conteúdo principal (mobile + desktop) ─────────────────────── */}
+      {/* No md: sidebar settings tem 288px (w-72), offset o conteúdo */}
+      <div className="md:pl-72">
+        <div className="mx-auto max-w-2xl space-y-4 px-4 py-5 pb-32 md:max-w-none md:px-6 md:py-6 md:pb-8">
 
-        {/* Left panel — dark sidebar unified with app header */}
-        <aside className="sticky top-14 h-[calc(100vh-3.5rem)] w-[260px] shrink-0 flex flex-col overflow-y-auto bg-brand-charcoal border-r border-zinc-700/60">
-          {/* Identity */}
-          <div className="border-b border-zinc-700/60 px-5 py-5">
-            <p className="text-[10px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>
-            <h1 className="mt-1 text-lg font-black text-white">Configurações</h1>
-            <p className="mt-0.5 text-[11px] font-medium text-zinc-400">
-              Pedidos online, impressão, notificações e autenticação.
-            </p>
-          </div>
-
-          {/* Branch badge */}
-          {currentBranch && (
-            <div className="border-b border-zinc-700/60 px-5 py-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-brand-red/20 text-[11px] font-black text-brand-red">
-                  {currentBranch.code}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-[11px] font-black text-white">{currentBranch.name}</p>
-                  <p className="text-[10px] text-zinc-500">Configurações globais</p>
-                </div>
-              </div>
-              <a
-                href="/app/configuracoes/filiais"
-                className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-[11px] font-bold text-zinc-300 transition-all hover:bg-zinc-700 hover:text-white w-full"
-              >
-                Editar filial →
-              </a>
-            </div>
-          )}
-
-          {/* Navigation */}
-          <nav className="flex-1 px-3 py-3 space-y-0.5">
-            {SECTIONS.map((section) => {
-              const Icon = section.icon;
-              const active = activeSection === section.id;
-              const accent = SECTION_ACCENT[section.id] ?? SECTION_ACCENT.pedido;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => scrollToSection(section.id)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-all ${
-                    active
-                      ? `${accent.navActive} shadow-sm`
-                      : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
-                  }`}
-                >
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all ${
-                    active ? "bg-white/15" : "bg-zinc-800"
-                  }`}>
-                    <Icon className={`h-4 w-4 transition-colors ${active ? "text-white" : "text-zinc-500"}`} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className={`block text-sm font-black transition-colors ${active ? "" : "text-zinc-300"}`}>
-                      {section.title}
-                    </span>
-                    <span className={`block text-[10px] font-medium truncate ${active ? "opacity-70" : "text-zinc-500"}`}>
-                      {section.description}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* Status pills */}
-          <div className="border-t border-zinc-700/60 px-4 py-4 space-y-2">
-            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 px-1">Status atual</p>
-            <div className="grid grid-cols-2 gap-2">
-              <StatPill
-                label={`${settings.public_ordering_start_time}–${settings.public_ordering_end_time}`}
-                value={publicOrderStatus}
-                tone={settings.public_ordering_enabled === "true" ? "green" : "red"}
-              />
-              <StatPill
-                label={printWorkerStatus.lastSeen}
-                value={`Pi ${printWorkerStatus.value}`}
-                tone={printWorkerStatus.tone}
-              />
-              <StatPill
-                label={`${settings.printer_host}:${settings.printer_port}`}
-                value={printingStatus}
-                tone={settings.printing_enabled === "true" ? "green" : "red"}
-              />
-              <StatPill
-                label={`${whatsappStats.pending} pendentes`}
-                value={whatsappStatus}
-                tone={settings.whatsapp_enabled === "true" ? "green" : "neutral"}
-              />
-            </div>
-          </div>
-
-          {/* Save button */}
-          <div className="border-t border-zinc-700/60 px-4 py-4">
-            <Button
-              onClick={handleSave}
-              loading={saving}
-              className="w-full gap-2 bg-brand-red hover:bg-brand-red/90 text-white shadow-lg shadow-brand-red/20"
-            >
-              {!saving && <Save className="h-4 w-4" />}
-              Salvar alterações
-            </Button>
-          </div>
-        </aside>
-
-        {/* Right panel — clean content area */}
-        <main className="flex-1 overflow-y-auto bg-[#F5F7FA]">
-          <div className="mx-auto max-w-3xl space-y-6 px-6 py-6">
-
-        <div className="space-y-5">
+        <div className="space-y-4">
           <SettingsPanel
             id="pedido"
             icon={Store}
@@ -995,19 +998,9 @@ export default function ConfiguracoesSistema() {
             <BiometricManager />
           </SettingsPanel>
 
-          </div>{/* end space-y-5 panels */}
-          </div>{/* end max-w-3xl */}
-        </main>{/* end right panel */}
-
-      </div>{/* end desktop two-panel */}
-
-      {/* Mobile: save bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-zinc-200 bg-white/95 p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] backdrop-blur md:hidden">
-        <Button onClick={handleSave} loading={saving} className="w-full gap-2">
-          {!saving && <Check className="h-4 w-4" />}
-          Salvar alterações
-        </Button>
-      </div>
+        </div>{/* end space-y-4 panels */}
+        </div>{/* end content wrapper */}
+      </div>{/* end md:pl-72 */}
     </div>
   );
 }
