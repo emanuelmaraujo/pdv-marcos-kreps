@@ -258,7 +258,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
 
                       return (
                         <div
-                          key={item.id}
+                          key={item.sequence_no ?? item.product_name}
                           className={`flex items-start gap-3 rounded-xl border p-3 transition-all ${
                             isReady ? "border-emerald-200 bg-emerald-50"
                             : isCancelled ? "border-zinc-100 bg-zinc-50 opacity-50"

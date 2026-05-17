@@ -247,7 +247,7 @@ export type PublicOrderStatusResponse = {
   };
   transaction?: Partial<PaymentTransaction> | null;
   items?: Array<{
-    id: string;
+    // id omitido intencionalmente: não exposto pelo endpoint público (reduz superfície de ataque)
     sequence_no?: number | null;
     status?: string | null;
     payment_status?: string | null;
