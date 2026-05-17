@@ -1,5 +1,7 @@
 "use client";
 
+"use client";
+
 import { useEffect, useState } from "react";
 import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
 import { Button } from "@/components/ui/Button";
@@ -77,6 +79,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [showPaymentSelection, setShowPaymentSelection] = useState(false);
   const [showPayItems, setShowPayItems] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showChangeMethod, setShowChangeMethod] = useState(false);
   const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
 
   // Close on Escape
@@ -94,6 +97,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
       setShowCancelReason(false);
       setCancelReason("");
       setShowPaymentSelection(false);
+      setShowChangeMethod(false);
       setShowHistory(false);
     }, 0);
 
@@ -130,6 +134,11 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   };
   const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
     handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: order.total_amount }));
+  const onChangeMethod = (method: PaymentMethod) =>
+    handleAction(async () => {
+      await pdvApi.changePaymentMethod({ orderId: order.id, paymentMethod: method });
+      setShowChangeMethod(false);
+    });
   const onReprint = () =>
     handleAction(() => pdvApi.reprintOrder({
       orderId: order.id,
@@ -144,6 +153,16 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const hasPacking   = order.packing_fee > 0;
   const subtotal     = order.total_amount + order.discount_amount - order.packing_fee;
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
+  const isPaid       = order.payment_status === "PAID" || order.payment_status === "COURTESY";
+
+  const elapsedMin = isENTREGUE && order.delivered_at
+    ? Math.round((new Date(order.delivered_at).getTime() - new Date(order.created_at).getTime()) / 60000)
+    : null;
+  const elapsedLabel = elapsedMin !== null
+    ? elapsedMin < 60
+      ? `${elapsedMin} min`
+      : `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}min`
+    : null;
 
   const historyEvents = [
     { label: "Criado",     time: order.created_at },
@@ -199,6 +218,9 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   {order.type === "BALCAO" ? "Balcão" : "Para Viagem"} ·{" "}
                   {order.source === "ATTENDANT" ? "Atendente" : order.source === "QR_CODE" ? "QR Code" : order.source === "APP" ? "App" : "WhatsApp"} ·{" "}
                   Criado às {fmt(order.created_at)}
+                  {elapsedLabel && (
+                    <span className="ml-1 font-black text-emerald-400"> · {elapsedLabel}</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -335,7 +357,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
             )}
 
             {/* ─ Default actions ─ */}
-            {!showPaymentSelection && !showCancelReason && (
+            {!showPaymentSelection && !showCancelReason && !showChangeMethod && (
               <>
                 {/* Primary status CTA */}
                 {order.status === "AGUARDANDO_CONFIRMACAO" && (
@@ -418,6 +440,18 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
 
                 <hr className="border-zinc-200" />
 
+                {/* Alterar forma de pagamento */}
+                {isPaid && !isCANCELADO && (
+                  <Button
+                    variant="outline"
+                    className="h-11 w-full rounded-2xl border-2 text-xs font-black text-zinc-600 gap-2"
+                    onClick={() => setShowChangeMethod(true)}
+                    disabled={isLoading}
+                  >
+                    <ArrowLeft size={14} className="rotate-180" /> ALTERAR PAGAMENTO
+                  </Button>
+                )}
+
                 {/* Secondary actions */}
                 {["NA_FILA", "PRONTO", "ENTREGUE"].includes(order.status) && (
                   <Button
@@ -447,6 +481,35 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </p>
                 )}
               </>
+            )}
+
+            {/* ─ Change payment method ─ */}
+            {showChangeMethod && (
+              <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-150">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowChangeMethod(false)}
+                    className="rounded-xl p-1.5 text-zinc-400 hover:bg-zinc-200 transition-colors"
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <h4 className="text-xs font-black uppercase tracking-widest text-zinc-700">
+                    Alterar Forma de Pagamento
+                  </h4>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {PAYMENT_METHODS.map(({ value, label, Icon, color }) => (
+                    <button
+                      key={value}
+                      onClick={() => onChangeMethod(value)}
+                      disabled={isLoading}
+                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 text-xs font-black transition-all active:scale-95 disabled:opacity-50 ${color} ${order.payment_method === value ? "ring-2 ring-offset-1 ring-current" : ""}`}
+                    >
+                      <Icon size={18} /> {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* ─ Payment selection ─ */}

@@ -641,4 +641,10 @@ export const pdvApi = {
       addons: payload.addons,
       is_takeout: payload.is_takeout,
     }),
+
+  changePaymentMethod: (payload: { orderId: string; paymentMethod: PaymentMethod }) =>
+    invokeEdgeFunction('change-payment-method', {
+      order_id: payload.orderId,
+      payment_method: payload.paymentMethod,
+    }),
 };
