@@ -58,8 +58,10 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
           .map((r: any) => r.addons)
           .filter((a: AvailableAddon | null) => a && a.active);
         setAvailableAddons(addons);
-      })
-      .finally(() => setIsFetchingAddons(false));
+        setIsFetchingAddons(false);
+      }, () => {
+        setIsFetchingAddons(false);
+      });
   }, [isOpen, item]);
 
   const updateAddonQty = (addonId: string, delta: number) => {

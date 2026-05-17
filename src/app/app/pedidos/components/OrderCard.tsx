@@ -260,7 +260,7 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
         )}
 
         {/* Per-item progress chips — só aparece em pedidos com 2+ itens ativos */}
-        {order.items && showTimer && (
+        {order.items && isActive && (
           <ItemProgress items={order.items} branchCode={order.branch?.code} dailyNumber={order.daily_number} />
         )}
 
