@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Order, OrderItem, OrderItemStatus } from '@/types/pdv';
 import { pdvApi } from '@/lib/api/pdv-api';
-import { Clock, ChefHat, CheckCircle2, Package, X, Loader2, Wallet } from 'lucide-react';
+import { Clock, ChefHat, CheckCircle2, Package, X, Loader2, Wallet, Pencil } from 'lucide-react';
 
 const STATUS_META: Record<OrderItemStatus, { label: string; dot: string; pill: string; text: string }> = {
   PENDING:        { label: 'Pendente',    dot: 'bg-zinc-300',     pill: 'bg-zinc-100 text-zinc-600',   text: 'text-zinc-600' },
@@ -39,9 +39,11 @@ function itemLabel(order: Order, item: OrderItem): string {
 export function OrderItemsControl({
   order,
   onMutated,
+  onEditItem,
 }: {
   order: Order;
   onMutated?: () => void;
+  onEditItem?: (item: OrderItem) => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -181,6 +183,16 @@ export function OrderItemsControl({
                       className="flex items-center gap-1 rounded px-2 py-1 hover:bg-zinc-50"
                     >
                       <Clock className="h-2.5 w-2.5" /> Iniciar preparo
+                    </button>
+                  )}
+                  {onEditItem && order.status === 'NA_FILA' && item.status === 'PENDING' && item.payment_status === 'PENDING' && (
+                    <button
+                      type="button"
+                      onClick={() => onEditItem(item)}
+                      disabled={isBusy}
+                      className="flex items-center gap-1 rounded px-2 py-1 text-blue-600 hover:bg-blue-50"
+                    >
+                      <Pencil className="h-2.5 w-2.5" /> Editar
                     </button>
                   )}
                   <button

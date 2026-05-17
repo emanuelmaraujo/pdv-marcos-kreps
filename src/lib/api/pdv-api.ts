@@ -630,4 +630,15 @@ export const pdvApi = {
       order_id: payload.order_id,
       items: payload.items
     }),
+
+  editOrderItem: (payload: {
+    orderItemId: string;
+    addons: Array<{ addon_id: string; quantity: number }>;
+    is_takeout: boolean;
+  }) =>
+    invokeEdgeFunction('edit-order-item', {
+      order_item_id: payload.orderItemId,
+      addons: payload.addons,
+      is_takeout: payload.is_takeout,
+    }),
 };

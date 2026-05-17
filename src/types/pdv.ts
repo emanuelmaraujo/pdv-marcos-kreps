@@ -116,6 +116,7 @@ export interface OrderItem {
   payment_status: PaymentStatus;
   payment_method: PaymentMethod;
   paid_at?: string;
+  is_takeout?: boolean;
   product?: Product;
   removed_ingredients?: OrderItemRemovedIngredient[];
   addons?: OrderItemAddon[];

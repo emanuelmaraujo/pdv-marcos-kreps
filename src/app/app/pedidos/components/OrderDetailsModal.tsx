@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Order, PaymentMethod, PaymentStatus } from "@/types/pdv";
+import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
 import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
 import { PayItemsModal } from "./PayItemsModal";
+import { EditOrderItemSheet } from "./EditOrderItemSheet";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useRouter } from "next/navigation";
@@ -76,6 +77,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [showPaymentSelection, setShowPaymentSelection] = useState(false);
   const [showPayItems, setShowPayItems] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
 
   // Close on Escape
   useEffect(() => {
@@ -245,7 +247,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
               <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-zinc-400">
                 Itens do Pedido
               </p>
-              <OrderItemsControl order={order} onMutated={onOrderUpdated} />
+              <OrderItemsControl order={order} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
 
               {/* Financial summary */}
               <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -521,6 +523,14 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
           order={order}
           onClose={() => setShowPayItems(false)}
           onPaid={() => { setShowPayItems(false); onOrderUpdated(); onClose(); }}
+        />
+      )}
+      {editingItem && (
+        <EditOrderItemSheet
+          item={editingItem}
+          isOpen={true}
+          onClose={() => setEditingItem(null)}
+          onSaved={() => { setEditingItem(null); onOrderUpdated(); }}
         />
       )}
     </>
