@@ -155,8 +155,9 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
   const isPaid       = order.payment_status === "PAID" || order.payment_status === "COURTESY";
 
-  const elapsedMin = isENTREGUE && order.delivered_at
-    ? Math.round((new Date(order.delivered_at).getTime() - new Date(order.created_at).getTime()) / 60000)
+  const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
+  const elapsedMin = isENTREGUE && order.delivered_at && queueEnteredAt
+    ? Math.round((new Date(order.delivered_at).getTime() - new Date(queueEnteredAt).getTime()) / 60000)
     : null;
   const elapsedLabel = elapsedMin !== null
     ? elapsedMin < 60
