@@ -437,7 +437,10 @@ export default function NovoPedidoPage() {
          desktop — garante que fica sempre visível mesmo em layouts com
          scroll em container aninhado. O conteúdo recebe pt para compensar. */}
       {!isCheckoutOpen && !selectedProduct && (
-        <div className="lg:hidden fixed top-14 left-0 right-0 z-30 bg-[var(--bg-surface)]/95 backdrop-blur border-b border-[var(--border)]">
+        <div
+          style={{ backgroundColor: "var(--bg-surface)" }}
+          className="lg:hidden fixed top-14 left-0 right-0 z-30 border-b border-[var(--border)] isolate"
+        >
           {targetOrder && (
             <div className="px-4 pt-2 pb-1 flex items-center gap-2">
               <span className="rounded-full bg-[var(--status-info-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--status-info)]">
