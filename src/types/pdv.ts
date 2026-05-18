@@ -20,7 +20,7 @@ export type OrderItemStatus =
   | 'CANCELLED';
 
 export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'REFUNDED' | 'CANCELED' | 'COURTESY';
-export type PaymentMethod = 'PIX' | 'CASH' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'PENDING' | 'COURTESY';
+export type PaymentMethod = 'PIX' | 'CASH' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'IFOOD' | 'PENDING' | 'COURTESY';
 export type OrderType = 'BALCAO' | 'VIAGEM';
 export type OrderSource = 'ATTENDANT' | 'QR_CODE' | 'WHATSAPP' | 'APP';
 
@@ -116,6 +116,7 @@ export interface OrderItem {
   payment_status: PaymentStatus;
   payment_method: PaymentMethod;
   paid_at?: string;
+  is_takeout?: boolean;
   product?: Product;
   removed_ingredients?: OrderItemRemovedIngredient[];
   addons?: OrderItemAddon[];

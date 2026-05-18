@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { Order, OrderItem, OrderItemStatus } from '@/types/pdv';
 import { pdvApi } from '@/lib/api/pdv-api';
-import { Clock, ChefHat, CheckCircle2, Package, X, Loader2, Wallet } from 'lucide-react';
+import { Clock, ChefHat, CheckCircle2, Package, X, Loader2, Wallet, Pencil, ShoppingBag, Utensils } from 'lucide-react';
+
+const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const STATUS_META: Record<OrderItemStatus, { label: string; dot: string; pill: string; text: string }> = {
   PENDING:        { label: 'Pendente',    dot: 'bg-zinc-300',     pill: 'bg-zinc-100 text-zinc-600',   text: 'text-zinc-600' },
@@ -39,9 +41,11 @@ function itemLabel(order: Order, item: OrderItem): string {
 export function OrderItemsControl({
   order,
   onMutated,
+  onEditItem,
 }: {
   order: Order;
   onMutated?: () => void;
+  onEditItem?: (item: OrderItem) => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,8 +135,8 @@ export function OrderItemsControl({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${meta.dot}`} />
                     <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] font-black text-white">
                       {itemLabel(order, item)}
                     </span>
@@ -144,13 +148,55 @@ export function OrderItemsControl({
                         <Wallet className="h-2.5 w-2.5" /> Pago
                       </span>
                     )}
+                    {item.is_takeout ? (
+                      <span className="flex items-center gap-1 rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-black text-sky-700">
+                        <ShoppingBag className="h-2.5 w-2.5" /> Levar
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-black text-zinc-500">
+                        <Utensils className="h-2.5 w-2.5" /> Aqui
+                      </span>
+                    )}
                   </div>
-                  <p className={`mt-1 truncate text-sm font-bold ${meta.text}`}>
-                    {item.quantity}× {item.product_name_snapshot}
-                  </p>
-                  {item.observation && (
-                    <p className="mt-0.5 text-[11px] italic text-zinc-500">&ldquo;{item.observation}&rdquo;</p>
+                  <div className="mt-1 flex items-baseline justify-between gap-2">
+                    <p className={`truncate text-sm font-bold ${meta.text}`}>
+                      {item.quantity}× {item.product_name_snapshot}
+                    </p>
+                    <span className="shrink-0 text-xs font-black text-zinc-700">
+                      {currency.format(Number(item.total_price))}
+                    </span>
+                  </div>
+
+                  {/* Adicionais */}
+                  {(item.addons ?? []).length > 0 && (
+                    <div className="mt-1 space-y-0.5 pl-1 border-l-2 border-emerald-200">
+                      {item.addons!.map((a) => (
+                        <p key={a.id ?? a.addon_id} className="text-[11px] text-zinc-500">
+                          + {a.addon_name_snapshot}
+                          {(a.quantity > 1) && <span className="font-bold"> ×{a.quantity}</span>}
+                          {Number(a.addon_price_snapshot) > 0 && (
+                            <span className="ml-1 text-zinc-400">
+                              ({currency.format(Number(a.addon_price_snapshot) * a.quantity)})
+                            </span>
+                          )}
+                        </p>
+                      ))}
+                    </div>
                   )}
+
+                  {/* Ingredientes removidos */}
+                  {(item.removed_ingredients ?? []).length > 0 && (
+                    <p className="mt-0.5 text-[11px] italic text-red-400 pl-1">
+                      Sem: {item.removed_ingredients!.map((r) => r.ingredient_name_snapshot).join(', ')}
+                    </p>
+                  )}
+
+                  {item.observation && (() => {
+                    const obs = item.observation.replace(/^\[VIAGEM\]\s*/, '').trim();
+                    return obs ? (
+                      <p className="mt-0.5 text-[11px] italic text-zinc-400">&ldquo;{obs}&rdquo;</p>
+                    ) : null;
+                  })()}
                 </div>
 
                 {next && (
@@ -181,6 +227,16 @@ export function OrderItemsControl({
                       className="flex items-center gap-1 rounded px-2 py-1 hover:bg-zinc-50"
                     >
                       <Clock className="h-2.5 w-2.5" /> Iniciar preparo
+                    </button>
+                  )}
+                  {onEditItem && order.status === 'NA_FILA' && item.status === 'PENDING' && item.payment_status === 'PENDING' && (
+                    <button
+                      type="button"
+                      onClick={() => onEditItem(item)}
+                      disabled={isBusy}
+                      className="flex items-center gap-1 rounded px-2 py-1 text-blue-600 hover:bg-blue-50"
+                    >
+                      <Pencil className="h-2.5 w-2.5" /> Editar
                     </button>
                   )}
                   <button

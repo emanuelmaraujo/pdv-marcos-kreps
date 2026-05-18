@@ -224,6 +224,7 @@ serve(async (req) => {
         product,
         quantity: item.quantity,
         notes: item.notes || null,
+        is_takeout: item.is_takeout === true,
         itemTotalPrice,
         removedIngredientsSnapshots,
         addonsSnapshots
@@ -232,8 +233,12 @@ serve(async (req) => {
 
     // 4. Calcular Taxas e Descontos
     let packingFee = 0;
-    if (order_type === 'VIAGEM' && settingBool(settings.apply_packaging_fee_for_takeout)) {
-      packingFee = settingNumber(settings.packaging_fee);
+    if (settingBool(settings.apply_packaging_fee_for_takeout)) {
+      const feePerItem = settingNumber(settings.packaging_fee);
+      if (feePerItem > 0) {
+        const takeoutQty = finalItemsData.reduce((sum, i) => sum + (i.is_takeout ? i.quantity : 0), 0);
+        packingFee = takeoutQty * feePerItem;
+      }
     }
 
     let discountAmount = 0;
@@ -375,6 +380,15 @@ serve(async (req) => {
     }
 
     // 8. Inserir Itens
+    // Para pedidos pagos no ato (não split_bill), os itens já nascem com payment_status
+    // correspondente — o trigger recompute_order_payment_status_from_items deriva o
+    // orders.payment_status dos itens, então sem isso o status voltaria a PENDING após
+    // cada INSERT de item.
+    const itemPaymentStatus = !isSplitBill && (payment_status === 'PAID' || payment_status === 'COURTESY')
+      ? payment_status : 'PENDING';
+    const itemPaymentMethod = itemPaymentStatus !== 'PENDING' ? payment_method : 'PENDING';
+    const itemPaidAt       = itemPaymentStatus !== 'PENDING' ? nowIso : null;
+
     for (const itemData of finalItemsData) {
       const { data: oi, error: oiErr } = await supabaseAdmin
         .from('order_items')
@@ -386,7 +400,10 @@ serve(async (req) => {
           production_sector: itemData.product.sector,
           quantity: itemData.quantity,
           observation: itemData.notes,
-          total_price: itemData.itemTotalPrice
+          total_price: itemData.itemTotalPrice,
+          payment_status: itemPaymentStatus,
+          payment_method: itemPaymentMethod,
+          paid_at: itemPaidAt,
         })
         .select('id')
         .single();

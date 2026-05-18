@@ -126,12 +126,9 @@ function getMdPlusSnapshot() {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getStatusEnteredAt(order: Order): string | undefined {
-  switch (order.status) {
-    case "NA_FILA":         return order.queue_entered_at ?? order.confirmed_at;
-    case "PRONTO_PARCIAL":  return order.queue_entered_at ?? order.confirmed_at;
-    case "PRONTO":          return order.ready_at;
-    default:                return order.created_at;
-  }
+  // Usa sempre queue_entered_at como base — o tempo conta desde que entrou na fila,
+  // sem resetar quando o status avança de NA_FILA para PRONTO.
+  return order.queue_entered_at ?? order.confirmed_at ?? order.created_at;
 }
 
 function getAvgWaitMinutes(orders: Order[], now: number): number | null {
@@ -350,10 +347,6 @@ export default function PedidosPage() {
         await pdvApi.updateOrderItemStatus({ orderItemId: id, newStatus: "DELIVERED" });
       }
     } else if (order.status === "PRONTO") {
-      if (
-        (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") &&
-        !window.confirm("ATENÇÃO: Pagamento pendente/parcial. Confirmar entrega mesmo assim?")
-      ) return;
       await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
     }
     await fetchOrders(false);
@@ -364,7 +357,9 @@ export default function PedidosPage() {
   const queueCount       = getCount("NA_FILA");
   const readyCount       = getCount("PRONTO");
   const waitingCount     = getCount("AGUARDANDO_CONFIRMACAO");
-  const pendingPayCount  = orders.filter((o) => o.payment_status === "PENDING").length;
+  const pendingPayCount  = orders.filter((o) =>
+    o.payment_status === "PENDING" && !["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(o.status)
+  ).length;
   const receivedTotal    = orders
     .filter((o) => o.payment_status === "PAID" || o.payment_status === "COURTESY")
     .reduce((sum, o) => sum + o.total_amount, 0);

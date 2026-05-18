@@ -21,6 +21,7 @@ const METHODS: {
   { value: 'CASH',        label: 'Dinheiro', short: 'Dinheiro', Icon: Banknote,    colors: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' },
   { value: 'DEBIT_CARD',  label: 'Débito',   short: 'Débito',   Icon: CreditCard,  colors: 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100' },
   { value: 'CREDIT_CARD', label: 'Crédito',  short: 'Crédito',  Icon: Wallet,      colors: 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100' },
+  { value: 'IFOOD',       label: 'iFood',    short: 'iFood',    Icon: Smartphone,  colors: 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100' },
   { value: 'COURTESY',    label: 'Cortesia', short: 'Cortesia', Icon: CheckCircle2,colors: 'border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100' },
 ];
 
@@ -59,8 +60,11 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   const [paidCount, setPaidCount] = useState(0);
 
   const selectedItems = unpaidItems.filter((i) => selected.has(i.id));
-  const batchTotal = selectedItems.reduce((s, i) => s + Number(i.total_price), 0);
   const isAll = selected.size === unpaidItems.length && unpaidItems.length > 0;
+  // packing_fee fica no pedido, não rateado por item; cobrado apenas quando todos os itens
+  // são pagos em lote (scope = undefined em mark-payment).
+  const packingFeeAmount = Number(order.packing_fee ?? 0);
+  const batchTotal = selectedItems.reduce((s, i) => s + Number(i.total_price), 0) + (isAll ? packingFeeAmount : 0);
 
   // ── Pagar 1 item direto (modo por pessoa) ─────────────────────────────────
   async function payOneItem(item: OrderItem, method: PaymentMethod) {
@@ -114,7 +118,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   const dailyNum = String(order.daily_number).padStart(3, '0');
   const branchCode = order.branch?.code;
   const orderLabel = branchCode ? `${branchCode}-${dailyNum}` : `#${dailyNum}`;
-  const pendingTotal = unpaidItems.reduce((s, i) => s + Number(i.total_price), 0);
+  const pendingTotal = unpaidItems.reduce((s, i) => s + Number(i.total_price), 0) + packingFeeAmount;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center">
@@ -207,7 +211,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
                     </div>
 
                     {/* Botões de método inline */}
-                    <div className={`grid grid-cols-5 gap-1.5 transition-opacity ${isBusy ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <div className={`grid grid-cols-3 gap-1.5 transition-opacity ${isBusy ? 'opacity-50 pointer-events-none' : ''}`}>
                       {METHODS.map(({ value, short, Icon, colors }) => (
                         <button
                           key={value}
@@ -295,11 +299,19 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
                 })}
               </div>
 
+              {/* Taxa de embalagem — só visível quando todos os itens selecionados */}
+              {isAll && packingFeeAmount > 0 && (
+                <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <span className="text-xs font-bold text-amber-700">Taxa de embalagem (para levar)</span>
+                  <span className="text-sm font-black text-amber-700">{currency.format(packingFeeAmount)}</span>
+                </div>
+              )}
+
               {/* Método de pagamento */}
               {selected.size > 0 && (
                 <div className="space-y-2.5">
                   <p className="text-[11px] font-black uppercase tracking-widest text-zinc-400">Forma de pagamento</p>
-                  <div className="grid grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-3 gap-1.5">
                     {METHODS.map(({ value, short, Icon, colors }) => (
                       <button
                         key={value}

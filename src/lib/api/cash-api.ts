@@ -94,6 +94,7 @@ const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   DEBIT_CARD: "Debito",
   CREDIT_CARD: "Credito",
   COURTESY: "Cortesia",
+  IFOOD: "iFood",
   PENDING: "Pendente",
 };
 
