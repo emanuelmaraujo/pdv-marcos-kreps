@@ -152,6 +152,26 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
 
   if (order.payment_status !== "PAID") {
     const nowIso = new Date().toISOString();
+    const { data: payableItems, error: payableItemsErr } = await supabaseAdmin
+      .from("order_items")
+      .select("id")
+      .eq("order_id", order.id)
+      .neq("status", "CANCELLED");
+    if (payableItemsErr) throw new Error("Erro ao carregar itens do pedido pago.");
+
+    const orderItemIds = (payableItems ?? []).map((item: any) => item.id);
+    if (orderItemIds.length > 0) {
+      const { error: itemsPaymentErr } = await supabaseAdmin
+        .from("order_items")
+        .update({
+          payment_status: "PAID",
+          payment_method: internalMethod,
+          paid_at: nowIso,
+        })
+        .in("id", orderItemIds);
+      if (itemsPaymentErr) throw new Error("Erro ao marcar itens como pagos.");
+    }
+
     const { error } = await supabaseAdmin
       .from("orders")
       .update({
@@ -173,6 +193,12 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
     .maybeSingle();
 
   if (!existingPayment) {
+    const { data: paymentItems } = await supabaseAdmin
+      .from("order_items")
+      .select("id")
+      .eq("order_id", order.id)
+      .neq("status", "CANCELLED");
+
     const { error } = await supabaseAdmin
       .from("payments")
       .insert({
@@ -181,6 +207,7 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
         payment_method: internalMethod,
         payment_status: "PAID",
         notes: `Mercado Pago payment ${payment?.id ?? ""}`.trim(),
+        order_item_ids: (paymentItems ?? []).map((item: any) => item.id),
       });
 
     if (error) throw new Error("Erro ao registrar pagamento consolidado.");
@@ -351,6 +378,7 @@ serve(async (req) => {
         id,
         sequence_no,
         status,
+        production_sector,
         payment_status,
         item_ready_at,
         delivered_at,
@@ -386,6 +414,7 @@ serve(async (req) => {
         // e reduz superfície de ataque caso a validação server-side mude no futuro.
         sequence_no: item.sequence_no,
         status: item.status,
+        production_sector: item.production_sector,
         payment_status: item.payment_status,
         item_ready_at: item.item_ready_at,
         delivered_at: item.delivered_at,

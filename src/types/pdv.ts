@@ -109,6 +109,7 @@ export interface OrderItem {
   // Per-item lifecycle (multi-filial / per-krep tracking)
   status: OrderItemStatus;
   sequence_no?: number;
+  addition_batch_no?: number;
   prep_started_at?: string;
   item_ready_at?: string;
   delivered_at?: string;

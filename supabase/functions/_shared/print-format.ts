@@ -5,6 +5,7 @@ type ReceiptOptions = {
   timestamp?: string;
   mode?: "NORMAL" | "REPRINT" | "ADDITIONAL";
   source?: "ATTENDANT" | "PUBLIC";
+  additionBatchNo?: number;
   branchCode?: string;   // prefixo curto da filial: "P", "F", etc. Resulta em "P-042-1".
   branchName?: string;   // nome humano da filial: aparece no cabeçalho do recibo.
 };
@@ -135,7 +136,12 @@ function header(order: any, section: string, options: ReceiptOptions) {
   ];
 
   if (options.branchName) lines.push(`Filial: ${options.branchName}`);
-  lines.push(`${modeLabel} ${label}`);
+  if (options.mode === "ADDITIONAL") {
+    lines.push(`COMANDA ${label}`);
+    lines.push(options.additionBatchNo != null ? `ADICIONAL #${options.additionBatchNo}` : modeLabel);
+  } else {
+    lines.push(`${modeLabel} ${label}`);
+  }
   lines.push(section);
 
   if (options.source === "PUBLIC") lines.push("Origem: APP");

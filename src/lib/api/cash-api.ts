@@ -196,7 +196,7 @@ export const cashApi = {
       (order) => order.payment_status === "PAID" && order.status !== "CANCELADO"
     );
     const pending = orders.filter(
-      (order) => order.payment_status === "PENDING" && order.status !== "CANCELADO"
+      (order) => (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") && order.status !== "CANCELADO"
     );
     const courtesy = orders.filter(
       (order) => order.payment_status === "COURTESY" && order.status !== "CANCELADO"
@@ -276,6 +276,14 @@ export const cashApi = {
         .in("order_id", allOrderIds)
         .in("payment_status", ["PAID", "COURTESY"]);
       realPayments = (rawPayments ?? []) as PaymentRow[];
+    }
+
+    const realReceived = realPayments
+      .filter((payment) => payment.payment_status === "PAID")
+      .reduce((sum, payment) => sum + money(payment.amount), 0);
+    if (realReceived > 0) {
+      summary.totalRecebido = realReceived;
+      summary.ticketMedio = paid.length > 0 ? realReceived / paid.length : realReceived;
     }
 
     // Breakdown baseado na tabela payments (cada linha = 1 transação real)

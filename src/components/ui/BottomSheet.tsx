@@ -31,12 +31,12 @@ export function BottomSheet({ isOpen, onClose, title, children }: DialogProps) {
       />
 
       {/* Sheet Content */}
-      <div className="relative z-[45] w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl transform-gpu transition-transform will-change-transform animate-in slide-in-from-bottom duration-300">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
-          <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
+      <div className="relative z-[45] w-full max-w-md rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xl transform-gpu transition-transform will-change-transform animate-in slide-in-from-bottom duration-300 sm:rounded-2xl">
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
           <button 
             onClick={onClose}
-            className="p-2 -mr-2 text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 rounded-full transition-colors"
+            className="-mr-2 rounded-full p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
           >
             <X size={20} />
           </button>

@@ -33,6 +33,7 @@ type TabStatus =
   | "NA_FILA"
   | "PRONTO_PARCIAL"
   | "PRONTO"
+  | "ENTREGUE_PENDENTE"
   | "ENTREGUE"
   | "CANCELADO";
 
@@ -112,6 +113,15 @@ const CANCELLED_COLUMN: KanbanColumnConfig = {
   showAvgWait: false,
 };
 
+const DELIVERED_PENDING_COLUMN: KanbanColumnConfig = {
+  status: "ENTREGUE",
+  label: "Entregues com pagamento pendente",
+  topColor: "bg-[var(--status-warning)]",
+  headerBg: "bg-[var(--status-warning-bg)] border-transparent",
+  emptyText: "Nenhum entregue pendente",
+  showAvgWait: false,
+};
+
 function subscribeMdPlus(callback: () => void) {
   if (typeof window === "undefined") return () => {};
   const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -139,6 +149,17 @@ function getAvgWaitMinutes(orders: Order[], now: number): number | null {
     return Math.floor((now - new Date(since).getTime()) / 1000 / 60);
   });
   return Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+}
+
+function hasPendingPayment(order: Order) {
+  if (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") return true;
+  return (order.items ?? []).some(
+    (item) => item.status !== "CANCELLED" && item.payment_status !== "PAID" && item.payment_status !== "COURTESY",
+  );
+}
+
+function isDeliveredPendingPayment(order: Order) {
+  return order.status === "ENTREGUE" && hasPendingPayment(order);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -357,8 +378,9 @@ export default function PedidosPage() {
   const queueCount       = getCount("NA_FILA");
   const readyCount       = getCount("PRONTO");
   const waitingCount     = getCount("AGUARDANDO_CONFIRMACAO");
+  const deliveredPendingCount = orders.filter(isDeliveredPendingPayment).length;
   const pendingPayCount  = orders.filter((o) =>
-    o.payment_status === "PENDING" && !["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(o.status)
+    hasPendingPayment(o) && !["CANCELADO", "EXPIRADO"].includes(o.status)
   ).length;
   const receivedTotal    = orders
     .filter((o) => o.payment_status === "PAID" || o.payment_status === "COURTESY")
@@ -369,13 +391,20 @@ export default function PedidosPage() {
     .filter((order) => {
       const q = searchQuery.toLowerCase().trim();
       const matchesTab = activeTab === "TODOS" ||
-        order.status === activeTab;
+        (activeTab === "ENTREGUE_PENDENTE"
+          ? isDeliveredPendingPayment(order)
+          : activeTab === "ENTREGUE"
+          ? order.status === "ENTREGUE" && !isDeliveredPendingPayment(order)
+          : order.status === activeTab);
       const matchesSearch =
         !q || String(order.daily_number).includes(q) || order.customer_name?.toLowerCase().includes(q);
       return matchesTab && matchesSearch;
     })
     .sort((a, b) => {
       if (activeTab !== "TODOS") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (isDeliveredPendingPayment(a) !== isDeliveredPendingPayment(b)) {
+        return isDeliveredPendingPayment(a) ? -1 : 1;
+      }
       const diff = (STATUS_SORT_ORDER[a.status] ?? 99) - (STATUS_SORT_ORDER[b.status] ?? 99);
       return diff !== 0 ? diff : new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
@@ -385,14 +414,25 @@ export default function PedidosPage() {
     { id: "NA_FILA",               label: "Na fila",    count: queueCount },
     { id: "PRONTO_PARCIAL",        label: "Parciais",   count: partialCount },
     { id: "PRONTO",                label: "Prontos",    count: readyCount },
+    { id: "ENTREGUE_PENDENTE",     label: "Pend. pagto", count: deliveredPendingCount },
     { id: "AGUARDANDO_CONFIRMACAO",label: "Aguardando", count: waitingCount },
-    { id: "ENTREGUE",              label: "Entregues",  count: getCount("ENTREGUE") },
+    { id: "ENTREGUE",              label: "Entregues",  count: orders.filter((o) => o.status === "ENTREGUE" && !isDeliveredPendingPayment(o)).length },
     { id: "CANCELADO",             label: "Cancelados", count: getCount("CANCELADO") },
   ];
 
   const kanbanColumns = showCancelled
     ? [...KANBAN_COLUMNS, CANCELLED_COLUMN]
     : KANBAN_COLUMNS;
+
+  const desktopSections = kanbanColumns.flatMap((col) => {
+    if (col.status !== "ENTREGUE") {
+      return [{ key: col.status, config: col, orders: orders.filter((o) => o.status === col.status) }];
+    }
+    return [
+      { key: "ENTREGUE_PENDENTE", config: DELIVERED_PENDING_COLUMN, orders: orders.filter(isDeliveredPendingPayment) },
+      { key: "ENTREGUE", config: col, orders: orders.filter((o) => o.status === "ENTREGUE" && !isDeliveredPendingPayment(o)) },
+    ];
+  });
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -466,11 +506,11 @@ export default function PedidosPage() {
         className="hidden lg:flex gap-4 overflow-x-auto px-0 pb-4 pt-16"
         style={{ height: "calc(100vh - 56px - 148px)" }}
       >
-        {kanbanColumns.map((col) => (
+        {desktopSections.map((section) => (
           <KanbanColumn
-            key={col.status}
-            config={col}
-            orders={orders.filter((o) => o.status === col.status)}
+            key={section.key}
+            config={section.config}
+            orders={section.orders}
             now={now}
             onCardClick={setSelectedOrder}
             onQuickAction={handleQuickAction}

@@ -72,13 +72,9 @@ serve(async (req) => {
     if (orderErr || !order) throw new Error('Pedido não encontrado.');
 
     // Regras de bloqueio obrigatórias
-    const allowedStatuses = ['NA_FILA', 'AGUARDANDO_PAGAMENTO'];
+    const allowedStatuses = ['AGUARDANDO_PAGAMENTO', 'NA_FILA', 'PRONTO_PARCIAL', 'PRONTO', 'ENTREGUE'];
     if (!allowedStatuses.includes(order.status)) {
       throw new Error(`Não é possível adicionar itens a um pedido com status ${order.status}.`);
-    }
-
-    if (order.payment_status !== 'PENDING') {
-      throw new Error(`Não é possível adicionar itens a um pedido que não esteja PENDENTE (Status atual: ${order.payment_status}).`);
     }
 
     // 4. Buscar configurações
@@ -179,8 +175,18 @@ serve(async (req) => {
       });
     }
 
+    const { data: batchRows, error: batchErr } = await supabaseAdmin
+      .from('order_items')
+      .select('addition_batch_no')
+      .eq('order_id', order.id)
+      .order('addition_batch_no', { ascending: false })
+      .limit(1);
+    if (batchErr) throw new Error('Erro ao calcular lote do adicional: ' + batchErr.message);
+    const additionBatchNo = Number(batchRows?.[0]?.addition_batch_no ?? 1) + 1;
+
     // 6. Inserir Novos Itens
     const auditLogsToInsert = [];
+    const receiptItems: any[] = [];
     
     for (const itemData of finalItemsData) {
       const { data: oi, error: oiErr } = await supabaseAdmin
@@ -193,9 +199,10 @@ serve(async (req) => {
           production_sector: itemData.product.sector,
           quantity: itemData.quantity,
           observation: itemData.notes,
-          total_price: itemData.itemTotalPrice
+          total_price: itemData.itemTotalPrice,
+          addition_batch_no: additionBatchNo,
         })
-        .select('id')
+        .select('id, sequence_no, addition_batch_no')
         .single();
 
       if (oiErr) throw new Error('Erro ao inserir item do pedido: ' + oiErr.message);
@@ -213,6 +220,20 @@ serve(async (req) => {
         }));
         await supabaseAdmin.from('order_item_addons').insert(adds);
       }
+
+      receiptItems.push({
+        id: oi.id,
+        sequence_no: oi.sequence_no,
+        addition_batch_no: oi.addition_batch_no,
+        product_name_snapshot: itemData.product.name,
+        product_price_snapshot: itemData.product.price,
+        production_sector: itemData.product.sector,
+        quantity: itemData.quantity,
+        observation: itemData.notes,
+        total_price: itemData.itemTotalPrice,
+        order_item_removed_ingredients: itemData.removedIngredientsSnapshots,
+        order_item_addons: itemData.addonsSnapshots,
+      });
     }
 
     // 7. Atualizar Total do Pedido (Apenas total_amount)
@@ -229,7 +250,7 @@ serve(async (req) => {
       table_name: 'orders', 
       record_id: order.id, 
       user_id: user.id,
-      details: { additional_amount: additionalSubtotal, new_total: newTotal }
+      new_data: { additional_amount: additionalSubtotal, new_total: newTotal, addition_batch_no: additionBatchNo }
     });
 
     // 8. Fila de Impressão (Apenas novos itens)
@@ -239,12 +260,14 @@ serve(async (req) => {
 
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');
+    const kitchenReceiptItems = receiptItems.filter(i => i.production_sector === 'KITCHEN');
+    const juicePotatoReceiptItems = receiptItems.filter(i => i.production_sector === 'JUICE_POTATO');
     
     const printerJobsToInsert = [];
     const timestampNow = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     const branchCode: string | undefined = (order as any).branches?.code;
     const branchName: string | undefined = (order as any).branches?.name;
-    const receiptOpts = { timestamp: timestampNow, branchCode, branchName, mode: 'ADDITIONAL' as const };
+    const receiptOpts = { timestamp: timestampNow, branchCode, branchName, mode: 'ADDITIONAL' as const, additionBatchNo };
 
     const header = `MARCOS KREP'S\nADICIONAL DE COMANDA\nPEDIDO #${String(order.daily_number).padStart(3, '0')}\n`;
 
@@ -262,11 +285,11 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
-      content = buildProductionReceipt(order, finalItemsData, 'KITCHEN', {
+      content = buildProductionReceipt(order, receiptItems, 'KITCHEN', {
         ...receiptOpts,
         title: 'KREPS',
       });
-      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { text: content, mode: 'ADDITIONAL', addition_batch_no: additionBatchNo, order_item_ids: kitchenReceiptItems.map((item) => item.id) } });
     }
 
     if (juicePotatoItems.length > 0 && shouldPrintJuice) {
@@ -277,11 +300,11 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
-      content = buildProductionReceipt(order, finalItemsData, 'JUICE_POTATO', {
+      content = buildProductionReceipt(order, receiptItems, 'JUICE_POTATO', {
         ...receiptOpts,
         title: 'COZINHA',
       });
-      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { text: content, mode: 'ADDITIONAL', addition_batch_no: additionBatchNo, order_item_ids: juicePotatoReceiptItems.map((item) => item.id) } });
     }
 
     const createdJobsResponse = [];
@@ -306,7 +329,8 @@ serve(async (req) => {
       success: true, 
       order: {
         id: order.id,
-        total_amount: newTotal
+        total_amount: newTotal,
+        addition_batch_no: additionBatchNo,
       },
       printer_jobs: createdJobsResponse
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
