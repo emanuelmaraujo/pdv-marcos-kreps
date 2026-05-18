@@ -68,7 +68,7 @@ serve(async (req) => {
     // Lê o pedido via JWT (RLS valida que o user opera a filial).
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
-      .select("id, branch_id, daily_number, status, total_amount, packing_fee")
+      .select("id, branch_id, daily_number, status, total_amount, packing_fee, paid_at")
       .eq("id", order_id)
       .single();
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
@@ -84,7 +84,7 @@ serve(async (req) => {
     if (Array.isArray(order_item_ids) && order_item_ids.length > 0) {
       const { data: items, error: itemsErr } = await supabaseAdmin
         .from("order_items")
-        .select("id, order_id, total_price, status")
+        .select("id, order_id, total_price, status, payment_status")
         .in("id", order_item_ids);
       if (itemsErr) throw new Error(`Erro ao ler itens: ${itemsErr.message}`);
       if (!items || items.length !== order_item_ids.length) {
@@ -95,6 +95,11 @@ serve(async (req) => {
       const cancelled = items.find((i) => i.status === "CANCELLED");
       if (cancelled) throw new Error("Item cancelado não pode receber pagamento.");
 
+      if (payment_status === "PAID" || payment_status === "COURTESY") {
+        const alreadyPaid = items.find((i) => i.payment_status === "PAID" || i.payment_status === "COURTESY");
+        if (alreadyPaid) throw new Error("Um ou mais itens selecionados ja foram pagos.");
+      }
+
       targetItemIds = items.map((i) => i.id);
       targetTotal   = items.reduce((sum, i) => sum + Number(i.total_price ?? 0), 0);
     } else {
@@ -102,20 +107,37 @@ serve(async (req) => {
         .from("order_items")
         .select("id, total_price")
         .eq("order_id", order.id)
-        .neq("status", "CANCELLED");
+        .neq("status", "CANCELLED")
+        .not("payment_status", "in", "(PAID,COURTESY)");
       if (itemsErr) throw new Error(`Erro ao ler itens do pedido: ${itemsErr.message}`);
 
       targetItemIds = (items ?? []).map((i) => i.id);
       targetTotal   = (items ?? []).reduce((sum, i) => sum + Number(i.total_price ?? 0), 0);
       // Ao pagar o pedido inteiro (sem subset de itens), inclui a taxa de embalagem
       // que fica em orders.packing_fee (não rateada por item).
-      targetTotal  += Number((order as any).packing_fee ?? 0);
+      // Taxa de embalagem e cobrada apenas quando este pagamento quita os
+      // itens restantes e o pedido ainda nao tinha sido totalmente pago.
+    }
+
+    if ((payment_status === "PAID" || payment_status === "COURTESY") && targetItemIds.length > 0) {
+      const { count: unpaidOutsideCount, error: unpaidOutsideErr } = await supabaseAdmin
+        .from("order_items")
+        .select("id", { count: "exact", head: true })
+        .eq("order_id", order.id)
+        .neq("status", "CANCELLED")
+        .not("payment_status", "in", "(PAID,COURTESY)")
+        .not("id", "in", `(${targetItemIds.join(",")})`);
+      if (unpaidOutsideErr) throw new Error(`Erro ao validar itens pendentes: ${unpaidOutsideErr.message}`);
+
+      if (unpaidOutsideCount === 0 && !order.paid_at) {
+        targetTotal += Number((order as any).packing_fee ?? 0);
+      }
     }
 
     // Para PAID, exige bate-confere financeiro com o subset.
     let paymentRecordAmount = 0;
     if (payment_status === "PAID") {
-      if (Number(amount) !== Number(targetTotal)) {
+      if (Math.round(Number(amount) * 100) !== Math.round(Number(targetTotal) * 100)) {
         throw new Error(`Valor (R$ ${amount}) difere do total (R$ ${targetTotal.toFixed(2)}).`);
       }
       paymentRecordAmount = targetTotal;

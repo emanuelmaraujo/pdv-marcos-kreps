@@ -111,6 +111,8 @@ export interface OrderRecord {
   discount_amount: number | null;
   packing_fee: number | null;
   created_at: string;
+  confirmed_at: string | null;
+  paid_at: string | null;
 }
 
 export const reportsApi = {
@@ -126,14 +128,22 @@ export const reportsApi = {
   async getOrdersForDateRange(startISO: string, endISO: string, branchId?: string | null): Promise<OrderRecord[]> {
     let query = supabase
       .from("orders")
-      .select("id, daily_number, status, payment_status, payment_method, total_amount, discount_amount, packing_fee, created_at")
-      .gte("created_at", startISO)
-      .lte("created_at", endISO)
+      .select("id, daily_number, status, payment_status, payment_method, total_amount, discount_amount, packing_fee, created_at, confirmed_at, paid_at")
+      .or([
+        `and(paid_at.not.is.null,paid_at.gte.${startISO},paid_at.lte.${endISO})`,
+        `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${startISO},confirmed_at.lte.${endISO})`,
+        `and(paid_at.is.null,confirmed_at.is.null,created_at.gte.${startISO},created_at.lte.${endISO})`,
+      ].join(","))
       .order("created_at", { ascending: false });
     if (branchId) query = query.eq("branch_id", branchId);
     const { data, error } = await query;
     if (error) throw error;
-    return (data ?? []).map((row) => ({
+    const start = new Date(startISO).getTime();
+    const end = new Date(endISO).getTime();
+    return (data ?? []).filter((row) => {
+      const saleTime = new Date(row.paid_at ?? row.confirmed_at ?? row.created_at).getTime();
+      return saleTime >= start && saleTime <= end;
+    }).map((row) => ({
       ...row,
       total_amount: Number(row.total_amount ?? 0),
       discount_amount: row.discount_amount != null ? Number(row.discount_amount) : null,

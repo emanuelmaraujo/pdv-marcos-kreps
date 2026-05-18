@@ -38,6 +38,36 @@ function classifyProductGroup(productName: string, categoryName: string): string
   return 'Outros';
 }
 
+const REPORT_TZ = 'America/Sao_Paulo';
+
+function getSaleTimestamp(order: any): string {
+  return order.paid_at || order.confirmed_at || order.created_at;
+}
+
+function getSpDateParts(value: string) {
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: REPORT_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'long',
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(value));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  const weekday = get('weekday').replace('-feira', '');
+  return {
+    weekday: weekday ? weekday.charAt(0).toUpperCase() + weekday.slice(1) : '',
+    hour: Number(get('hour')),
+  };
+}
+
+function hourRange(hour: number): string {
+  const start = String(hour).padStart(2, '0');
+  const end = String((hour + 1) % 24).padStart(2, '0');
+  return `${start}h–${end}h`;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: getCorsHeaders(req) });
@@ -95,16 +125,33 @@ serve(async (req) => {
         status,
         discount_amount,
         created_at,
+        confirmed_at,
+        paid_at,
         daily_number
       `);
 
-    if (start_date) query = query.gte('created_at', start_date);
-    if (end_date) query = query.lte('created_at', end_date);
+    if (start_date && end_date) {
+      query = query.or([
+        `and(paid_at.not.is.null,paid_at.gte.${start_date},paid_at.lte.${end_date})`,
+        `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${start_date},confirmed_at.lte.${end_date})`,
+        `and(paid_at.is.null,confirmed_at.is.null,created_at.gte.${start_date},created_at.lte.${end_date})`,
+      ].join(','));
+    } else {
+      if (start_date) query = query.gte('created_at', start_date);
+      if (end_date) query = query.lte('created_at', end_date);
+    }
     if (branch_id) query = query.eq('branch_id', branch_id);
     // Nota: filtro payment_method é aplicado depois, via tabela payments (suporte a split-bill)
 
-    const { data: orders, error: ordersError } = await query;
+    const { data: rawOrders, error: ordersError } = await query;
     if (ordersError) throw ordersError;
+    const orders = (rawOrders || []).filter((order: any) => {
+      if (!start_date && !end_date) return true;
+      const saleTime = new Date(getSaleTimestamp(order)).getTime();
+      const startTime = start_date ? new Date(start_date).getTime() : Number.NEGATIVE_INFINITY;
+      const endTime = end_date ? new Date(end_date).getTime() : Number.POSITIVE_INFINITY;
+      return saleTime >= startTime && saleTime <= endTime;
+    });
 
     // 4.1 Query Payments — usada para breakdown correto por método (split-bill pode ter métodos mistos)
     const allOrderIds = (orders || []).map((o: any) => o.id);
@@ -186,7 +233,7 @@ serve(async (req) => {
     const soldProductIds = new Set();
 
     const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-    const HOURS = ['17h–18h', '18h–19h', '19h–20h', '20h–21h', '21h–22h', '22h–23h', '23h–00h', '00h+'];
+    const HOURS = Array.from({ length: 24 }, (_, hour) => hourRange(hour));
 
     // 7.1 Filter items by category if needed
     const filteredItems = isFilteredByCategory 
@@ -195,19 +242,9 @@ serve(async (req) => {
 
     // 7.2 Calculate order metrics
     filteredOrders.forEach((order: any) => {
-      const orderDate = new Date(order.created_at);
-      const weekday = WEEKDAYS[orderDate.getDay()];
-      const hour = orderDate.getHours();
-      let hourRange = 'Outros';
-      
-      if (hour === 17) hourRange = '17h–18h';
-      else if (hour === 18) hourRange = '18h–19h';
-      else if (hour === 19) hourRange = '19h–20h';
-      else if (hour === 20) hourRange = '20h–21h';
-      else if (hour === 21) hourRange = '21h–22h';
-      else if (hour === 22) hourRange = '22h–23h';
-      else if (hour === 23) hourRange = '23h–00h';
-      else if (hour >= 0 && hour < 5) hourRange = '00h+';
+      const saleParts = getSpDateParts(getSaleTimestamp(order));
+      const weekday = saleParts.weekday;
+      const hourBucket = hourRange(saleParts.hour);
 
       const orderItems = (items || []).filter(i => i.order_id === order.id);
       const categorySpecificItems = orderItems.filter(i => !isFilteredByCategory || i.products?.category_id === category_id);
@@ -243,11 +280,11 @@ serve(async (req) => {
         weekdayMap.set(weekday, wData);
 
         // Hourly
-        const hData = hourlyMap.get(hourRange) || { range: hourRange, orders: 0, items_quantity: 0, received: 0 };
+        const hData = hourlyMap.get(hourBucket) || { range: hourBucket, orders: 0, items_quantity: 0, received: 0 };
         hData.orders++;
         hData.items_quantity += categorySpecificItems.reduce((acc, i) => acc + Number(i.quantity || 0), 0);
         if (order.payment_status === 'PAID') hData.received += orderValue;
-        hourlyMap.set(hourRange, hData);
+        hourlyMap.set(hourBucket, hData);
 
         // Payment breakdown — usa tabela payments para suportar split-bill com métodos mistos
         // (cada linha = 1 transação real, pode haver PIX + Débito no mesmo pedido)
@@ -355,7 +392,11 @@ serve(async (req) => {
     const insights = [];
     
     // 8.1 Peak Hour
-    const peak = [...hourlySales].sort((a, b) => b.orders - a.orders)[0];
+    const peak = hourlySales.reduce((best, hour) => {
+      if (hour.orders <= 0) return best;
+      if (!best || hour.orders > best.orders) return hour;
+      return best;
+    }, null);
     if (peak && peak.orders > 0) {
       insights.push({
         title: 'Horário de Pico',
@@ -390,7 +431,7 @@ serve(async (req) => {
     const lateItems = (items || []).filter(item => {
       const order = filteredOrders.find((o: any) => o.id === item.order_id);
       if (!order) return false;
-      const hour = new Date(order.created_at).getHours();
+      const hour = getSpDateParts(getSaleTimestamp(order)).hour;
       return hour >= 22 || hour < 5;
     });
 

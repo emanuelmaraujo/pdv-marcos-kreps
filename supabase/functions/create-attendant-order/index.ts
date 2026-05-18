@@ -95,6 +95,7 @@ serve(async (req) => {
     const {
       order_type, customer_name, customer_phone, notes,
       payment_method, payment_status, discount, items,
+      ifood_charged_amount,
       remember_checkout_data,
       branch_id,
       split_bill,
@@ -117,7 +118,7 @@ serve(async (req) => {
     if (!branch.active) throw new Error('Filial inativa.');
     if (order_type !== 'BALCAO' && order_type !== 'VIAGEM') throw new Error('order_type inválido (BALCAO ou VIAGEM).');
 
-    const validPayMethods = ['PIX', 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'PENDING', 'COURTESY'];
+    const validPayMethods = ['PIX', 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'IFOOD', 'PENDING', 'COURTESY'];
     const validPayStatuses = ['PENDING', 'PAID', 'COURTESY'];
 
     if (!validPayMethods.includes(payment_method)) throw new Error('payment_method inválido.');
@@ -261,6 +262,16 @@ serve(async (req) => {
     if (totalAmount < 0) {
        throw new Error('Total final nunca pode ser menor que zero.');
     }
+
+    let ifoodChargedAmount: number | null = null;
+    if (payment_method === 'IFOOD' && payment_status === 'PAID') {
+      const parsedIfoodAmount = Number(ifood_charged_amount);
+      if (!Number.isFinite(parsedIfoodAmount) || parsedIfoodAmount < 0) {
+        throw new Error('Informe um valor cobrado no iFood válido.');
+      }
+      ifoodChargedAmount = Math.round(parsedIfoodAmount * 100) / 100;
+    }
+
     const nowIso = new Date().toISOString();
     let paidAt = null;
 
@@ -360,12 +371,16 @@ serve(async (req) => {
 
     // 7. Registrar Pagamento em Histórico
     if (payment_status === 'PAID') {
+       const paymentAmount = ifoodChargedAmount ?? totalAmount;
        await supabaseAdmin.from('payments').insert({
          order_id: createdOrder.id,
-         amount: totalAmount,
+         amount: paymentAmount,
          payment_method: payment_method,
          payment_status: 'PAID',
-         received_by: user.id
+         received_by: user.id,
+         notes: ifoodChargedAmount !== null
+           ? `iFood cobrado: ${ifoodChargedAmount.toFixed(2)}; total interno: ${totalAmount.toFixed(2)}`
+           : null
        });
        auditLogsToInsert.push({ action: 'PAYMENT_MARKED_PAID', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
     } else if (payment_status === 'COURTESY') {
@@ -591,7 +606,8 @@ serve(async (req) => {
         subtotal_amount: subtotalAmount,
         discount_amount: discountAmount,
         packaging_fee: packingFee,
-        total_amount: totalAmount
+        total_amount: totalAmount,
+        ifood_charged_amount: ifoodChargedAmount
       },
       printer_jobs: createdJobsResponse
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });

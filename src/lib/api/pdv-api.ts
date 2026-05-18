@@ -137,6 +137,7 @@ export type CreateAttendantOrderResponse = {
     discount_amount?: number;
     packaging_fee?: number;
     total_amount: number;
+    ifood_charged_amount?: number | null;
   };
   printer_jobs?: { type: string; id: string }[];
 };
@@ -160,6 +161,7 @@ export type AddItemsToOrderResponse = {
   order: {
     id: string;
     total_amount: number;
+    addition_batch_no?: number;
   };
   printer_jobs?: { type: string; id: string }[];
 };
@@ -250,6 +252,7 @@ export type PublicOrderStatusResponse = {
     // id omitido intencionalmente: não exposto pelo endpoint público (reduz superfície de ataque)
     sequence_no?: number | null;
     status?: string | null;
+    production_sector?: string | null;
     payment_status?: string | null;
     item_ready_at?: string | null;
     delivered_at?: string | null;

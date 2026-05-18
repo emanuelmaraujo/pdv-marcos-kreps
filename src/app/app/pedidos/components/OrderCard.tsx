@@ -84,7 +84,7 @@ const ACTIVE_STATUSES: Order["status"][] = [
 export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
   const [quickLoading, setQuickLoading] = useState(false);
 
-  const isPendingPayment = order.payment_status === "PENDING";
+  const isPendingPayment = order.payment_status === "PENDING" || order.payment_status === "PARTIAL";
   const time = new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const itemCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
   const firstItems = order.items?.slice(0, 3) ?? [];

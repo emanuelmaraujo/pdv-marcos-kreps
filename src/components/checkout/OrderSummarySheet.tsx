@@ -19,6 +19,7 @@ import {
   QrCode,
   Banknote,
   CreditCard,
+  Smartphone,
   Gift,
   Clock,
   Tag,
@@ -83,6 +84,7 @@ const PAYMENT_METHODS = [
   { value: "CASH",        label: "Dinheiro", Icon: Banknote,   color: "border-emerald-200 bg-emerald-50 text-emerald-700 ring-emerald-200" },
   { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard, color: "border-blue-200 bg-blue-50 text-blue-700 ring-blue-200" },
   { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard, color: "border-violet-200 bg-violet-50 text-violet-700 ring-violet-200" },
+  { value: "IFOOD",       label: "iFood",    Icon: Smartphone, color: "border-red-200 bg-red-50 text-red-700 ring-red-200" },
   { value: "PENDING",     label: "Pendente", Icon: Clock,      color: "border-amber-200 bg-amber-50 text-amber-700 ring-amber-200" },
   { value: "COURTESY",   label: "Cortesia", Icon: Gift,       color: "border-pink-200 bg-pink-50 text-pink-700 ring-pink-200" },
 ] as const;
@@ -98,7 +100,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
         <div
           key={i}
           className={`h-1.5 rounded-full transition-all duration-300 ${
-            i < current ? "bg-brand-red w-6" : i === current ? "bg-brand-red w-10" : "bg-zinc-200 w-4"
+            i < current ? "bg-brand-red w-6" : i === current ? "bg-brand-red w-10" : "bg-[var(--border)] w-4"
           }`}
         />
       ))}
@@ -141,8 +143,9 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number } | null>(null);
+  const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number; ifood_charged_amount?: number | null } | null>(null);
   const [customAmountStr, setCustomAmountStr] = useState("");
+  const [ifoodAmountStr, setIfoodAmountStr] = useState("");
 
   // Customer profile lookup (mirrors /pedir behavior)
   const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found" | "not_found">("idle");
@@ -251,6 +254,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
       : (estimatedSubtotal * discountNum) / 100
     : 0;
   const estimatedTotal = estimatedSubtotal + packagingTotal - discountAmount;
+  const ifoodAmount = parseFloat(ifoodAmountStr.replace(",", ".")) || 0;
 
   const handleCheckout = async () => {
     setIsSubmitting(true);
@@ -258,6 +262,16 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     try {
       const customAmount = parseFloat(customAmountStr.replace(",", ".")) || 0;
       const isPartialCash = selectedPaymentMethod === "CASH" && customAmount > 0 && customAmount < estimatedTotal;
+      if (!splitBill && selectedPaymentMethod === "IFOOD" && (!ifoodAmountStr.trim() || ifoodAmount < 0)) {
+        setError("Informe o valor cobrado no iFood.");
+        setIsSubmitting(false);
+        return;
+      }
+      if (hasDiscount && discountNum > 0 && !discountReason.trim()) {
+        setError("Informe o motivo do desconto.");
+        setIsSubmitting(false);
+        return;
+      }
 
       let paymentStatus = "PAID";
       if (selectedPaymentMethod === "PENDING")   paymentStatus = "PENDING";
@@ -282,6 +296,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         payment_method: splitBill ? "PENDING" : selectedPaymentMethod,
         payment_status: paymentStatus,
         split_bill: splitBill || undefined, // flag para o edge function não imprimir antes do pagamento
+        ifood_charged_amount: !splitBill && selectedPaymentMethod === "IFOOD" ? ifoodAmount : undefined,
         discount: finalDiscount,
         items: items.map((item) => ({
           product_id: item.product.id,
@@ -338,7 +353,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
           }).catch(() => {});
         }
 
-        setSuccessData({ daily_number: response.order.daily_number, total_amount: response.order.total_amount });
+        setSuccessData({
+          daily_number: response.order.daily_number,
+          total_amount: response.order.total_amount,
+          ifood_charged_amount: response.order.ifood_charged_amount,
+        });
         clearCart();
       } else {
         throw new Error("Resposta inválida do servidor.");
@@ -366,8 +385,8 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
             <CheckCircle2 className="h-10 w-10 text-emerald-500" />
           </div>
           <div>
-            <p className="text-sm font-bold uppercase tracking-widest text-zinc-400">Pedido confirmado</p>
-            <h2 className="mt-1 text-3xl font-black text-zinc-900">
+            <p className="text-sm font-bold uppercase tracking-widest text-[var(--text-muted)]">Pedido confirmado</p>
+            <h2 className="mt-1 text-3xl font-black text-[var(--text-primary)]">
               #{String(successData.daily_number).padStart(3, "0")}
             </h2>
           </div>
@@ -376,6 +395,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
             <p className="mt-1 text-3xl font-black text-emerald-700">
               {currency.format(successData.total_amount)}
             </p>
+            {successData.ifood_charged_amount !== null && successData.ifood_charged_amount !== undefined && (
+              <p className="mt-2 text-xs font-bold text-emerald-700">
+                iFood cobrado: {currency.format(successData.ifood_charged_amount)}
+              </p>
+            )}
             <p className="mt-1 text-xs text-emerald-500 font-bold">Status: NA FILA</p>
           </div>
           <Button onClick={handleClose} className="w-full h-14 text-lg font-black">
@@ -392,12 +416,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     return (
       <BottomSheet isOpen={isOpen} onClose={handleClose} title="Adicionar à Comanda">
         <div className="flex flex-col gap-5 pb-6">
-          <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-            <div className="divide-y divide-zinc-100">
+          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)]">
+            <div className="divide-y divide-[var(--border)]">
               {items.map((item) => (
                 <div key={item.id} className="flex items-center gap-3 p-4">
-                  <span className="font-black text-zinc-700">{item.quantity}×</span>
-                  <p className="flex-1 text-sm font-bold text-zinc-900">{item.product.name}</p>
+                  <span className="font-black text-[var(--text-secondary)]">{item.quantity}×</span>
+                  <p className="flex-1 text-sm font-bold text-[var(--text-primary)]">{item.product.name}</p>
                   <button onClick={() => removeItem(item.id)} className="p-2 text-red-400 hover:text-red-600">
                     <Trash2 size={14} />
                   </button>
@@ -430,7 +454,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         {/* Progress */}
         <div className="px-4 pb-4 space-y-2">
           <StepIndicator current={step} total={STEPS.length} />
-          <p className="text-center text-[10px] font-black uppercase tracking-widest text-zinc-400">
+          <p className="text-center text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
             Etapa {step + 1} de {STEPS.length} — {STEPS[step]}
           </p>
         </div>
@@ -438,14 +462,14 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         {/* ── STEP 0: Items ─────────────────────────────────────────────── */}
         {step === 0 && (
           <div className="flex-1 space-y-4 px-4 pb-4">
-            <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden shadow-sm">
-              <div className="divide-y divide-zinc-100 max-h-72 overflow-y-auto">
+            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
+              <div className="max-h-72 divide-y divide-[var(--border)] overflow-y-auto">
                 {items.map((item) => (
                   <div key={item.id} className="p-4 flex flex-col gap-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-black text-zinc-900 text-[13px]">
+                          <p className="text-[13px] font-black text-[var(--text-primary)]">
                             {item.quantity}× {item.product.name}
                           </p>
                           {item.is_takeout && (
@@ -466,13 +490,13 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                           </p>
                         )}
                         {item.notes && (
-                          <p className="text-[11px] italic text-zinc-400 mt-1">&quot;{item.notes}&quot;</p>
+                          <p className="mt-1 text-[11px] italic text-[var(--text-muted)]">&quot;{item.notes}&quot;</p>
                         )}
                       </div>
                       <div className="flex gap-2 ml-2">
                         <button
                           onClick={() => onEditItem?.(item)}
-                          className="p-2.5 bg-zinc-100 rounded-xl text-zinc-500 hover:bg-zinc-200"
+                          className="rounded-xl bg-[var(--bg-subtle)] p-2.5 text-[var(--text-secondary)] hover:bg-[var(--border)]"
                         >
                           <Edit2 size={14} />
                         </button>
@@ -487,8 +511,8 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                   </div>
                 ))}
               </div>
-              <div className="px-4 py-3 bg-zinc-50 border-t border-zinc-100 flex justify-between items-center">
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Subtotal estimado</span>
+              <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Subtotal estimado</span>
                 <span className="text-xl font-black text-brand-red">{currency.format(estimatedSubtotal)}</span>
               </div>
             </div>
@@ -520,10 +544,10 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
 
             {/* Customer name */}
             <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Nome do Cliente</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nome do Cliente</p>
               <div className="relative">
-                <div className="flex items-center gap-2 rounded-xl border border-zinc-100 bg-zinc-50 px-4 focus-within:border-brand-red/30 focus-within:bg-white focus-within:ring-4 focus-within:ring-brand-red/10 transition-all">
-                  <User className="h-4 w-4 text-zinc-400 shrink-0" />
+                <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 transition-all focus-within:border-brand-red/30 focus-within:bg-[var(--bg-surface)] focus-within:ring-4 focus-within:ring-brand-red/10">
+                  <User className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
                   <input
                     type="text"
                     placeholder="Ex: Marcos Silva"
@@ -531,19 +555,19 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                     onChange={(e) => setCustomerInfo(e.target.value, customerPhone)}
                     onFocus={() => setShowNameSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
-                    className="flex-1 py-3.5 bg-transparent font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none text-sm"
+                    className="flex-1 bg-transparent py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
                   />
                 </div>
                 {showNameSuggestions && recentNames.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-10 mt-1 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
+                  <div className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg">
                     {recentNames.map((name) => (
                       <button
                         key={name}
                         type="button"
                         onMouseDown={() => setCustomerInfo(name, customerPhone)}
-                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-bold text-zinc-700 hover:bg-zinc-50"
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
                       >
-                        <Clock className="h-3 w-3 text-zinc-400" />
+                        <Clock className="h-3 w-3 text-[var(--text-muted)]" />
                         {name}
                       </button>
                     ))}
@@ -555,9 +579,9 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
             {/* WhatsApp */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">WhatsApp (opcional)</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">WhatsApp (opcional)</p>
                 {profileLookupState === "checking" && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-zinc-500">
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-[var(--text-secondary)]">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     procurando...
                   </span>
@@ -569,7 +593,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                 value={customerPhone}
                 onChange={(e) => setCustomerInfo(customerName, e.target.value)}
                 onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
-                className="w-full rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3.5 font-bold text-zinc-900 placeholder-zinc-400 focus:border-brand-red/30 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-red/10 transition-all text-sm"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"
               />
 
               {profileLookupState === "found" && profileNotice && (
@@ -579,7 +603,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                 </p>
               )}
               {profileLookupState === "not_found" && (
-                <p className="text-[11px] font-medium text-zinc-400">
+                <p className="text-[11px] font-medium text-[var(--text-muted)]">
                   Cliente novo. Marque a opção abaixo para salvar para a próxima vez.
                 </p>
               )}
@@ -592,14 +616,14 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                   className={`mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                     rememberCustomerData
                       ? "border-emerald-200 bg-emerald-50"
-                      : "border-zinc-200 bg-white hover:bg-zinc-50"
+                      : "border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
                   }`}
                 >
                   <span className="min-w-0">
-                    <span className={`block text-xs font-black ${rememberCustomerData ? "text-emerald-800" : "text-zinc-800"}`}>
+                    <span className={`block text-xs font-black ${rememberCustomerData ? "text-emerald-800" : "text-[var(--text-primary)]"}`}>
                       Salvar dados deste cliente
                     </span>
-                    <span className={`mt-0.5 block text-[10px] font-medium leading-relaxed ${rememberCustomerData ? "text-emerald-600" : "text-zinc-400"}`}>
+                    <span className={`mt-0.5 block text-[10px] font-medium leading-relaxed ${rememberCustomerData ? "text-emerald-600" : "text-[var(--text-muted)]"}`}>
                       Da próxima vez que ele digitar o WhatsApp, o nome aparece sozinho.
                     </span>
                   </span>
@@ -612,12 +636,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
 
             {/* Notes */}
             <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Obs. gerais (opcional)</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Obs. gerais (opcional)</p>
               <textarea
                 placeholder="Detalhe importante para a produção..."
                 value={orderNotes}
                 onChange={(e) => setOrderNotes(e.target.value)}
-                className="w-full rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3 font-bold text-zinc-900 placeholder-zinc-400 focus:border-brand-red/30 focus:bg-white focus:outline-none focus:ring-4 focus:ring-brand-red/10 transition-all text-sm resize-none h-20"
+                className="h-20 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"
               />
             </div>
 
@@ -644,17 +668,17 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                 className={`flex w-full items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition-all ${
                   splitBill
                     ? "border-brand-red bg-brand-red/5 ring-2 ring-brand-red/10"
-                    : "border-zinc-200 bg-white hover:border-zinc-300"
+                    : "border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]"
                 }`}
               >
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${splitBill ? "bg-brand-red text-white" : "bg-zinc-100 text-zinc-500"}`}>
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${splitBill ? "bg-brand-red text-white" : "bg-[var(--bg-subtle)] text-[var(--text-secondary)]"}`}>
                   <Users className="h-4.5 w-4.5" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className={`block text-sm font-black ${splitBill ? "text-brand-red" : "text-zinc-900"}`}>
+                  <span className={`block text-sm font-black ${splitBill ? "text-brand-red" : "text-[var(--text-primary)]"}`}>
                     Dividir conta por pessoa
                   </span>
-                  <span className="block text-[11px] text-zinc-500">
+                  <span className="block text-[11px] text-[var(--text-secondary)]">
                     Cada um paga o próprio krepe com o método que quiser
                   </span>
                 </span>
@@ -668,7 +692,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
             {!splitBill && (
               <>
                 <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Forma de Pagamento</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Forma de Pagamento</p>
                   <div className="grid grid-cols-3 gap-2">
                     {PAYMENT_METHODS.map(({ value, label, Icon, color }) => (
                       <button
@@ -678,7 +702,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                         className={`flex flex-col items-center gap-1.5 rounded-2xl border-2 px-2 py-3 text-[10px] font-black uppercase tracking-wide transition-all active:scale-95 ${
                           selectedPaymentMethod === value
                             ? `${color} ring-2`
-                            : "border-zinc-100 bg-white text-zinc-400 hover:border-zinc-200"
+                            : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-muted)] hover:border-[var(--text-muted)]"
                         }`}
                       >
                         <Icon className="h-5 w-5" />
@@ -694,12 +718,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                   const change = received > 0 ? received - estimatedTotal : null;
                   const isPartial = received > 0 && received < estimatedTotal;
                   return (
-                    <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
                         Valor recebido (opcional)
                       </p>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-zinc-500">R$</span>
+                        <span className="text-sm font-black text-[var(--text-secondary)]">R$</span>
                         <input
                           type="number"
                           step="0.01"
@@ -707,11 +731,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                           placeholder={estimatedTotal.toFixed(2).replace(".", ",")}
                           value={customAmountStr}
                           onChange={(e) => setCustomAmountStr(e.target.value)}
-                          className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-black focus:border-brand-red/40 focus:outline-none focus:ring-2 focus:ring-brand-red/10"
+                          className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-black text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/40 focus:outline-none focus:ring-2 focus:ring-brand-red/10"
                         />
                         {customAmountStr && (
                           <button type="button" onClick={() => setCustomAmountStr("")}
-                            className="text-zinc-400 hover:text-zinc-600 text-xs font-bold">
+                            className="text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)]">
                             limpar
                           </button>
                         )}
@@ -732,6 +756,53 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                     </div>
                   );
                 })()}
+
+                {selectedPaymentMethod === "IFOOD" && (() => {
+                  const difference = ifoodAmount > 0 ? ifoodAmount - estimatedTotal : 0;
+                  return (
+                    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
+                          Valor cobrado no iFood
+                        </p>
+                        <p className="mt-1 text-[11px] font-medium text-[var(--text-secondary)]">
+                          Use o valor que aparece no pedido do app. O total interno continua registrado separadamente.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-[var(--text-secondary)]">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder={estimatedTotal.toFixed(2).replace(".", ",")}
+                          value={ifoodAmountStr}
+                          onChange={(e) => setIfoodAmountStr(e.target.value)}
+                          className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-black text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/40 focus:outline-none focus:ring-2 focus:ring-brand-red/10"
+                        />
+                        {ifoodAmountStr && (
+                          <button
+                            type="button"
+                            onClick={() => setIfoodAmountStr("")}
+                            className="text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                          >
+                            limpar
+                          </button>
+                        )}
+                      </div>
+                      {ifoodAmount > 0 && Math.abs(difference) > 0.009 && (
+                        <div className="flex items-center justify-between rounded-xl border border-brand-red/15 bg-brand-red/5 px-3 py-2">
+                          <span className="text-xs font-bold text-[var(--text-secondary)]">
+                            Diferença vs. total interno
+                          </span>
+                          <span className="text-sm font-black text-brand-red">
+                            {difference > 0 ? "+" : "-"} {currency.format(Math.abs(difference))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </>
             )}
 
@@ -739,17 +810,17 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
             {splitBill && (
               <div className="rounded-2xl border border-brand-red/20 bg-brand-red/5 p-4 space-y-2">
                 <p className="text-xs font-black text-brand-red">Dividir conta ativado</p>
-                <p className="text-[11px] text-zinc-600">
+                <p className="text-[11px] text-[var(--text-secondary)]">
                   O pedido será criado como <strong>pendente</strong>. Na próxima tela, cada pessoa escolhe o método para pagar o próprio item.
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {items.slice(0, 4).map((item, i) => (
-                    <span key={i} className="rounded-lg bg-white border border-brand-red/20 px-2 py-1 text-[10px] font-bold text-zinc-700">
+                    <span key={i} className="rounded-lg border border-brand-red/20 bg-[var(--bg-surface)] px-2 py-1 text-[10px] font-bold text-[var(--text-secondary)]">
                       {item.quantity}× {item.product.name.split(' ')[0]}
                     </span>
                   ))}
                   {items.length > 4 && (
-                    <span className="rounded-lg bg-white border border-zinc-200 px-2 py-1 text-[10px] font-bold text-zinc-500">
+                    <span className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2 py-1 text-[10px] font-bold text-[var(--text-secondary)]">
                       +{items.length - 4} mais
                     </span>
                   )}
@@ -762,25 +833,25 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
               <button
                 type="button"
                 onClick={() => setHasDiscount((v) => !v)}
-                className="flex w-full items-center justify-between text-[10px] font-black uppercase tracking-widest text-zinc-400"
+                className="flex w-full items-center justify-between text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]"
               >
                 <span>Desconto especial</span>
                 {hasDiscount ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
               {hasDiscount && (
-                <div className="space-y-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 animate-in fade-in slide-in-from-top-2">
+                <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4 animate-in fade-in slide-in-from-top-2">
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => setDiscountType("AMOUNT")}
-                      className={`rounded-xl border-2 px-4 py-2 text-sm font-black transition-all ${discountType === "AMOUNT" ? "border-brand-red bg-brand-red/5 text-brand-red" : "border-zinc-200 text-zinc-500"}`}
+                      className={`rounded-xl border-2 px-4 py-2 text-sm font-black transition-all ${discountType === "AMOUNT" ? "border-brand-red bg-brand-red/5 text-brand-red" : "border-[var(--border)] text-[var(--text-secondary)]"}`}
                     >
                       R$
                     </button>
                     <button
                       type="button"
                       onClick={() => setDiscountType("PERCENT")}
-                      className={`rounded-xl border-2 px-4 py-2 text-sm font-black transition-all ${discountType === "PERCENT" ? "border-brand-red bg-brand-red/5 text-brand-red" : "border-zinc-200 text-zinc-500"}`}
+                      className={`rounded-xl border-2 px-4 py-2 text-sm font-black transition-all ${discountType === "PERCENT" ? "border-brand-red bg-brand-red/5 text-brand-red" : "border-[var(--border)] text-[var(--text-secondary)]"}`}
                     >
                       %
                     </button>
@@ -790,7 +861,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                       placeholder="Valor"
                       value={discountValue}
                       onChange={(e) => setDiscountValue(e.target.value)}
-                      className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 font-black text-zinc-900 focus:border-brand-red/30 focus:outline-none focus:ring-2 focus:ring-brand-red/10 text-sm"
+                      className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-black text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/30 focus:outline-none focus:ring-2 focus:ring-brand-red/10"
                     />
                   </div>
                   <input
@@ -798,21 +869,21 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                     placeholder="Motivo (obrigatório)"
                     value={discountReason}
                     onChange={(e) => setDiscountReason(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 font-bold text-zinc-900 placeholder-zinc-400 focus:border-brand-red/30 focus:outline-none focus:ring-2 focus:ring-brand-red/10 text-sm"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/30 focus:outline-none focus:ring-2 focus:ring-brand-red/10"
                   />
                 </div>
               )}
             </div>
 
             {/* Order summary */}
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Resumo</p>
-              <div className="flex justify-between text-sm font-semibold text-zinc-600">
+            <div className="space-y-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Resumo</p>
+              <div className="flex justify-between text-sm font-semibold text-[var(--text-secondary)]">
                 <span>Subtotal</span>
                 <span>{currency.format(estimatedSubtotal)}</span>
               </div>
               {showPackagingFee && (
-                <div className="flex justify-between text-sm font-semibold text-zinc-600">
+                <div className="flex justify-between text-sm font-semibold text-[var(--text-secondary)]">
                   <span>Embalagem</span>
                   <span>{currency.format(packagingTotal)}</span>
                 </div>
@@ -823,11 +894,22 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                   <span>- {currency.format(discountAmount)}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center border-t border-zinc-200 pt-2">
-                <span className="text-sm font-black text-zinc-700">Total estimado</span>
+              <div className="flex items-center justify-between border-t border-[var(--border)] pt-2">
+                <span className="text-sm font-black text-[var(--text-secondary)]">Total estimado</span>
                 <span className="text-2xl font-black text-brand-red">{currency.format(estimatedTotal)}</span>
               </div>
-              <p className="text-[10px] text-zinc-400 font-medium">
+              {selectedPaymentMethod === "IFOOD" && ifoodAmount > 0 && (
+                <div className="flex justify-between text-sm font-bold text-red-600">
+                  <span>Cobrado no iFood</span>
+                  <span>{currency.format(ifoodAmount)}</span>
+                </div>
+              )}
+              {selectedPaymentMethod === "PENDING" && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                  Pedido ficará com pagamento pendente. O desconto informado acima será enviado ao servidor.
+                </div>
+              )}
+              <p className="text-[10px] font-medium text-[var(--text-muted)]">
                 O valor oficial é calculado pelo servidor após confirmação.
               </p>
             </div>

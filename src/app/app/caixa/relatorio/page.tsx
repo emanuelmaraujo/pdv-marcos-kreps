@@ -31,8 +31,6 @@ import {
   Zap,
   LayoutDashboard,
   Percent,
-  Minus,
-  Plus,
   Wallet,
   Download,
 } from "lucide-react";
@@ -40,7 +38,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   CashReportFilters,
   CashReportResponse,
-  CategoryStat,
+  HourlyStat,
   OrderRecord,
   ProductStat,
   reportsApi,
@@ -48,18 +46,33 @@ import {
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { LoadingState } from "@/components/feedback/LoadingState";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Select } from "@/components/ui/Select";
-import { PaymentMethod } from "@/types/pdv";
 import { getBusinessDayRange } from "@/lib/utils/business-day";
 import { useBranch } from "@/contexts/BranchContext";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const shortDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
 const longDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
-const timeFormatter = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
-const weekdayFmt = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
+const reportDateKeyFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const reportDateLabelFmt = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+});
+const reportWeekdayFmt = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  weekday: "short",
+});
+const reportTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -174,6 +187,18 @@ function pctDelta(curr: number, prev: number) {
   return ((curr - prev) / prev) * 100;
 }
 
+function getSaleDate(order: OrderRecord): Date {
+  return new Date(order.paid_at ?? order.confirmed_at ?? order.created_at);
+}
+
+function getPeakHour(hourlySales: HourlyStat[]): HourlyStat | null {
+  return hourlySales.reduce<HourlyStat | null>((best, hour) => {
+    if (hour.orders <= 0) return best;
+    if (!best || hour.orders > best.orders) return hour;
+    return best;
+  }, null);
+}
+
 function classifyABC(products: ProductStat[]): AbcProduct[] {
   const sorted = [...products].sort((a, b) => b.revenue - a.revenue);
   const total = sorted.reduce((s, p) => s + p.revenue, 0);
@@ -189,12 +214,12 @@ function classifyABC(products: ProductStat[]): AbcProduct[] {
 function buildDailyRows(orders: OrderRecord[]): DailyRow[] {
   const map = new Map<string, DailyRow>();
   orders.forEach((o) => {
-    const day = o.created_at.substring(0, 10);
+    const saleDate = getSaleDate(o);
+    const day = reportDateKeyFmt.format(saleDate);
     if (!map.has(day)) {
-      const d = new Date(o.created_at);
       map.set(day, {
         date: day,
-        label: `${shortDate.format(d)} (${weekdayFmt.format(d)})`,
+        label: `${reportDateLabelFmt.format(saleDate)} (${reportWeekdayFmt.format(saleDate)})`,
         received: 0, orders: 0, paid: 0, avg: 0,
       });
     }
@@ -213,13 +238,13 @@ function buildDailyRows(orders: OrderRecord[]): DailyRow[] {
 // ── Payment meta ──────────────────────────────────────────────────────────────
 
 const PAYMENT_META: Record<string, { icon: React.ElementType; label: string; iconCls: string; barCls: string }> = {
-  PIX:         { icon: QrCode,     label: "PIX",      iconCls: "bg-teal-50 text-teal-600",     barCls: "bg-teal-500" },
-  CASH:        { icon: Banknote,   label: "Dinheiro",  iconCls: "bg-emerald-50 text-emerald-600", barCls: "bg-emerald-500" },
-  DEBIT_CARD:  { icon: CreditCard, label: "Débito",   iconCls: "bg-blue-50 text-blue-600",     barCls: "bg-blue-500" },
-  CREDIT_CARD: { icon: CreditCard, label: "Crédito",  iconCls: "bg-violet-50 text-violet-600", barCls: "bg-violet-500" },
-  COURTESY:    { icon: Gift,       label: "Cortesia",  iconCls: "bg-pink-50 text-pink-600",     barCls: "bg-pink-400" },
-  PENDING:     { icon: Clock,      label: "Pendente",  iconCls: "bg-amber-50 text-amber-600",   barCls: "bg-amber-400" },
-  ALL:         { icon: Wallet,     label: "Todos",     iconCls: "bg-zinc-50 text-zinc-600",     barCls: "bg-zinc-400" },
+  PIX:         { icon: QrCode,     label: "PIX",      iconCls: "bg-teal-500/10 text-teal-600",     barCls: "bg-teal-500" },
+  CASH:        { icon: Banknote,   label: "Dinheiro",  iconCls: "bg-emerald-500/10 text-emerald-600", barCls: "bg-emerald-500" },
+  DEBIT_CARD:  { icon: CreditCard, label: "Débito",   iconCls: "bg-blue-500/10 text-blue-600",     barCls: "bg-blue-500" },
+  CREDIT_CARD: { icon: CreditCard, label: "Crédito",  iconCls: "bg-violet-500/10 text-violet-600", barCls: "bg-violet-500" },
+  COURTESY:    { icon: Gift,       label: "Cortesia",  iconCls: "bg-pink-500/10 text-pink-600",     barCls: "bg-pink-400" },
+  PENDING:     { icon: Clock,      label: "Pendente",  iconCls: "bg-amber-500/10 text-amber-600",   barCls: "bg-amber-400" },
+  ALL:         { icon: Wallet,     label: "Todos",     iconCls: "bg-[var(--bg-subtle)] text-[var(--text-secondary)]", barCls: "bg-[var(--text-muted)]" },
 };
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -227,7 +252,7 @@ const PAYMENT_META: Record<string, { icon: React.ElementType; label: string; ico
 export default function RelatorioPage() {
   const router = useRouter();
   const supabase = createClient();
-  const { currentBranchId, currentBranch } = useBranch();
+  const { currentBranchId } = useBranch();
 
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -426,7 +451,6 @@ function ControlPanel({
         <FilterChip
           value={filters.category_id ?? "ALL"}
           onChange={(v) => onFilterChange({ ...filters, category_id: v })}
-          label="Categoria"
         >
           <option value="ALL">Todas as categorias</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -436,7 +460,6 @@ function ControlPanel({
         <FilterChip
           value={filters.payment_method ?? "ALL"}
           onChange={(v) => onFilterChange({ ...filters, payment_method: v })}
-          label="Pagamento"
         >
           <option value="ALL">Todos os pagamentos</option>
           <option value="PIX">PIX</option>
@@ -461,30 +484,29 @@ function ControlPanel({
 }
 
 function FilterChip({
-  value, onChange, label, children,
+  value, onChange, children,
 }: {
   value: string;
   onChange: (v: string) => void;
-  label: string;
   children: React.ReactNode;
 }) {
   const isActive = value !== "ALL";
   return (
     <div className={`relative shrink-0 inline-flex items-center gap-1 rounded-full border px-1 py-0 transition-colors ${
       isActive
-        ? "border-brand-charcoal bg-brand-charcoal"
-        : "border-zinc-200 bg-white hover:border-zinc-300"
+        ? "border-brand-red bg-brand-red"
+        : "border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]"
     }`}>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`h-7 cursor-pointer appearance-none bg-transparent pl-2.5 pr-6 text-[11px] font-black focus:outline-none ${
-          isActive ? "text-white" : "text-zinc-600"
+          isActive ? "text-white" : "text-[var(--text-secondary)]"
         }`}
       >
         {children}
       </select>
-      <ChevronDown className={`pointer-events-none absolute right-2 h-3 w-3 shrink-0 ${isActive ? "text-white/70" : "text-zinc-400"}`} />
+      <ChevronDown className={`pointer-events-none absolute right-2 h-3 w-3 shrink-0 ${isActive ? "text-white/70" : "text-[var(--text-muted)]"}`} />
     </div>
   );
 }
@@ -636,7 +658,7 @@ function SectionOverview({
     .sort((a, b) => b.total - a.total)[0];
 
   const bestWeekday = [...report.weekday_sales].sort((a, b) => b.received - a.received)[0];
-  const peakHour = report.hourly_sales.sort((a, b) => b.orders - a.orders)[0];
+  const peakHour = getPeakHour(report.hourly_sales);
 
   return (
     <div className="space-y-5">
@@ -738,10 +760,10 @@ function SectionOverview({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {report.insights.map((ins, i) => {
               const style =
-                ins.severity === "positive" ? "border-emerald-100 bg-emerald-50 text-emerald-700" :
-                ins.severity === "warning"  ? "border-amber-100 bg-amber-50 text-amber-700" :
-                ins.severity === "negative" ? "border-red-100 bg-red-50 text-red-700" :
-                                              "border-blue-100 bg-blue-50 text-blue-700";
+                ins.severity === "positive" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600" :
+                ins.severity === "warning"  ? "border-amber-500/30 bg-amber-500/10 text-amber-600" :
+                ins.severity === "negative" ? "border-red-500/30 bg-red-500/10 text-red-600" :
+                                              "border-blue-500/30 bg-blue-500/10 text-blue-600";
               const Icon =
                 ins.severity === "positive" ? CheckCircle2 :
                 ins.severity === "warning"  ? AlertCircle :
@@ -766,9 +788,9 @@ function SectionOverview({
 
 function ScorePanel({ score }: { score: OperationalScore }) {
   const color =
-    score.total >= 80 ? { ring: "text-emerald-600", bg: "bg-emerald-500", label: "Excelente", txt: "text-emerald-700", badge: "bg-emerald-50 text-emerald-700" }
-    : score.total >= 60 ? { ring: "text-amber-500",  bg: "bg-amber-400",   label: "Regular",   txt: "text-amber-700",  badge: "bg-amber-50 text-amber-700" }
-    : { ring: "text-red-600",   bg: "bg-red-500",     label: "Atenção",   txt: "text-red-700",   badge: "bg-red-50 text-red-700" };
+    score.total >= 80 ? { ring: "text-emerald-600", bg: "bg-emerald-500", label: "Excelente", txt: "text-emerald-600", badge: "bg-emerald-500/10 text-emerald-600" }
+    : score.total >= 60 ? { ring: "text-amber-500",  bg: "bg-amber-400",   label: "Regular",   txt: "text-amber-600",  badge: "bg-amber-500/10 text-amber-600" }
+    : { ring: "text-red-600",   bg: "bg-red-500",     label: "Atenção",   txt: "text-red-600",   badge: "bg-red-500/10 text-red-600" };
 
   const circ = 2 * Math.PI * 36;
   const dash = (score.total / 100) * circ;
@@ -781,14 +803,14 @@ function ScorePanel({ score }: { score: OperationalScore }) {
   ];
 
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={BarChart3} title="Score operacional" />
         <div className="mt-5 flex items-center gap-6">
           {/* Ring */}
           <div className="relative shrink-0">
             <svg width="96" height="96" viewBox="0 0 96 96" className="-rotate-90">
-              <circle cx="48" cy="48" r="36" fill="none" stroke="#f4f4f5" strokeWidth="8" />
+              <circle cx="48" cy="48" r="36" fill="none" stroke="var(--bg-subtle)" strokeWidth="8" />
               <circle
                 cx="48" cy="48" r="36" fill="none"
                 stroke="currentColor" strokeWidth="8"
@@ -800,7 +822,7 @@ function ScorePanel({ score }: { score: OperationalScore }) {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <p className={`text-2xl font-black ${color.txt}`}>{score.total}</p>
-              <p className="text-[9px] font-bold uppercase text-zinc-400">/ 100</p>
+              <p className="text-[9px] font-bold uppercase text-[var(--text-muted)]">/ 100</p>
             </div>
           </div>
           {/* Details */}
@@ -809,12 +831,12 @@ function ScorePanel({ score }: { score: OperationalScore }) {
             {components.map((c) => (
               <div key={c.label}>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-medium text-zinc-500 truncate">{c.label}</p>
+                  <p className="truncate text-[11px] font-medium text-[var(--text-secondary)]">{c.label}</p>
                   <p className={`shrink-0 text-[11px] font-black ${c.good ? "text-emerald-600" : "text-red-600"}`}>
                     {c.pct.toFixed(0)}%
                   </p>
                 </div>
-                <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-zinc-100">
+                <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-[var(--bg-subtle)]">
                   <div
                     className={`h-full rounded-full ${c.good ? "bg-emerald-500" : "bg-red-400"}`}
                     style={{ width: `${Math.min(100, c.pct)}%` }}
@@ -831,36 +853,36 @@ function ScorePanel({ score }: { score: OperationalScore }) {
 
 function ProjectionPanel({ projection: p }: { projection: RevenueProjection }) {
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={TrendingUp} title="Projeção de receita" />
         <div className="mt-5 space-y-4">
-          <div className="rounded-2xl bg-zinc-50 p-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">Média diária (dias com movimento)</p>
-            <p className="mt-1 text-2xl font-black text-brand-charcoal">{currency.format(p.avgPerDay)}</p>
-            <p className="text-xs font-medium text-zinc-400">{p.daysWorked} dia{p.daysWorked !== 1 ? "s" : ""} com vendas</p>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Média diária (dias com movimento)</p>
+            <p className="mt-1 text-2xl font-black text-[var(--text-primary)]">{currency.format(p.avgPerDay)}</p>
+            <p className="text-xs font-medium text-[var(--text-muted)]">{p.daysWorked} dia{p.daysWorked !== 1 ? "s" : ""} com vendas</p>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-xl border border-zinc-100 p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-zinc-400">Pessimista</p>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Pessimista</p>
               <p className="mt-1 text-sm font-black text-red-600">{currency.format(p.pessimistic)}</p>
             </div>
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-center">
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center">
               <p className="text-[10px] font-bold uppercase text-emerald-600">Projetado</p>
-              <p className="mt-1 text-sm font-black text-emerald-700">{currency.format(p.projectedTotal)}</p>
+              <p className="mt-1 text-sm font-black text-emerald-600">{currency.format(p.projectedTotal)}</p>
             </div>
-            <div className="rounded-xl border border-zinc-100 p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-zinc-400">Otimista</p>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Otimista</p>
               <p className="mt-1 text-sm font-black text-blue-600">{currency.format(p.optimistic)}</p>
             </div>
           </div>
 
           {p.isMonthly && p.daysRemainingInMonth > 0 && (
-            <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+            <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-4">
               <p className="text-[11px] font-bold uppercase tracking-wide text-blue-600">Projeção de fechamento do mês</p>
-              <p className="mt-1 text-xl font-black text-blue-800">{currency.format(p.projectedMonthEnd)}</p>
-              <p className="text-xs font-medium text-blue-500">
+              <p className="mt-1 text-xl font-black text-blue-600">{currency.format(p.projectedMonthEnd)}</p>
+              <p className="text-xs font-medium text-blue-600">
                 Com base nos últimos {p.daysWorked} dias · faltam {p.daysRemainingInMonth} dias
               </p>
             </div>
@@ -879,32 +901,32 @@ function ScorecardCard({
   invertDelta?: boolean;
 }) {
   const tones = {
-    emerald: "bg-emerald-50 text-emerald-600",
-    blue:    "bg-blue-50 text-blue-600",
-    violet:  "bg-violet-50 text-violet-600",
-    red:     "bg-red-50 text-red-600",
-    amber:   "bg-amber-50 text-amber-600",
+    emerald: "bg-emerald-500/10 text-emerald-600",
+    blue:    "bg-blue-500/10 text-blue-600",
+    violet:  "bg-violet-500/10 text-violet-600",
+    red:     "bg-red-500/10 text-red-600",
+    amber:   "bg-amber-500/10 text-amber-600",
   };
   const isPositive = delta == null ? null : (invertDelta ? delta <= 0 : delta >= 0);
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">{label}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
           <span className={`rounded-xl p-2 ${tones[tone]}`}><Icon className="h-3.5 w-3.5" /></span>
         </div>
-        <p className="text-2xl font-black leading-tight text-brand-charcoal">{value}</p>
+        <p className="text-2xl font-black leading-tight text-[var(--text-primary)]">{value}</p>
         {delta != null && prev != null && (
           <div className="mt-2 flex items-center gap-1.5">
             <span className={`inline-flex items-center gap-0.5 text-xs font-black ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
               {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
               {Math.abs(delta).toFixed(1)}%
             </span>
-            <span className="text-[11px] text-zinc-400">vs anterior ({prev})</span>
+            <span className="text-[11px] text-[var(--text-muted)]">vs anterior ({prev})</span>
           </div>
         )}
         {delta == null && (
-          <p className="mt-2 text-[11px] text-zinc-400">Sem dados do período anterior</p>
+          <p className="mt-2 text-[11px] text-[var(--text-muted)]">Sem dados do período anterior</p>
         )}
       </CardContent>
     </Card>
@@ -918,16 +940,16 @@ function HighlightTile({
   tone: "amber" | "teal" | "emerald" | "violet";
 }) {
   const tones = {
-    amber:   "from-amber-50 border-amber-100 text-amber-700",
-    teal:    "from-teal-50 border-teal-100 text-teal-700",
-    emerald: "from-emerald-50 border-emerald-100 text-emerald-700",
-    violet:  "from-violet-50 border-violet-100 text-violet-700",
+    amber:   "from-amber-500/15 border-amber-500/30 text-amber-600",
+    teal:    "from-teal-500/15 border-teal-500/30 text-teal-600",
+    emerald: "from-emerald-500/15 border-emerald-500/30 text-emerald-600",
+    violet:  "from-violet-500/15 border-violet-500/30 text-violet-600",
   };
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br to-white p-4 ${tones[tone]}`}>
+    <div className={`rounded-2xl border bg-gradient-to-br to-[var(--bg-surface)] p-4 ${tones[tone]}`}>
       <Icon className="mb-3 h-5 w-5" />
       <p className="text-[10px] font-bold uppercase tracking-wide opacity-70">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-brand-charcoal">{primary}</p>
+      <p className="mt-1 truncate text-sm font-black text-current">{primary}</p>
       <p className="mt-0.5 text-xs font-medium opacity-80">{secondary}</p>
     </div>
   );
@@ -966,7 +988,7 @@ function WaterfallPanel({ report }: { report: CashReportResponse }) {
   ];
   const max = summary.gross_sales || 1;
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={TrendingUp} title="Composição da receita" />
         <div className="mt-5 space-y-2">
@@ -976,7 +998,7 @@ function WaterfallPanel({ report }: { report: CashReportResponse }) {
             const isSubtract = step.type === "subtract";
             return (
               <div key={i}>
-                {isTotal && <div className="my-3 border-t border-zinc-200" />}
+                {isTotal && <div className="my-3 border-t border-[var(--border)]" />}
                 <div className="flex items-center gap-3">
                   <div className="w-5 shrink-0 text-right">
                     {step.sign && (
@@ -987,16 +1009,16 @@ function WaterfallPanel({ report }: { report: CashReportResponse }) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
-                      <p className={`text-sm font-bold ${isTotal ? "text-brand-charcoal" : "text-zinc-600"}`}>
+                      <p className={`text-sm font-bold ${isTotal ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}`}>
                         {step.label}
                       </p>
-                      <p className={`shrink-0 text-sm font-black ${isTotal ? "text-brand-charcoal" : isSubtract ? "text-red-600" : "text-zinc-700"}`}>
+                      <p className={`shrink-0 text-sm font-black ${isTotal ? "text-[var(--text-primary)]" : isSubtract ? "text-red-600" : "text-[var(--text-secondary)]"}`}>
                         {currency.format(step.value)}
                       </p>
                     </div>
-                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
                       <div
-                        className={`h-full rounded-full ${isTotal ? "bg-emerald-500" : isSubtract ? "bg-red-300" : "bg-brand-charcoal"}`}
+                        className={`h-full rounded-full ${isTotal ? "bg-emerald-500" : isSubtract ? "bg-red-300" : "bg-brand-red/60"}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -1007,9 +1029,9 @@ function WaterfallPanel({ report }: { report: CashReportResponse }) {
           })}
         </div>
         {summary.pending > 0 && (
-          <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
-            <p className="text-xs font-bold text-amber-700">Pendente (aguardando baixa)</p>
-            <p className="text-sm font-black text-amber-700">{currency.format(summary.pending)}</p>
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <p className="text-xs font-bold text-amber-600">Pendente (aguardando baixa)</p>
+            <p className="text-sm font-black text-amber-600">{currency.format(summary.pending)}</p>
           </div>
         )}
       </CardContent>
@@ -1021,7 +1043,7 @@ function PaymentPanel({ report }: { report: CashReportResponse }) {
   const active = report.payment_breakdown.filter((i) => i.count > 0);
   const max = Math.max(...active.map((i) => i.total), 1);
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={Wallet} title="Meios de pagamento" />
         <div className="mt-5 space-y-3">
@@ -1034,18 +1056,18 @@ function PaymentPanel({ report }: { report: CashReportResponse }) {
                   <span className={`shrink-0 rounded-xl p-2 ${meta.iconCls}`}><Icon className="h-4 w-4" /></span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
-                      <p className="text-sm font-bold text-brand-charcoal">{meta.label}</p>
-                      <p className="shrink-0 text-sm font-black text-brand-charcoal">{currency.format(item.total)}</p>
+                      <p className="text-sm font-bold text-[var(--text-primary)]">{meta.label}</p>
+                      <p className="shrink-0 text-sm font-black text-[var(--text-primary)]">{currency.format(item.total)}</p>
                     </div>
                     <div className="mt-1.5 flex items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-subtle)]">
                         <div className={`h-full rounded-full ${meta.barCls}`} style={{ width: `${(item.total / max) * 100}%` }} />
                       </div>
-                      <span className="w-8 shrink-0 text-right text-[11px] font-bold text-zinc-400">{item.percent.toFixed(1)}%</span>
+                      <span className="w-8 shrink-0 text-right text-[11px] font-bold text-[var(--text-muted)]">{item.percent.toFixed(1)}%</span>
                     </div>
                   </div>
                 </div>
-                <p className="mt-0.5 pl-11 text-[11px] font-medium text-zinc-400">{item.count} pedido{item.count !== 1 ? "s" : ""}</p>
+                <p className="mt-0.5 pl-11 text-[11px] font-medium text-[var(--text-muted)]">{item.count} pedido{item.count !== 1 ? "s" : ""}</p>
               </div>
             );
           })}
@@ -1058,36 +1080,36 @@ function PaymentPanel({ report }: { report: CashReportResponse }) {
 function DailyTablePanel({ rows }: { rows: DailyRow[] }) {
   const maxReceived = Math.max(...rows.map((r) => r.received), 1);
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={CalendarDays} title="Receita dia a dia" />
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[480px] text-sm">
             <thead>
-              <tr className="border-b border-zinc-100">
-                <th className="pb-2 text-left text-[11px] font-black uppercase tracking-wide text-zinc-400">Data</th>
-                <th className="pb-2 text-right text-[11px] font-black uppercase tracking-wide text-zinc-400">Pedidos</th>
-                <th className="pb-2 text-right text-[11px] font-black uppercase tracking-wide text-zinc-400">Ticket</th>
-                <th className="pb-2 text-right text-[11px] font-black uppercase tracking-wide text-zinc-400">Recebido</th>
-                <th className="pb-2 pl-4 text-left text-[11px] font-black uppercase tracking-wide text-zinc-400">Distribuição</th>
+              <tr className="border-b border-[var(--border)]">
+                <th className="pb-2 text-left text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Data</th>
+                <th className="pb-2 text-right text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Pedidos</th>
+                <th className="pb-2 text-right text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Ticket</th>
+                <th className="pb-2 text-right text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Recebido</th>
+                <th className="pb-2 pl-4 text-left text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Distribuição</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-50">
+            <tbody className="divide-y divide-[var(--border)]">
               {rows.map((r) => {
                 const pct = (r.received / maxReceived) * 100;
                 const isBest = r.received === maxReceived;
                 return (
-                  <tr key={r.date} className={isBest ? "bg-emerald-50/50" : ""}>
-                    <td className="py-2.5 text-left font-bold text-brand-charcoal">{r.label}</td>
-                    <td className="py-2.5 text-right font-medium text-zinc-500">{r.orders}</td>
-                    <td className="py-2.5 text-right font-medium text-zinc-500">{currency.format(r.avg)}</td>
-                    <td className={`py-2.5 text-right font-black ${isBest ? "text-emerald-700" : "text-brand-charcoal"}`}>
+                  <tr key={r.date} className={isBest ? "bg-emerald-500/10" : ""}>
+                    <td className="py-2.5 text-left font-bold text-[var(--text-primary)]">{r.label}</td>
+                    <td className="py-2.5 text-right font-medium text-[var(--text-secondary)]">{r.orders}</td>
+                    <td className="py-2.5 text-right font-medium text-[var(--text-secondary)]">{currency.format(r.avg)}</td>
+                    <td className={`py-2.5 text-right font-black ${isBest ? "text-emerald-600" : "text-[var(--text-primary)]"}`}>
                       {currency.format(r.received)}
                     </td>
                     <td className="py-2.5 pl-4">
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
                         <div
-                          className={`h-full rounded-full ${isBest ? "bg-emerald-500" : "bg-brand-charcoal/40"}`}
+                          className={`h-full rounded-full ${isBest ? "bg-emerald-500" : "bg-brand-red/40"}`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -1106,7 +1128,7 @@ function DailyTablePanel({ rows }: { rows: DailyRow[] }) {
 function AuditPanel({ report }: { report: CashReportResponse }) {
   const fa = report.financial_attention;
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={Filter} title="Auditoria financeira" />
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1141,14 +1163,14 @@ function AuditTile({ icon: Icon, label, total, count, tone }: {
   icon: React.ElementType; label: string; total: number; count: number;
   tone: "red" | "violet" | "zinc";
 }) {
-  const tones = { red: "bg-red-50 text-red-600", violet: "bg-violet-50 text-violet-600", zinc: "bg-zinc-100 text-zinc-600" };
-  const textTones = { red: "text-red-700", violet: "text-violet-700", zinc: "text-zinc-700" };
+  const tones = { red: "bg-red-500/10 text-red-600", violet: "bg-violet-500/10 text-violet-600", zinc: "bg-[var(--bg-subtle)] text-[var(--text-secondary)]" };
+  const textTones = { red: "text-red-600", violet: "text-violet-600", zinc: "text-[var(--text-primary)]" };
   return (
-    <div className="rounded-2xl border border-zinc-100 p-4">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
       <div className={`mb-3 inline-flex rounded-xl p-2 ${tones[tone]}`}><Icon className="h-4 w-4" /></div>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">{label}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
       <p className={`mt-1 text-xl font-black ${textTones[tone]}`}>{currency.format(total)}</p>
-      <p className="mt-0.5 text-xs font-medium text-zinc-400">{count} registro{count !== 1 ? "s" : ""}</p>
+      <p className="mt-0.5 text-xs font-medium text-[var(--text-muted)]">{count} registro{count !== 1 ? "s" : ""}</p>
     </div>
   );
 }
@@ -1182,7 +1204,7 @@ function CategoryMixPanel({ report }: { report: CashReportResponse }) {
     "bg-amber-500", "bg-emerald-500", "bg-pink-500",
   ];
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={BarChart3} title="Mix de categorias" />
         {cats.length === 0 ? <EmptyPanel text="Sem dados de categoria." /> : (
@@ -1205,10 +1227,10 @@ function CategoryMixPanel({ report }: { report: CashReportResponse }) {
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
-                      <p className="truncate text-sm font-bold text-brand-charcoal">{cat.category_name}</p>
-                      <p className="shrink-0 text-sm font-black text-brand-charcoal">{currency.format(cat.revenue)}</p>
+                      <p className="truncate text-sm font-bold text-[var(--text-primary)]">{cat.category_name}</p>
+                      <p className="shrink-0 text-sm font-black text-[var(--text-primary)]">{currency.format(cat.revenue)}</p>
                     </div>
-                    <p className="text-[11px] font-medium text-zinc-400">
+                    <p className="text-[11px] font-medium text-[var(--text-muted)]">
                       {cat.quantity} un · {cat.orders_count} pedidos · {cat.percent.toFixed(1)}%
                     </p>
                   </div>
@@ -1226,30 +1248,30 @@ function AbcPanel({ products }: { products: AbcProduct[] }) {
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? products : products.slice(0, 10);
   const ABC_STYLE = {
-    A: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    B: "bg-blue-100 text-blue-800 border-blue-200",
-    C: "bg-zinc-100 text-zinc-600 border-zinc-200",
+    A: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+    B: "bg-blue-500/10 text-blue-600 border-blue-500/30",
+    C: "bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border)]",
   };
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={Trophy} title="Classificação ABC" />
         <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-          <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 font-bold text-emerald-700">A = 80% da receita</span>
-          <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 font-bold text-blue-700">B = próximos 15%</span>
-          <span className="rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 font-bold text-zinc-600">C = últimos 5%</span>
+          <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 font-bold text-emerald-600">A = 80% da receita</span>
+          <span className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-2 py-1 font-bold text-blue-600">B = próximos 15%</span>
+          <span className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-1 font-bold text-[var(--text-secondary)]">C = últimos 5%</span>
         </div>
         {products.length === 0 ? <EmptyPanel text="Sem produtos para classificar." /> : (
           <>
             <div className="mt-4 space-y-1.5">
               {shown.map((p, i) => (
-                <div key={p.name} className="flex items-center gap-3 rounded-xl border border-zinc-50 bg-zinc-50/50 px-3 py-2">
-                  <span className="w-5 shrink-0 text-right text-xs font-black text-zinc-400">{i + 1}</span>
+                <div key={p.name} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/60 px-3 py-2">
+                  <span className="w-5 shrink-0 text-right text-xs font-black text-[var(--text-muted)]">{i + 1}</span>
                   <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-black ${ABC_STYLE[p.cls]}`}>{p.cls}</span>
-                  <p className="min-w-0 flex-1 truncate text-sm font-bold text-brand-charcoal">{p.name}</p>
+                  <p className="min-w-0 flex-1 truncate text-sm font-bold text-[var(--text-primary)]">{p.name}</p>
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-black text-brand-charcoal">{currency.format(p.revenue)}</p>
-                    <p className="text-[10px] font-medium text-zinc-400">{p.cumPct.toFixed(0)}% acum.</p>
+                    <p className="text-sm font-black text-[var(--text-primary)]">{currency.format(p.revenue)}</p>
+                    <p className="text-[10px] font-medium text-[var(--text-muted)]">{p.cumPct.toFixed(0)}% acum.</p>
                   </div>
                 </div>
               ))}
@@ -1257,7 +1279,7 @@ function AbcPanel({ products }: { products: AbcProduct[] }) {
             {products.length > 10 && (
               <button
                 onClick={() => setExpanded((v) => !v)}
-                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 py-2 text-xs font-bold text-zinc-500 hover:bg-zinc-50"
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
               >
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
                 {expanded ? "Mostrar menos" : `Ver mais ${products.length - 10} produtos`}
@@ -1296,22 +1318,22 @@ function CategoryRankingsPanel({ report }: { report: CashReportResponse }) {
 function CategoryRankCard({ title, items, icon: Icon }: { title: string; items: ProductStat[]; icon: React.ElementType }) {
   const max = Math.max(...items.map((i) => i.quantity), 1);
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-4">
         <div className="mb-4 flex items-center gap-2">
-          <span className="rounded-xl bg-red-50 p-2 text-brand-red"><Icon className="h-4 w-4" /></span>
-          <h3 className="text-sm font-black text-brand-charcoal">{title}</h3>
+          <span className="rounded-xl bg-brand-red/10 p-2 text-brand-red"><Icon className="h-4 w-4" /></span>
+          <h3 className="text-sm font-black text-[var(--text-primary)]">{title}</h3>
         </div>
         <div className="space-y-2.5">
           {items.slice(0, 5).map((item, i) => (
             <div key={item.name} className="flex items-center gap-2.5">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-[10px] font-black text-zinc-500">{i + 1}</span>
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[var(--bg-subtle)] text-[10px] font-black text-[var(--text-secondary)]">{i + 1}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-1">
-                  <p className="truncate text-xs font-bold text-brand-charcoal">{item.name}</p>
-                  <p className="shrink-0 text-xs font-black text-brand-charcoal">{item.quantity} un.</p>
+                  <p className="truncate text-xs font-bold text-[var(--text-primary)]">{item.name}</p>
+                  <p className="shrink-0 text-xs font-black text-[var(--text-primary)]">{item.quantity} un.</p>
                 </div>
-                <div className="mt-1 h-1 overflow-hidden rounded-full bg-zinc-100">
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--bg-subtle)]">
                   <div className="h-full rounded-full bg-brand-red" style={{ width: `${(item.quantity / max) * 100}%` }} />
                 </div>
               </div>
@@ -1326,20 +1348,20 @@ function CategoryRankCard({ title, items, icon: Icon }: { title: string; items: 
 function LowSellersPanel({ report }: { report: CashReportResponse }) {
   if (report.low_selling_products.length === 0) return null;
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={AlertCircle} title="Produtos sem saída no período" />
-        <p className="mt-1 text-xs font-medium text-zinc-400">
+        <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">
           Esses produtos estão ativos no cardápio mas não tiveram vendas. Considere removê-los ou reposicioná-los.
         </p>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {report.low_selling_products.map((item) => (
-            <div key={item.product_id} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5">
+            <div key={item.product_id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5">
               <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-brand-charcoal">{item.name}</p>
-                <p className="text-[11px] font-medium text-zinc-400">{item.category}</p>
+                <p className="truncate text-sm font-bold text-[var(--text-primary)]">{item.name}</p>
+                <p className="text-[11px] font-medium text-[var(--text-muted)]">{item.category}</p>
               </div>
-              <span className="rounded-lg bg-white px-2 py-0.5 text-[10px] font-black text-zinc-400">0 vendas</span>
+              <span className="rounded-lg bg-[var(--bg-surface)] px-2 py-0.5 text-[10px] font-black text-[var(--text-muted)]">0 vendas</span>
             </div>
           ))}
         </div>
@@ -1366,52 +1388,59 @@ function SectionPatterns({ report }: { report: CashReportResponse }) {
 
 function HourlyPanel({ report }: { report: CashReportResponse }) {
   const maxOrders = Math.max(...report.hourly_sales.map((i) => i.orders), 1);
-  const peakHour = report.hourly_sales.find((h) => h.orders === maxOrders && h.orders > 0);
+  const peakHour = getPeakHour(report.hourly_sales);
+  const revenuePeakHour = report.hourly_sales.reduce<HourlyStat | null>((best, hour) => {
+    if (hour.received <= 0) return best;
+    if (!best || hour.received > best.received) return hour;
+    return best;
+  }, null);
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <PanelHeader icon={Zap} title="Volume por horário" />
           {peakHour && (
-            <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-black text-brand-red">
+            <span className="rounded-full bg-brand-red/10 px-2 py-1 text-[10px] font-black text-brand-red">
               Pico: {peakHour.range}
             </span>
           )}
         </div>
-        <div className="mt-6 flex h-44 items-end gap-1 border-b border-zinc-100 px-0.5">
-          {report.hourly_sales.map((hour) => {
-            const h = hour.orders > 0 ? Math.max((hour.orders / maxOrders) * 100, 6) : 2;
-            const isPeak = hour.orders === maxOrders && hour.orders > 0;
-            return (
-              <div key={hour.range} className="flex h-full flex-1 flex-col justify-end gap-1">
-                {hour.orders > 0 && (
-                  <span className="text-center text-[9px] font-black text-zinc-400">{hour.orders}</span>
-                )}
-                <div
-                  className={`rounded-t-md transition-all ${isPeak ? "bg-brand-red" : "bg-zinc-200 hover:bg-zinc-300"}`}
-                  style={{ height: `${h}%` }}
-                  title={`${hour.range}: ${hour.orders} pedidos · ${currency.format(hour.received)}`}
-                />
+        <div className="overflow-x-auto hide-scrollbar">
+          <div className="mt-6 flex h-44 min-w-[720px] items-end gap-1 border-b border-[var(--border)] px-0.5">
+            {report.hourly_sales.map((hour) => {
+              const h = hour.orders > 0 ? Math.max((hour.orders / maxOrders) * 100, 6) : 2;
+              const isPeak = peakHour?.range === hour.range;
+              return (
+                <div key={hour.range} className="flex h-full flex-1 flex-col justify-end gap-1">
+                  {hour.orders > 0 && (
+                    <span className="text-center text-[9px] font-black text-[var(--text-muted)]">{hour.orders}</span>
+                  )}
+                  <div
+                    className={`rounded-t-md transition-all ${isPeak ? "bg-brand-red" : "bg-[var(--bg-subtle)] hover:bg-[var(--border-strong)]"}`}
+                    style={{ height: `${h}%` }}
+                    title={`${hour.range}: ${hour.orders} pedidos · ${currency.format(hour.received)}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex min-w-[720px]">
+            {report.hourly_sales.map((hour) => (
+              <div key={hour.range} className="flex-1 whitespace-nowrap text-center text-[9px] font-medium text-[var(--text-muted)]">
+                {hour.range.split("h")[0]}h
               </div>
-            );
-          })}
-        </div>
-        <div className="mt-2 flex overflow-x-auto hide-scrollbar">
-          {report.hourly_sales.map((hour) => (
-            <div key={hour.range} className="flex-1 text-center text-[9px] font-medium text-zinc-400 whitespace-nowrap">
-              {hour.range.split("h")[0]}h
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
         <div className="mt-4 grid grid-cols-3 gap-3">
           {[
             { label: "Total pedidos", value: String(report.hourly_sales.reduce((s, h) => s + h.orders, 0)) },
             { label: "Hora de pico", value: peakHour?.range ?? "—" },
-            { label: "Maior receita", value: peakHour ? currency.format(peakHour.received) : "—" },
+            { label: "Maior receita", value: revenuePeakHour ? currency.format(revenuePeakHour.received) : "—" },
           ].map((s) => (
-            <div key={s.label} className="rounded-xl bg-zinc-50 p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-zinc-400">{s.label}</p>
-              <p className="mt-1 text-sm font-black text-brand-charcoal">{s.value}</p>
+            <div key={s.label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-center">
+              <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">{s.label}</p>
+              <p className="mt-1 text-sm font-black text-[var(--text-primary)]">{s.value}</p>
             </div>
           ))}
         </div>
@@ -1426,12 +1455,12 @@ function WeekdayPanel({ report }: { report: CashReportResponse }) {
   const best = sorted[0];
   const worst = sorted[sorted.length - 1];
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <PanelHeader icon={CalendarDays} title="Padrão semanal" />
           {best?.weekday && (
-            <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">
+            <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-black text-emerald-600">
               Melhor: {best.weekday}
             </span>
           )}
@@ -1442,21 +1471,21 @@ function WeekdayPanel({ report }: { report: CashReportResponse }) {
             const isBest = day.weekday === best?.weekday;
             const isWorst = day.weekday === worst?.weekday && day.received < best?.received;
             return (
-              <div key={day.weekday} className={`rounded-xl border p-3 ${isBest ? "border-emerald-200 bg-emerald-50" : "border-zinc-100"}`}>
+              <div key={day.weekday} className={`rounded-xl border p-3 ${isBest ? "border-emerald-500/30 bg-emerald-500/10" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className={`text-sm font-black ${isBest ? "text-emerald-800" : "text-brand-charcoal"}`}>{day.weekday}</p>
-                    <p className="text-[11px] font-medium text-zinc-400">
+                    <p className={`text-sm font-black ${isBest ? "text-emerald-600" : "text-[var(--text-primary)]"}`}>{day.weekday}</p>
+                    <p className="text-[11px] font-medium text-[var(--text-muted)]">
                       {day.orders} pedidos · ticket {currency.format(day.average_ticket)}
                     </p>
                   </div>
-                  <p className={`text-sm font-black ${isBest ? "text-emerald-700" : "text-brand-charcoal"}`}>
+                  <p className={`text-sm font-black ${isBest ? "text-emerald-600" : "text-[var(--text-primary)]"}`}>
                     {currency.format(day.received)}
                   </p>
                 </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--bg-subtle)]">
                   <div
-                    className={`h-full rounded-full ${isBest ? "bg-emerald-500" : isWorst ? "bg-zinc-300" : "bg-brand-charcoal"}`}
+                    className={`h-full rounded-full ${isBest ? "bg-emerald-500" : isWorst ? "bg-[var(--text-muted)]" : "bg-brand-red/60"}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -1476,26 +1505,26 @@ function CancellationPanel({ report }: { report: CashReportResponse }) {
     ? (fa.canceled_orders / report.summary.total_orders) * 100
     : 0;
   return (
-    <Card className="border-zinc-100 shadow-sm">
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={XCircle} title="Análise de cancelamentos" />
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-center">
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-center">
             <p className="text-[11px] font-bold uppercase text-red-600">Cancelamentos</p>
-            <p className="mt-2 text-3xl font-black text-red-700">{fa.canceled_orders}</p>
-            <p className="mt-1 text-xs font-medium text-red-500">pedidos no período</p>
+            <p className="mt-2 text-3xl font-black text-red-600">{fa.canceled_orders}</p>
+            <p className="mt-1 text-xs font-medium text-red-600">pedidos no período</p>
           </div>
-          <div className="rounded-2xl border border-zinc-100 p-4 text-center">
-            <p className="text-[11px] font-bold uppercase text-zinc-400">Receita perdida</p>
-            <p className="mt-2 text-2xl font-black text-brand-charcoal">{currency.format(fa.canceled_total)}</p>
-            <p className="mt-1 text-xs font-medium text-zinc-400">valor total cancelado</p>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-center">
+            <p className="text-[11px] font-bold uppercase text-[var(--text-muted)]">Receita perdida</p>
+            <p className="mt-2 text-2xl font-black text-[var(--text-primary)]">{currency.format(fa.canceled_total)}</p>
+            <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">valor total cancelado</p>
           </div>
-          <div className={`rounded-2xl border p-4 text-center ${cancelRate > 10 ? "border-amber-100 bg-amber-50" : "border-zinc-100"}`}>
-            <p className={`text-[11px] font-bold uppercase ${cancelRate > 10 ? "text-amber-600" : "text-zinc-400"}`}>Taxa</p>
-            <p className={`mt-2 text-3xl font-black ${cancelRate > 10 ? "text-amber-700" : "text-brand-charcoal"}`}>
+          <div className={`rounded-2xl border p-4 text-center ${cancelRate > 10 ? "border-amber-500/30 bg-amber-500/10" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
+            <p className={`text-[11px] font-bold uppercase ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-muted)]"}`}>Taxa</p>
+            <p className={`mt-2 text-3xl font-black ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-primary)]"}`}>
               {cancelRate.toFixed(1)}%
             </p>
-            <p className={`mt-1 text-xs font-medium ${cancelRate > 10 ? "text-amber-500" : "text-zinc-400"}`}>
+            <p className={`mt-1 text-xs font-medium ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-muted)]"}`}>
               {cancelRate > 10 ? "acima do ideal (< 10%)" : "dentro do aceitável"}
             </p>
           </div>
@@ -1516,13 +1545,13 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
   const PAGE_SIZE = 30;
 
   const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
-    NA_FILA:                 { label: "Na fila",      cls: "bg-blue-100 text-blue-700" },
-    PRONTO:                  { label: "Pronto",        cls: "bg-emerald-100 text-emerald-700" },
-    ENTREGUE:                { label: "Entregue",      cls: "bg-zinc-100 text-zinc-600" },
-    CANCELADO:               { label: "Cancelado",     cls: "bg-red-100 text-red-700" },
-    AGUARDANDO_CONFIRMACAO:  { label: "Aguardando",    cls: "bg-amber-100 text-amber-700" },
-    AGUARDANDO_PAGAMENTO:    { label: "Ag. pagamento", cls: "bg-amber-100 text-amber-700" },
-    EXPIRADO:                { label: "Expirado",      cls: "bg-zinc-100 text-zinc-400" },
+    NA_FILA:                 { label: "Na fila",      cls: "bg-blue-500/10 text-blue-600" },
+    PRONTO:                  { label: "Pronto",        cls: "bg-emerald-500/10 text-emerald-600" },
+    ENTREGUE:                { label: "Entregue",      cls: "bg-[var(--bg-subtle)] text-[var(--text-secondary)]" },
+    CANCELADO:               { label: "Cancelado",     cls: "bg-red-500/10 text-red-600" },
+    AGUARDANDO_CONFIRMACAO:  { label: "Aguardando",    cls: "bg-amber-500/10 text-amber-600" },
+    AGUARDANDO_PAGAMENTO:    { label: "Ag. pagamento", cls: "bg-amber-500/10 text-amber-600" },
+    EXPIRADO:                { label: "Expirado",      cls: "bg-[var(--bg-subtle)] text-[var(--text-muted)]" },
   };
 
   const filtered = useMemo(() => {
@@ -1551,7 +1580,7 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
   const exportCSV = () => {
     const header = "Número,Status,Pagamento,Valor,Desconto,Data,Hora\n";
     const rows = filtered.map((o) => {
-      const d = new Date(o.created_at);
+      const d = getSaleDate(o);
       return [
         `#${String(o.daily_number).padStart(3, "0")}`,
         o.status,
@@ -1559,7 +1588,7 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
         o.total_amount.toFixed(2).replace(".", ","),
         (o.discount_amount ?? 0).toFixed(2).replace(".", ","),
         longDate.format(d),
-        timeFormatter.format(d),
+        reportTimeFormatter.format(d),
       ].join(",");
     }).join("\n");
     const blob = new Blob(["﻿" + header + rows], { type: "text/csv;charset=utf-8" });
@@ -1581,14 +1610,14 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
           { label: "Recebido",    value: currency.format(totalReceived) },
           { label: "Ticket médio",value: currency.format(filtered.filter((o) => o.payment_status === "PAID").length > 0 ? totalReceived / filtered.filter((o) => o.payment_status === "PAID").length : 0) },
         ].map((s) => (
-          <div key={s.label} className="rounded-2xl border border-zinc-100 bg-white p-3 text-center shadow-sm">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">{s.label}</p>
-            <p className="mt-1 text-lg font-black text-brand-charcoal">{s.value}</p>
+          <div key={s.label} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-center shadow-[var(--shadow-sm)]">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{s.label}</p>
+            <p className="mt-1 text-lg font-black text-[var(--text-primary)]">{s.value}</p>
           </div>
         ))}
       </div>
 
-      <Card className="border-zinc-100 shadow-sm">
+      <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
         <CardContent className="p-4 md:p-5">
           {/* Export */}
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -1596,7 +1625,7 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
             <button
               onClick={exportCSV}
               disabled={filtered.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-black text-zinc-600 transition-colors hover:bg-zinc-50 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-xs font-black text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] disabled:opacity-40"
             >
               <Download className="h-3.5 w-3.5" />
               Exportar CSV
@@ -1605,13 +1634,13 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
 
           {/* Search */}
           <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               type="text"
               placeholder="Buscar por número do pedido..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-10 pr-4 text-sm font-medium text-brand-charcoal placeholder:text-zinc-400 focus:border-brand-charcoal focus:outline-none"
+              className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] pl-10 pr-4 text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/50 focus:outline-none"
             />
           </div>
 
@@ -1622,11 +1651,11 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
                 key={c.key}
                 onClick={() => { setFilter(c.key); setPage(1); }}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-black transition-all ${
-                  filter === c.key ? "bg-brand-charcoal text-white" : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
+                  filter === c.key ? "bg-brand-red text-white" : "bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)]"
                 }`}
               >
                 {c.label}
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${filter === c.key ? "bg-white/20" : "bg-white text-zinc-600"}`}>
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${filter === c.key ? "bg-white/20" : "bg-[var(--bg-surface)] text-[var(--text-secondary)]"}`}>
                   {c.count}
                 </span>
               </button>
@@ -1637,33 +1666,33 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
           {filtered.length === 0 ? (
             <EmptyPanel text="Nenhum pedido com esse filtro." />
           ) : (
-            <div className="divide-y divide-zinc-50">
+            <div className="divide-y divide-[var(--border)]">
               {paginated.map((order) => {
-                const st = STATUS_LABELS[order.status] ?? { label: order.status, cls: "bg-zinc-100 text-zinc-600" };
+                const st = STATUS_LABELS[order.status] ?? { label: order.status, cls: "bg-[var(--bg-subtle)] text-[var(--text-secondary)]" };
                 const pm = PAYMENT_META[order.payment_method] ?? PAYMENT_META.ALL;
                 const PayIcon = pm.icon;
                 const hasDiscount = order.discount_amount != null && order.discount_amount > 0;
                 return (
                   <div key={order.id} className="flex items-center gap-3 py-3.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-charcoal text-xs font-black text-white">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-red text-xs font-black text-white">
                       #{String(order.daily_number).padStart(3, "0")}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${st.cls}`}>{st.label}</span>
                         {hasDiscount && (
-                          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-600">
+                          <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-black text-red-600">
                             -{currency.format(order.discount_amount!)}
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 text-[11px] font-medium text-zinc-400">
-                        {longDate.format(new Date(order.created_at))} · {timeFormatter.format(new Date(order.created_at))}
+                      <p className="mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">
+                        {longDate.format(getSaleDate(order))} · {reportTimeFormatter.format(getSaleDate(order))}
                       </p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-black text-brand-charcoal">{currency.format(order.total_amount)}</p>
-                      <div className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-zinc-400">
+                      <p className="text-sm font-black text-[var(--text-primary)]">{currency.format(order.total_amount)}</p>
+                      <div className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-[var(--text-muted)]">
                         <PayIcon className="h-3 w-3" />
                         <span>{pm.label}</span>
                       </div>
@@ -1677,7 +1706,7 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
           {paginated.length < filtered.length && (
             <button
               onClick={() => setPage((p) => p + 1)}
-              className="mt-3 w-full rounded-xl border border-zinc-200 bg-zinc-50 py-3 text-sm font-black text-zinc-600 hover:bg-zinc-100"
+              className="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] py-3 text-sm font-black text-[var(--text-secondary)] hover:bg-[var(--border)]"
             >
               Carregar mais ({filtered.length - paginated.length} restantes)
             </button>
@@ -1692,7 +1721,7 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-3 text-[11px] font-black uppercase tracking-widest text-zinc-400">{children}</p>
+    <p className="mb-3 text-[11px] font-black uppercase tracking-widest text-[var(--text-muted)]">{children}</p>
   );
 }
 
@@ -1700,11 +1729,11 @@ function PanelHeader({ icon: Icon, title }: { icon: React.ElementType; title: st
   return (
     <div className="flex items-center gap-2">
       <Icon className="h-4 w-4 text-brand-red" />
-      <h2 className="text-sm font-black text-brand-charcoal">{title}</h2>
+      <h2 className="text-sm font-black text-[var(--text-primary)]">{title}</h2>
     </div>
   );
 }
 
 function EmptyPanel({ text }: { text: string }) {
-  return <p className="mt-4 rounded-xl bg-zinc-50 p-4 text-sm font-medium text-zinc-400">{text}</p>;
+  return <p className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4 text-sm font-medium text-[var(--text-muted)]">{text}</p>;
 }

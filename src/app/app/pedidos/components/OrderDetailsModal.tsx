@@ -65,6 +65,13 @@ const PAYMENT_LABEL: Record<string, string> = {
   CREDIT_CARD: "Crédito", IFOOD: "iFood", COURTESY: "Cortesia", PENDING: "Pendente",
 };
 
+function getOutstandingAmount(order: Order) {
+  const pendingItemsTotal = (order.items ?? [])
+    .filter((item) => item.status !== "CANCELLED" && item.payment_status !== "PAID" && item.payment_status !== "COURTESY")
+    .reduce((sum, item) => sum + Number(item.total_price ?? 0), 0);
+  return pendingItemsTotal + (!order.paid_at ? Number(order.packing_fee ?? 0) : 0);
+}
+
 interface Props {
   order: Order | null;
   isOpen: boolean;
@@ -133,7 +140,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }));
   };
   const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
-    handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: order.total_amount }));
+    handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: getOutstandingAmount(order) }));
   const onChangeMethod = (method: PaymentMethod) =>
     handleAction(async () => {
       await pdvApi.changePaymentMethod({ orderId: order.id, paymentMethod: method });
@@ -154,6 +161,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const subtotal     = order.total_amount + order.discount_amount - order.packing_fee;
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
   const isPaid       = order.payment_status === "PAID" || order.payment_status === "COURTESY";
+  const canAddItems = !isCANCELADO && !["EXPIRADO", "AGUARDANDO_CONFIRMACAO"].includes(order.status) && !isAppAwaitingPayment;
 
   const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
   const elapsedMin = isENTREGUE && order.delivered_at && queueEnteredAt
@@ -439,7 +447,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 )}
 
                 {/* Add to order */}
-                {order.payment_status === "PENDING" && ["NA_FILA", "AGUARDANDO_PAGAMENTO"].includes(order.status) && !isAppAwaitingPayment && (
+                {canAddItems && (
                   <Button
                     variant="outline"
                     className="h-11 w-full rounded-2xl border-2 border-zinc-900 text-sm font-black gap-2"

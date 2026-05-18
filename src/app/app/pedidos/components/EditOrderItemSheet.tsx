@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useEffect, useState } from "react";
 import { OrderItem } from "@/types/pdv";
 import { createClient } from "@/lib/supabase/client";
@@ -13,6 +15,10 @@ interface AvailableAddon {
   name: string;
   price: number;
   active: boolean;
+}
+
+interface ProductAddonRow {
+  addons: AvailableAddon | AvailableAddon[] | null;
 }
 
 interface Props {
@@ -36,7 +42,7 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
     if (!isOpen) return;
 
     // Estado inicial do item
-    const takeout = (item as any).is_takeout ?? item.observation?.startsWith("[VIAGEM]") ?? false;
+    const takeout = item.is_takeout ?? item.observation?.startsWith("[VIAGEM]") ?? false;
     setIsTakeout(takeout);
     setError(null);
 
@@ -54,9 +60,9 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
       .select("addons(id, name, price, active)")
       .eq("product_id", item.product_id)
       .then(({ data }) => {
-        const addons = (data ?? [])
-          .map((r: any) => r.addons)
-          .filter((a: AvailableAddon | null) => a && a.active);
+        const addons = ((data ?? []) as ProductAddonRow[])
+          .flatMap((row) => Array.isArray(row.addons) ? row.addons : row.addons ? [row.addons] : [])
+          .filter((addon) => addon.active);
         setAvailableAddons(addons);
         setIsFetchingAddons(false);
       }, () => {

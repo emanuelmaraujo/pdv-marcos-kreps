@@ -143,6 +143,12 @@ const ITEM_STATUS_LABELS: Record<ItemStatusUI, { label: string; color: string }>
   canceled:  { label: "Cancelado",  color: "var(--text-muted)" },
 };
 
+function sectorLabel(sector: string | null | undefined) {
+  if (sector === "KITCHEN") return "Kreps";
+  if (sector === "JUICE_POTATO") return "Cozinha";
+  return null;
+}
+
 // ── Validador de token ──────────────────────────────────────────────────────
 
 function isLikelyPublicToken(value: string) {
@@ -455,6 +461,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                           )}
                           <p className="mt-0.5 text-[11px] font-medium" style={{ color: meta.color }}>
                             {meta.label}
+                            {sectorLabel(item.production_sector) ? ` · ${sectorLabel(item.production_sector)}` : ""}
                           </p>
                         </div>
                         <p

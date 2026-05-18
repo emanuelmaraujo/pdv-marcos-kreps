@@ -169,7 +169,7 @@ export default function NovoPedidoPage() {
       
       pdvApi.getOrder(addToId)
         .then(order => {
-          const isAllowed = ['NA_FILA', 'AGUARDANDO_PAGAMENTO'].includes(order.status) && order.payment_status === 'PENDING';
+          const isAllowed = ['AGUARDANDO_PAGAMENTO', 'NA_FILA', 'PRONTO_PARCIAL', 'PRONTO', 'ENTREGUE'].includes(order.status);
           if (!isAllowed) {
             setError("Este pedido não está aberto para adições.");
           } else {
@@ -657,15 +657,15 @@ export default function NovoPedidoPage() {
               </span>
             </div>
             <div className="flex-1 text-left leading-tight">
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[11px] text-[var(--text-muted)]">
                 {items.length === 1 ? "1 item no pedido" : `${items.length} itens no pedido`}
               </p>
               <p className="font-semibold text-base tabular-nums">
-                <span className="text-xs text-zinc-300 mr-0.5 font-medium">R$</span>
+                <span className="mr-0.5 text-xs font-medium text-[var(--text-secondary)]">R$</span>
                 {getEstimatedSubtotal().toFixed(2).replace('.', ',')}
               </p>
             </div>
-            <div className="flex items-center gap-1 text-xs font-semibold text-zinc-300 shrink-0">
+            <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--text-secondary)]">
               Ver pedido
               <ChevronRight size={14} strokeWidth={2} />
             </div>
@@ -751,7 +751,7 @@ export default function NovoPedidoPage() {
                           </div>
                         )}
                         <div className="flex flex-col gap-1">
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isSelected ? 'bg-white/60' : 'bg-[var(--bg-subtle)]'}`}>
+                          <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${isSelected ? 'bg-[var(--bg-surface)]/70' : 'bg-[var(--bg-subtle)]'}`}>
                             <Plus size={14} className={isSelected ? 'text-[var(--status-success)]' : 'text-[var(--text-muted)]'} strokeWidth={2} />
                           </div>
                           <span className={`text-xs font-semibold leading-tight ${isSelected ? 'text-[var(--status-success)]' : 'text-[var(--text-primary)]'}`}>

@@ -64,7 +64,8 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   // packing_fee fica no pedido, não rateado por item; cobrado apenas quando todos os itens
   // são pagos em lote (scope = undefined em mark-payment).
   const packingFeeAmount = Number(order.packing_fee ?? 0);
-  const batchTotal = selectedItems.reduce((s, i) => s + Number(i.total_price), 0) + (isAll ? packingFeeAmount : 0);
+  const shouldChargePackingFee = !order.paid_at && packingFeeAmount > 0;
+  const batchTotal = selectedItems.reduce((s, i) => s + Number(i.total_price), 0) + (isAll && shouldChargePackingFee ? packingFeeAmount : 0);
 
   // ── Pagar 1 item direto (modo por pessoa) ─────────────────────────────────
   async function payOneItem(item: OrderItem, method: PaymentMethod) {
@@ -76,7 +77,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
         orderId: order.id,
         paymentMethod: method,
         status: method === 'COURTESY' ? 'COURTESY' : 'PAID',
-        amount: Number(item.total_price),
+        amount: Number(item.total_price) + (unpaidItems.length === 1 && shouldChargePackingFee ? packingFeeAmount : 0),
         orderItemIds: [item.id],
       });
       setPaidCount((c) => c + 1);
@@ -118,7 +119,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   const dailyNum = String(order.daily_number).padStart(3, '0');
   const branchCode = order.branch?.code;
   const orderLabel = branchCode ? `${branchCode}-${dailyNum}` : `#${dailyNum}`;
-  const pendingTotal = unpaidItems.reduce((s, i) => s + Number(i.total_price), 0) + packingFeeAmount;
+  const pendingTotal = unpaidItems.reduce((s, i) => s + Number(i.total_price), 0) + (shouldChargePackingFee ? packingFeeAmount : 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center">
@@ -187,7 +188,6 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
               </p>
               {unpaidItems.map((item) => {
                 const isBusy = busyItemId === item.id;
-                const isPaid = !unpaidItems.find((i) => i.id === item.id) || false;
                 return (
                   <div key={item.id} className="px-5 py-4 space-y-3">
                     {/* Info do item */}
@@ -267,7 +267,8 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
                       type="button"
                       onClick={() => setSelected((prev) => {
                         const next = new Set(prev);
-                        next.has(item.id) ? next.delete(item.id) : next.add(item.id);
+                        if (next.has(item.id)) next.delete(item.id);
+                        else next.add(item.id);
                         return next;
                       })}
                       className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition-all ${
@@ -300,7 +301,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
               </div>
 
               {/* Taxa de embalagem — só visível quando todos os itens selecionados */}
-              {isAll && packingFeeAmount > 0 && (
+              {isAll && shouldChargePackingFee && (
                 <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                   <span className="text-xs font-bold text-amber-700">Taxa de embalagem (para levar)</span>
                   <span className="text-sm font-black text-amber-700">{currency.format(packingFeeAmount)}</span>
