@@ -55,11 +55,14 @@ serve(async (req) => {
       throw new Error("Role não autorizada.");
     }
 
-    const { order_id, payment_method, payment_status, amount, notes, order_item_ids } = await req.json();
+    const { order_id, payment_method, payment_status, amount, notes, order_item_ids, ifood_charged_amount } = await req.json();
 
     if (!order_id) throw new Error("order_id ausente.");
     if (!VALID_STATUSES.includes(payment_status)) throw new Error("payment_status inválido.");
     if (!VALID_METHODS.includes(payment_method))   throw new Error("payment_method inválido.");
+    if (payment_method === "IFOOD" && (typeof ifood_charged_amount !== "number" || Number.isNaN(ifood_charged_amount) || ifood_charged_amount < 0)) {
+      throw new Error("ifood_charged_amount inválido.");
+    }
 
     if (payment_status === "REFUNDED" && profile.role !== "ADMIN") {
       throw new Error("Apenas ADMIN pode estornar (REFUNDED).");
@@ -185,6 +188,14 @@ serve(async (req) => {
           order_item_ids: targetItemIds,
         });
       if (payErr) throw new Error(`Erro ao registrar pagamento: ${payErr.message}`);
+    }
+
+    if (payment_method === "IFOOD") {
+      const { error: ifoodErr } = await supabaseAdmin
+        .from("orders")
+        .update({ ifood_charged_amount })
+        .eq("id", order.id);
+      if (ifoodErr) throw new Error(`Erro ao salvar valor do iFood: ${ifoodErr.message}`);
     }
 
     await supabaseAdmin.from("audit_logs").insert({
