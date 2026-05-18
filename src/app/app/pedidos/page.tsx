@@ -347,10 +347,6 @@ export default function PedidosPage() {
         await pdvApi.updateOrderItemStatus({ orderItemId: id, newStatus: "DELIVERED" });
       }
     } else if (order.status === "PRONTO") {
-      if (
-        (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") &&
-        !window.confirm("ATENÇÃO: Pagamento pendente/parcial. Confirmar entrega mesmo assim?")
-      ) return;
       await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
     }
     await fetchOrders(false);

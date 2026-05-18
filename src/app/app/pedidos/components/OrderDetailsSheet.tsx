@@ -118,12 +118,10 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
 
   const onConfirm = () => handleAction(() => pdvApi.confirmOrder(order.id));
   const onReady   = () => handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
-  const onDeliver = () => {
-    if (order.payment_status === "PENDING") {
-      if (!window.confirm("ATENÇÃO: Pagamento PENDENTE. Confirmar entrega mesmo assim?")) return;
-    }
+  const onDeliver = () =>
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" }));
-  };
+  const onRevertToQueue = () =>
+    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "NA_FILA" }));
   const onCancel = () => {
     if (!cancelReason.trim()) { setErrorMsg("Motivo obrigatório."); return; }
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }));
@@ -288,13 +286,24 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </Button>
               )}
               {order.status === "PRONTO" && (
-                <Button
-                  className="h-14 w-full rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
-                  onClick={onDeliver}
-                  disabled={isLoading}
-                >
-                  <CheckCircle2 size={20} /> ENTREGAR PEDIDO
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="h-14 flex-1 rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
+                    onClick={onDeliver}
+                    disabled={isLoading}
+                  >
+                    <CheckCircle2 size={20} /> ENTREGAR
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-14 rounded-2xl border-2 border-zinc-300 text-xs font-black text-zinc-500 hover:bg-zinc-100 gap-1 px-3"
+                    onClick={onRevertToQueue}
+                    disabled={isLoading}
+                    title="Voltar para Na Fila"
+                  >
+                    <ArrowLeft size={16} /> NA FILA
+                  </Button>
+                </div>
               )}
 
               {/* Payment pending / partial alert */}
@@ -394,8 +403,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </button>
                 <h4 className="text-sm font-black uppercase tracking-widest text-zinc-900">Alterar Pagamento</h4>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {(["PIX", "DEBIT_CARD", "CREDIT_CARD", "CASH"] as PaymentMethod[]).map((method) => {
+              <div className="grid grid-cols-3 gap-3">
+                {(["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD"] as PaymentMethod[]).map((method) => {
                   const { label, Icon, colors } = PAYMENT_METHOD_CONFIG[method];
                   const isCurrent = order.payment_method === method;
                   return (
@@ -403,19 +412,12 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                       key={method}
                       onClick={() => onChangeMethod(method)}
                       disabled={isLoading || isCurrent}
-                      className={`flex items-center justify-center gap-2 h-14 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${colors} ${isCurrent ? "ring-2 ring-current ring-offset-1 opacity-70" : ""}`}
+                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 font-black text-xs transition-all active:scale-95 ${colors} ${isCurrent ? "ring-2 ring-current ring-offset-1 opacity-70" : ""}`}
                     >
                       <Icon size={16} /> {label}
                     </button>
                   );
                 })}
-                <button
-                  onClick={() => onChangeMethod("IFOOD")}
-                  disabled={isLoading || order.payment_method === "IFOOD"}
-                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${PAYMENT_METHOD_CONFIG.IFOOD.colors} ${order.payment_method === "IFOOD" ? "ring-2 ring-current ring-offset-1 opacity-70" : ""}`}
-                >
-                  <Smartphone size={16} /> IFOOD
-                </button>
               </div>
             </div>
           )}
@@ -429,34 +431,20 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </button>
                 <h4 className="text-sm font-black uppercase tracking-widest text-zinc-900">Forma de Pagamento</h4>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {(["PIX", "DEBIT_CARD", "CREDIT_CARD", "CASH"] as PaymentMethod[]).map((method) => {
+              <div className="grid grid-cols-3 gap-3">
+                {(["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD", "COURTESY"] as PaymentMethod[]).map((method) => {
                   const { label, Icon, colors } = PAYMENT_METHOD_CONFIG[method];
                   return (
                     <button
                       key={method}
-                      onClick={() => onMarkPayment(method, "PAID")}
+                      onClick={() => onMarkPayment(method, method === "COURTESY" ? "COURTESY" : "PAID")}
                       disabled={isLoading}
-                      className={`flex items-center justify-center gap-2 h-14 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${colors}`}
+                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 font-black text-xs transition-all active:scale-95 ${colors}`}
                     >
                       <Icon size={16} /> {label}
                     </button>
                   );
                 })}
-                <button
-                  onClick={() => onMarkPayment("IFOOD", "PAID")}
-                  disabled={isLoading}
-                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${PAYMENT_METHOD_CONFIG.IFOOD.colors}`}
-                >
-                  <Smartphone size={16} /> IFOOD
-                </button>
-                <button
-                  onClick={() => onMarkPayment("COURTESY", "COURTESY")}
-                  disabled={isLoading}
-                  className={`col-span-2 flex items-center justify-center gap-2 h-12 rounded-2xl border-2 font-black text-sm transition-all active:scale-95 ${PAYMENT_METHOD_CONFIG.COURTESY.colors}`}
-                >
-                  <Gift size={16} /> CORTESIA
-                </button>
               </div>
             </div>
           )}
