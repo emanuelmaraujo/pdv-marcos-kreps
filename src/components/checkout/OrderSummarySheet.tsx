@@ -949,6 +949,8 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     {splitOrder && (
       <PayItemsModal
         order={splitOrder}
+        allowIfood
+        context="new-order"
         onClose={() => {
           setSplitOrder(null);
           setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount });

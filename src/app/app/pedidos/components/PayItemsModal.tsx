@@ -42,19 +42,22 @@ interface Props {
   order: Order;
   onClose: () => void;
   onPaid: () => void;
+  allowIfood?: boolean;
+  context?: 'new-order' | 'pending-settlement';
 }
 
 type Mode = 'per-person' | 'batch';
 
-export function PayItemsModal({ order, onClose, onPaid }: Props) {
+export function PayItemsModal({ order, onClose, onPaid, allowIfood = false, context = 'pending-settlement' }: Props) {
   const unpaidItems = (order.items ?? []).filter(
     (i) => i.status !== 'CANCELLED' && i.payment_status !== 'PAID' && i.payment_status !== 'COURTESY',
   );
 
-  const [mode, setMode] = useState<Mode>('per-person');
+  const [mode, setMode] = useState<Mode>(context === 'new-order' ? 'batch' : 'per-person');
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set(unpaidItems.map((i) => i.id)));
   const [batchMethod, setBatchMethod] = useState<PaymentMethod>('PIX');
+  const [ifoodAmountStr, setIfoodAmountStr] = useState('');
   const [batchLoading, setBatchLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paidCount, setPaidCount] = useState(0);
@@ -66,6 +69,8 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   const packingFeeAmount = Number(order.packing_fee ?? 0);
   const shouldChargePackingFee = !order.paid_at && packingFeeAmount > 0;
   const batchTotal = selectedItems.reduce((s, i) => s + Number(i.total_price), 0) + (isAll && shouldChargePackingFee ? packingFeeAmount : 0);
+  const ifoodAmount = parseFloat(ifoodAmountStr.replace(",", ".")) || 0;
+  const methodOptions = allowIfood ? METHODS : METHODS.filter((m) => m.value !== 'IFOOD');
 
   // ── Pagar 1 item direto (modo por pessoa) ─────────────────────────────────
   async function payOneItem(item: OrderItem, method: PaymentMethod) {
@@ -96,6 +101,10 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   // ── Pagar em lote (modo batch) ────────────────────────────────────────────
   async function payBatch() {
     if (selected.size === 0) { setError('Selecione pelo menos 1 item.'); return; }
+    if (batchMethod === 'IFOOD' && (!ifoodAmountStr.trim() || ifoodAmount < 0)) {
+      setError('Informe o valor cobrado no iFood.');
+      return;
+    }
     setBatchLoading(true);
     setError(null);
     try {
@@ -106,6 +115,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
         status: batchMethod === 'COURTESY' ? 'COURTESY' : 'PAID',
         amount: batchTotal,
         orderItemIds: scope,
+        ifoodChargedAmount: batchMethod === 'IFOOD' ? ifoodAmount : undefined,
       });
       onPaid();
       onClose();
@@ -120,6 +130,8 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
   const branchCode = order.branch?.code;
   const orderLabel = branchCode ? `${branchCode}-${dailyNum}` : `#${dailyNum}`;
   const pendingTotal = unpaidItems.reduce((s, i) => s + Number(i.total_price), 0) + (shouldChargePackingFee ? packingFeeAmount : 0);
+  const pendingItemsCount = unpaidItems.length - selected.size;
+  const pendingItemsValue = pendingTotal - batchTotal;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center">
@@ -131,6 +143,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
             <div>
               <p className="text-base font-black text-zinc-900">Dividir conta</p>
               <p className="mt-0.5 text-xs text-zinc-500">
+                {context === 'new-order' ? 'Novo pedido · ' : ''}
                 Pedido {orderLabel} · {unpaidItems.length} item{unpaidItems.length !== 1 ? 's' : ''} pendente{unpaidItems.length !== 1 ? 's' : ''} · {currency.format(pendingTotal)}
               </p>
             </div>
@@ -212,7 +225,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
 
                     {/* Botões de método inline */}
                     <div className={`grid grid-cols-3 gap-1.5 transition-opacity ${isBusy ? 'opacity-50 pointer-events-none' : ''}`}>
-                      {METHODS.map(({ value, short, Icon, colors }) => (
+                      {methodOptions.map(({ value, short, Icon, colors }) => (
                         <button
                           key={value}
                           type="button"
@@ -238,6 +251,27 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
 
             /* ── Modo Em Lote ────────────────────────────────────────────── */
             <div className="px-5 py-4 space-y-4">
+              {/* Resumo da triagem */}
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-zinc-500">Itens selecionados</span>
+                  <span className="font-black text-zinc-900">{selected.size}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="font-bold text-zinc-600">Total selecionado</span>
+                  <span className="font-black text-zinc-900">{currency.format(batchTotal)}</span>
+                </div>
+                <div className="mt-2 h-px w-full bg-zinc-200" />
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="font-bold text-zinc-500">Itens pendentes</span>
+                  <span className="font-black text-zinc-900">{Math.max(0, pendingItemsCount)}</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="font-bold text-zinc-600">Valor pendente</span>
+                  <span className="font-black text-zinc-900">{currency.format(Math.max(0, pendingItemsValue))}</span>
+                </div>
+              </div>
+
               {/* Selecionar todos */}
               <button
                 type="button"
@@ -313,7 +347,7 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
                 <div className="space-y-2.5">
                   <p className="text-[11px] font-black uppercase tracking-widest text-zinc-400">Forma de pagamento</p>
                   <div className="grid grid-cols-3 gap-1.5">
-                    {METHODS.map(({ value, short, Icon, colors }) => (
+                    {methodOptions.map(({ value, short, Icon, colors }) => (
                       <button
                         key={value}
                         type="button"
@@ -328,6 +362,27 @@ export function PayItemsModal({ order, onClose, onPaid }: Props) {
                         <span>{short}</span>
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {selected.size > 0 && batchMethod === 'IFOOD' && allowIfood && (
+                <div className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                  <p className="text-[11px] font-bold text-zinc-600">Valor cobrado no iFood</p>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder={batchTotal.toFixed(2).replace('.', ',')}
+                    value={ifoodAmountStr}
+                    onChange={(e) => setIfoodAmountStr(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-900"
+                  />
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-zinc-500">Diferença</span>
+                    <span className="font-black text-zinc-800">
+                      {(ifoodAmount - batchTotal) > 0 ? '+' : '-'} {currency.format(Math.abs(ifoodAmount - batchTotal))}
+                    </span>
                   </div>
                 </div>
               )}
