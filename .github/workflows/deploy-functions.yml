@@ -30,7 +30,6 @@ jobs:
           echo "Ref matches format: $(echo "$PROJECT_REF" | grep -cP '^[a-z0-9]{20}$' || echo 0)"
 
       - name: Apply pending migrations
-        if: env.SUPABASE_DB_PASSWORD != ''
         run: |
           supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
           supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
