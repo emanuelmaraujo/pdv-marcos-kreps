@@ -68,7 +68,9 @@ interface Props {
   onPaid: () => void;
   onPaymentRegistered?: () => void;
   includeIfood?: boolean;
+  allowIfood?: boolean;
   allowPending?: boolean;
+  context?: 'new-order' | 'pending-settlement';
 }
 
 export function PayItemsModal({
@@ -76,15 +78,20 @@ export function PayItemsModal({
   onClose,
   onPaid,
   onPaymentRegistered,
-  includeIfood = false,
+  includeIfood,
+  allowIfood,
   allowPending = false,
+  context,
 }: Props) {
   const [items, setItems] = useState<OrderItem[]>(order.items ?? []);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<'select' | 'method'>('select');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PIX');
+  const [ifoodAmountStr, setIfoodAmountStr] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const canUseIfood = includeIfood ?? allowIfood ?? context === 'new-order';
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -92,6 +99,7 @@ export function PayItemsModal({
       setSelected(new Set());
       setStep('select');
       setPaymentMethod('PIX');
+      setIfoodAmountStr('');
       setError(null);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -99,11 +107,11 @@ export function PayItemsModal({
 
   const availableMethods = useMemo(
     () => METHODS.filter((method) => {
-      if (method.value === 'IFOOD') return includeIfood;
+      if (method.value === 'IFOOD') return canUseIfood;
       if (method.value === 'PENDING') return allowPending;
       return true;
     }),
-    [allowPending, includeIfood],
+    [allowPending, canUseIfood],
   );
 
   const activeItems = items.filter((item) => item.status !== 'CANCELLED');
@@ -118,6 +126,7 @@ export function PayItemsModal({
     + (shouldChargePackingFee ? packingFeeAmount : 0);
   const pendingAfterSelection = Math.max(0, pendingTotal - selectedTotal);
   const allSelected = selected.size > 0 && selected.size === unpaidItems.length;
+  const ifoodAmount = parseFloat(ifoodAmountStr.replace(',', '.')) || 0;
   const orderLabel = order.branch?.code
     ? `${order.branch.code}-${String(order.daily_number).padStart(3, '0')}`
     : `#${String(order.daily_number).padStart(3, '0')}`;
@@ -140,6 +149,10 @@ export function PayItemsModal({
       setError('Selecione pelo menos 1 item.');
       return;
     }
+    if (paymentMethod === 'IFOOD' && (!ifoodAmountStr.trim() || ifoodAmount < 0)) {
+      setError('Informe o valor cobrado no iFood.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -154,6 +167,7 @@ export function PayItemsModal({
           status: nextStatus,
           amount: selectedTotal,
           orderItemIds: itemIds,
+          ifoodChargedAmount: paymentMethod === 'IFOOD' ? ifoodAmount : undefined,
         });
       }
 
@@ -169,6 +183,7 @@ export function PayItemsModal({
       )));
       setSelected(new Set());
       setStep('select');
+      setIfoodAmountStr('');
       onPaymentRegistered?.();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro ao registrar pagamento.');
@@ -336,6 +351,27 @@ export function PayItemsModal({
                   ))}
                 </div>
               </div>
+
+              {paymentMethod === 'IFOOD' && canUseIfood && (
+                <div className="space-y-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Valor cobrado no iFood</p>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder={selectedTotal.toFixed(2).replace('.', ',')}
+                    value={ifoodAmountStr}
+                    onChange={(event) => setIfoodAmountStr(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-sm font-bold text-[var(--text-primary)] outline-none focus:border-brand-red"
+                  />
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-[var(--text-secondary)]">Diferenca</span>
+                    <span className="font-black text-[var(--text-primary)]">
+                      {ifoodAmount - selectedTotal > 0 ? '+' : '-'} {currency.format(Math.abs(ifoodAmount - selectedTotal))}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

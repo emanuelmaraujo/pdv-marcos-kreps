@@ -131,7 +131,6 @@ const PAYMENT_PENDING_COLUMN: KanbanColumnConfig = {
   emptyText: "Nenhum pagamento pendente",
   showAvgWait: false,
 };
-
 function subscribeMdPlus(callback: () => void) {
   if (typeof window === "undefined") return () => {};
   const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -456,7 +455,6 @@ export default function PedidosPage() {
     },
     ...desktopSections,
   ];
-
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (

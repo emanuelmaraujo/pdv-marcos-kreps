@@ -584,6 +584,7 @@ export const pdvApi = {
     paymentMethod: PaymentMethod;
     status: string;
     amount?: number;
+    ifoodChargedAmount?: number;
     notes?: string;
     orderItemIds?: string[];
   }) =>
@@ -592,6 +593,7 @@ export const pdvApi = {
       payment_method: payload.paymentMethod,
       payment_status: payload.status,
       amount: payload.amount,
+      ifood_charged_amount: payload.ifoodChargedAmount,
       notes: payload.notes,
       order_item_ids: payload.orderItemIds,
     }),

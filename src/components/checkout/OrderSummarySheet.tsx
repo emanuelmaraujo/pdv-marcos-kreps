@@ -951,6 +951,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         order={splitOrder}
         includeIfood
         allowPending
+        context="new-order"
         onPaymentRegistered={async () => {
           const refreshed = await pdvApi.getOrder(splitOrder.id).catch(() => null);
           if (refreshed) setSplitOrder(refreshed);
