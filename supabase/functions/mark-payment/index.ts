@@ -68,7 +68,7 @@ serve(async (req) => {
     // Lê o pedido via JWT (RLS valida que o user opera a filial).
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
-      .select("id, branch_id, daily_number, status, total_amount, packing_fee, paid_at")
+      .select("id, branch_id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at")
       .eq("id", order_id)
       .single();
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
@@ -204,7 +204,7 @@ serve(async (req) => {
     // Relê pedido pra ver se ficou totalmente pago (após trigger derivar payment_status)
     const { data: orderAfter } = await supabaseAdmin
       .from("orders")
-      .select("id, daily_number, status, payment_status, payment_method, paid_at, branch_id, branches(code, name)")
+      .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at, branch_id, branches(code, name)")
       .eq("id", order.id)
       .single();
 

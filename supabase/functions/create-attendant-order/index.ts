@@ -345,6 +345,7 @@ serve(async (req) => {
         created_by: user.id,
         confirmed_by: isSplitBill ? null : user.id, // confirmação acontece após pagamento no split
         confirmed_at: isSplitBill ? null : nowIso,
+        queue_entered_at: isSplitBill ? null : nowIso,
         paid_at: paidAt
       })
       .select('id, daily_number')
@@ -354,7 +355,9 @@ serve(async (req) => {
 
     const auditLogsToInsert = [];
     auditLogsToInsert.push({ action: 'ORDER_CREATED', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
-    auditLogsToInsert.push({ action: 'ORDER_SENT_TO_QUEUE', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
+    if (!isSplitBill) {
+      auditLogsToInsert.push({ action: 'ORDER_SENT_TO_QUEUE', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
+    }
 
     // 6. Registrar Desconto
     if (discountAmount > 0) {
@@ -600,7 +603,7 @@ serve(async (req) => {
       order: {
         order_id: createdOrder.id,
         daily_number: createdOrder.daily_number,
-        status: 'NA_FILA',
+        status: isSplitBill ? 'AGUARDANDO_PAGAMENTO' : 'NA_FILA',
         payment_status: payment_status,
         payment_method: payment_method,
         subtotal_amount: subtotalAmount,

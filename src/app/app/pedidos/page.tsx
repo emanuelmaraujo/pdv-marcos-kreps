@@ -29,6 +29,7 @@ import {
 
 type TabStatus =
   | "TODOS"
+  | "PAGAMENTO_PENDENTE"
   | "AGUARDANDO_CONFIRMACAO"
   | "NA_FILA"
   | "PRONTO_PARCIAL"
@@ -122,6 +123,15 @@ const DELIVERED_PENDING_COLUMN: KanbanColumnConfig = {
   showAvgWait: false,
 };
 
+const PAYMENT_PENDING_COLUMN: KanbanColumnConfig = {
+  status: "AGUARDANDO_PAGAMENTO",
+  label: "Aguardando pagamento",
+  topColor: "bg-[var(--status-warning)]",
+  headerBg: "bg-[var(--status-warning-bg)] border-transparent",
+  emptyText: "Nenhum pagamento pendente",
+  showAvgWait: false,
+};
+
 function subscribeMdPlus(callback: () => void) {
   if (typeof window === "undefined") return () => {};
   const mediaQuery = window.matchMedia("(min-width: 768px)");
@@ -152,6 +162,7 @@ function getAvgWaitMinutes(orders: Order[], now: number): number | null {
 }
 
 function hasPendingPayment(order: Order) {
+  if (order.status === "AGUARDANDO_PAGAMENTO") return true;
   if (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") return true;
   return (order.items ?? []).some(
     (item) => item.status !== "CANCELLED" && item.payment_status !== "PAID" && item.payment_status !== "COURTESY",
@@ -391,7 +402,9 @@ export default function PedidosPage() {
     .filter((order) => {
       const q = searchQuery.toLowerCase().trim();
       const matchesTab = activeTab === "TODOS" ||
-        (activeTab === "ENTREGUE_PENDENTE"
+        (activeTab === "PAGAMENTO_PENDENTE"
+          ? hasPendingPayment(order) && !["CANCELADO", "EXPIRADO"].includes(order.status)
+          : activeTab === "ENTREGUE_PENDENTE"
           ? isDeliveredPendingPayment(order)
           : activeTab === "ENTREGUE"
           ? order.status === "ENTREGUE" && !isDeliveredPendingPayment(order)
@@ -411,6 +424,7 @@ export default function PedidosPage() {
 
   const partialCount = getCount("PRONTO_PARCIAL");
   const tabs: { id: TabStatus; label: string; count?: number }[] = [
+    { id: "PAGAMENTO_PENDENTE",    label: "Ag. pagto",  count: pendingPayCount },
     { id: "NA_FILA",               label: "Na fila",    count: queueCount },
     { id: "PRONTO_PARCIAL",        label: "Parciais",   count: partialCount },
     { id: "PRONTO",                label: "Prontos",    count: readyCount },
@@ -433,6 +447,15 @@ export default function PedidosPage() {
       { key: "ENTREGUE", config: col, orders: orders.filter((o) => o.status === "ENTREGUE" && !isDeliveredPendingPayment(o)) },
     ];
   });
+
+  const visibleDesktopSections = [
+    {
+      key: "PAGAMENTO_PENDENTE",
+      config: PAYMENT_PENDING_COLUMN,
+      orders: orders.filter((o) => hasPendingPayment(o) && !["CANCELADO", "EXPIRADO"].includes(o.status)),
+    },
+    ...desktopSections,
+  ];
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -506,7 +529,7 @@ export default function PedidosPage() {
         className="hidden lg:flex gap-4 overflow-x-auto px-0 pb-4 pt-16"
         style={{ height: "calc(100vh - 56px - 148px)" }}
       >
-        {desktopSections.map((section) => (
+        {visibleDesktopSections.map((section) => (
           <KanbanColumn
             key={section.key}
             config={section.config}
