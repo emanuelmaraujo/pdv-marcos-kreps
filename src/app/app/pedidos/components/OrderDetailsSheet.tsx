@@ -31,13 +31,23 @@ interface Props {
   order: Order | null;
   isOpen: boolean;
   onClose: () => void;
-  onOrderUpdated: () => void;
+  onOrderUpdated: () => void | Promise<void>;
 }
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function minutesBetween(start?: string | null, end?: string | null) {
+  if (!start || !end) return null;
+  return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
+}
+
+function formatDuration(minutes: number | null) {
+  if (minutes === null) return "--";
+  return minutes < 60 ? `${minutes}min` : `${Math.floor(minutes / 60)}h ${minutes % 60}min`;
 }
 
 function TimelineStep({
@@ -76,6 +86,15 @@ function TimelineConnector({ done }: { done: boolean }) {
   );
 }
 
+function TimeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2">
+      <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">{label}</p>
+      <p className="mt-0.5 text-sm font-black text-zinc-800">{value}</p>
+    </div>
+  );
+}
+
 const PAYMENT_METHOD_CONFIG: Record<
   PaymentMethod,
   { label: string; Icon: React.ElementType; colors: string }
@@ -109,13 +128,14 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
 
   if (!order) return null;
 
-  const handleAction = async (action: () => Promise<unknown>) => {
+  const handleAction = async (action: () => Promise<unknown>, options: { closeAfter?: boolean } = {}) => {
+    const closeAfter = options.closeAfter ?? false;
     setIsLoading(true);
     setErrorMsg("");
     try {
       await action();
-      onOrderUpdated();
-      onClose();
+      await onOrderUpdated();
+      if (closeAfter) onClose();
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro na ação.");
     } finally {
@@ -131,7 +151,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "NA_FILA" }));
   const onCancel = () => {
     if (!cancelReason.trim()) { setErrorMsg("Motivo obrigatório."); return; }
-    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }));
+    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }), { closeAfter: true });
   };
   const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
     handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: getOutstandingAmount(order) }));
@@ -168,6 +188,11 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
       ? `${elapsedMin} min`
       : `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}min`
     : null;
+
+  const queueAt = order.queue_entered_at ?? order.confirmed_at ?? order.created_at;
+  const queueMinutes = minutesBetween(queueAt, order.ready_at ?? (isPRONTO ? new Date().toISOString() : null));
+  const readyToDeliveredMinutes = minutesBetween(order.ready_at, order.delivered_at);
+  const totalMinutes = minutesBetween(order.created_at, order.delivered_at ?? (isENTREGUE ? order.updated_at : null));
 
   return (
     <>
@@ -232,6 +257,12 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               </p>
             )}
           </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <TimeMetric label="Fila" value={formatDuration(queueMinutes)} />
+          <TimeMetric label="Pronto > entrega" value={formatDuration(readyToDeliveredMinutes)} />
+          <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
         </div>
 
         {/* Items com controles por item */}
@@ -323,32 +354,13 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                       {order.payment_status === "PARTIAL" ? "Pagamento Parcial" : "Pagamento Pendente"}
                     </span>
                   </div>
-                  {(order.items?.length ?? 0) > 1 ? (
-                    <div className="flex gap-2">
-                      <Button
-                        className="h-12 flex-1 bg-brand-amber font-black text-brand-charcoal hover:bg-brand-amber/80 text-xs"
-                        onClick={() => setShowPayItems(true)}
-                        disabled={isLoading}
-                      >
-                        PAGAR ITENS
-                      </Button>
-                      <Button
-                        className="h-12 flex-1 bg-brand-charcoal font-black text-white hover:bg-zinc-700 text-xs"
-                        onClick={() => setShowPaymentSelection(true)}
-                        disabled={isLoading}
-                      >
-                        PAGAR TUDO
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      className="h-12 w-full bg-brand-amber font-black text-brand-charcoal hover:bg-brand-amber/80"
-                      onClick={() => setShowPaymentSelection(true)}
-                      disabled={isLoading}
-                    >
-                      RECEBER AGORA
-                    </Button>
-                  )}
+                  <Button
+                    className="h-12 w-full bg-brand-amber font-black text-brand-charcoal hover:bg-brand-amber/80"
+                    onClick={() => setShowPayItems(true)}
+                    disabled={isLoading}
+                  >
+                    PAGAR ITENS PENDENTES
+                  </Button>
                 </div>
               )}
 
@@ -498,7 +510,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
       <PayItemsModal
         order={order}
         onClose={() => setShowPayItems(false)}
-        onPaid={() => { setShowPayItems(false); onOrderUpdated(); onClose(); }}
+        onPaymentRegistered={onOrderUpdated}
+        onPaid={() => { setShowPayItems(false); onOrderUpdated(); }}
       />
     )}
     {editingItem && (

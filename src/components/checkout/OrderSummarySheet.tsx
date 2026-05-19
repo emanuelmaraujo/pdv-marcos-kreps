@@ -949,8 +949,13 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     {splitOrder && (
       <PayItemsModal
         order={splitOrder}
-        allowIfood
+        includeIfood
+        allowPending
         context="new-order"
+        onPaymentRegistered={async () => {
+          const refreshed = await pdvApi.getOrder(splitOrder.id).catch(() => null);
+          if (refreshed) setSplitOrder(refreshed);
+        }}
         onClose={() => {
           setSplitOrder(null);
           setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount });
