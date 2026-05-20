@@ -12,6 +12,7 @@ function resolvePrinterColumns(paperWidth: number) {
   return 48;
 }
 
+// Aplica formatacao ESC/POS linha a linha conforme o conteudo do ticket.
 function printFormattedText(printer: any, text: string): void {
   const lines = text.split('\n');
 
@@ -118,7 +119,7 @@ function printFormattedText(printer: any, text: string): void {
       continue;
     }
 
-    // NAO COLOCAR — invertido + duplo-altura: maximo destaque
+    // !! NAO COLOCAR — invertido + duplo-altura: maximo destaque
     if (/NAO COLOCAR:/i.test(trimmed)) {
       printer.invert(true);
       printer.bold(true);
