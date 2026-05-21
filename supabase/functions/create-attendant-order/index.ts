@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildCustomerReceipt, buildProductionReceipt, settingBool, settingNumber } from "../_shared/print-format.ts";
+import { parseBranchPrinterConfig, shouldPrint } from "../_shared/branch-print-cfg.ts";
 import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 
 const corsHeaders = {
@@ -111,7 +112,7 @@ serve(async (req) => {
     // Valida que o atendente pode operar essa filial (RLS via JWT).
     const { data: branch, error: branchErr } = await supabaseClientAuth
       .from('branches')
-      .select('id, code, name, active')
+      .select('id, code, name, active, printer_config')
       .eq('id', branch_id)
       .single();
     if (branchErr || !branch) throw new Error('Filial inválida ou usuário sem permissão.');
@@ -443,12 +444,13 @@ serve(async (req) => {
       }
     }
 
-    // 9. Fila de Impressão
+    // 9. Fila de Impressão — respeita override por filial (branches.printer_config)
     // split_bill: NÃO imprime agora — mark-payment dispara a impressão quando tudo for pago
     const printingEnabled = !isSplitBill && settingBool(settings['printing_enabled'], true);
-    const shouldPrintCustomer = printingEnabled && settingBool(settings['print_customer_copy']);
-    const shouldPrintKitchen = printingEnabled && settingBool(settings['print_kitchen_copy']);
-    const shouldPrintJuice = printingEnabled && settingBool(settings['print_juice_potato_copy']);
+    const branchCfg = parseBranchPrinterConfig((branch as any).printer_config);
+    const shouldPrintCustomer = shouldPrint(printingEnabled && settingBool(settings['print_customer_copy']), branchCfg, 'customer');
+    const shouldPrintKitchen  = shouldPrint(printingEnabled && settingBool(settings['print_kitchen_copy']), branchCfg, 'kitchen');
+    const shouldPrintJuice    = shouldPrint(printingEnabled && settingBool(settings['print_juice_potato_copy']), branchCfg, 'juice');
 
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');

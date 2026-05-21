@@ -215,7 +215,7 @@ serve(async (req) => {
     // Relê pedido pra ver se ficou totalmente pago (após trigger derivar payment_status)
     const { data: orderAfter } = await supabaseAdmin
       .from("orders")
-      .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at, branch_id, branches(code, name)")
+      .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at, branch_id, branches(code, name, printer_config)")
       .eq("id", order.id)
       .single();
 
@@ -249,21 +249,24 @@ serve(async (req) => {
       const printingEnabled = settingBoolFn(find("printing_enabled"), true);
       const ts = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
+      const { parseBranchPrinterConfig, shouldPrint } = await import("../_shared/branch-print-cfg.ts");
+      const branchCfg = parseBranchPrinterConfig((orderAfter as any).branches?.printer_config);
+
       const printerJobs: any[] = [];
       if (printingEnabled && items) {
         const kitchen = items.filter((i: any) => i.production_sector === "KITCHEN");
         const juice = items.filter((i: any) => i.production_sector === "JUICE_POTATO");
-        if (kitchen.length > 0 && settingBoolFn(find("print_kitchen_copy"), true)) {
+        if (kitchen.length > 0 && shouldPrint(settingBoolFn(find("print_kitchen_copy"), true), branchCfg, "kitchen")) {
           const { buildProductionReceipt } = await import("../_shared/print-format.ts");
           const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes };
           printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "KITCHEN", content: { text: buildProductionReceipt(orderObj, items, "KITCHEN", { timestamp: ts, title: "KREPS", branchCode, branchName }) } });
         }
-        if (juice.length > 0 && settingBoolFn(find("print_juice_potato_copy"), true)) {
+        if (juice.length > 0 && shouldPrint(settingBoolFn(find("print_juice_potato_copy"), true), branchCfg, "juice")) {
           const { buildProductionReceipt } = await import("../_shared/print-format.ts");
           const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes };
           printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "JUICE_POTATO", content: { text: buildProductionReceipt(orderObj, items, "JUICE_POTATO", { timestamp: ts, title: "COZINHA", branchCode, branchName }) } });
         }
-        if (settingBoolFn(find("print_customer_copy"))) {
+        if (shouldPrint(settingBoolFn(find("print_customer_copy")), branchCfg, "customer")) {
           const { buildCustomerReceipt } = await import("../_shared/print-format.ts");
           const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes, packing_fee: order.packing_fee, discount_amount: order.discount_amount, total_amount: order.total_amount, payment_status: order.payment_status, payment_method: payment_method };
           printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "CUSTOMER", content: { text: buildCustomerReceipt(orderObj, items, { timestamp: ts, branchCode, branchName }) } });

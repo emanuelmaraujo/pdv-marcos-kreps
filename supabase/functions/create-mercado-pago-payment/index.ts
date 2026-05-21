@@ -217,7 +217,7 @@ function isPastPendingPaymentWindow(createdAt: unknown) {
 async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const { data: order } = await supabaseAdmin
     .from("orders")
-    .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, packing_fee, total_amount, payment_status, payment_method")
+    .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, packing_fee, total_amount, payment_status, payment_method, branch_id, branches(printer_config)")
     .eq("id", orderId)
     .single();
 
@@ -246,8 +246,10 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
     .in("key", ["printing_enabled", "print_kitchen_copy", "print_juice_potato_copy"]);
 
   const printingEnabled = settingBool(settings?.find((s: any) => s.key === "printing_enabled")?.value, true);
-  const shouldPrintKitchen = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value, true);
-  const shouldPrintJuice = printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value, true);
+  const { parseBranchPrinterConfig, shouldPrint } = await import("../_shared/branch-print-cfg.ts");
+  const branchCfg = parseBranchPrinterConfig((order as any).branches?.printer_config);
+  const shouldPrintKitchen = shouldPrint(printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value, true), branchCfg, "kitchen");
+  const shouldPrintJuice   = shouldPrint(printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value, true), branchCfg, "juice");
 
   const kitchenItems = items.filter((i: any) => resolveProductionSector(i) === "KITCHEN");
   const juicePotatoItems = items.filter((i: any) => resolveProductionSector(i) === "JUICE_POTATO");
