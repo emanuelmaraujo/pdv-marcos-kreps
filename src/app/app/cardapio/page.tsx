@@ -21,6 +21,7 @@ import { ProductModal } from "@/components/menu/ProductModal";
 import { AddonModal } from "@/components/menu/AddonModal";
 import { CategoryModal } from "@/components/menu/CategoryModal";
 import { AddonLinkingModal } from "@/components/menu/AddonLinkingModal";
+import { ProductLinkingModal } from "@/components/menu/ProductLinkingModal";
 import { IngredientLinkingModal } from "@/components/menu/IngredientLinkingModal";
 
 // ─── Types ──────────────────────────────────────────────
@@ -48,6 +49,7 @@ export default function CardapioPage() {
   const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isLinkingModalOpen, setIsLinkingModalOpen] = useState(false);
+  const [isProductLinkingModalOpen, setIsProductLinkingModalOpen] = useState(false);
   const [isIngredientModalOpen, setIsIngredientModalOpen] = useState(false);
   
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -458,6 +460,17 @@ export default function CardapioPage() {
               setSelectedAddon(a);
               setIsAddonModalOpen(true);
             }}
+            onConfigureProducts={(a) => {
+              setSelectedAddon(a);
+              setIsProductLinkingModalOpen(true);
+            }}
+            productCountByAddon={menuData.productAddons.reduce<Record<string, number>>(
+              (acc, pa) => {
+                acc[pa.addon_id] = (acc[pa.addon_id] ?? 0) + 1;
+                return acc;
+              },
+              {}
+            )}
           />
         )}
         {mainTab === "categories" && (
@@ -546,6 +559,31 @@ export default function CardapioPage() {
             loadMenu();
           } catch {
             addToast("error", "Erro ao salvar categoria");
+          }
+        }}
+      />
+
+      <ProductLinkingModal
+        key={isProductLinkingModalOpen ? `addon-link-${selectedAddon?.id || 'none'}` : 'addon-link-closed'}
+        isOpen={isProductLinkingModalOpen}
+        onClose={() => setIsProductLinkingModalOpen(false)}
+        addon={selectedAddon}
+        allProducts={menuData.products}
+        categories={menuData.categories}
+        initialSelectedIds={
+          selectedAddon
+            ? menuData.productAddons
+                .filter((pa) => pa.addon_id === selectedAddon.id)
+                .map((pa) => pa.product_id)
+            : []
+        }
+        onSave={async (addonId, productIds) => {
+          try {
+            await menuApi.setAddonProducts(addonId, productIds);
+            addToast("success", "Produtos vinculados ao adicional!");
+            loadMenu();
+          } catch {
+            addToast("error", "Erro ao vincular produtos");
           }
         }}
       />
@@ -840,6 +878,8 @@ interface AddonListProps {
   onSavePrice: (a: Addon, value: string) => void;
   onCancelEdit: () => void;
   onEditAddon: (a: Addon) => void;
+  onConfigureProducts: (a: Addon) => void;
+  productCountByAddon: Record<string, number>;
 }
 
 function AddonList({
@@ -853,6 +893,8 @@ function AddonList({
   onSavePrice,
   onCancelEdit,
   onEditAddon,
+  onConfigureProducts,
+  productCountByAddon,
 }: AddonListProps) {
   if (addons.length === 0) {
     return (
@@ -871,15 +913,17 @@ function AddonList({
         const isEditingPrice =
           editingAddon?.id === addon.id && editingAddon?.field === "price";
 
+        const linkedCount = productCountByAddon[addon.id] ?? 0;
         return (
           <div
             key={addon.id}
-            className={`bg-white border rounded-2xl p-4 flex items-center justify-between gap-3 transition-all ${
+            className={`bg-white border rounded-2xl p-4 transition-all ${
               isInactive
                 ? "border-red-200 bg-red-50/60"
                 : "border-zinc-200 hover:border-zinc-300"
             } ${isSaving ? "opacity-70 pointer-events-none" : ""}`}
           >
+          <div className="flex items-center justify-between gap-3">
             <div className="flex-1 min-w-0">
               <h3
                 className={`font-bold text-sm ${
@@ -963,6 +1007,23 @@ function AddonList({
                 </div>
               </div>
             )}
+          </div>
+
+          {isAdmin && (
+            <div className="mt-3 flex gap-2 overflow-x-auto hide-scrollbar">
+              <button
+                onClick={() => onConfigureProducts(addon)}
+                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] rounded-full text-xs font-semibold hover:bg-[var(--bg-subtle)]"
+                title="Selecionar em quais itens este adicional aparece"
+              >
+                <PlusCircle className="w-3 h-3" strokeWidth={1.75} />
+                Vincular produtos
+                <span className="ml-1 text-[10px] font-bold text-[var(--text-muted)]">
+                  ({linkedCount})
+                </span>
+              </button>
+            </div>
+          )}
           </div>
         );
       })}
