@@ -201,6 +201,32 @@ export const menuApi = {
     if (insError) throw new Error(`Erro ao vincular adicionais ao produto: ${insError.message}`);
   },
 
+  /**
+   * Variante invertida de setProductAddons: define quais produtos têm acesso
+   * a este adicional. Útil para vincular um adicional novo a vários itens
+   * sem ter que abrir cada produto.
+   */
+  setAddonProducts: async (addonId: string, productIds: string[]) => {
+    const supabase = createClient();
+
+    const { error: delError } = await supabase
+      .from('product_addons')
+      .delete()
+      .eq('addon_id', addonId);
+
+    if (delError) throw new Error(`Erro ao limpar produtos do adicional: ${delError.message}`);
+
+    if (productIds.length === 0) return;
+
+    const inserts = productIds.map((product_id) => ({ product_id, addon_id: addonId }));
+
+    const { error: insError } = await supabase
+      .from('product_addons')
+      .insert(inserts);
+
+    if (insError) throw new Error(`Erro ao vincular produtos ao adicional: ${insError.message}`);
+  },
+
   setProductIngredients: async (productId: string, ingredientIds: string[]) => {
     const supabase = createClient();
     
