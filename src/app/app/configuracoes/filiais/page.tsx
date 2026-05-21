@@ -269,17 +269,31 @@ export default function FiliaisPage() {
 
       {/* Modal de edição */}
       {editing && (
-        <div className="fixed inset-0 z-40 flex items-end bg-black/50 sm:items-center sm:justify-center">
-          <div className="w-full max-w-2xl overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl flex flex-col max-h-[92vh]">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 shrink-0">
-              <h2 className="flex items-center gap-2 text-sm font-black">
-                <Building2 className="h-4 w-4" />
-                {editingId ? `Editar — ${editing.name || 'filial'}` : 'Nova filial'}
+        <div className="fixed inset-0 z-[60] flex items-end bg-black/50 sm:items-center sm:justify-center">
+          <div className="w-full max-w-2xl overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl flex flex-col max-h-[100dvh] sm:max-h-[92vh]">
+            {/* Header — também atalho de salvar para mobile */}
+            <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3 shrink-0">
+              <h2 className="flex items-center gap-2 text-sm font-black min-w-0">
+                <Building2 className="h-4 w-4 shrink-0" />
+                <span className="truncate">
+                  {editingId ? `Editar — ${editing.name || 'filial'}` : 'Nova filial'}
+                </span>
               </h2>
-              <button onClick={() => setEditing(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100">
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={!canSave}
+                  className="flex items-center gap-1 rounded-lg bg-brand-red px-2.5 py-1.5 text-xs font-bold text-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 sm:hidden"
+                  aria-label="Salvar filial"
+                >
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  Salvar
+                </button>
+                <button onClick={() => setEditing(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100" aria-label="Fechar">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             {/* Conteúdo com scroll */}
@@ -566,8 +580,8 @@ export default function FiliaisPage() {
               </Section>
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2 border-t border-zinc-100 px-4 py-3 shrink-0">
+            {/* Footer — sticky, respeita a barra inferior do iOS (safe-area) */}
+            <div className="flex items-center justify-end gap-2 border-t border-zinc-100 bg-white px-4 py-3 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 onClick={() => setEditing(null)}
                 className="rounded-lg px-3 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100"
