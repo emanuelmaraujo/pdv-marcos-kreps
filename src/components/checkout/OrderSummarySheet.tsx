@@ -143,7 +143,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number; ifood_charged_amount?: number | null } | null>(null);
+  const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number; ifood_charged_amount?: number | null; order_type?: "BALCAO" | "VIAGEM" } | null>(null);
   const [customAmountStr, setCustomAmountStr] = useState("");
   const [ifoodAmountStr, setIfoodAmountStr] = useState("");
 
@@ -357,6 +357,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
           daily_number: response.order.daily_number,
           total_amount: response.order.total_amount,
           ifood_charged_amount: response.order.ifood_charged_amount,
+          order_type: orderType,
         });
         clearCart();
       } else {
@@ -389,6 +390,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
             <h2 className="mt-1 text-3xl font-black text-[var(--text-primary)]">
               #{String(successData.daily_number).padStart(3, "0")}
             </h2>
+            {successData.order_type === "VIAGEM" && (
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--status-warning-bg)] px-3 py-1 text-xs font-black uppercase tracking-wider text-[var(--status-warning)] ring-1 ring-[var(--status-warning)]/30">
+                <ShoppingBag className="h-3.5 w-3.5" strokeWidth={2.25} />
+                Para Viagem
+              </span>
+            )}
           </div>
           <div className="w-full rounded-2xl bg-emerald-50 border border-emerald-100 p-5">
             <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Total Oficial</p>
@@ -958,11 +965,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         }}
         onClose={() => {
           setSplitOrder(null);
-          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount });
+          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | undefined) ?? orderType });
         }}
         onPaid={() => {
           setSplitOrder(null);
-          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount });
+          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | undefined) ?? orderType });
         }}
       />
     )}
