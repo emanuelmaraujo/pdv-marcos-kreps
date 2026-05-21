@@ -112,7 +112,7 @@ serve(async (req) => {
     // Valida que o atendente pode operar essa filial (RLS via JWT).
     const { data: branch, error: branchErr } = await supabaseClientAuth
       .from('branches')
-      .select('id, code, name, active, printer_config')
+      .select('id, code, name, active, printer_config, packing_fee')
       .eq('id', branch_id)
       .single();
     if (branchErr || !branch) throw new Error('Filial inválida ou usuário sem permissão.');
@@ -234,9 +234,13 @@ serve(async (req) => {
     }
 
     // 4. Calcular Taxas e Descontos
+    // Taxa de embalagem: branch.packing_fee tem prioridade. Se a filial
+    // não definir (0/null), usa o setting global `packaging_fee`.
     let packingFee = 0;
     if (settingBool(settings.apply_packaging_fee_for_takeout)) {
-      const feePerItem = settingNumber(settings.packaging_fee);
+      const branchFee = Number((branch as any).packing_fee ?? 0);
+      const globalFee = settingNumber(settings.packaging_fee);
+      const feePerItem = branchFee > 0 ? branchFee : globalFee;
       if (feePerItem > 0) {
         const takeoutQty = finalItemsData.reduce((sum, i) => sum + (i.is_takeout ? i.quantity : 0), 0);
         packingFee = takeoutQty * feePerItem;

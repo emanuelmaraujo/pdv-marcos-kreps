@@ -343,7 +343,13 @@ export default function PedidosPage() {
     }
   }, [currentBranch]);
 
-  // Initial load + realtime. Refaz quando filial selecionada muda.
+  // Initial load + realtime + polling de fallback. Refaz quando filial muda.
+  //
+  // Estratégia em camadas:
+  // 1. Realtime do Supabase (ideal — atualiza em ms quando há mudança).
+  // 2. Polling a cada 15s (fallback caso o Realtime esteja desligado na
+  //    tabela ou a conexão WS caia — comum em redes ruins de feira/popup).
+  // 3. Refresh ao voltar a aba para foreground (visibilitychange).
   useEffect(() => {
     const timer = window.setTimeout(() => fetchOrders(), 0);
     const supabase = createClient();
@@ -352,11 +358,29 @@ export default function PedidosPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
         fetchOrders(false);
       })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "order_items" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => {
         fetchOrders(false);
       })
       .subscribe();
-    return () => { window.clearTimeout(timer); supabase.removeChannel(channel); };
+
+    const POLL_MS = 15_000;
+    const pollInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchOrders(false);
+      }
+    }, POLL_MS);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") fetchOrders(false);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(pollInterval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      supabase.removeChannel(channel);
+    };
   }, [fetchOrders]);
 
   // Quick action handler (for card buttons — no modal)

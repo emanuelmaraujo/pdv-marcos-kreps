@@ -158,13 +158,17 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     customerNameRef.current = customerName;
   }, [customerName]);
 
-  // Load packaging fee setting once
+  // Carrega taxa de embalagem:
+  //   - branch.packing_fee tem prioridade (override por filial).
+  //   - Se a filial não definir (0 ou undefined), cai para o setting global.
   useEffect(() => {
     settingsApi.getSettings().then((s) => {
-      setPackagingFee(parseFloat(s.packaging_fee ?? "0") || 0);
+      const globalFee = parseFloat(s.packaging_fee ?? "0") || 0;
+      const branchFee = Number(currentBranch?.packing_fee ?? 0);
+      setPackagingFee(branchFee > 0 ? branchFee : globalFee);
       setApplyPackagingForTakeout(s.apply_packaging_fee_for_takeout === "true");
     }).catch(() => {});
-  }, []);
+  }, [currentBranch?.packing_fee]);
 
   // Load recent names when opening
   useEffect(() => {
