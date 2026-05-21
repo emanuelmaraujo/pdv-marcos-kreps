@@ -63,14 +63,37 @@ serve(async (req) => {
       if (!validCopies.includes(c)) throw new Error(`Tipo de via inválido: ${c}.`);
     }
 
-    // 3. Buscar Pedido
+    // 3. Buscar Pedido (inclui printer_config da filial para respeitar override por setor)
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name )')
+      .select('id, daily_number, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
     if (orderErr || !order) throw new Error('Pedido inexistente.');
+
+    // Filtra cópias desabilitadas explicitamente nesta filial (printer_config.<setor>.enabled === false).
+    // O setor 'JUICE_POTATO' no enum mapeia para a chave 'juice' no printer_config (alinhado com a UI de filiais).
+    const branchPrinterCfg: Record<string, { enabled?: boolean }> =
+      ((order as any).branches?.printer_config ?? {}) as Record<string, { enabled?: boolean }>;
+    const COPY_TO_CFG_KEY: Record<string, 'kitchen' | 'juice' | 'customer'> = {
+      KITCHEN: 'kitchen',
+      JUICE_POTATO: 'juice',
+      CUSTOMER: 'customer',
+    };
+    copies = copies.filter((c: string) => {
+      const key = COPY_TO_CFG_KEY[c];
+      if (!key) return true;
+      const disabled = branchPrinterCfg?.[key]?.enabled === false;
+      if (disabled) {
+        console.error(`[reprint-order] Setor ${c} desabilitado na filial — removendo da reimpressão.`);
+      }
+      return !disabled;
+    });
+
+    if (copies.length === 0) {
+      throw new Error('Todas as vias solicitadas estão desabilitadas na configuração desta filial.');
+    }
 
     if (order.source === 'APP') {
       copies = copies.filter((copy: string) => copy !== 'CUSTOMER');

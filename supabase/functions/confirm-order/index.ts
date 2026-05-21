@@ -55,10 +55,10 @@ serve(async (req) => {
     const { order_id } = await req.json();
     if (!order_id) throw new Error('order_id não fornecido no payload.');
 
-    // 3. Busca o Pedido
+    // 3. Busca o Pedido (inclui printer_config da filial para override por setor)
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, status, type, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name )')
+      .select('id, daily_number, status, type, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
@@ -102,11 +102,23 @@ serve(async (req) => {
       .from('settings')
       .select('key, value')
       .in('key', ['printing_enabled', 'print_customer_copy', 'print_kitchen_copy', 'print_juice_potato_copy']);
-    
+
     const printingEnabled = settingBool(settings?.find(s => s.key === 'printing_enabled')?.value, true);
-    const shouldPrintCustomer = printingEnabled && settingBool(settings?.find(s => s.key === 'print_customer_copy')?.value);
-    const shouldPrintKitchen = printingEnabled && settingBool(settings?.find(s => s.key === 'print_kitchen_copy')?.value);
-    const shouldPrintJuice = printingEnabled && settingBool(settings?.find(s => s.key === 'print_juice_potato_copy')?.value);
+    const globalPrintCustomer = settingBool(settings?.find(s => s.key === 'print_customer_copy')?.value);
+    const globalPrintKitchen  = settingBool(settings?.find(s => s.key === 'print_kitchen_copy')?.value);
+    const globalPrintJuice    = settingBool(settings?.find(s => s.key === 'print_juice_potato_copy')?.value);
+
+    // Override por filial — branches.printer_config.<setor>.enabled
+    // Quando explicitamente false, NUNCA imprime aquele setor, mesmo que o global esteja ligado.
+    // Quando ausente/undefined, segue o comportamento global.
+    const branchPrinterCfg: Record<string, { enabled?: boolean; ip?: string; port?: number }> =
+      ((order as any).branches?.printer_config ?? {}) as Record<string, { enabled?: boolean; ip?: string; port?: number }>;
+    const sectorEnabled = (key: 'kitchen' | 'juice' | 'customer'): boolean =>
+      branchPrinterCfg?.[key]?.enabled !== false;
+
+    const shouldPrintCustomer = printingEnabled && globalPrintCustomer && sectorEnabled('customer');
+    const shouldPrintKitchen  = printingEnabled && globalPrintKitchen  && sectorEnabled('kitchen');
+    const shouldPrintJuice    = printingEnabled && globalPrintJuice    && sectorEnabled('juice');
 
     // 4. Separa os itens por setor
     const kitchenItems = items.filter(i => i.production_sector === 'KITCHEN');
