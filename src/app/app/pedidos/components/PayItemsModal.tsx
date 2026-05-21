@@ -195,7 +195,7 @@ export function PayItemsModal({
   const completed = unpaidItems.length === 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center">
+    <div className="fixed inset-0 z-[60] flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center">
       <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-2xl sm:rounded-3xl">
         <div className="shrink-0 border-b border-[var(--border)] px-5 py-4">
           <div className="flex items-start justify-between gap-3">
