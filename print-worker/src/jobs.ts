@@ -90,8 +90,64 @@ export async function getRemoteConfig() {
   }
 }
 
+// Mapeia o setor do job para a chave usada em branches.printer_config
+const SECTOR_TO_CFG_KEY: Record<string, 'kitchen' | 'juice' | 'customer'> = {
+  KITCHEN: 'kitchen',
+  JUICE_POTATO: 'juice',
+  CUSTOMER: 'customer',
+};
+
+interface BranchPrinterSlot {
+  ip?: string;
+  port?: number;
+  enabled?: boolean;
+}
+
+/**
+ * Aplica override da filial sobre a config global.
+ * - Se enabled === false no setor desta filial → impressão é PULADA (job marcado PRINTED com nota).
+ * - Se IP/porta estiverem definidos no setor da filial → usa-os no lugar do global.
+ */
+async function resolveBranchOverride(
+  job: any,
+  global: { printerHost: string; printerPort: number }
+): Promise<{ enabled: boolean; host: string; port: number; reason?: string }> {
+  if (!job?.branch_id) return { enabled: true, host: global.printerHost, port: global.printerPort };
+  const sectorKey = SECTOR_TO_CFG_KEY[String(job.sector)];
+  if (!sectorKey) return { enabled: true, host: global.printerHost, port: global.printerPort };
+
+  const { data: branch, error } = await supabase
+    .from('branches')
+    .select('printer_config, name')
+    .eq('id', job.branch_id)
+    .single();
+
+  if (error || !branch) {
+    console.warn(`[JOBS] Não foi possível ler printer_config da filial ${job.branch_id}: ${error?.message ?? 'sem dados'}. Usando config global.`);
+    return { enabled: true, host: global.printerHost, port: global.printerPort };
+  }
+
+  const cfg = ((branch as any).printer_config ?? {}) as Record<string, BranchPrinterSlot>;
+  const slot = cfg[sectorKey] ?? {};
+
+  if (slot.enabled === false) {
+    return {
+      enabled: false,
+      host: global.printerHost,
+      port: global.printerPort,
+      reason: `Setor ${sectorKey} desabilitado na filial "${(branch as any).name}"`,
+    };
+  }
+
+  return {
+    enabled: true,
+    host: slot.ip && slot.ip.trim() ? slot.ip.trim() : global.printerHost,
+    port: Number.isFinite(slot.port) && (slot.port as number) > 0 ? (slot.port as number) : global.printerPort,
+  };
+}
+
 export async function processJob(job: any) {
-  console.log(`[JOBS] Processando job ${job.id} (setor: ${job.sector})`);
+  console.log(`[JOBS] Processando job ${job.id} (setor: ${job.sector}, filial: ${job.branch_id ?? '—'})`);
 
   try {
     const remoteConfig = await getRemoteConfig();
@@ -100,9 +156,25 @@ export async function processJob(job: any) {
       throw new Error('Impressao desativada no painel administrativo');
     }
 
-    await printWithConfig(job.content, remoteConfig);
+    const override = await resolveBranchOverride(job, remoteConfig);
+    if (!override.enabled) {
+      console.log(`[JOBS] Job ${job.id} pulado: ${override.reason}`);
+      await updateJobStatus(job.id, 'PRINTED', {
+        printed_at: new Date().toISOString(),
+        error_message: `SKIPPED: ${override.reason}`,
+      });
+      return;
+    }
+
+    const effectiveConfig = {
+      ...remoteConfig,
+      printerHost: override.host,
+      printerPort: override.port,
+    };
+
+    await printWithConfig(job.content, effectiveConfig);
     await updateJobStatus(job.id, 'PRINTED', { printed_at: new Date().toISOString() });
-    console.log(`[JOBS] Job ${job.id} marcado como PRINTED.`);
+    console.log(`[JOBS] Job ${job.id} marcado como PRINTED (impressora ${effectiveConfig.printerHost}:${effectiveConfig.printerPort}).`);
   } catch (err: any) {
     console.error(`[JOBS] Erro ao processar job ${job.id}:`, err);
 
