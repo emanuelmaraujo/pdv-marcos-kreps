@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildProductionReceipt, settingBool } from "../_shared/print-format.ts";
+import { parseBranchPrinterConfig, shouldPrint } from "../_shared/branch-print-cfg.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -65,7 +66,7 @@ serve(async (req) => {
     // 3. Buscar e validar pedido original
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, status, payment_status, total_amount, type, customer_name, customer_phone, notes, branch_id, branches ( code, name )')
+      .select('id, daily_number, status, payment_status, total_amount, type, customer_name, customer_phone, notes, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
@@ -253,10 +254,11 @@ serve(async (req) => {
       new_data: { additional_amount: additionalSubtotal, new_total: newTotal, addition_batch_no: additionBatchNo }
     });
 
-    // 8. Fila de Impressão (Apenas novos itens)
+    // 8. Fila de Impressão (Apenas novos itens) — respeita override por filial
     const printingEnabled = settingBool(settings['printing_enabled'], true);
-    const shouldPrintKitchen = printingEnabled && settingBool(settings['print_kitchen_copy']);
-    const shouldPrintJuice = printingEnabled && settingBool(settings['print_juice_potato_copy']);
+    const branchCfg = parseBranchPrinterConfig((order as any).branches?.printer_config);
+    const shouldPrintKitchen = shouldPrint(printingEnabled && settingBool(settings['print_kitchen_copy']), branchCfg, 'kitchen');
+    const shouldPrintJuice   = shouldPrint(printingEnabled && settingBool(settings['print_juice_potato_copy']), branchCfg, 'juice');
 
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');
