@@ -47,6 +47,14 @@ const EMPTY: BranchInput = {
   packing_fee: 0, ordering_enabled: true, whatsapp_enabled: true,
 };
 
+// Classe de input tematizada (light/dark/warm) — substitui o `.input` global.
+const INPUT_CLS =
+  'w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] ' +
+  'px-3 py-2.5 text-sm text-[var(--text-primary)] ' +
+  'placeholder:text-[var(--text-muted)] ' +
+  'focus:border-brand-red/50 focus:outline-none focus:ring-2 focus:ring-brand-red/15 ' +
+  'transition-colors';
+
 /* Cor estável de avatar derivada do id da filial — mesma filial sempre
    recebe a mesma cor, sem usar preto. Paleta calma (não brand) para não
    competir com os CTAs vermelhos. */
@@ -269,11 +277,11 @@ export default function FiliaisPage() {
 
       {/* Modal de edição */}
       {editing && (
-        <div className="fixed inset-0 z-[60] flex items-end bg-black/50 sm:items-center sm:justify-center">
-          <div className="w-full max-w-2xl overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl flex flex-col max-h-[100dvh] sm:max-h-[92vh]">
+        <div className="fixed inset-0 z-[60] flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center">
+          <div className="w-full max-w-2xl overflow-hidden rounded-t-3xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-2xl sm:rounded-3xl flex flex-col max-h-[100dvh] sm:max-h-[92vh]">
             {/* Header — também atalho de salvar para mobile */}
-            <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-4 py-3 shrink-0">
-              <h2 className="flex items-center gap-2 text-sm font-black min-w-0">
+            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shrink-0">
+              <h2 className="flex items-center gap-2 text-sm font-black text-[var(--text-primary)] min-w-0">
                 <Building2 className="h-4 w-4 shrink-0" />
                 <span className="truncate">
                   {editingId ? `Editar — ${editing.name || 'filial'}` : 'Nova filial'}
@@ -290,7 +298,11 @@ export default function FiliaisPage() {
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                   Salvar
                 </button>
-                <button onClick={() => setEditing(null)} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100" aria-label="Fechar">
+                <button
+                  onClick={() => setEditing(null)}
+                  className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+                  aria-label="Fechar"
+                >
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -317,7 +329,7 @@ export default function FiliaisPage() {
                         slug: prev.slug || slugify(name),
                       } : prev);
                     }}
-                    className="input"
+                    className={INPUT_CLS}
                     placeholder="Loja Principal · Feira da Vila · Pop-up Shopping"
                   />
                 </Field>
@@ -334,7 +346,7 @@ export default function FiliaisPage() {
                       value={editing.code}
                       onChange={(e) => setField('code', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3))}
                       maxLength={3}
-                      className={`input font-black uppercase tracking-widest ${!codeValid ? 'border-red-400' : ''}`}
+                      className={`${INPUT_CLS} font-black uppercase tracking-widest ${!codeValid ? '!border-[var(--status-danger)]' : ''}`}
                       placeholder="P, F, M2..."
                     />
                   </Field>
@@ -348,7 +360,7 @@ export default function FiliaisPage() {
                       type="text"
                       value={editing.slug}
                       onChange={(e) => setField('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32))}
-                      className={`input ${!slugValid ? 'border-red-400' : ''}`}
+                      className={`${INPUT_CLS} ${!slugValid ? '!border-[var(--status-danger)]' : ''}`}
                       placeholder="principal, feira-norte..."
                     />
                   </Field>
@@ -356,25 +368,25 @@ export default function FiliaisPage() {
 
                 {/* Preview URL */}
                 {editing.slug && slugValid && (
-                  <p className="text-[11px] text-zinc-500 bg-zinc-50 rounded-lg px-3 py-1.5">
-                    URL pública: <span className="font-bold text-zinc-700">marcoskreps.com.br/pedir/{editing.slug}</span>
+                  <p className="rounded-lg bg-[var(--bg-subtle)] px-3 py-1.5 text-[11px] text-[var(--text-secondary)]">
+                    URL pública: <span className="font-bold text-[var(--text-primary)]">marcoskreps.com.br/pedir/{editing.slug}</span>
                   </p>
                 )}
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   {TYPE_OPTIONS.map((t) => (
                     <button
                       key={t.value}
                       type="button"
                       onClick={() => setField('type', t.value)}
-                      className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                      className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
                         editing.type === t.value
-                          ? 'border-brand-red bg-red-50 text-brand-red'
-                          : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
+                          ? 'border-brand-red bg-[var(--status-danger-bg)] text-brand-red'
+                          : 'border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]'
                       }`}
                     >
                       <p className="text-xs font-black">{t.label}</p>
-                      <p className="text-[10px] opacity-70 mt-0.5">{t.desc}</p>
+                      <p className="text-[10px] opacity-70 mt-0.5 leading-tight">{t.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -385,7 +397,7 @@ export default function FiliaisPage() {
                       type="tel"
                       value={editing.phone ?? ''}
                       onChange={(e) => setField('phone', e.target.value)}
-                      className="input"
+                      className={INPUT_CLS}
                       placeholder="(61) 99999-9999"
                     />
                   </Field>
@@ -396,7 +408,7 @@ export default function FiliaisPage() {
                       min="0"
                       value={editing.packing_fee ?? 0}
                       onChange={(e) => setField('packing_fee', Number(e.target.value))}
-                      className="input"
+                      className={INPUT_CLS}
                     />
                   </Field>
                 </div>
@@ -406,7 +418,7 @@ export default function FiliaisPage() {
                     type="text"
                     value={editing.address ?? ''}
                     onChange={(e) => setField('address', e.target.value)}
-                    className="input"
+                    className={INPUT_CLS}
                     placeholder="Rua X, nº Y — Asa Norte"
                   />
                 </Field>
@@ -434,7 +446,7 @@ export default function FiliaisPage() {
                 open={openSection === 'hours'}
                 onToggle={() => setOpenSection(openSection === 'hours' ? 'basic' : 'hours')}
               >
-                <p className="text-[11px] text-zinc-500">
+                <p className="text-[11px] text-[var(--text-secondary)]">
                   Deixe em branco para usar o horário global configurado em Configurações. Quando preenchido, tem prioridade.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
@@ -443,7 +455,7 @@ export default function FiliaisPage() {
                       type="time"
                       value={editing.ordering_start_time ?? ''}
                       onChange={(e) => setField('ordering_start_time', e.target.value || undefined)}
-                      className="input"
+                      className={INPUT_CLS}
                     />
                   </Field>
                   <Field label="Fecha às">
@@ -451,12 +463,12 @@ export default function FiliaisPage() {
                       type="time"
                       value={editing.ordering_end_time ?? ''}
                       onChange={(e) => setField('ordering_end_time', e.target.value || undefined)}
-                      className="input"
+                      className={INPUT_CLS}
                     />
                   </Field>
                 </div>
                 {editing.ordering_start_time && editing.ordering_end_time && (
-                  <p className="text-[11px] bg-blue-50 text-blue-700 rounded-lg px-3 py-2">
+                  <p className="rounded-lg bg-[var(--status-info-bg)] px-3 py-2 text-[11px] text-[var(--status-info)]">
                     Aceita pedidos das <strong>{editing.ordering_start_time}</strong> às <strong>{editing.ordering_end_time}</strong>
                   </p>
                 )}
@@ -469,11 +481,11 @@ export default function FiliaisPage() {
                 open={openSection === 'printer'}
                 onToggle={() => setOpenSection(openSection === 'printer' ? 'basic' : 'printer')}
               >
-                <p className="text-[11px] text-zinc-500">
-                  IP e porta de cada impressora térmica desta filial. O print-worker local lê essa configuração. Porta padrão: <strong>9100</strong>.
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  IP e porta de cada impressora térmica desta filial. O print-worker local lê essa configuração. Porta padrão: <strong className="text-[var(--text-primary)]">9100</strong>.
                 </p>
                 {PRINTER_SECTORS.map((s) => (
-                  <div key={s.key} className="rounded-xl border border-zinc-200 p-3 space-y-2">
+                  <div key={s.key} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3">
                     <div className="flex items-center gap-2">
                       <Toggle
                         label={s.label}
@@ -491,7 +503,7 @@ export default function FiliaisPage() {
                               type="text"
                               value={printerCfg[s.key]?.ip ?? ''}
                               onChange={(e) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], ip: e.target.value } }))}
-                              className="input font-mono"
+                              className={`${INPUT_CLS} font-mono`}
                               placeholder="192.168.1.100"
                             />
                           </Field>
@@ -501,7 +513,7 @@ export default function FiliaisPage() {
                             type="number"
                             value={printerCfg[s.key]?.port ?? 9100}
                             onChange={(e) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], port: Number(e.target.value) } }))}
-                            className="input font-mono"
+                            className={`${INPUT_CLS} font-mono`}
                             placeholder="9100"
                           />
                         </Field>
@@ -529,24 +541,24 @@ export default function FiliaisPage() {
 
                 {editing.whatsapp_enabled !== false && (
                   <div className="space-y-3">
-                    <p className="text-[11px] text-zinc-500">
+                    <p className="text-[11px] text-[var(--text-secondary)]">
                       Deixe o nome do template em branco para usar o template global padrão. O template deve estar aprovado na Meta.
                     </p>
                     {WA_EVENTS.map((ev) => (
-                      <div key={ev.key} className="rounded-xl border border-zinc-200 p-3 space-y-2">
+                      <div key={ev.key} className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3">
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-black text-zinc-800">{ev.label}</p>
-                            <p className="text-[10px] text-zinc-500">{ev.hint}</p>
+                          <div className="min-w-0">
+                            <p className="text-xs font-black text-[var(--text-primary)]">{ev.label}</p>
+                            <p className="text-[10px] text-[var(--text-muted)]">{ev.hint}</p>
                           </div>
-                          <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+                          <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
                             <input
                               type="checkbox"
                               checked={waCfg[ev.key]?.enabled !== false}
                               onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], enabled: e.target.checked } }))}
                               className="h-3.5 w-3.5 accent-brand-red"
                             />
-                            <span className="text-[10px] font-bold text-zinc-600">Ativo</span>
+                            <span className="text-[10px] font-bold text-[var(--text-secondary)]">Ativo</span>
                           </label>
                         </div>
                         {waCfg[ev.key]?.enabled !== false && (
@@ -557,7 +569,7 @@ export default function FiliaisPage() {
                                   type="text"
                                   value={waCfg[ev.key]?.template_name ?? ''}
                                   onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], template_name: e.target.value } }))}
-                                  className="input font-mono text-xs"
+                                  className={`${INPUT_CLS} font-mono text-xs`}
                                   placeholder="ex: pedido_pronto_feira"
                                 />
                               </Field>
@@ -567,7 +579,7 @@ export default function FiliaisPage() {
                                 type="text"
                                 value={waCfg[ev.key]?.language ?? 'pt_BR'}
                                 onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], language: e.target.value } }))}
-                                className="input font-mono text-xs"
+                                className={`${INPUT_CLS} font-mono text-xs`}
                                 placeholder="pt_BR"
                               />
                             </Field>
@@ -581,10 +593,10 @@ export default function FiliaisPage() {
             </div>
 
             {/* Footer — sticky, respeita a barra inferior do iOS (safe-area) */}
-            <div className="flex items-center justify-end gap-2 border-t border-zinc-100 bg-white px-4 py-3 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 onClick={() => setEditing(null)}
-                className="rounded-lg px-3 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100"
+                className="rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
               >
                 Cancelar
               </button>
@@ -607,17 +619,19 @@ function Section({
   open: boolean; onToggle: () => void; children: React.ReactNode;
 }) {
   return (
-    <div className="border-b border-zinc-100 last:border-0">
+    <div className="border-b border-[var(--border)] last:border-0">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left hover:bg-zinc-50"
+        className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left hover:bg-[var(--bg-subtle)]/60"
       >
-        <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-zinc-600">
+        <span className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
           {icon}
           {label}
         </span>
-        {open ? <ChevronUp className="h-3.5 w-3.5 text-zinc-400" /> : <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />}
+        {open
+          ? <ChevronUp className="h-4 w-4 text-[var(--text-muted)]" />
+          : <ChevronDown className="h-4 w-4 text-[var(--text-muted)]" />}
       </button>
       {open && <div className="space-y-3 px-4 pb-4">{children}</div>}
     </div>
@@ -631,13 +645,13 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 flex items-baseline gap-1 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+      <span className="mb-1 flex items-baseline gap-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
         {label}
-        {required && <span className="text-red-500">*</span>}
-        {hint && <span className="font-medium normal-case text-[10px] text-zinc-400">— {hint}</span>}
+        {required && <span className="text-[var(--status-danger)]">*</span>}
+        {hint && <span className="text-[10px] font-medium normal-case text-[var(--text-muted)]">— {hint}</span>}
       </span>
       {children}
-      {error && <p className="mt-1 text-[10px] font-bold text-red-600">{error}</p>}
+      {error && <p className="mt-1 text-[10px] font-bold text-[var(--status-danger)]">{error}</p>}
     </label>
   );
 }
@@ -648,19 +662,42 @@ function Toggle({
   label: string; desc?: string; checked: boolean; onChange: (v: boolean) => void; small?: boolean;
 }) {
   return (
-    <label className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition-all ${
-      checked ? 'border-emerald-200 bg-emerald-50' : 'border-zinc-200 bg-zinc-50'
-    } ${small ? '' : 'w-full'}`}>
+    <label
+      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition-colors ${
+        checked
+          ? 'border-[var(--status-success)]/30 bg-[var(--status-success-bg)]'
+          : 'border-[var(--border)] bg-[var(--bg-subtle)]'
+      } ${small ? '' : 'w-full'}`}
+    >
       <div className="min-w-0">
-        <p className={`font-bold text-zinc-800 ${small ? 'text-[11px]' : 'text-xs'}`}>{label}</p>
-        {desc && <p className="text-[10px] text-zinc-500 leading-tight">{desc}</p>}
+        <p className={`font-bold text-[var(--text-primary)] ${small ? 'text-[11px]' : 'text-xs'}`}>{label}</p>
+        {desc && <p className="text-[10px] leading-tight text-[var(--text-secondary)]">{desc}</p>}
       </div>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 shrink-0 accent-brand-red"
-      />
+      <SwitchKnob checked={checked} onChange={onChange} />
     </label>
+  );
+}
+
+/** Switch estilizado tipo iOS — substitui o checkbox cru por algo moderno. */
+function SwitchKnob({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={(e) => {
+        e.preventDefault();
+        onChange(!checked);
+      }}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:ring-offset-2 focus:ring-offset-[var(--bg-surface)] ${
+        checked ? 'bg-[var(--status-success)]' : 'bg-[var(--border-strong)]'
+      }`}
+    >
+      <span
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+          checked ? 'translate-x-[22px]' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
   );
 }
