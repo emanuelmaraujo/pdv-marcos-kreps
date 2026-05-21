@@ -234,6 +234,12 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </p>
               </div>
               <div className="flex flex-col items-end gap-2">
+                {order.type === "VIAGEM" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-200 ring-1 ring-amber-300/30">
+                    <ShoppingBag className="h-2.5 w-2.5" strokeWidth={2.25} />
+                    Viagem
+                  </span>
+                )}
                 <OrderStatusBadge status={order.status} />
                 <PaymentStatusBadge status={order.payment_status} />
               </div>

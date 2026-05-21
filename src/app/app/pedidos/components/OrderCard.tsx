@@ -51,6 +51,28 @@ interface Props {
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
+/**
+ * Badge prominente de tipo de pedido.
+ * VIAGEM é destacado em laranja (warning) com texto "VIAGEM" — não dá pra perder.
+ * BALCÃO fica em cinza neutro com texto "BALCÃO".
+ */
+function OrderTypeBadge({ type }: { type: Order["type"] }) {
+  const isViagem = type === "VIAGEM";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+        isViagem
+          ? "bg-[var(--status-warning-bg)] text-[var(--status-warning)] ring-1 ring-[var(--status-warning)]/30"
+          : "bg-[var(--bg-subtle)] text-[var(--text-secondary)] ring-1 ring-[var(--border)]"
+      }`}
+      title={isViagem ? "Pedido para viagem" : "Pedido para o balcão"}
+    >
+      {isViagem ? <ShoppingBag className="h-2.5 w-2.5" strokeWidth={2.25} /> : <Utensils className="h-2.5 w-2.5" strokeWidth={2.25} />}
+      {isViagem ? "Viagem" : "Balcão"}
+    </span>
+  );
+}
+
 function ElapsedTimer({ since, now }: { since: string; now: number }) {
   const elapsed = Math.floor((now - new Date(since).getTime()) / 1000 / 60);
   const colorClass =
@@ -172,12 +194,9 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
               <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
                 <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
                 <span className="text-[11px] font-medium tabular-nums">{time}</span>
-                {order.type === "BALCAO"
-                  ? <Utensils className="h-3 w-3 ml-0.5" strokeWidth={1.75} />
-                  : <ShoppingBag className="h-3 w-3 ml-0.5" strokeWidth={1.75} />
-                }
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-1">
+                <OrderTypeBadge type={order.type} />
                 <OrderStatusBadge status={order.status} />
                 {activeElapsedMin !== null && <ElapsedTimer since={queueEnteredAt!} now={now} />}
                 {deliveredElapsedMin !== null && (
