@@ -166,11 +166,13 @@ export function buildProductionReceipt(order: any, items: any[], sector: Sector,
     }
 
     const removed = removedNames(item);
-    if (removed.length > 0) content += `   NAO COLOCAR: ${removed.join(", ")}\n`;
+    for (const ingredient of removed) {
+      content += `   NAO COLOCAR: ${ingredient}\n`;
+    }
 
     const itemAddons = addons(item);
-    if (itemAddons.length > 0) {
-      content += `   ADICIONAIS: ${itemAddons.map((add) => `${add.quantity}x ${add.name}`).join(", ")}\n`;
+    for (const add of itemAddons) {
+      content += `   ADICIONAIS: ${add.quantity}x ${add.name}\n`;
     }
 
     const obs = itemObservation(item);
