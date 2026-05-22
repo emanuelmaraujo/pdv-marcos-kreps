@@ -231,7 +231,7 @@ export async function pollPendingJobs() {
 
 export function subscribeToJobs() {
   console.log('[JOBS] Inscrito no Supabase Realtime para captar novos printer_jobs...');
-  supabase
+  const ch = supabase
     .channel('public:printer_jobs')
     .on(
       'postgres_changes',
@@ -247,6 +247,12 @@ export function subscribeToJobs() {
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         console.log('[JOBS] Assinatura Realtime ativada com sucesso.');
+      } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+        console.log(`[JOBS] Realtime printer_jobs: ${status} — reconectando em 15s...`);
+        setTimeout(() => {
+          supabase.removeChannel(ch);
+          subscribeToJobs();
+        }, 15000);
       } else {
         console.log(`[JOBS] Status do Realtime: ${status}`);
       }
@@ -255,7 +261,7 @@ export function subscribeToJobs() {
 
 export function subscribeToSettingsChanges() {
   console.log('[JOBS] Inscrito no Supabase Realtime para captar mudancas de settings...');
-  supabase
+  const ch = supabase
     .channel('public:settings')
     .on(
       'postgres_changes',
@@ -271,6 +277,12 @@ export function subscribeToSettingsChanges() {
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         console.log('[JOBS] Assinatura de settings ativada com sucesso.');
+      } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+        console.log(`[JOBS] Realtime settings: ${status} — reconectando em 15s...`);
+        setTimeout(() => {
+          supabase.removeChannel(ch);
+          subscribeToSettingsChanges();
+        }, 15000);
       } else {
         console.log(`[JOBS] Status do Realtime settings: ${status}`);
       }
