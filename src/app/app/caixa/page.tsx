@@ -473,8 +473,6 @@ export default function CaixaPage() {
           ) : (
             <>
               <DayHero data={data} prevData={showComparison ? prevData : null} />
-              {/* Decomposição honesta do faturamento (sem "−" enganoso) */}
-              <DayBreakdown data={data} />
               <StatusStrip data={data} prevData={showComparison ? prevData : null} />
               <DayMetricsPanel data={data} prevData={showComparison ? prevData : null} />
               {insights.length > 0 && <InsightsSection insights={insights} />}
@@ -594,121 +592,6 @@ function Stat({
         <p className={`text-sm font-semibold tabular-nums ${textColor}`}>{value}</p>
         {deltaBadge}
       </div>
-    </div>
-  );
-}
-
-// ── Day breakdown (decomposição honesta do faturamento) ──────────────────────
-//
-// Regra (cash-api.ts):
-//   totalBruto = Σ total_amount de pedidos NÃO-cancelados (PAID + PENDING + COURTESY).
-//                Já líquido de desconto (orders.total_amount é o valor final).
-//     ├─ totalRecebido (PAID)
-//     ├─ totalPendente (PENDING / PARTIAL)
-//     └─ totalCortesia (COURTESY)
-//   totalDescontos = Σ discount_amount dos não-cancelados (informativo; já
-//                    refletido em totalBruto, não subtrai de nada).
-//   totalCancelado = Σ total_amount dos cancelados (fora de totalBruto).
-//
-// Logo: totalRecebido + totalPendente + totalCortesia ≈ totalBruto.
-function DayBreakdown({ data }: { data: CaixaData }) {
-  const { summary } = data;
-  if (summary.totalBruto <= 0) return null;
-
-  const max = summary.totalBruto || 1;
-  const pct = (v: number) => (v > 0 ? Math.max((v / max) * 100, 2) : 0);
-
-  const destinations: { label: string; value: number; barCls: string; textCls: string }[] = [
-    { label: "Recebido", value: summary.totalRecebido, barCls: "bg-emerald-500", textCls: "text-emerald-700" },
-    { label: "Pendente", value: summary.totalPendente, barCls: "bg-amber-400",   textCls: "text-amber-700"   },
-    { label: "Cortesia", value: summary.totalCortesia, barCls: "bg-pink-400",    textCls: "text-pink-700"    },
-  ].filter((d) => d.value > 0);
-
-  return (
-    <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-elevated)] p-5 shadow-[var(--shadow-sm)]">
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-            Composição do faturamento
-          </p>
-          <p className="mt-1 text-2xl font-black tabular-nums text-[var(--text-primary)]">
-            {currency.format(summary.totalBruto)}
-          </p>
-          <p className="text-[11px] font-medium text-[var(--text-muted)]">
-            Pedidos não-cancelados (descontos já aplicados)
-          </p>
-        </div>
-      </div>
-
-      {/* Barra empilhada: cada destino proporcional ao faturamento */}
-      <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
-        {destinations.map((d) => (
-          <div key={d.label} className={`h-full ${d.barCls}`} style={{ width: `${(d.value / max) * 100}%` }} />
-        ))}
-      </div>
-
-      {/* Destinos */}
-      <div className="mt-4 space-y-2">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-          Para onde foi
-        </p>
-        {destinations.map((d) => (
-          <div key={d.label} className="flex items-center gap-3">
-            <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${d.barCls}`} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-sm font-bold text-[var(--text-secondary)]">{d.label}</p>
-                <p className={`text-sm font-black tabular-nums ${d.textCls}`}>
-                  {currency.format(d.value)}
-                  <span className="ml-1.5 text-[11px] font-bold text-[var(--text-muted)]">
-                    ({Math.round((d.value / summary.totalBruto) * 100)}%)
-                  </span>
-                </p>
-              </div>
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
-                <div className={`h-full rounded-full ${d.barCls}`} style={{ width: `${pct(d.value)}%` }} />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Visões paralelas — não subtraem do faturamento */}
-      {(summary.totalDescontos > 0 || summary.totalCancelado > 0) && (
-        <div className="mt-5 border-t border-[var(--border)] pt-4">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
-            À parte
-          </p>
-          <div className="mt-2 space-y-1.5">
-            {summary.totalDescontos > 0 && (
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-xs font-bold text-[var(--text-secondary)]">
-                  Descontos concedidos
-                  <span className="ml-1.5 text-[10px] font-medium text-[var(--text-muted)]">
-                    (já refletido no faturamento)
-                  </span>
-                </p>
-                <p className="text-xs font-black tabular-nums text-[var(--text-secondary)]">
-                  {currency.format(summary.totalDescontos)}
-                </p>
-              </div>
-            )}
-            {summary.totalCancelado > 0 && (
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-xs font-bold text-[var(--text-secondary)]">
-                  Cancelados
-                  <span className="ml-1.5 text-[10px] font-medium text-[var(--text-muted)]">
-                    (fora do faturamento)
-                  </span>
-                </p>
-                <p className="text-xs font-black tabular-nums text-[var(--text-secondary)]">
-                  {currency.format(summary.totalCancelado)}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
