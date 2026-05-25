@@ -12,9 +12,19 @@ interface CashOrderRow {
   packing_fee: number | string | null;
   total_amount: number | string | null;
   created_at: string;
+  confirmed_at: string | null;
   paid_at: string | null;
   delivered_at: string | null;
   cancelled_at: string | null;
+}
+
+/**
+ * Timestamp efetivo de venda. Mesma regra do cash-report Edge Function:
+ *   paid_at, senão confirmed_at, senão created_at.
+ * Garante que caixa e relatório enxerguem o mesmo pedido no mesmo dia comercial.
+ */
+function getSaleTimestamp(order: { paid_at: string | null; confirmed_at: string | null; created_at: string }): string {
+  return order.paid_at ?? order.confirmed_at ?? order.created_at;
 }
 
 interface OrderItemRow {
@@ -177,13 +187,21 @@ export const cashApi = {
       role = (profile?.role as UserRole | undefined) ?? null;
     }
 
+    // Mesma regra do cash-report: usa paid_at se existir, senão confirmed_at,
+    // senão created_at. Garante que caixa e relatório mostrem o mesmo pedido
+    // no mesmo dia comercial (reconciliação financeira honesta).
+    const startIso = startOfDay.toISOString();
+    const endIso = endOfDay.toISOString();
     let ordersQuery = supabase
       .from("orders")
       .select(
-        "id, daily_number, status, payment_status, payment_method, discount_amount, packing_fee, total_amount, created_at, paid_at, delivered_at, cancelled_at"
+        "id, daily_number, status, payment_status, payment_method, discount_amount, packing_fee, total_amount, created_at, confirmed_at, paid_at, delivered_at, cancelled_at"
       )
-      .gte("created_at", startOfDay.toISOString())
-      .lt("created_at", endOfDay.toISOString())
+      .or([
+        `and(paid_at.not.is.null,paid_at.gte.${startIso},paid_at.lt.${endIso})`,
+        `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${startIso},confirmed_at.lt.${endIso})`,
+        `and(paid_at.is.null,confirmed_at.is.null,created_at.gte.${startIso},created_at.lt.${endIso})`,
+      ].join(","))
       .order("created_at", { ascending: false });
 
     if (branchId) ordersQuery = ordersQuery.eq("branch_id", branchId);
@@ -194,7 +212,14 @@ export const cashApi = {
       throw friendlyError(`Erro ao carregar pedidos do caixa: ${ordersError.message}`);
     }
 
-    const orders = (rawOrders ?? []) as CashOrderRow[];
+    // Filtro defensivo client-side: a OR via PostgREST pode pegar boundary
+    // edge cases (índices, timezones). Reaplicamos a regra em JS.
+    const startMs = startOfDay.getTime();
+    const endMs = endOfDay.getTime();
+    const orders = ((rawOrders ?? []) as CashOrderRow[]).filter((o) => {
+      const t = new Date(getSaleTimestamp(o)).getTime();
+      return t >= startMs && t < endMs;
+    });
     const nonCancelled = orders.filter((order) => order.status !== "CANCELADO");
     const paid = orders.filter(
       (order) => order.payment_status === "PAID" && order.status !== "CANCELADO"
@@ -215,7 +240,7 @@ export const cashApi = {
     if (orders.length > 0) {
       const hourCounts = new Array<number>(24).fill(0);
       for (const o of orders) {
-        hourCounts[getSpHour(new Date(o.created_at))]++;
+        hourCounts[getSpHour(new Date(getSaleTimestamp(o)))]++;
       }
       let bestHour = -1;
       let bestCount = 0;
