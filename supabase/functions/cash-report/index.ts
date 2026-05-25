@@ -478,10 +478,17 @@ serve(async (req) => {
       .map(p => ({ ...p, percent: totalPayments > 0 ? (p.total / totalPayments) * 100 : 0 }))
       .sort((a, b) => b.total - a.total);
 
+    // Counts e totais seguem a MESMA regra (excluem CANCELADO),
+    // pareando com summary.discounts/courtesy que já são zerados no bloco
+    // `if (status === 'CANCELADO') … else { … }` acima.
     const financial_attention = {
-      discount_orders: filteredOrders.filter((o: any) => Number(o.discount_amount || 0) > 0).length,
+      discount_orders: filteredOrders.filter(
+        (o: any) => Number(o.discount_amount || 0) > 0 && o.status !== 'CANCELADO',
+      ).length,
       discount_total: summary.discounts,
-      courtesy_orders: filteredOrders.filter((o: any) => o.payment_status === 'COURTESY').length,
+      courtesy_orders: filteredOrders.filter(
+        (o: any) => o.payment_status === 'COURTESY' && o.status !== 'CANCELADO',
+      ).length,
       courtesy_total: summary.courtesy,
       canceled_orders: cancellations,
       canceled_total: summary.canceled,
