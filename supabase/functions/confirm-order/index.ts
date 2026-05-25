@@ -116,7 +116,9 @@ serve(async (req) => {
     const sectorEnabled = (key: 'kitchen' | 'juice' | 'customer'): boolean =>
       branchPrinterCfg?.[key]?.enabled !== false;
 
-    const shouldPrintCustomer = printingEnabled && globalPrintCustomer && sectorEnabled('customer');
+    // iFood sempre imprime via do cliente — pedidos de entrega precisam do recibo na sacola
+    const isIfood = (order as any).payment_method === 'IFOOD';
+    const shouldPrintCustomer = printingEnabled && sectorEnabled('customer') && (globalPrintCustomer || isIfood);
     const shouldPrintKitchen  = printingEnabled && globalPrintKitchen  && sectorEnabled('kitchen');
     const shouldPrintJuice    = printingEnabled && globalPrintJuice    && sectorEnabled('juice');
 

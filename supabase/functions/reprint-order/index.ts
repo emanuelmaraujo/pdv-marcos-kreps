@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { buildCustomerReceipt, buildProductionReceipt, resolveProductionSector } from "../_shared/print-format.ts";
+import { buildCustomerReceipt, buildProductionReceipt, resolveProductionSector, settingBool } from "../_shared/print-format.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -63,7 +63,16 @@ serve(async (req) => {
       if (!validCopies.includes(c)) throw new Error(`Tipo de via inválido: ${c}.`);
     }
 
-    // 3. Buscar Pedido (inclui printer_config da filial para respeitar override por setor)
+    // 3. Buscar configurações globais de impressão
+    const { data: settings } = await supabaseAdmin
+      .from('settings')
+      .select('key, value')
+      .in('key', ['printing_enabled', 'print_customer_copy']);
+
+    const printingEnabled = settingBool(settings?.find((s: any) => s.key === 'printing_enabled')?.value, true);
+    const globalPrintCustomer = settingBool(settings?.find((s: any) => s.key === 'print_customer_copy')?.value);
+
+    // 4. Buscar Pedido (inclui printer_config da filial para respeitar override por setor)
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
       .select('id, daily_number, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name, printer_config )')
@@ -95,11 +104,21 @@ serve(async (req) => {
       throw new Error('Todas as vias solicitadas estão desabilitadas na configuração desta filial.');
     }
 
-    if (order.source === 'APP') {
+    // iFood sempre imprime via do cliente (pedidos de entrega precisam do recibo na sacola)
+    const isIfood = order.payment_method === 'IFOOD';
+
+    // Respeita setting global print_customer_copy — exceto para iFood
+    if (!printingEnabled || (!globalPrintCustomer && !isIfood)) {
       copies = copies.filter((copy: string) => copy !== 'CUSTOMER');
-      if (copies.length === 0) {
-        copies = ['KITCHEN', 'JUICE_POTATO'];
-      }
+    }
+
+    // Pedidos APP (site público) não têm via do cliente — a menos que seja iFood
+    if (order.source === 'APP' && !isIfood) {
+      copies = copies.filter((copy: string) => copy !== 'CUSTOMER');
+    }
+
+    if (copies.length === 0) {
+      copies = ['KITCHEN', 'JUICE_POTATO'];
     }
 
     // 4. Buscar Itens

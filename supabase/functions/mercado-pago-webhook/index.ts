@@ -163,7 +163,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       title: "KREPS",
       source: "PUBLIC",
     });
-    printerJobsToInsert.push({ order_id: orderId, sector: "KITCHEN", content: { text: content } });
+    printerJobsToInsert.push({ order_id: orderId, branch_id: order.branch_id, sector: "KITCHEN", content: { text: content } });
   }
 
   if (juicePotatoItems.length > 0 && shouldPrintJuice && !existingSectors.has("JUICE_POTATO")) {
@@ -184,7 +184,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       title: "COZINHA",
       source: "PUBLIC",
     });
-    printerJobsToInsert.push({ order_id: orderId, sector: "JUICE_POTATO", content: { text: content } });
+    printerJobsToInsert.push({ order_id: orderId, branch_id: order.branch_id, sector: "JUICE_POTATO", content: { text: content } });
   }
 
   if (printerJobsToInsert.length > 0) {
