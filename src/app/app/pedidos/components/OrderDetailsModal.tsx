@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useEffect, useState } from "react";
 import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
 import { Button } from "@/components/ui/Button";

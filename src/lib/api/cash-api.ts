@@ -32,6 +32,8 @@ export interface PeakHour {
 export interface DaySummary {
   totalBruto: number;
   totalRecebido: number;
+  totalLiquido: number;            // alias semântico = totalRecebido (dinheiro efetivamente recebido)
+  totalIFood: number;              // total de pagamentos via iFood
   totalPendente: number;
   totalCortesia: number;
   totalCancelado: number;
@@ -86,6 +88,7 @@ export interface CaixaData {
   pendingOrders: PendingOrder[];
   topProducts: TopProduct[];
   generatedAt: string;
+  businessDayLabel: string;         // "2025-01-15" — dia de negócio dos dados
 }
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
@@ -123,6 +126,7 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   "CASH",
   "DEBIT_CARD",
   "CREDIT_CARD",
+  "IFOOD",
   "COURTESY",
   "PENDING",
 ];
@@ -153,10 +157,10 @@ function friendlyError(message: string): Error {
 }
 
 export const cashApi = {
-  getDaySummary: async (branchId?: string | null): Promise<CaixaData> => {
+  getDaySummary: async (branchId?: string | null, date?: Date): Promise<CaixaData> => {
     const supabase = createClient();
 
-    const { start: startOfDay, end: endOfDay } = getBusinessDayRange();
+    const { start: startOfDay, end: endOfDay, label: businessDayLabel } = getBusinessDayRange(date);
 
     const {
       data: { user },
@@ -238,6 +242,8 @@ export const cashApi = {
     const summary: DaySummary = {
       totalBruto: sumOrders(nonCancelled),
       totalRecebido,
+      totalLiquido: totalRecebido,   // preenchido abaixo após realPayments
+      totalIFood: 0,                  // preenchido abaixo após realPayments
       totalPendente: sumOrders(pending),
       totalCortesia: sumOrders(courtesy),
       totalCancelado: sumOrders(cancelled),
@@ -283,8 +289,13 @@ export const cashApi = {
       .reduce((sum, payment) => sum + money(payment.amount), 0);
     if (realReceived > 0) {
       summary.totalRecebido = realReceived;
+      summary.totalLiquido = realReceived;
       summary.ticketMedio = paid.length > 0 ? realReceived / paid.length : realReceived;
     }
+
+    summary.totalIFood = realPayments
+      .filter((p) => p.payment_method === "IFOOD" && p.payment_status === "PAID")
+      .reduce((sum, p) => sum + money(p.amount), 0);
 
     // Breakdown baseado na tabela payments (cada linha = 1 transação real)
     // Isso reflete corretamente pedidos com múltiplos métodos (ex: PIX + Débito no split-bill)
@@ -369,6 +380,7 @@ export const cashApi = {
       pendingOrders,
       topProducts,
       generatedAt: new Date().toISOString(),
+      businessDayLabel,
     };
   },
 };
