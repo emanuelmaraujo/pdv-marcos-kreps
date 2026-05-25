@@ -12,7 +12,7 @@ type ReceiptOptions = {
 
 const LINE = "========================================";
 const DASH = "----------------------------------------";
-const PUBLIC_ORDER_SITE = "marcoskreps.com.br";
+const PUBLIC_ORDER_SITE = "marcoskreps.com.br/pedir";
 const INSTAGRAM = "@marcos_kreps";
 const WHATSAPP = "(61) 99341-0411";
 

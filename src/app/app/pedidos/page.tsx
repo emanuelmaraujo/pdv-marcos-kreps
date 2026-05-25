@@ -319,6 +319,13 @@ export default function PedidosPage() {
 
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
 
+  // Limpa o ref imediatamente para evitar race condition com Realtime/polling:
+  // sem isso, fetchOrders pode reabrir o modal entre o setState e o useEffect do ref.
+  const handleCloseModal = useCallback(() => {
+    selectedOrderRef.current = null;
+    setSelectedOrder(null);
+  }, []);
+
   // Tick every 30s for timers
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -608,7 +615,7 @@ export default function PedidosPage() {
           key={selectedOrder?.id ?? "closed"}
           order={selectedOrder}
           isOpen={!!selectedOrder}
-          onClose={() => setSelectedOrder(null)}
+          onClose={handleCloseModal}
           onOrderUpdated={() => fetchOrders(false)}
         />
       )}
@@ -619,7 +626,7 @@ export default function PedidosPage() {
           key={selectedOrder?.id ?? "closed"}
           order={selectedOrder}
           isOpen={!!selectedOrder}
-          onClose={() => setSelectedOrder(null)}
+          onClose={handleCloseModal}
           onOrderUpdated={() => fetchOrders(false)}
         />
       )}

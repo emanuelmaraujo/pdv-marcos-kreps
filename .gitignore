@@ -58,3 +58,6 @@ lint_out.txt
 teste.py
 qrcode_drive.png
 supabase/migrations/*.disabled
+
+# graphify knowledge graph (generated, rebuildable with /graphify)
+graphify-out/
