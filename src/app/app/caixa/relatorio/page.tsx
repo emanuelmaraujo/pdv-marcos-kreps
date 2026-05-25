@@ -977,61 +977,121 @@ function SectionFinancial({
   );
 }
 
+// Decomposição honesta do faturamento.
+//
+// Regra do back-end (cash-report/index.ts):
+//   gross_sales = Σ total_amount de pedidos NÃO-cancelados (já líquido de desconto)
+//     ├─ received  (PAID)
+//     ├─ pending   (PENDING/PARTIAL)
+//     └─ courtesy  (COURTESY)
+//   discounts = Σ discount_amount dos não-cancelados (informativo; já refletido em gross_sales)
+//   canceled  = Σ total_amount dos cancelados (fora de gross_sales)
+//
+// Logo: received + pending + courtesy ≈ gross_sales (sem subtrair nada).
+// Cancelamentos e descontos NÃO são "menos algo" — são views paralelas.
 function WaterfallPanel({ report }: { report: CashReportResponse }) {
   const { summary } = report;
-  const steps = [
-    { label: "Venda bruta",    value: summary.gross_sales, type: "base"     as const, sign: null },
-    { label: "Descontos",      value: summary.discounts,   type: "subtract" as const, sign: "-" },
-    { label: "Cortesias",      value: summary.courtesy,    type: "subtract" as const, sign: "-" },
-    { label: "Cancelamentos",  value: summary.canceled,    type: "subtract" as const, sign: "-" },
-    { label: "Receita líquida",value: summary.received,    type: "total"    as const, sign: "=" },
-  ];
   const max = summary.gross_sales || 1;
+  const pct = (v: number) => Math.max((v / max) * 100, v > 0 ? 2 : 0);
+
+  const destinations: { label: string; value: number; barCls: string; textCls: string }[] = [
+    { label: "Recebido (pago)", value: summary.received,  barCls: "bg-emerald-500",     textCls: "text-emerald-700" },
+    { label: "Pendente",        value: summary.pending,   barCls: "bg-amber-400",       textCls: "text-amber-700"   },
+    { label: "Cortesia",        value: summary.courtesy,  barCls: "bg-pink-400",        textCls: "text-pink-700"    },
+  ];
+
   return (
     <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={TrendingUp} title="Composição da receita" />
-        <div className="mt-5 space-y-2">
-          {steps.map((step, i) => {
-            const pct = Math.max((step.value / max) * 100, 2);
-            const isTotal = step.type === "total";
-            const isSubtract = step.type === "subtract";
-            return (
-              <div key={i}>
-                {isTotal && <div className="my-3 border-t border-[var(--border)]" />}
-                <div className="flex items-center gap-3">
-                  <div className="w-5 shrink-0 text-right">
-                    {step.sign && (
-                      <span className={`text-sm font-black ${isSubtract ? "text-red-500" : "text-emerald-600"}`}>
-                        {step.sign}
+
+        {/* Faturamento total (não-cancelados) — barra cheia que será dividida abaixo */}
+        <div className="mt-5">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-sm font-bold text-[var(--text-primary)]">Faturamento</p>
+            <p className="text-sm font-black text-[var(--text-primary)]">
+              {currency.format(summary.gross_sales)}
+            </p>
+          </div>
+          <p className="mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">
+            Pedidos não-cancelados (descontos já aplicados)
+          </p>
+          {/* Barra empilhada: received | pending | courtesy proporcionais a gross_sales */}
+          <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
+            {destinations.map((d) =>
+              d.value > 0 ? (
+                <div
+                  key={d.label}
+                  className={`h-full ${d.barCls}`}
+                  style={{ width: `${(d.value / max) * 100}%` }}
+                />
+              ) : null,
+            )}
+          </div>
+        </div>
+
+        {/* Destinos */}
+        <div className="mt-4 space-y-2">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+            Para onde foi
+          </p>
+          {destinations.map((d) => (
+            <div key={d.label} className="flex items-center gap-3">
+              <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${d.barCls}`} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-bold text-[var(--text-secondary)]">{d.label}</p>
+                  <p className={`text-sm font-black ${d.textCls}`}>
+                    {currency.format(d.value)}
+                    {summary.gross_sales > 0 && (
+                      <span className="ml-1.5 text-[11px] font-bold text-[var(--text-muted)]">
+                        ({Math.round((d.value / summary.gross_sales) * 100)}%)
                       </span>
                     )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <p className={`text-sm font-bold ${isTotal ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}`}>
-                        {step.label}
-                      </p>
-                      <p className={`shrink-0 text-sm font-black ${isTotal ? "text-[var(--text-primary)]" : isSubtract ? "text-red-600" : "text-[var(--text-secondary)]"}`}>
-                        {currency.format(step.value)}
-                      </p>
-                    </div>
-                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
-                      <div
-                        className={`h-full rounded-full ${isTotal ? "bg-emerald-500" : isSubtract ? "bg-red-300" : "bg-brand-red/60"}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
+                  </p>
+                </div>
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
+                  <div className={`h-full rounded-full ${d.barCls}`} style={{ width: `${pct(d.value)}%` }} />
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
-        {summary.pending > 0 && (
-          <div className="mt-4 flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
-            <p className="text-xs font-bold text-amber-600">Pendente (aguardando baixa)</p>
-            <p className="text-sm font-black text-amber-600">{currency.format(summary.pending)}</p>
+
+        {/* Visões paralelas — não subtraem do faturamento */}
+        {(summary.discounts > 0 || summary.canceled > 0) && (
+          <div className="mt-5 border-t border-[var(--border)] pt-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+              À parte
+            </p>
+            <div className="mt-2 space-y-1.5">
+              {summary.discounts > 0 && (
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xs font-bold text-[var(--text-secondary)]">
+                    Descontos concedidos
+                    <span className="ml-1.5 text-[10px] font-medium text-[var(--text-muted)]">
+                      (já refletido no faturamento)
+                    </span>
+                  </p>
+                  <p className="text-xs font-black text-[var(--text-secondary)]">
+                    {currency.format(summary.discounts)}
+                  </p>
+                </div>
+              )}
+              {summary.canceled > 0 && (
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xs font-bold text-[var(--text-secondary)]">
+                    Cancelados
+                    <span className="ml-1.5 text-[10px] font-medium text-[var(--text-muted)]">
+                      (fora do faturamento)
+                    </span>
+                  </p>
+                  <p className="text-xs font-black text-[var(--text-secondary)]">
+                    {currency.format(summary.canceled)}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </CardContent>

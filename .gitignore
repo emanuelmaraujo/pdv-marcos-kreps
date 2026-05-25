@@ -58,3 +58,13 @@ lint_out.txt
 teste.py
 qrcode_drive.png
 supabase/migrations/*.disabled
+
+# graphify (local knowledge graph artifacts)
+graphify-out/
+
+# project-local agent rules / workflows (machine-specific)
+.agents/
+
+# Claude Code project settings (besides settings.local.json above)
+.claude/settings.json
+.claude/hooks/
