@@ -32,7 +32,7 @@ export interface PeakHour {
 export interface DaySummary {
   totalBruto: number;
   totalRecebido: number;
-  totalLiquido: number;            // alias semântico = totalRecebido (dinheiro efetivamente recebido)
+  totalLiquido: number;            // totalRecebido − totalCortesia (cortesia é custo)
   totalIFood: number;              // total de pagamentos via iFood
   totalPendente: number;
   totalCortesia: number;
@@ -284,14 +284,17 @@ export const cashApi = {
       realPayments = (rawPayments ?? []) as PaymentRow[];
     }
 
+    // Exclui method=COURTESY do "recebido": cortesia nunca é entrada de caixa,
+    // mesmo que alguma linha legado tenha ficado com status=PAID.
     const realReceived = realPayments
-      .filter((payment) => payment.payment_status === "PAID")
+      .filter((payment) => payment.payment_status === "PAID" && payment.payment_method !== "COURTESY")
       .reduce((sum, payment) => sum + money(payment.amount), 0);
     if (realReceived > 0) {
       summary.totalRecebido = realReceived;
-      summary.totalLiquido = realReceived;
       summary.ticketMedio = paid.length > 0 ? realReceived / paid.length : realReceived;
     }
+    // Líquido = recebido − cortesia (cortesia é custo: cliente não pagou).
+    summary.totalLiquido = summary.totalRecebido - summary.totalCortesia;
 
     summary.totalIFood = realPayments
       .filter((p) => p.payment_method === "IFOOD" && p.payment_status === "PAID")
@@ -309,9 +312,20 @@ export const cashApi = {
         };
       }
 
+      // COURTESY usa a mesma fonte do "Cortesias" (orders.payment_status),
+      // para não divergir do contador da faixa de status quando faltar
+      // linha na tabela payments.
+      if (method === "COURTESY") {
+        return {
+          method,
+          label: PAYMENT_LABELS[method],
+          count: courtesy.length,
+          total: sumOrders(courtesy),
+        };
+      }
+
       const matchingPayments = realPayments.filter(
-        (p) => p.payment_method === method &&
-               (method === "COURTESY" ? p.payment_status === "COURTESY" : p.payment_status === "PAID"),
+        (p) => p.payment_method === method && p.payment_status === "PAID",
       );
 
       const total = matchingPayments.reduce((sum, p) => sum + money(p.amount), 0);

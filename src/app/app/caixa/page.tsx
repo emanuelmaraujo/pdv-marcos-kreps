@@ -517,14 +517,14 @@ function DayHero({ data, prevData }: { data: CaixaData; prevData: CaixaData | nu
             "Faturamento" (= totalBruto) substitui "Bruto" — total_amount já é
             líquido de desconto; "Bruto" sugeria valor pré-desconto e iludia. */}
         <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <Stat label="Faturamento" value={currency.format(summary.totalBruto)} />
+          <Stat label="Recebido" value={currency.format(summary.totalRecebido)} />
           {summary.pedidosPendentes > 0 && (
             <Stat label="Pendente" value={currency.format(summary.totalPendente)} warn />
           )}
           {summary.totalCortesia > 0 && (
             <Stat
-              label={`Cortesia (${summary.pedidosCortesia})`}
-              value={currency.format(summary.totalCortesia)}
+              label={`Cortesia (${summary.pedidosCortesia}) − custo`}
+              value={`-${currency.format(summary.totalCortesia)}`}
               highlight="pink"
               delta={prevData ? <DeltaBadge current={summary.totalCortesia} previous={prevData.summary.totalCortesia} invertColor /> : null}
             />

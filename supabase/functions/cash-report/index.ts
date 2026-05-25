@@ -261,7 +261,11 @@ serve(async (req) => {
       if (order.status === 'CANCELADO') {
         summary.canceled += orderValue;
       } else {
-        summary.gross_sales += orderValue;
+        // Cortesia é custo (cliente não pagou) — não entra no faturamento.
+        // gross_sales = recebido + pendente apenas.
+        if (order.payment_status !== 'COURTESY') {
+          summary.gross_sales += orderValue;
+        }
         summary.discounts += discountValue;
 
         if (order.payment_status === 'PAID') {

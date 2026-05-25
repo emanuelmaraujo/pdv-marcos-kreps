@@ -77,7 +77,7 @@ const reportTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Section = "overview" | "financial" | "sales" | "patterns" | "orders";
-type Period = "today" | "yesterday" | "last7" | "last30" | "thisMonth";
+type Period = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "custom";
 type OrderFilter = "TODOS" | "PAGOS" | "PENDENTES" | "CANCELADOS";
 
 interface AbcProduct extends ProductStat {
@@ -107,12 +107,17 @@ const SECTIONS: { id: Section; label: string; short: string; icon: React.Element
 // ── Period helpers ────────────────────────────────────────────────────────────
 
 const PERIOD_LABELS: Record<Period, string> = {
-  today: "Hoje", yesterday: "Ontem", last7: "7 dias", last30: "30 dias", thisMonth: "Este mês",
+  today: "Hoje", yesterday: "Ontem", last7: "7 dias", last30: "30 dias", thisMonth: "Este mês", custom: "Data",
 };
 
-function computeDates(period: Period): { start: Date; end: Date } {
+function labelToDate(label: string): Date {
+  const [y, m, d] = label.split("-").map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0);
+}
+
+function computeDates(period: Period, customDate?: string): { start: Date; end: Date } {
   const now = new Date();
-  // "Hoje" e "Ontem" usam o mesmo dia comercial do caixa (03h–02:59h Brasília)
+  // "Hoje", "Ontem" e "Data" usam o mesmo dia comercial do caixa (03h–02:59h Brasília)
   // para que ambas as telas mostrem os mesmos pedidos.
   if (period === "today") {
     const bd = getBusinessDayRange(now);
@@ -123,6 +128,10 @@ function computeDates(period: Period): { start: Date; end: Date } {
     const todayBd = getBusinessDayRange(now);
     const yesterdayStart = new Date(todayBd.start.getTime() - 24 * 60 * 60 * 1000);
     return { start: yesterdayStart, end: todayBd.start };
+  }
+  if (period === "custom" && customDate) {
+    const bd = getBusinessDayRange(labelToDate(customDate));
+    return { start: bd.start, end: bd.end };
   }
 
   const start = new Date();
@@ -147,7 +156,7 @@ function computeDates(period: Period): { start: Date; end: Date } {
   return { start, end };
 }
 
-function computePrevDates(period: Period): { start: Date; end: Date } {
+function computePrevDates(period: Period, customDate?: string): { start: Date; end: Date } {
   const now = new Date();
   const start = new Date();
   const end = new Date();
@@ -158,6 +167,15 @@ function computePrevDates(period: Period): { start: Date; end: Date } {
       const ystStart = new Date(todayBd.start.getTime() - 24 * 60 * 60 * 1000);
       start.setTime(ystStart.getTime());
       end.setTime(todayBd.start.getTime());
+      break;
+    }
+    case "custom": {
+      // Dia comercial anterior à data escolhida
+      const ref = customDate ? labelToDate(customDate) : now;
+      const curBd = getBusinessDayRange(ref);
+      const prevStart = new Date(curBd.start.getTime() - 24 * 60 * 60 * 1000);
+      start.setTime(prevStart.getTime());
+      end.setTime(curBd.start.getTime());
       break;
     }
     case "yesterday":
@@ -265,6 +283,7 @@ export default function RelatorioPage() {
     payment_method: "ALL", category_id: "ALL", start_date: "", end_date: "",
   });
   const [period, setPeriod] = useState<Period>("today");
+  const [customDate, setCustomDate] = useState<string>(""); // YYYY-MM-DD
   const [activeSection, setActiveSection] = useState<Section>("overview");
 
   useEffect(() => {
@@ -287,11 +306,15 @@ export default function RelatorioPage() {
   }, [isAdmin]);
 
   const loadReport = useCallback(async () => {
+    if (period === "custom" && !customDate) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError("");
     try {
-      const { start, end } = computeDates(period);
-      const { start: ps, end: pe } = computePrevDates(period);
+      const { start, end } = computeDates(period, customDate);
+      const { start: ps, end: pe } = computePrevDates(period, customDate);
       const f = { ...filters, start_date: start.toISOString(), end_date: end.toISOString() };
       const pf = { ...filters, start_date: ps.toISOString(), end_date: pe.toISOString() };
 
@@ -310,7 +333,7 @@ export default function RelatorioPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [period, filters, currentBranchId]);
+  }, [period, customDate, filters, currentBranchId]);
 
   useEffect(() => {
     if (isAdmin !== true) return;
@@ -348,10 +371,18 @@ export default function RelatorioPage() {
       {/* ── Control panel ── */}
       <ControlPanel
         period={period}
+        customDate={customDate}
         filters={filters}
         categories={categories}
         isLoading={isLoading}
-        onPeriodChange={setPeriod}
+        onPeriodChange={(p) => {
+          setPeriod(p);
+          if (p !== "custom") setCustomDate("");
+        }}
+        onCustomDateChange={(d) => {
+          setCustomDate(d);
+          setPeriod("custom");
+        }}
         onFilterChange={setFilters}
         onBack={() => router.push("/app/caixa")}
         onRefresh={loadReport}
@@ -381,18 +412,24 @@ export default function RelatorioPage() {
 // ── Control panel ─────────────────────────────────────────────────────────────
 
 function ControlPanel({
-  period, filters, categories, isLoading,
-  onPeriodChange, onFilterChange, onBack, onRefresh,
+  period, customDate, filters, categories, isLoading,
+  onPeriodChange, onCustomDateChange, onFilterChange, onBack, onRefresh,
 }: {
   period: Period;
+  customDate: string;
   filters: CashReportFilters;
   categories: { id: string; name: string }[];
   isLoading: boolean;
   onPeriodChange: (p: Period) => void;
+  onCustomDateChange: (d: string) => void;
   onFilterChange: (f: CashReportFilters) => void;
   onBack: () => void;
   onRefresh: () => void;
 }) {
+  const todayKey = reportDateKeyFmt.format(new Date());
+  const customLabel = customDate
+    ? reportDateLabelFmt.format(labelToDate(customDate))
+    : "Data";
   const hasActiveFilters =
     (filters.category_id && filters.category_id !== "ALL") ||
     (filters.payment_method && filters.payment_method !== "ALL");
@@ -427,6 +464,26 @@ function ControlPanel({
               {PERIOD_LABELS[p]}
             </button>
           ))}
+          {/* Pill "Data" — abre date picker nativo */}
+          <label
+            className={`relative shrink-0 inline-flex cursor-pointer items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              period === "custom"
+                ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+            title="Escolher data específica"
+          >
+            <CalendarDays className="h-3 w-3" strokeWidth={1.75} />
+            <span>{period === "custom" ? customLabel : "Data"}</span>
+            <input
+              type="date"
+              max={todayKey}
+              value={customDate}
+              onChange={(e) => { if (e.target.value) onCustomDateChange(e.target.value); }}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              tabIndex={-1}
+            />
+          </label>
         </div>
 
         <button
@@ -667,7 +724,7 @@ function SectionOverview({
         <SectionLabel>Resumo do período</SectionLabel>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <ScorecardCard
-            label="Receita líquida"
+            label="Recebido"
             value={currency.format(report.summary.received)}
             prev={prevReport ? currency.format(prevReport.summary.received) : null}
             delta={prevReport ? pctDelta(report.summary.received, prevReport.summary.received) : null}
@@ -980,15 +1037,13 @@ function SectionFinancial({
 // Decomposição honesta do faturamento.
 //
 // Regra do back-end (cash-report/index.ts):
-//   gross_sales = Σ total_amount de pedidos NÃO-cancelados (já líquido de desconto)
-//     ├─ received  (PAID)
-//     ├─ pending   (PENDING/PARTIAL)
-//     └─ courtesy  (COURTESY)
-//   discounts = Σ discount_amount dos não-cancelados (informativo; já refletido em gross_sales)
-//   canceled  = Σ total_amount dos cancelados (fora de gross_sales)
+//   gross_sales = recebido + pendente  (CORTESIA NÃO ENTRA — é custo)
+//   discounts   = Σ discount_amount dos não-cancelados (informativo; já refletido em gross_sales)
+//   courtesy    = Σ total_amount dos cortesia (custo / receita não realizada)
+//   canceled    = Σ total_amount dos cancelados (fora de gross_sales)
 //
-// Logo: received + pending + courtesy ≈ gross_sales (sem subtrair nada).
-// Cancelamentos e descontos NÃO são "menos algo" — são views paralelas.
+// Cortesia é custo (cliente não pagou) — sai do faturamento e aparece como dedução.
+// Logo: received + pending ≈ gross_sales.
 function WaterfallPanel({ report }: { report: CashReportResponse }) {
   const { summary } = report;
   const max = summary.gross_sales || 1;
@@ -997,7 +1052,6 @@ function WaterfallPanel({ report }: { report: CashReportResponse }) {
   const destinations: { label: string; value: number; barCls: string; textCls: string }[] = [
     { label: "Recebido (pago)", value: summary.received,  barCls: "bg-emerald-500",     textCls: "text-emerald-700" },
     { label: "Pendente",        value: summary.pending,   barCls: "bg-amber-400",       textCls: "text-amber-700"   },
-    { label: "Cortesia",        value: summary.courtesy,  barCls: "bg-pink-400",        textCls: "text-pink-700"    },
   ];
 
   return (
@@ -1058,13 +1112,26 @@ function WaterfallPanel({ report }: { report: CashReportResponse }) {
           ))}
         </div>
 
-        {/* Visões paralelas — não subtraem do faturamento */}
-        {(summary.discounts > 0 || summary.canceled > 0) && (
+        {/* Visões paralelas — descontos/cancelamentos são informativos; cortesia é custo */}
+        {(summary.discounts > 0 || summary.canceled > 0 || summary.courtesy > 0) && (
           <div className="mt-5 border-t border-[var(--border)] pt-4">
             <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
               À parte
             </p>
             <div className="mt-2 space-y-1.5">
+              {summary.courtesy > 0 && (
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xs font-bold text-pink-700">
+                    Cortesias (custo)
+                    <span className="ml-1.5 text-[10px] font-medium text-[var(--text-muted)]">
+                      (cliente não pagou — fora do faturamento)
+                    </span>
+                  </p>
+                  <p className="text-xs font-black text-pink-700">
+                    -{currency.format(summary.courtesy)}
+                  </p>
+                </div>
+              )}
               {summary.discounts > 0 && (
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="text-xs font-bold text-[var(--text-secondary)]">
