@@ -48,6 +48,7 @@ import { LoadingState } from "@/components/feedback/LoadingState";
 import { Card, CardContent } from "@/components/ui/Card";
 import { getBusinessDayRange } from "@/lib/utils/business-day";
 import { useBranch } from "@/contexts/BranchContext";
+import { SectionCompare } from "./compare";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ const reportTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Section = "overview" | "financial" | "sales" | "patterns" | "orders";
+type Section = "overview" | "financial" | "sales" | "patterns" | "orders" | "compare";
 type Period = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "custom";
 type OrderFilter = "TODOS" | "PAGOS" | "PENDENTES" | "CANCELADOS";
 
@@ -101,6 +102,7 @@ const SECTIONS: { id: Section; label: string; short: string; icon: React.Element
   { id: "financial", label: "Financeiro",        short: "Financeiro",icon: TrendingUp },
   { id: "sales",     label: "Vendas & Cardápio", short: "Vendas",    icon: ShoppingBag },
   { id: "patterns",  label: "Padrões",           short: "Padrões",   icon: CalendarDays },
+  { id: "compare",   label: "Comparar",          short: "Comparar",  icon: TrendingDown },
   { id: "orders",    label: "Pedidos",           short: "Pedidos",   icon: ListOrdered },
 ];
 
@@ -341,6 +343,17 @@ export default function RelatorioPage() {
     return () => window.clearTimeout(timer);
   }, [isAdmin, loadReport]);
 
+  // Range atual derivado para a aba Comparar.
+  const currentRangeForCompare = useMemo(() => {
+    if (period === "custom" && !customDate) return null;
+    const { start, end } = computeDates(period, customDate);
+    const isSingleDay = period === "today" || period === "yesterday" || period === "custom";
+    const label = period === "custom" && customDate
+      ? customDate
+      : PERIOD_LABELS[period];
+    return { start, end, label, isSingleDay };
+  }, [period, customDate]);
+
   const dailyRows = useMemo(() => buildDailyRows(orders), [orders]);
   const abcProducts = useMemo(
     () => (report ? classifyABC(report.top_all_products) : []),
@@ -401,6 +414,13 @@ export default function RelatorioPage() {
             {activeSection === "financial" && <SectionFinancial report={report} dailyRows={dailyRows} />}
             {activeSection === "sales"     && <SectionSales     report={report} abcProducts={abcProducts} />}
             {activeSection === "patterns"  && <SectionPatterns  report={report} />}
+            {activeSection === "compare"   && currentRangeForCompare && (
+              <SectionCompare
+                currentRange={{ start: currentRangeForCompare.start, end: currentRangeForCompare.end, label: currentRangeForCompare.label }}
+                isSingleDay={currentRangeForCompare.isSingleDay}
+                branchId={currentBranchId ?? null}
+              />
+            )}
             {activeSection === "orders"    && <SectionOrders    orders={orders} />}
           </div>
         )}
