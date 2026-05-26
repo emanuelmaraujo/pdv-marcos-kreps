@@ -1671,12 +1671,128 @@ function SectionPatterns({ report }: { report: CashReportResponse }) {
   return (
     <div className="space-y-5">
       <PipelinePanel report={report} />
+      <HeatmapPanel report={report} />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <HourlyPanel report={report} />
         <WeekdayPanel report={report} />
       </div>
       <CancellationPanel report={report} />
     </div>
+  );
+}
+
+/**
+ * Heatmap dia × hora — 7 linhas × 24 colunas. Intensidade da cor reflete
+ * o valor da métrica selecionada (pedidos ou receita) relativo ao máximo.
+ * Decide escala de pessoal, horário de funcionamento, dias-foco para promoção.
+ */
+function HeatmapPanel({ report }: { report: CashReportResponse }) {
+  const [metric, setMetric] = useState<"orders" | "received">("orders");
+  if (!report.heatmap || report.heatmap.length === 0) return null;
+
+  const max = report.heatmap.reduce((m, c) => Math.max(m, c[metric]), 0);
+  if (max === 0) {
+    return (
+      <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
+        <CardContent className="p-5">
+          <PanelHeader icon={CalendarDays} title="Heatmap dia × hora" />
+          <EmptyPanel text="Sem movimento no período." />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Linha por dia da semana — usa ordem semântica (Dom → Sáb)
+  const WEEKDAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+  const cellByKey = new Map(report.heatmap.map((c) => [`${c.weekday}|${c.hour}`, c]));
+
+  // Top 3 células para destacar o hotspot
+  const top3 = [...report.heatmap].sort((a, b) => b[metric] - a[metric]).slice(0, 3).map((c) => `${c.weekday}|${c.hour}`);
+  const topKeys = new Set(top3);
+
+  function intensity(v: number) {
+    if (v === 0) return 0;
+    const ratio = v / max;
+    // Curva sublinear: mesmo células médias ficam visíveis
+    return Math.max(0.08, Math.pow(ratio, 0.6));
+  }
+
+  return (
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <PanelHeader icon={CalendarDays} title="Heatmap dia × hora" />
+          <div className="flex items-center gap-1 rounded-full bg-[var(--bg-subtle)] p-1 text-[11px] font-semibold">
+            <button
+              onClick={() => setMetric("orders")}
+              className={`rounded-full px-2.5 py-1 ${metric === "orders" ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)]"}`}
+            >
+              Pedidos
+            </button>
+            <button
+              onClick={() => setMetric("received")}
+              className={`rounded-full px-2.5 py-1 ${metric === "received" ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)]"}`}
+            >
+              Receita
+            </button>
+          </div>
+        </div>
+        <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">
+          Cada célula é {metric === "orders" ? "pedidos" : "receita recebida"} no dia × hora. Top 3 hotspots destacados.
+        </p>
+        <div className="mt-4 overflow-x-auto hide-scrollbar">
+          <div className="min-w-[720px]">
+            {/* Header de horas */}
+            <div className="grid grid-cols-[64px_repeat(24,minmax(0,1fr))] gap-px text-[9px] font-bold text-[var(--text-muted)]">
+              <div />
+              {Array.from({ length: 24 }, (_, h) => (
+                <div key={h} className="px-0.5 text-center">{String(h).padStart(2, "0")}</div>
+              ))}
+            </div>
+            {/* Linhas por dia */}
+            <div className="mt-1 space-y-px">
+              {WEEKDAYS.map((wd) => (
+                <div key={wd} className="grid grid-cols-[64px_repeat(24,minmax(0,1fr))] gap-px">
+                  <div className="pr-2 text-right text-[10px] font-bold text-[var(--text-secondary)] leading-[20px]">{wd.slice(0, 3)}</div>
+                  {Array.from({ length: 24 }, (_, h) => {
+                    const key = `${wd}|${h}`;
+                    const cell = cellByKey.get(key);
+                    const v = cell?.[metric] ?? 0;
+                    const i = intensity(v);
+                    const isTop = topKeys.has(key) && v > 0;
+                    const title = cell
+                      ? `${wd} ${String(h).padStart(2, "0")}h: ${cell.orders} pedido${cell.orders !== 1 ? "s" : ""} · ${currency.format(cell.received)}`
+                      : `${wd} ${String(h).padStart(2, "0")}h: sem dados`;
+                    return (
+                      <div
+                        key={h}
+                        title={title}
+                        className={`h-5 rounded-sm ${isTop ? "ring-1 ring-brand-red" : ""}`}
+                        style={{
+                          backgroundColor: v === 0
+                            ? "var(--bg-subtle)"
+                            : `rgba(220, 38, 38, ${i})`, // brand-red com alpha
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            {/* Escala */}
+            <div className="mt-3 flex items-center justify-end gap-2 text-[10px] font-bold text-[var(--text-muted)]">
+              <span>Menor</span>
+              <div className="flex h-2 w-32 overflow-hidden rounded-full">
+                {[0.08, 0.25, 0.5, 0.75, 1].map((a) => (
+                  <div key={a} className="flex-1" style={{ backgroundColor: `rgba(220, 38, 38, ${a})` }} />
+                ))}
+              </div>
+              <span>Maior</span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

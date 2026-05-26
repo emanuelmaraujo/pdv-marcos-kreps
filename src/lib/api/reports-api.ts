@@ -42,6 +42,13 @@ export interface WeekdayStat {
   average_ticket: number;
 }
 
+export interface HeatmapCell {
+  weekday: string;
+  hour: number;      // 0–23
+  orders: number;
+  received: number;
+}
+
 export interface PipelineStageStat {
   count: number;
   median: number;          // minutos
@@ -90,6 +97,7 @@ export interface CashReportResponse {
   };
   hourly_sales: HourlyStat[];
   weekday_sales: WeekdayStat[];
+  heatmap: HeatmapCell[];
   low_selling_products: Array<{
     product_id: string;
     name: string;
