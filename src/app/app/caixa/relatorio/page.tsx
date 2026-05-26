@@ -78,7 +78,7 @@ const reportTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Section = "overview" | "financial" | "sales" | "patterns" | "orders" | "compare";
-type Period = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "custom";
+type Period = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "custom" | "range";
 type OrderFilter = "TODOS" | "PAGOS" | "PENDENTES" | "CANCELADOS";
 
 interface AbcProduct extends ProductStat {
@@ -109,7 +109,7 @@ const SECTIONS: { id: Section; label: string; short: string; icon: React.Element
 // ── Period helpers ────────────────────────────────────────────────────────────
 
 const PERIOD_LABELS: Record<Period, string> = {
-  today: "Hoje", yesterday: "Ontem", last7: "7 dias", last30: "30 dias", thisMonth: "Este mês", custom: "Data",
+  today: "Hoje", yesterday: "Ontem", last7: "7 dias", last30: "30 dias", thisMonth: "Este mês", custom: "Data", range: "Intervalo",
 };
 
 function labelToDate(label: string): Date {
@@ -117,7 +117,7 @@ function labelToDate(label: string): Date {
   return new Date(y, m - 1, d, 12, 0, 0);
 }
 
-function computeDates(period: Period, customDate?: string): { start: Date; end: Date } {
+function computeDates(period: Period, customDate?: string, rangeStart?: string, rangeEnd?: string): { start: Date; end: Date } {
   const now = new Date();
   // "Hoje", "Ontem" e "Data" usam o mesmo dia comercial do caixa (03h–02:59h Brasília)
   // para que ambas as telas mostrem os mesmos pedidos.
@@ -134,6 +134,12 @@ function computeDates(period: Period, customDate?: string): { start: Date; end: 
   if (period === "custom" && customDate) {
     const bd = getBusinessDayRange(labelToDate(customDate));
     return { start: bd.start, end: bd.end };
+  }
+  if (period === "range" && rangeStart && rangeEnd) {
+    // Range fecha por dia comercial inclusive: start do dia inicial até end do dia final.
+    const startBd = getBusinessDayRange(labelToDate(rangeStart));
+    const endBd = getBusinessDayRange(labelToDate(rangeEnd));
+    return { start: startBd.start, end: endBd.end };
   }
 
   const start = new Date();
@@ -158,10 +164,18 @@ function computeDates(period: Period, customDate?: string): { start: Date; end: 
   return { start, end };
 }
 
-function computePrevDates(period: Period, customDate?: string): { start: Date; end: Date } {
+function computePrevDates(period: Period, customDate?: string, rangeStart?: string, rangeEnd?: string): { start: Date; end: Date } {
   const now = new Date();
   const start = new Date();
   const end = new Date();
+  if (period === "range" && rangeStart && rangeEnd) {
+    // Mesma duração imediatamente antes do range escolhido.
+    const cur = computeDates("range", undefined, rangeStart, rangeEnd);
+    const ms = cur.end.getTime() - cur.start.getTime();
+    end.setTime(cur.start.getTime());
+    start.setTime(cur.start.getTime() - ms);
+    return { start, end };
+  }
   switch (period) {
     case "today": {
       // Período anterior = dia comercial de ontem
@@ -286,6 +300,8 @@ export default function RelatorioPage() {
   });
   const [period, setPeriod] = useState<Period>("today");
   const [customDate, setCustomDate] = useState<string>(""); // YYYY-MM-DD
+  const [rangeStart, setRangeStart] = useState<string>(""); // YYYY-MM-DD
+  const [rangeEnd, setRangeEnd] = useState<string>("");     // YYYY-MM-DD
   const [activeSection, setActiveSection] = useState<Section>("overview");
 
   useEffect(() => {
@@ -312,11 +328,15 @@ export default function RelatorioPage() {
       setIsLoading(false);
       return;
     }
+    if (period === "range" && (!rangeStart || !rangeEnd)) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     setError("");
     try {
-      const { start, end } = computeDates(period, customDate);
-      const { start: ps, end: pe } = computePrevDates(period, customDate);
+      const { start, end } = computeDates(period, customDate, rangeStart, rangeEnd);
+      const { start: ps, end: pe } = computePrevDates(period, customDate, rangeStart, rangeEnd);
       const f = { ...filters, start_date: start.toISOString(), end_date: end.toISOString() };
       const pf = { ...filters, start_date: ps.toISOString(), end_date: pe.toISOString() };
 
@@ -335,7 +355,7 @@ export default function RelatorioPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [period, customDate, filters, currentBranchId]);
+  }, [period, customDate, rangeStart, rangeEnd, filters, currentBranchId]);
 
   useEffect(() => {
     if (isAdmin !== true) return;
@@ -346,13 +366,16 @@ export default function RelatorioPage() {
   // Range atual derivado para a aba Comparar.
   const currentRangeForCompare = useMemo(() => {
     if (period === "custom" && !customDate) return null;
-    const { start, end } = computeDates(period, customDate);
+    if (period === "range" && (!rangeStart || !rangeEnd)) return null;
+    const { start, end } = computeDates(period, customDate, rangeStart, rangeEnd);
     const isSingleDay = period === "today" || period === "yesterday" || period === "custom";
     const label = period === "custom" && customDate
       ? customDate
+      : period === "range" && rangeStart && rangeEnd
+      ? `${rangeStart} → ${rangeEnd}`
       : PERIOD_LABELS[period];
     return { start, end, label, isSingleDay };
-  }, [period, customDate]);
+  }, [period, customDate, rangeStart, rangeEnd]);
 
   const dailyRows = useMemo(() => buildDailyRows(orders), [orders]);
   const abcProducts = useMemo(
@@ -385,16 +408,24 @@ export default function RelatorioPage() {
       <ControlPanel
         period={period}
         customDate={customDate}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
         filters={filters}
         categories={categories}
         isLoading={isLoading}
         onPeriodChange={(p) => {
           setPeriod(p);
           if (p !== "custom") setCustomDate("");
+          if (p !== "range") { setRangeStart(""); setRangeEnd(""); }
         }}
         onCustomDateChange={(d) => {
           setCustomDate(d);
           setPeriod("custom");
+        }}
+        onRangeChange={(start, end) => {
+          setRangeStart(start);
+          setRangeEnd(end);
+          if (start && end) setPeriod("range");
         }}
         onFilterChange={setFilters}
         onBack={() => router.push("/app/caixa")}
@@ -432,16 +463,19 @@ export default function RelatorioPage() {
 // ── Control panel ─────────────────────────────────────────────────────────────
 
 function ControlPanel({
-  period, customDate, filters, categories, isLoading,
-  onPeriodChange, onCustomDateChange, onFilterChange, onBack, onRefresh,
+  period, customDate, rangeStart, rangeEnd, filters, categories, isLoading,
+  onPeriodChange, onCustomDateChange, onRangeChange, onFilterChange, onBack, onRefresh,
 }: {
   period: Period;
   customDate: string;
+  rangeStart: string;
+  rangeEnd: string;
   filters: CashReportFilters;
   categories: { id: string; name: string }[];
   isLoading: boolean;
   onPeriodChange: (p: Period) => void;
   onCustomDateChange: (d: string) => void;
+  onRangeChange: (start: string, end: string) => void;
   onFilterChange: (f: CashReportFilters) => void;
   onBack: () => void;
   onRefresh: () => void;
@@ -450,6 +484,10 @@ function ControlPanel({
   const customLabel = customDate
     ? reportDateLabelFmt.format(labelToDate(customDate))
     : "Data";
+  const rangeLabel = rangeStart && rangeEnd
+    ? `${reportDateLabelFmt.format(labelToDate(rangeStart))} → ${reportDateLabelFmt.format(labelToDate(rangeEnd))}`
+    : "Intervalo";
+  const [showRangePopover, setShowRangePopover] = useState(false);
   const hasActiveFilters =
     (filters.category_id && filters.category_id !== "ALL") ||
     (filters.payment_method && filters.payment_method !== "ALL");
@@ -504,6 +542,65 @@ function ControlPanel({
               tabIndex={-1}
             />
           </label>
+
+          {/* Pill "Intervalo" — abre popover com dois date inputs */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowRangePopover((v) => !v)}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
+                period === "range"
+                  ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+              title="Escolher intervalo de datas"
+            >
+              <CalendarDays className="h-3 w-3" strokeWidth={1.75} />
+              <span className="max-w-[180px] truncate">{period === "range" && rangeStart && rangeEnd ? rangeLabel : "Intervalo"}</span>
+            </button>
+            {showRangePopover && (
+              <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-lg)]">
+                <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-[var(--text-muted)]">Intervalo (dias comerciais)</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">De</label>
+                    <input
+                      type="date"
+                      max={todayKey}
+                      value={rangeStart}
+                      onChange={(e) => onRangeChange(e.target.value, rangeEnd && e.target.value > rangeEnd ? e.target.value : rangeEnd)}
+                      className="mt-0.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-1.5 text-sm font-medium text-[var(--text-primary)] focus:border-brand-red focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Até</label>
+                    <input
+                      type="date"
+                      max={todayKey}
+                      min={rangeStart || undefined}
+                      value={rangeEnd}
+                      onChange={(e) => onRangeChange(rangeStart, e.target.value)}
+                      className="mt-0.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-1.5 text-sm font-medium text-[var(--text-primary)] focus:border-brand-red focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-end gap-2">
+                  <button
+                    onClick={() => { onRangeChange("", ""); setShowRangePopover(false); }}
+                    className="rounded-lg px-2 py-1 text-[11px] font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]"
+                  >
+                    Limpar
+                  </button>
+                  <button
+                    onClick={() => setShowRangePopover(false)}
+                    disabled={!rangeStart || !rangeEnd}
+                    className="rounded-lg bg-brand-red px-3 py-1 text-[11px] font-black text-white disabled:opacity-40"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <button
