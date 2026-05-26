@@ -418,6 +418,11 @@ async function loadSameWeekdayAverage(
       courtesy_orders: 0, courtesy_total: avg("courtesy"),
       canceled_orders: 0, canceled_total: avg("canceled"),
     },
+    pipeline_stages: {
+      acceptance: { count: 0, median: 0, p90: 0, max: 0, queue_loss_min: 0 },
+      delivery:   { count: 0, median: 0, p90: 0, max: 0, queue_loss_min: 0 },
+      payment:    { count: 0, median: 0, p90: 0, max: 0, queue_loss_min: 0 },
+    },
     insights: [],
     metadata: { is_filtered_by_category: false, note: null },
   };
