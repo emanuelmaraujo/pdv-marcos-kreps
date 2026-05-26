@@ -42,6 +42,14 @@ export interface WeekdayStat {
   average_ticket: number;
 }
 
+export interface PipelineStageStat {
+  count: number;
+  median: number;          // minutos
+  p90: number;             // minutos
+  max: number;             // minutos
+  queue_loss_min: number;  // Σ (tempo − mediana) — capacidade perdida em fila
+}
+
 export interface Insight {
   title: string;
   description: string;
@@ -96,6 +104,11 @@ export interface CashReportResponse {
     courtesy_total: number;
     canceled_orders: number;
     canceled_total: number;
+  };
+  pipeline_stages: {
+    acceptance: PipelineStageStat;  // created_at → confirmed_at
+    delivery:   PipelineStageStat;  // confirmed_at → delivered_at
+    payment:    PipelineStageStat;  // created_at → paid_at
   };
   insights: Insight[];
   metadata: {

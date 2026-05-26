@@ -1573,6 +1573,7 @@ function LowSellersPanel({ report }: { report: CashReportResponse }) {
 function SectionPatterns({ report }: { report: CashReportResponse }) {
   return (
     <div className="space-y-5">
+      <PipelinePanel report={report} />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <HourlyPanel report={report} />
         <WeekdayPanel report={report} />
@@ -1580,6 +1581,108 @@ function SectionPatterns({ report }: { report: CashReportResponse }) {
       <CancellationPanel report={report} />
     </div>
   );
+}
+
+/**
+ * Painel "Gargalo por etapa".
+ *
+ * Decompõe o ciclo do pedido em 3 etapas e mostra mediana, p90, máximo e
+ * "tempo perdido em fila" (Σ minutos acima da mediana — estimativa do que
+ * poderia ter sido vendido se a operação rodasse na sua própria mediana).
+ */
+function PipelinePanel({ report }: { report: CashReportResponse }) {
+  const p = report.pipeline_stages;
+  if (!p) return null;
+  const stages: { key: keyof typeof p; label: string; hint: string }[] = [
+    { key: "acceptance", label: "Criação → Aceite",    hint: "Tempo até confirmar o pedido" },
+    { key: "delivery",   label: "Aceite → Entrega",    hint: "Cozinha + saída do balcão"     },
+    { key: "payment",    label: "Criação → Pagamento", hint: "Fechamento financeiro"          },
+  ];
+
+  // Pior gargalo = etapa com maior p90 (latência da maioria dos pedidos lentos).
+  const worst = stages.reduce<{ key: string; p90: number } | null>((best, s) => {
+    const v = p[s.key].p90;
+    if (!best || v > best.p90) return { key: s.key, p90: v };
+    return best;
+  }, null);
+
+  const hasAnyData = stages.some((s) => p[s.key].count > 0);
+  if (!hasAnyData) return null;
+
+  return (
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <PanelHeader icon={Clock} title="Gargalo por etapa" />
+          {worst && p[worst.key as keyof typeof p].count > 0 && (
+            <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-black text-amber-700">
+              Pior latência: {stages.find((s) => s.key === worst.key)?.label.split(" → ")[1]}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">
+          Quanto tempo cada etapa do pedido leva — mediana = caso típico, p90 = quase pior caso, fila = capacidade perdida.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+          {stages.map((s) => {
+            const stat = p[s.key];
+            const isWorst = worst?.key === s.key && stat.count > 0;
+            return (
+              <div
+                key={s.key}
+                className={`rounded-2xl border p-4 ${
+                  isWorst
+                    ? "border-amber-500/30 bg-amber-500/10"
+                    : "border-[var(--border)] bg-[var(--bg-surface)]"
+                }`}
+              >
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{s.label}</p>
+                <p className="mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">{s.hint}</p>
+                {stat.count === 0 ? (
+                  <p className="mt-3 text-xs font-medium text-[var(--text-muted)]">Sem dados no período</p>
+                ) : (
+                  <>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <PipelineMetric label="Mediana" value={`${stat.median}min`} highlight />
+                      <PipelineMetric label="p90" value={`${stat.p90}min`} />
+                      <PipelineMetric label="Máx" value={`${stat.max}min`} />
+                    </div>
+                    <div className="mt-3 rounded-xl bg-[var(--bg-subtle)] px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                        Tempo perdido em fila
+                      </p>
+                      <p className="mt-0.5 text-sm font-black text-[var(--text-primary)] tabular-nums">
+                        {formatMinutes(stat.queue_loss_min)}
+                      </p>
+                      <p className="mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">
+                        {stat.count} pedido{stat.count !== 1 ? "s" : ""} avaliados
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PipelineMetric({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className={`rounded-lg px-2 py-1.5 ${highlight ? "bg-brand-red/10" : "bg-[var(--bg-subtle)]"}`}>
+      <p className={`text-[9px] font-bold uppercase tracking-wide ${highlight ? "text-brand-red" : "text-[var(--text-muted)]"}`}>{label}</p>
+      <p className={`mt-0.5 text-xs font-black tabular-nums ${highlight ? "text-brand-red" : "text-[var(--text-primary)]"}`}>{value}</p>
+    </div>
+  );
+}
+
+function formatMinutes(mins: number): string {
+  if (mins < 60) return `${mins}min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
 }
 
 function HourlyPanel({ report }: { report: CashReportResponse }) {

@@ -127,6 +127,7 @@ serve(async (req) => {
         created_at,
         confirmed_at,
         paid_at,
+        delivered_at,
         daily_number
       `);
 
@@ -338,6 +339,67 @@ serve(async (req) => {
       ? (summary.gross_margin / summary.received) * 100
       : 0;
 
+    // ── Pipeline / gargalo por etapa ───────────────────────────────────────
+    // Calcula tempo em minutos por etapa, apenas para pedidos não-cancelados
+    // que têm o timestamp da etapa preenchido.
+    //   acceptance : created_at  → confirmed_at  (gargalo de aceite)
+    //   delivery   : confirmed_at → delivered_at (gargalo de cozinha+entrega)
+    //   payment    : created_at  → paid_at       (gargalo de fechamento)
+    // Para cada etapa, devolvemos count, median, p90, max e o "tempo perdido
+    // em fila" — soma dos minutos acima da mediana (estimativa de capacidade
+    // que poderia ter sido vendida sem fila).
+    function diffMin(a: string | null, b: string | null): number | null {
+      if (!a || !b) return null;
+      const ms = new Date(b).getTime() - new Date(a).getTime();
+      if (!Number.isFinite(ms) || ms <= 0) return null;
+      return ms / 60000;
+    }
+    function percentile(sorted: number[], p: number): number {
+      if (sorted.length === 0) return 0;
+      if (sorted.length === 1) return sorted[0];
+      const idx = (sorted.length - 1) * p;
+      const lo = Math.floor(idx);
+      const hi = Math.ceil(idx);
+      if (lo === hi) return sorted[lo];
+      const frac = idx - lo;
+      return sorted[lo] * (1 - frac) + sorted[hi] * frac;
+    }
+    function summarizeStage(values: number[]) {
+      if (values.length === 0) {
+        return { count: 0, median: 0, p90: 0, max: 0, queue_loss_min: 0 };
+      }
+      const sorted = [...values].sort((a, b) => a - b);
+      const median = percentile(sorted, 0.5);
+      const p90 = percentile(sorted, 0.9);
+      const max = sorted[sorted.length - 1];
+      // Tempo perdido em fila: minutos acumulados além da mediana, para cada pedido.
+      const queue_loss_min = values.reduce((sum, v) => sum + Math.max(0, v - median), 0);
+      return {
+        count: values.length,
+        median: Math.round(median),
+        p90: Math.round(p90),
+        max: Math.round(max),
+        queue_loss_min: Math.round(queue_loss_min),
+      };
+    }
+    const acceptanceTimes: number[] = [];
+    const deliveryTimes: number[] = [];
+    const paymentTimes: number[] = [];
+    filteredOrders.forEach((o: any) => {
+      if (o.status === 'CANCELADO') return;
+      const a = diffMin(o.created_at, o.confirmed_at);
+      if (a !== null) acceptanceTimes.push(a);
+      const d = diffMin(o.confirmed_at, o.delivered_at);
+      if (d !== null) deliveryTimes.push(d);
+      const p = diffMin(o.created_at, o.paid_at);
+      if (p !== null) paymentTimes.push(p);
+    });
+    const pipeline_stages = {
+      acceptance: summarizeStage(acceptanceTimes),
+      delivery:   summarizeStage(deliveryTimes),
+      payment:    summarizeStage(paymentTimes),
+    };
+
     // 7.3 Items & Rankings
     filteredItems.forEach((item: any) => {
       const order = filteredOrders.find((o: any) => o.id === item.order_id);
@@ -532,6 +594,7 @@ serve(async (req) => {
       weekday_sales: weekdaySales,
       low_selling_products: lowSellingProducts,
       financial_attention,
+      pipeline_stages,
       insights,
       metadata: {
         is_filtered_by_category: isFilteredByCategory,
