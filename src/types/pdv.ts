@@ -40,6 +40,7 @@ export interface Product {
   name: string;
   description?: string;
   price: number;
+  cost_price?: number;
   sector: ProductionSector;
   active: boolean;
   created_at?: string;

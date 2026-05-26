@@ -91,7 +91,7 @@ serve(async (req) => {
 
       const { data: product, error: prodErr } = await supabaseAdmin
         .from('products')
-        .select('id, name, price, sector, active, branch_id')
+        .select('id, name, price, cost_price, sector, active, branch_id')
         .eq('id', item.product_id)
         .single();
 
@@ -197,6 +197,7 @@ serve(async (req) => {
           product_id: itemData.product.id,
           product_name_snapshot: itemData.product.name,
           product_price_snapshot: itemData.product.price,
+          cost_price_snapshot: itemData.product.cost_price ?? 0,
           production_sector: itemData.product.sector,
           quantity: itemData.quantity,
           observation: itemData.notes,

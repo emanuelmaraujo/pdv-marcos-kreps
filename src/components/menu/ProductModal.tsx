@@ -25,6 +25,7 @@ export function ProductModal({
     product || {
       name: "",
       price: 0,
+      cost_price: 0,
       category_id: categories[0]?.id || "",
       sector: "KITCHEN",
       active: true,
@@ -77,7 +78,7 @@ export function ProductModal({
             />
           </div>
 
-          <div>
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
                 Preço (R$)
@@ -89,6 +90,20 @@ export function ProductModal({
                 value={formData.price}
                 onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
                 className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+                Custo (R$)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.cost_price ?? 0}
+                onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) || 0 })}
+                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
+                title="Custo unitário — usado para calcular margem nos relatórios"
               />
             </div>
           </div>
