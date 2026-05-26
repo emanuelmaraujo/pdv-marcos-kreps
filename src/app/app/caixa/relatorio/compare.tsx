@@ -412,6 +412,7 @@ async function loadSameWeekdayAverage(
     category_rankings: { savory_kreps: [], sweet_kreps: [], juices: [], sodas: [], potatoes: [], creams: [], others: [] },
     hourly_sales: [],
     weekday_sales: [],
+    heatmap: [],
     low_selling_products: [],
     financial_attention: {
       discount_orders: 0, discount_total: avg("discounts"),

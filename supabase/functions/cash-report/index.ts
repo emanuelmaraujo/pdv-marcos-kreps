@@ -235,6 +235,8 @@ serve(async (req) => {
     const paymentBreakdownMap = new Map();
     const weekdayMap = new Map();
     const hourlyMap = new Map();
+    // Heatmap dia × hora: chave "weekday|hour" → { orders, received }
+    const heatmapMap = new Map<string, { orders: number; received: number }>();
     const productStats = new Map();
     const categoryStats = new Map();
     const soldProductIds = new Set();
@@ -296,6 +298,13 @@ serve(async (req) => {
         hData.items_quantity += categorySpecificItems.reduce((acc, i) => acc + Number(i.quantity || 0), 0);
         if (order.payment_status === 'PAID') hData.received += orderValue;
         hourlyMap.set(hourBucket, hData);
+
+        // Heatmap dia × hora
+        const hmKey = `${weekday}|${saleParts.hour}`;
+        const hmData = heatmapMap.get(hmKey) || { orders: 0, received: 0 };
+        hmData.orders++;
+        if (order.payment_status === 'PAID') hmData.received += orderValue;
+        heatmapMap.set(hmKey, hmData);
 
         // Payment breakdown — usa tabela payments para suportar split-bill com métodos mistos
         // (cada linha = 1 transação real, pode haver PIX + Débito no mesmo pedido)
@@ -426,6 +435,14 @@ serve(async (req) => {
       cStat.orders_count.add(item.order_id);
       categoryStats.set(group, cStat);
     });
+
+    // Heatmap: 7×24 sempre, mesmo com células zeradas (renderização estável no front)
+    const heatmap = WEEKDAYS.flatMap((weekday) =>
+      Array.from({ length: 24 }, (_, hour) => {
+        const cell = heatmapMap.get(`${weekday}|${hour}`) || { orders: 0, received: 0 };
+        return { weekday, hour, orders: cell.orders, received: cell.received };
+      })
+    );
 
     // 7.4 Formatting Outputs
     const topAllProducts = Array.from(productStats.values())
@@ -592,6 +609,7 @@ serve(async (req) => {
       category_rankings: categoryRankings,
       hourly_sales: hourlySales,
       weekday_sales: weekdaySales,
+      heatmap,
       low_selling_products: lowSellingProducts,
       financial_attention,
       pipeline_stages,
