@@ -367,7 +367,7 @@ serve(async (req) => {
 
     const { data: products, error: prodErr } = await supabaseAdmin
       .from("products")
-      .select("id, name, price, sector, active, branch_id, category:categories(name), product_ingredients(ingredient_id)")
+      .select("id, name, price, cost_price, sector, active, branch_id, category:categories(name), product_ingredients(ingredient_id)")
       .in("id", productIds)
       .eq("branch_id", branch.id);
 
@@ -485,6 +485,7 @@ serve(async (req) => {
           product_id: product.id,
           product_name_snapshot: product.name,
           product_price_snapshot: product.price,
+          cost_price_snapshot: product.cost_price ?? 0,
           production_sector: resolveProductionSector(product),
           quantity,
           observation: cleanText(item.notes, 300),

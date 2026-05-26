@@ -181,6 +181,7 @@ serve(async (req) => {
         product_id,
         product_name_snapshot,
         product_price_snapshot,
+        cost_price_snapshot,
         quantity,
         total_price,
         order_id,
@@ -223,6 +224,11 @@ serve(async (req) => {
       total_orders: filteredOrders.length,
       paid_orders: 0,
       average_ticket: 0,
+      // Margem: receita líquida (recebido) − custo dos itens vendidos (PAID, não-cancelado).
+      // cogs = Σ (quantity * cost_price_snapshot) dos itens dos pedidos PAGOS.
+      cogs: 0,
+      gross_margin: 0,           // received − cogs (R$)
+      gross_margin_percent: 0,   // (gross_margin / received) × 100
     };
 
     const paymentBreakdownMap = new Map();
@@ -313,6 +319,24 @@ serve(async (req) => {
     });
 
     summary.average_ticket = summary.paid_orders > 0 ? summary.received / summary.paid_orders : 0;
+
+    // COGS: soma dos custos congelados dos itens cujos pedidos estão PAGOS (e não cancelados).
+    // Pendentes e cortesia ficam de fora — margem reflete o que efetivamente entrou em caixa.
+    const paidOrderIds = new Set(
+      filteredOrders
+        .filter((o: any) => o.payment_status === 'PAID' && o.status !== 'CANCELADO')
+        .map((o: any) => o.id),
+    );
+    summary.cogs = (items || []).reduce((sum: number, item: any) => {
+      if (!paidOrderIds.has(item.order_id)) return sum;
+      const qty = Number(item.quantity || 0);
+      const unitCost = Number(item.cost_price_snapshot || 0);
+      return sum + qty * unitCost;
+    }, 0);
+    summary.gross_margin = summary.received - summary.cogs;
+    summary.gross_margin_percent = summary.received > 0
+      ? (summary.gross_margin / summary.received) * 100
+      : 0;
 
     // 7.3 Items & Rankings
     filteredItems.forEach((item: any) => {

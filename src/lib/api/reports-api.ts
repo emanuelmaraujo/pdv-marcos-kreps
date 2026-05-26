@@ -59,6 +59,9 @@ export interface CashReportResponse {
     total_orders: number;
     paid_orders: number;
     average_ticket: number;
+    cogs: number;                 // custo total dos itens vendidos (PAID)
+    gross_margin: number;         // received − cogs (R$)
+    gross_margin_percent: number; // % sobre received
   };
   payment_breakdown: Array<{
     method: string;

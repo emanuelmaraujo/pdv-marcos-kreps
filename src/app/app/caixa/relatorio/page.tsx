@@ -1044,6 +1044,7 @@ function SectionFinancial({
 }) {
   return (
     <div className="space-y-5">
+      <MarginPanel report={report} />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <WaterfallPanel report={report} />
         <PaymentPanel report={report} />
@@ -1051,6 +1052,54 @@ function SectionFinancial({
       {dailyRows.length > 1 && <DailyTablePanel rows={dailyRows} />}
       <AuditPanel report={report} />
     </div>
+  );
+}
+
+// Margem bruta: receita líquida (recebido) − COGS (custo congelado dos itens vendidos).
+// Considera apenas pedidos PAID (não cancelados). Se cost_price for 0 nos produtos,
+// a margem aparenta 100% — é o esperado até cadastro de custo.
+function MarginPanel({ report }: { report: CashReportResponse }) {
+  const { received, cogs, gross_margin, gross_margin_percent } = report.summary;
+  if (received <= 0) return null;
+
+  const hasCost = cogs > 0;
+  const marginColor =
+    gross_margin_percent >= 50 ? "text-emerald-600"
+    : gross_margin_percent >= 30 ? "text-amber-600"
+    : "text-red-600";
+
+  return (
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
+      <CardContent className="p-5">
+        <PanelHeader icon={Percent} title="Margem bruta" />
+        {!hasCost && (
+          <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-medium text-amber-700">
+            Cadastre o custo dos produtos em Cardápio → Editar produto para enxergar a margem real.
+            Sem custo, a margem aparece como 100% do recebido.
+          </p>
+        )}
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Recebido</p>
+            <p className="mt-1 text-xl font-black text-[var(--text-primary)] tabular-nums">{currency.format(received)}</p>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Custo dos produtos</p>
+            <p className="mt-1 text-xl font-black text-red-600 tabular-nums">-{currency.format(cogs)}</p>
+            <p className="mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">
+              Σ (qtd × custo congelado) — só pedidos pagos
+            </p>
+          </div>
+          <div className={`rounded-2xl border p-4 ${gross_margin >= 0 ? "border-emerald-500/30 bg-emerald-500/10" : "border-red-500/30 bg-red-500/10"}`}>
+            <p className={`text-[11px] font-bold uppercase tracking-wide ${gross_margin >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+              Margem bruta
+            </p>
+            <p className={`mt-1 text-xl font-black tabular-nums ${marginColor}`}>{currency.format(gross_margin)}</p>
+            <p className={`mt-0.5 text-xs font-black ${marginColor}`}>{gross_margin_percent.toFixed(1)}%</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

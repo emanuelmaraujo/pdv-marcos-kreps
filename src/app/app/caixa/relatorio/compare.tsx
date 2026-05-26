@@ -135,6 +135,8 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
     if (!currReport || !compareReport) return [];
     return [
       { key: "received",     label: "Recebido",        curr: currReport.summary.received,         compare: compareReport.summary.received,         format: "currency" },
+      { key: "margin",       label: "Margem bruta",    curr: currReport.summary.gross_margin,     compare: compareReport.summary.gross_margin,     format: "currency" },
+      { key: "marginPct",    label: "Margem %",        curr: currReport.summary.gross_margin_percent, compare: compareReport.summary.gross_margin_percent, format: "number" },
       { key: "orders",       label: "Pedidos pagos",   curr: currReport.summary.paid_orders,      compare: compareReport.summary.paid_orders,      format: "int" },
       { key: "total",        label: "Pedidos totais",  curr: currReport.summary.total_orders,     compare: compareReport.summary.total_orders,     format: "int" },
       { key: "ticket",       label: "Ticket médio",    curr: currReport.summary.average_ticket,   compare: compareReport.summary.average_ticket,   format: "currency" },
@@ -400,6 +402,9 @@ async function loadSameWeekdayAverage(
       total_orders: avg("total_orders"),
       paid_orders: avg("paid_orders"),
       average_ticket: avg("average_ticket"),
+      cogs: avg("cogs"),
+      gross_margin: avg("gross_margin"),
+      gross_margin_percent: avg("gross_margin_percent"),
     },
     payment_breakdown: [],
     category_breakdown: [],
