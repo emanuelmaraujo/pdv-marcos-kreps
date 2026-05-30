@@ -7,6 +7,7 @@
 const LS_KEY = "pdv_webauthn_user";
 
 interface StoredUser {
+  /** Pode ser vazio quando a entrada veio de login discoverable. */
   userId: string;
   email: string;
 }
@@ -87,6 +88,19 @@ export function isWebAuthnSupported(): boolean {
 export function hasEnrolledPasskey(): boolean {
   if (typeof localStorage === "undefined") return false;
   return !!localStorage.getItem(LS_KEY);
+}
+
+/**
+ * Detecta se o ambiente provavelmente tem passkeys disponíveis para login
+ * discoverable — usado para mostrar o botão "Entrar com passkey" mesmo
+ * num dispositivo que nunca cadastrou aqui. Retorna true se o navegador
+ * suporta WebAuthn (na prática hoje, Chrome/Safari/Firefox modernos).
+ *
+ * O custo real ("tem alguma passkey sincronizada?") só sai quando o
+ * usuário clica e o SO mostra (ou não mostra nada) a UI nativa.
+ */
+export function canTryDiscoverablePasskey(): boolean {
+  return isWebAuthnSupported();
 }
 
 export function getStoredUser(): StoredUser | null {
@@ -172,6 +186,64 @@ export async function enrollPasskey(
 
 // ─── Authentication ───────────────────────────────────────────────────────────
 
+/**
+ * Login com passkey **discoverable** — funciona em qualquer dispositivo onde
+ * a passkey esteja sincronizada (iCloud Keychain, Google Password Manager,
+ * 1Password, Bitwarden) ou via QR code (cross-device hybrid, CTAP 2.2).
+ *
+ * NÃO requer userId previamente conhecido pelo client. O navegador mostra
+ * a UI nativa de seleção de passkey baseada no rpId.
+ */
+export async function authenticateWithPasskeyDiscoverable(): Promise<{
+  token_hash: string;
+  email: string;
+}> {
+  if (!isWebAuthnSupported()) throw new Error("WebAuthn não suportado neste navegador");
+
+  const opts = await callFn("auth_begin_discoverable", {});
+
+  const assertion = (await navigator.credentials.get({
+    publicKey: {
+      challenge: new TextEncoder().encode(opts.challenge as string),
+      rpId: opts.rpId as string,
+      timeout: opts.timeout as number,
+      userVerification: opts.userVerification as UserVerificationRequirement,
+      // allowCredentials omitido → modo discoverable
+    },
+    // Habilita Conditional UI em navegadores que suportam (autocompletion
+    // do campo de email mostra as passkeys disponíveis).
+    mediation: "optional",
+  })) as PublicKeyCredential | null;
+
+  if (!assertion) throw new Error("Autenticação cancelada pelo usuário");
+  const response = assertion.response as AuthenticatorAssertionResponse;
+
+  const result = await callFn("auth_complete_discoverable", {
+    challenge: opts.challenge,
+    credential: {
+      id: assertion.id,
+      response: {
+        clientDataJSON: bufToB64u(response.clientDataJSON),
+        authenticatorData: bufToB64u(response.authenticatorData),
+        signature: bufToB64u(response.signature),
+        userHandle: response.userHandle ? bufToB64u(response.userHandle) : undefined,
+      },
+    },
+  });
+
+  const typed = result as { token_hash: string; email: string };
+
+  // Salva email pra próximas visitas neste dispositivo (otimização visual).
+  // userId fica vazio — discoverable não precisa, e fallback do
+  // authenticateWithPasskey() detecta isso e roda discoverable de novo.
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    userId: "",
+    email: typed.email,
+  } satisfies StoredUser));
+
+  return typed;
+}
+
 export async function authenticateWithPasskey(): Promise<{
   token_hash: string;
   email: string;
@@ -179,7 +251,10 @@ export async function authenticateWithPasskey(): Promise<{
   if (!isWebAuthnSupported()) throw new Error("WebAuthn não suportado neste navegador");
 
   const stored = getStoredUser();
-  if (!stored) throw new Error("Nenhuma digital registrada. Faça login e cadastre primeiro.");
+  // Sem userId no storage → cai pro fluxo discoverable (cross-device).
+  if (!stored || !stored.userId) {
+    return authenticateWithPasskeyDiscoverable();
+  }
 
   const opts = await callFn("auth_begin", { userId: stored.userId });
   if (!opts.allowCredentials) throw new Error("Sem credenciais registradas para este usuário");
