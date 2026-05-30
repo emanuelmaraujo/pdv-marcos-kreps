@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-  isWebAuthnSupported,
-  hasEnrolledPasskey,
+  canTryDiscoverablePasskey,
   authenticateWithPasskey,
 } from "@/lib/webauthn-client";
 import { Button } from "@/components/ui/Button";
@@ -34,9 +33,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [error, setError] = useState("");
-  const [showBiometric] = useState(
-    () => isWebAuthnSupported() && hasEnrolledPasskey(),
-  );
+  // Mostra o botão de passkey em qualquer dispositivo que suporta WebAuthn —
+  // o SO sabe se há passkey sincronizada (iCloud Keychain, Google Password
+  // Manager, etc) e mostra a UI nativa. Se não houver, o clique abre prompt
+  // de cross-device (QR code do celular).
+  const [showBiometric] = useState(() => canTryDiscoverablePasskey());
   const router = useRouter();
   const supabase = createClient();
 
@@ -191,7 +192,7 @@ export default function LoginPage() {
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-zinc-600 bg-zinc-700/30 text-zinc-300 hover:bg-zinc-700/60 active:scale-95 transition-all text-sm font-medium disabled:opacity-50"
                 >
                   <Fingerprint className="h-5 w-5 text-brand-red" />
-                  {biometricLoading ? "Verificando biometria..." : "Entrar com digital / Face ID"}
+                  {biometricLoading ? "Verificando..." : "Entrar com passkey (Face ID / digital / chave)"}
                 </button>
               </div>
             )}

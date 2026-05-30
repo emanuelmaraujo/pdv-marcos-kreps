@@ -273,6 +273,8 @@ async function registerBegin(userId: string, rpId: string) {
     challenge,
     rp: { id: rpId, name: RP_NAME },
     user: {
+      // user.id = base64url(userId) — vira o userHandle devolvido na
+      // assinatura, permitindo descobrir o user no login discoverable.
       id: b64uEncode(new TextEncoder().encode(userId)),
       name: user.email!,
       displayName: user.email!,
@@ -281,9 +283,13 @@ async function registerBegin(userId: string, rpId: string) {
     timeout: 60000,
     attestation: "none",
     authenticatorSelection: {
-      authenticatorAttachment: "platform", // built-in biometric only
-      userVerification: "required",
-      residentKey: "preferred",
+      // SEM authenticatorAttachment: permite tanto biometria local quanto
+      // cross-device hybrid (QR code do celular) e chaves físicas.
+      // residentKey=required: garante passkey discoverable + sincronizada
+      // (iCloud Keychain, Google Password Manager, 1Password etc).
+      residentKey: "required",
+      requireResidentKey: true,
+      userVerification: "preferred",
     },
   };
 }
@@ -328,8 +334,13 @@ async function registerComplete(
 
   const credentialId = b64uEncode(authData.credentialId);
 
+  // user_handle = base64url(userId) — mesma derivação usada em registerBegin
+  // para permitir login discoverable resolvendo credential→user via banco.
+  const userHandle = b64uEncode(new TextEncoder().encode(userId));
+
   const { error } = await supabaseAdmin.from("webauthn_credentials").insert({
     user_id: userId,
+    user_handle: userHandle,
     credential_id: credentialId,
     public_key_jwk: authData.publicKeyJwk,
     sign_count: authData.signCount,
@@ -338,6 +349,111 @@ async function registerComplete(
   if (error) throw new Error(`Erro ao salvar credencial: ${error.message}`);
 
   return { credentialId };
+}
+
+// ── Challenge "anônimo" (discoverable login) ────────────────────────────────
+// Não amarra a userId — o user é descoberto na resposta via userHandle.
+const ANON_USER = "__anon__";
+async function generateAnonChallenge(): Promise<string> {
+  return await generateChallenge(ANON_USER);
+}
+async function verifyAnonChallenge(challenge: string): Promise<boolean> {
+  return await verifyChallenge(challenge, ANON_USER);
+}
+
+/**
+ * Login discoverable (sem userId conhecido). Funciona em qualquer dispositivo
+ * onde a passkey esteja sincronizada (iCloud Keychain / Google Password
+ * Manager / 1Password / Bitwarden) ou via QR code (cross-device hybrid).
+ *
+ * Browser devolve credential.id + userHandle → resolvemos o user via banco.
+ */
+async function authBeginDiscoverable(rpId: string) {
+  const challenge = await generateAnonChallenge();
+  return {
+    challenge,
+    rpId,
+    timeout: 60000,
+    userVerification: "preferred",
+    // allowCredentials OMITIDO → browser mostra UI nativa de seleção de
+    // passkey baseada nas que tem sincronizadas para este rpId.
+  };
+}
+
+async function authCompleteDiscoverable(
+  challenge: string,
+  credential: {
+    id: string;
+    response: {
+      clientDataJSON: string;
+      authenticatorData: string;
+      signature: string;
+      userHandle?: string;
+    };
+  },
+  rpId: string = RP_ID,
+) {
+  if (!await verifyAnonChallenge(challenge)) throw new Error("Challenge inválido ou expirado");
+
+  const clientDataJSON = b64uDecode(credential.response.clientDataJSON);
+  const clientData = JSON.parse(new TextDecoder().decode(clientDataJSON));
+
+  if (clientData.type !== "webauthn.get") throw new Error("Tipo inválido");
+  if (!isAllowedOrigin(clientData.origin)) throw new Error(`Origem inválida: ${clientData.origin}`);
+
+  const clientChallenge = new TextDecoder().decode(b64uDecode(clientData.challenge));
+  if (clientChallenge !== challenge) throw new Error("Challenge não corresponde");
+
+  // Resolve o user por credential.id OU por userHandle (se devolvido).
+  // Preferimos credential.id pois o índice unique garante 1 match.
+  const { data: stored, error: credErr } = await supabaseAdmin
+    .from("webauthn_credentials")
+    .select("*")
+    .eq("credential_id", credential.id)
+    .single();
+  if (credErr || !stored) {
+    throw new Error("Passkey não reconhecida neste sistema. Cadastre primeiro fazendo login com senha.");
+  }
+
+  // Se o autenticador devolveu userHandle (discoverable real), confirma o match.
+  if (credential.response.userHandle && credential.response.userHandle !== stored.user_handle) {
+    throw new Error("user handle não corresponde ao registro");
+  }
+
+  const authDataBytes = b64uDecode(credential.response.authenticatorData);
+  const signature = b64uDecode(credential.response.signature);
+
+  const rpIdHash = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rpId)));
+  if (!arrayEq(authDataBytes.slice(0, 32), rpIdHash)) throw new Error("RP ID hash não corresponde");
+
+  const flags = authDataBytes[32];
+  if (!(flags & 0x01)) throw new Error("Usuário não presente");
+  // UV opcional aqui — UI ainda costuma exigir biometria, mas chaves físicas
+  // sem PIN podem responder UV=0. Mantemos a barreira do UP=1 + UserHandle válido.
+
+  const valid = await verifyAssertion(stored.public_key_jwk, signature, authDataBytes, clientDataJSON);
+  if (!valid) throw new Error("Assinatura inválida");
+
+  // Anti-replay
+  const view = new DataView(authDataBytes.buffer, authDataBytes.byteOffset);
+  const newCount = view.getUint32(33, false);
+  if (newCount > 0 && newCount <= stored.sign_count) throw new Error("Possível replay detectado");
+  await supabaseAdmin.from("webauthn_credentials").update({ sign_count: newCount }).eq("id", stored.id);
+
+  // Cria sessão
+  const { data: { user }, error: userErr } = await supabaseAdmin.auth.admin.getUserById(stored.user_id);
+  if (userErr || !user) throw new Error("Usuário não encontrado");
+
+  const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+    type: "magiclink",
+    email: user.email!,
+  });
+  if (linkErr || !linkData) throw new Error(`Erro ao criar sessão: ${linkErr?.message}`);
+
+  return {
+    token_hash: linkData.properties.hashed_token,
+    email: user.email,
+  };
 }
 
 async function authBegin(userId: string, rpId: string) {
@@ -478,6 +594,10 @@ Deno.serve(async (req) => {
       result = await authBegin(data.userId, rpId);
     } else if (action === "auth_complete") {
       result = await authComplete(data.userId, data.challenge, data.credential, rpId);
+    } else if (action === "auth_begin_discoverable") {
+      result = await authBeginDiscoverable(rpId);
+    } else if (action === "auth_complete_discoverable") {
+      result = await authCompleteDiscoverable(data.challenge, data.credential, rpId);
     } else {
       throw new Error(`Ação desconhecida: ${action}`);
     }
