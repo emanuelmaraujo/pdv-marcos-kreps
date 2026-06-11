@@ -6,6 +6,25 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function cleanText(value: unknown, maxLength = 255) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function cleanEmail(value: unknown) {
+  const email = cleanText(value, 254).toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
+}
+
+function cleanRole(value: unknown) {
+  return value === 'ADMIN' || value === 'ATTENDANT' ? value : '';
+}
+
+function uniqueStrings(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.filter((item): item is string => typeof item === 'string' && item.length > 0)));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -75,17 +94,42 @@ serve(async (req) => {
       }
 
       case 'create_user': {
-        const { email, password, name, role, active, branch_ids, home_branch_id } = data;
+        const email = cleanEmail(data?.email);
+        const password = typeof data?.password === 'string' ? data.password : '';
+        const name = cleanText(data?.name, 120);
+        const role = cleanRole(data?.role);
+        const active = typeof data?.active === 'boolean' ? data.active : true;
+        const branchIds = uniqueStrings(data?.branch_ids);
+        const requestedHomeBranchId = typeof data?.home_branch_id === 'string' ? data.home_branch_id : null;
 
         if (!email || !password || !name || !role) {
-          throw new Error('Campos obrigatórios ausentes (email, senha, nome, perfil).');
+          throw new Error('Campos obrigatórios ausentes ou inválidos (email, senha, nome, perfil).');
         }
 
-        const ALLOWED_EMAIL_DOMAIN = 'marcoskreps.com.br';
+        if (password.length < 6) {
+          throw new Error('A senha deve ter pelo menos 6 caracteres.');
+        }
+
+        const allowedEmailDomain = (Deno.env.get('ALLOWED_USER_EMAIL_DOMAIN') || '').trim().toLowerCase();
         const isLocalSupabase = /localhost|127\.0\.0\.1/.test(supabaseUrl);
-        const emailOk = String(email).trim().toLowerCase().endsWith(`@${ALLOWED_EMAIL_DOMAIN}`);
-        if (!isLocalSupabase && !emailOk) {
-          throw new Error(`Apenas e-mails @${ALLOWED_EMAIL_DOMAIN} podem ser cadastrados.`);
+        if (allowedEmailDomain && !isLocalSupabase && !email.endsWith(`@${allowedEmailDomain}`)) {
+          throw new Error(`Apenas e-mails @${allowedEmailDomain} podem ser cadastrados.`);
+        }
+
+        if (role === 'ATTENDANT' && branchIds.length === 0) {
+          const { data: defaultBranch, error: branchErr } = await supabaseAdmin
+            .from('branches')
+            .select('id')
+            .eq('active', true)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+
+          if (branchErr) throw branchErr;
+          if (!defaultBranch?.id) {
+            throw new Error('Selecione pelo menos uma filial para o atendente.');
+          }
+          branchIds.push(defaultBranch.id);
         }
 
         const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -97,30 +141,41 @@ serve(async (req) => {
 
         if (createErr) throw createErr;
 
-        const { error: insErr } = await supabaseAdmin
-          .from('profiles')
-          .upsert({
-            id: newUser.user.id,
-            name,
-            role,
-            active: active ?? true,
-            home_branch_id: home_branch_id ?? (Array.isArray(branch_ids) && branch_ids.length > 0 ? branch_ids[0] : null),
+        try {
+          const homeBranchId = requestedHomeBranchId && branchIds.includes(requestedHomeBranchId)
+            ? requestedHomeBranchId
+            : branchIds[0] ?? null;
+
+          const { error: insErr } = await supabaseAdmin
+            .from('profiles')
+            .upsert({
+              id: newUser.user.id,
+              name,
+              role,
+              active,
+              home_branch_id: homeBranchId,
+            });
+
+          if (insErr) throw insErr;
+
+          if (branchIds.length > 0) {
+            const rows = branchIds.map((bid: string) => ({ profile_id: newUser.user.id, branch_id: bid }));
+            const { error: branchInsertErr } = await supabaseAdmin.from('profile_branches').insert(rows);
+            if (branchInsertErr) throw branchInsertErr;
+          }
+
+          const { error: auditErr } = await supabaseAdmin.from('audit_logs').insert({
+            user_id: user.id,
+            action: 'USER_CREATED',
+            table_name: 'profiles',
+            record_id: newUser.user.id,
+            new_data: { email, name, role, active, branch_ids: branchIds }
           });
-
-        if (insErr) throw insErr;
-
-        if (Array.isArray(branch_ids) && branch_ids.length > 0) {
-          const rows = branch_ids.map((bid: string) => ({ profile_id: newUser.user.id, branch_id: bid }));
-          await supabaseAdmin.from('profile_branches').insert(rows);
+          if (auditErr) throw auditErr;
+        } catch (err) {
+          await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+          throw err;
         }
-
-        await supabaseAdmin.from('audit_logs').insert({
-          user_id: user.id,
-          action: 'USER_CREATED',
-          table_name: 'profiles',
-          record_id: newUser.user.id,
-          new_data: { email, name, role, active: active ?? true, branch_ids }
-        });
 
         responseData = { id: newUser.user.id };
         break;
