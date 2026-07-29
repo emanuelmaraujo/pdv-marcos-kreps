@@ -67,7 +67,7 @@ serve(async (req) => {
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
       .select(`
-        id, branch_id, daily_number, status, payment_status,
+        id, branch_id, daily_number, status, payment_status, type,
         customer_phone, customer_name,
         branches ( code, name )
       `)
@@ -79,6 +79,13 @@ serve(async (req) => {
     if (cur === "ENTREGUE")  throw new Error("Pedido já ENTREGUE.");
     if (cur === "CANCELADO") throw new Error("Pedido já CANCELADO.");
     if (cur === "EXPIRADO")  throw new Error("Pedido EXPIRADO.");
+
+    // Pedidos de ENTREGA não usam esta função para o passo final: precisam
+    // passar por dispatch-delivery (PRONTO -> SAIU_PARA_ENTREGA) e depois
+    // confirm-delivery (SAIU_PARA_ENTREGA -> ENTREGUE).
+    if (order.type === "ENTREGA" && status === "ENTREGUE") {
+      throw new Error("Pedidos de entrega são confirmados via despacho + confirmação de entrega, não por aqui.");
+    }
 
     // Tabela de transições permitidas a nível de pedido.
     let allowed = false;

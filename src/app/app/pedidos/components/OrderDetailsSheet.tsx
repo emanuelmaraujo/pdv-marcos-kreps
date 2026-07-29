@@ -19,6 +19,8 @@ import {
   ArrowLeft,
   Utensils,
   ShoppingBag,
+  Bike,
+  MapPin,
   Clock,
   QrCode,
   Banknote,
@@ -112,7 +114,8 @@ function getOutstandingAmount(order: Order) {
   const pendingItemsTotal = (order.items ?? [])
     .filter((item) => item.status !== "CANCELLED" && item.payment_status !== "PAID" && item.payment_status !== "COURTESY")
     .reduce((sum, item) => sum + Number(item.total_price ?? 0), 0);
-  return pendingItemsTotal + (!order.paid_at ? Number(order.packing_fee ?? 0) : 0);
+  const feesTotal = !order.paid_at ? Number(order.packing_fee ?? 0) + Number(order.delivery_fee ?? 0) : 0;
+  return pendingItemsTotal + feesTotal;
 }
 
 export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Props) {
@@ -125,6 +128,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [showPayItems, setShowPayItems] = useState(false);
   const [showChangeMethod, setShowChangeMethod] = useState(false);
   const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
+  const [showDispatchForm, setShowDispatchForm] = useState(false);
+  const [courierNameInput, setCourierNameInput] = useState("");
+  const [courierPhoneInput, setCourierPhoneInput] = useState("");
 
   if (!order) return null;
 
@@ -147,6 +153,25 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const onReady   = () => handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
   const onDeliver = () =>
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" }));
+  const onDispatch = async () => {
+    setIsLoading(true);
+    setErrorMsg("");
+    try {
+      await pdvApi.dispatchDelivery({
+        orderId: order.id,
+        courierName: courierNameInput.trim() || undefined,
+        courierPhone: courierPhoneInput.trim() || undefined,
+      });
+      await onOrderUpdated();
+      setShowDispatchForm(false);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro ao despachar.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  const onConfirmDelivery = () =>
+    handleAction(() => pdvApi.confirmDelivery({ orderId: order.id }));
   const onRevertToQueue = () =>
     handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "NA_FILA" }));
   const onCancel = () => {
@@ -167,17 +192,20 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
     }));
 
   // Timeline logic
+  const isDelivery = order.type === "ENTREGA";
   const isNA_FILA = order.status === "NA_FILA";
   const isPRONTO  = order.status === "PRONTO";
+  const isSAIU_PARA_ENTREGA = order.status === "SAIU_PARA_ENTREGA";
   const isENTREGUE = order.status === "ENTREGUE";
   const isCANCELADO = order.status === "CANCELADO";
 
   const hasDiscount = order.discount_amount > 0;
   const hasPacking  = order.packing_fee > 0;
-  const subtotal = order.total_amount + order.discount_amount - order.packing_fee;
+  const hasDeliveryFee = Number(order.delivery_fee ?? 0) > 0;
+  const subtotal = order.total_amount + order.discount_amount - order.packing_fee - Number(order.delivery_fee ?? 0);
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
   const isPaid = order.payment_status === "PAID" || order.payment_status === "COURTESY";
-  const canAddItems = !isCANCELADO && !["EXPIRADO", "AGUARDANDO_CONFIRMACAO"].includes(order.status) && !isAppAwaitingPayment;
+  const canAddItems = !isCANCELADO && !["EXPIRADO", "AGUARDANDO_CONFIRMACAO", "SAIU_PARA_ENTREGA"].includes(order.status) && !isAppAwaitingPayment;
 
   const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
   const elapsedMin = isENTREGUE && order.delivered_at && queueEnteredAt
@@ -212,6 +240,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
           <div className="absolute right-4 top-4 opacity-10">
             {order.type === "BALCAO" ? (
               <Utensils size={64} />
+            ) : isDelivery ? (
+              <Bike size={64} />
             ) : (
               <ShoppingBag size={64} />
             )}
@@ -220,7 +250,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-                  {order.type === "BALCAO" ? "Balcão" : "Para Viagem"} · {order.source === "APP" ? "App" : order.source}
+                  {order.type === "BALCAO" ? "Balcão" : isDelivery ? "Entrega" : "Para Viagem"} · {order.source === "APP" ? "App" : order.source}
                 </p>
                 <h2 className="mt-0.5 text-2xl font-black leading-tight">
                   {order.customer_name || "Cliente Final"}
@@ -240,13 +270,37 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                     Viagem
                   </span>
                 )}
+                {isDelivery && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-200 ring-1 ring-blue-300/30">
+                    <Bike className="h-2.5 w-2.5" strokeWidth={2.25} />
+                    Entrega
+                  </span>
+                )}
                 <OrderStatusBadge status={order.status} />
                 <PaymentStatusBadge status={order.payment_status} />
               </div>
             </div>
 
+            {/* Endereço de entrega */}
+            {isDelivery && (order.delivery_street || order.delivery_neighborhood) && (
+              <div className="flex items-start gap-2 rounded-xl bg-white/10 px-3 py-2">
+                <MapPin size={14} className="mt-0.5 shrink-0 text-blue-300" />
+                <p className="text-xs font-bold text-zinc-100 leading-snug">
+                  {[order.delivery_street, order.delivery_number].filter(Boolean).join(", ")}
+                  {order.delivery_complement ? ` - ${order.delivery_complement}` : ""}
+                  {order.delivery_neighborhood ? ` · ${order.delivery_neighborhood}` : ""}
+                  {order.delivery_reference ? ` (${order.delivery_reference})` : ""}
+                  {(order.courier_name || order.courier_phone) && (
+                    <span className="mt-1 block text-blue-200">
+                      Entregador: {order.courier_name || "—"}{order.courier_phone ? ` · ${order.courier_phone}` : ""}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+
             {/* Timeline */}
-            {!isCANCELADO && (
+            {!isCANCELADO && !isDelivery && (
               <div className="flex items-center gap-2 pt-1">
                 <TimelineStep label="Criado"    time={fmt(order.created_at)}           done={true} />
                 <TimelineConnector done={!!order.confirmed_at} />
@@ -255,6 +309,19 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 <TimelineStep label="Pronto"    time={order.ready_at ? fmt(order.ready_at) : undefined}         active={isPRONTO}    done={isENTREGUE} />
                 <TimelineConnector done={isENTREGUE} />
                 <TimelineStep label="Entregue"  time={order.delivered_at ? fmt(order.delivered_at) : undefined} active={isENTREGUE}  done={isENTREGUE} />
+              </div>
+            )}
+            {!isCANCELADO && isDelivery && (
+              <div className="flex items-center gap-2 pt-1">
+                <TimelineStep label="Criado"    time={fmt(order.created_at)}           done={true} />
+                <TimelineConnector done={!!order.confirmed_at} />
+                <TimelineStep label="Na Fila"   time={order.confirmed_at ? fmt(order.confirmed_at) : undefined} active={isNA_FILA}   done={!!order.ready_at || isPRONTO || isSAIU_PARA_ENTREGA || isENTREGUE} />
+                <TimelineConnector done={!!order.ready_at} />
+                <TimelineStep label="Pronto"    time={order.ready_at ? fmt(order.ready_at) : undefined}         active={isPRONTO}    done={isSAIU_PARA_ENTREGA || isENTREGUE} />
+                <TimelineConnector done={!!order.dispatched_at} />
+                <TimelineStep label="Saiu p/ Entrega" time={order.dispatched_at ? fmt(order.dispatched_at) : undefined} active={isSAIU_PARA_ENTREGA} done={isENTREGUE} />
+                <TimelineConnector done={isENTREGUE} />
+                <TimelineStep label="Entregue"  time={order.delivery_delivered_at ? fmt(order.delivery_delivered_at) : undefined} active={isENTREGUE}  done={isENTREGUE} />
               </div>
             )}
             {isCANCELADO && (
@@ -279,7 +346,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
           {/* Financial summary */}
           <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
             <div className="bg-zinc-50/80 p-4 space-y-2">
-              {(hasDiscount || hasPacking) && (
+              {(hasDiscount || hasPacking || hasDeliveryFee) && (
                 <div className="flex justify-between text-xs font-semibold text-zinc-500">
                   <span>Subtotal</span>
                   <span>{currency.format(subtotal)}</span>
@@ -289,6 +356,12 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 <div className="flex justify-between text-xs font-semibold text-zinc-500">
                   <span>Embalagem</span>
                   <span>{currency.format(order.packing_fee)}</span>
+                </div>
+              )}
+              {hasDeliveryFee && (
+                <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                  <span>Entrega</span>
+                  <span>{currency.format(order.delivery_fee)}</span>
                 </div>
               )}
               {hasDiscount && (
@@ -330,7 +403,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                   <Package size={20} /> MARCAR PRONTO
                 </Button>
               )}
-              {order.status === "PRONTO" && (
+              {order.status === "PRONTO" && !isDelivery && (
                 <div className="flex gap-2">
                   <Button
                     className="h-14 flex-1 rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
@@ -349,6 +422,78 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                     <ArrowLeft size={16} /> NA FILA
                   </Button>
                 </div>
+              )}
+              {order.status === "PRONTO" && isDelivery && !showDispatchForm && (
+                <div className="flex gap-2">
+                  <Button
+                    className="h-14 flex-1 rounded-2xl bg-blue-500 text-lg font-black shadow-lg shadow-blue-200 hover:bg-blue-600 gap-2"
+                    onClick={() => {
+                      setCourierNameInput(order.courier_name || "");
+                      setCourierPhoneInput(order.courier_phone || "");
+                      setShowDispatchForm(true);
+                    }}
+                    disabled={isLoading}
+                  >
+                    <Bike size={20} /> DESPACHAR
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-14 rounded-2xl border-2 border-zinc-300 text-xs font-black text-zinc-500 hover:bg-zinc-100 gap-1 px-3"
+                    onClick={onRevertToQueue}
+                    disabled={isLoading}
+                    title="Voltar para Na Fila"
+                  >
+                    <ArrowLeft size={16} /> NA FILA
+                  </Button>
+                </div>
+              )}
+              {order.status === "PRONTO" && isDelivery && showDispatchForm && (
+                <div className="space-y-3 rounded-2xl border-2 border-blue-100 bg-blue-50 p-4 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Bike size={18} />
+                    <h4 className="text-sm font-black uppercase tracking-widest">Despachar Entrega</h4>
+                  </div>
+                  <input
+                    type="text"
+                    className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    placeholder="Nome do entregador"
+                    value={courierNameInput}
+                    onChange={(e) => setCourierNameInput(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    placeholder="Telefone do entregador (opcional)"
+                    value={courierPhoneInput}
+                    onChange={(e) => setCourierPhoneInput(e.target.value)}
+                  />
+                  <div className="flex gap-3">
+                    <Button
+                      className="flex-1 h-12 rounded-xl bg-blue-500 font-black shadow-lg shadow-blue-200 hover:bg-blue-600"
+                      onClick={onDispatch}
+                      disabled={isLoading}
+                    >
+                      CONFIRMAR DESPACHO
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-12 rounded-xl border-2 font-black"
+                      onClick={() => setShowDispatchForm(false)}
+                      disabled={isLoading}
+                    >
+                      VOLTAR
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {order.status === "SAIU_PARA_ENTREGA" && (
+                <Button
+                  className="h-14 w-full rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
+                  onClick={onConfirmDelivery}
+                  disabled={isLoading}
+                >
+                  <CheckCircle2 size={20} /> CONFIRMAR ENTREGA
+                </Button>
               )}
 
               {/* Payment pending / partial alert */}
@@ -396,7 +541,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
 
               {/* Secondary actions */}
               <div className="grid grid-cols-2 gap-3">
-                {["NA_FILA", "PRONTO", "ENTREGUE"].includes(order.status) && (
+                {["NA_FILA", "PRONTO", "SAIU_PARA_ENTREGA", "ENTREGUE"].includes(order.status) && (
                   <Button
                     variant="outline"
                     className="h-12 rounded-2xl border-2 font-black text-xs text-zinc-600 gap-2"

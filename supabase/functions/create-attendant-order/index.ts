@@ -100,14 +100,19 @@ serve(async (req) => {
       remember_checkout_data,
       branch_id,
       split_bill,
+      delivery_address,
+      courier_name,
+      courier_phone,
     } = await req.json();
 
     // split_bill: cria em AGUARDANDO_PAGAMENTO e pula impressão
     // A impressão acontece automaticamente em mark-payment quando tudo for pago
     const isSplitBill = split_bill === true;
+    const isDelivery = order_type === 'ENTREGA';
 
     if (!items || items.length === 0) throw new Error('O carrinho está vazio.');
     if (!branch_id) throw new Error('branch_id é obrigatório.');
+    if (isSplitBill && isDelivery) throw new Error('Divisão de conta não é suportada em pedidos de entrega.');
 
     // Valida que o atendente pode operar essa filial (RLS via JWT).
     const { data: branch, error: branchErr } = await supabaseClientAuth
@@ -117,7 +122,17 @@ serve(async (req) => {
       .single();
     if (branchErr || !branch) throw new Error('Filial inválida ou usuário sem permissão.');
     if (!branch.active) throw new Error('Filial inativa.');
-    if (order_type !== 'BALCAO' && order_type !== 'VIAGEM') throw new Error('order_type inválido (BALCAO ou VIAGEM).');
+    if (order_type !== 'BALCAO' && order_type !== 'VIAGEM' && order_type !== 'ENTREGA') {
+      throw new Error('order_type inválido (BALCAO, VIAGEM ou ENTREGA).');
+    }
+
+    // Endereço de entrega: obrigatório (rua + bairro) quando order_type = ENTREGA.
+    const deliveryAddr = (delivery_address && typeof delivery_address === 'object') ? delivery_address : {};
+    const deliveryStreet = isDelivery ? String(deliveryAddr.street || '').trim() : null;
+    const deliveryNeighborhood = isDelivery ? String(deliveryAddr.neighborhood || '').trim() : null;
+    if (isDelivery && (!deliveryStreet || !deliveryNeighborhood)) {
+      throw new Error('Endereço de entrega incompleto: informe ao menos rua e bairro.');
+    }
 
     const validPayMethods = ['PIX', 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'IFOOD', 'PENDING', 'COURTESY'];
     const validPayStatuses = ['PENDING', 'PAID', 'COURTESY'];
@@ -247,23 +262,33 @@ serve(async (req) => {
       }
     }
 
+    // Taxa de entrega: Fase 1 usa um valor fixo global (`default_delivery_fee`),
+    // sem zonas por bairro ainda. Nunca confia em um valor vindo do client.
+    let deliveryFee = 0;
+    if (isDelivery) {
+      if (!settingBool(settings.delivery_enabled)) {
+        throw new Error('Entrega não está habilitada no momento.');
+      }
+      deliveryFee = settingNumber(settings.default_delivery_fee);
+    }
+
     let discountAmount = 0;
     if (discount) {
       if (!discount.reason) throw new Error('É obrigatório informar o motivo (reason) do desconto.');
       if (discount.type !== 'AMOUNT' && discount.type !== 'PERCENT') throw new Error('Tipo de desconto inválido.');
-      
+
       if (discount.type === 'AMOUNT') {
         discountAmount = Number(discount.value);
       } else if (discount.type === 'PERCENT') {
         discountAmount = subtotalAmount * (Number(discount.value) / 100);
       }
-      
-      if (discountAmount > (subtotalAmount + packingFee)) {
-         throw new Error('Desconto maior que o total do pedido (subtotal + embalagem).');
+
+      if (discountAmount > (subtotalAmount + packingFee + deliveryFee)) {
+         throw new Error('Desconto maior que o total do pedido (subtotal + embalagem + entrega).');
       }
     }
 
-    const totalAmount = subtotalAmount + packingFee - discountAmount;
+    const totalAmount = subtotalAmount + packingFee + deliveryFee - discountAmount;
     if (totalAmount < 0) {
        throw new Error('Total final nunca pode ser menor que zero.');
     }
@@ -344,6 +369,17 @@ serve(async (req) => {
         notes: notes || null,
         discount_amount: discountAmount,
         packing_fee: packingFee,
+        delivery_fee: deliveryFee,
+        delivery_street: isDelivery ? deliveryStreet : null,
+        delivery_number: isDelivery ? (deliveryAddr.number || null) : null,
+        delivery_complement: isDelivery ? (deliveryAddr.complement || null) : null,
+        delivery_neighborhood: isDelivery ? deliveryNeighborhood : null,
+        delivery_city: isDelivery ? (deliveryAddr.city || null) : null,
+        delivery_state: isDelivery ? (deliveryAddr.state || null) : null,
+        delivery_postal_code: isDelivery ? (deliveryAddr.postal_code || null) : null,
+        delivery_reference: isDelivery ? (deliveryAddr.reference || null) : null,
+        courier_name: isDelivery ? (courier_name || null) : null,
+        courier_phone: isDelivery ? (courier_phone || null) : null,
         total_amount: totalAmount,
         payment_method: payment_method,
         payment_status: payment_status,
@@ -472,6 +508,12 @@ serve(async (req) => {
       notes,
       discount_amount: discountAmount,
       packing_fee: packingFee,
+      delivery_fee: deliveryFee,
+      delivery_street: isDelivery ? deliveryStreet : null,
+      delivery_number: isDelivery ? (deliveryAddr.number || null) : null,
+      delivery_complement: isDelivery ? (deliveryAddr.complement || null) : null,
+      delivery_neighborhood: isDelivery ? deliveryNeighborhood : null,
+      delivery_reference: isDelivery ? (deliveryAddr.reference || null) : null,
       total_amount: totalAmount,
       payment_status,
       payment_method,

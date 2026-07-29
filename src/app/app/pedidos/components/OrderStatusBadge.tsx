@@ -26,6 +26,10 @@ const MAP: Record<OrderStatus, { label: string; classes: string }> = {
     label: "Pronto",
     classes: "bg-[var(--status-success-bg)] text-[var(--status-success)]",
   },
+  SAIU_PARA_ENTREGA: {
+    label: "Saiu p/ entrega",
+    classes: "bg-blue-100 text-blue-700",
+  },
   ENTREGUE: {
     label: "Entregue",
     classes: "bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]",
