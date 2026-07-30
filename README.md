@@ -35,6 +35,7 @@ npm run dev
 - [Walkthrough Geral](walkthrough.md): Detalhes da arquitetura e fluxos.
 - [Plano de Teste Operacional](docs/mvp-operational-test.md): Checklist para validação do MVP.
 - [Guia WhatsApp](docs/whatsapp-cloud-setup.md): Configuração da API de notificações.
+- [Feature: Delivery](FEATURE_DELIVERY.md): Status e escopo da funcionalidade de entrega (documento vivo, atualizado por fase).
 
 ## 🔒 Segurança
 - **RLS (Row Level Security)**: Garantia de que Atendentes não alteram o cardápio e que usuários públicos apenas consultam status.
