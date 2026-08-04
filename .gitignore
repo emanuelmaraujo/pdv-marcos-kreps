@@ -59,6 +59,12 @@ teste.py
 qrcode_drive.png
 supabase/migrations/*.disabled
 
+# accidental local dumps / debug logs (see AGENTS.md for handling data)
+backup_data.sql
+backup_schema.sql
+errors.txt
+lint_output.txt
+
 # graphify (local knowledge graph artifacts)
 graphify-out/
 

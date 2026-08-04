@@ -1,6 +1,7 @@
 {
-  "name": "temp-frontend",
+  "name": "pdv-marcos-kreps",
   "version": "0.1.0",
+  "description": "Sistema de Ponto de Venda (PDV) mobile-first para a Marcos Krep's, com Next.js e Supabase.",
   "private": true,
   "scripts": {
     "dev": "next dev",
