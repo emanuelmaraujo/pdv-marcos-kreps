@@ -1,6 +1,8 @@
 # Proposta — Programa de Fidelidade Krep's
 
 > **Status:** proposta para discussão · **Autor:** Claude (full-stack + atendimento) · **Data:** 2026-05-25
+>
+> **Confirmado em 2026-08-04:** auditoria de código não encontrou nenhuma tabela, Edge Function ou componente de fidelidade — a proposta segue não iniciada, aguardando decisão.
 > **Branch sugerida:** `feat/fidelidade-mvp`
 > **Pré-requisitos já no projeto:** `customers` (E.164, opt-in), `whatsapp_messages` (fila + retry + idempotência), Edge Functions Supabase, multi-filial (`branches`), checkout público em `/pedir/[slug]`.
 

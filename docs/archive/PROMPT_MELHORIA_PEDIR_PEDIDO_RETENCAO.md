@@ -1,5 +1,7 @@
 # Prompt: melhoria premium das telas publicas `/pedir` e `/pedido/[publicToken]`
 
+> **Status:** ✅ Implementado, com 2 lacunas menores (verificado em 2026-08-04) — briefing histórico, não é backlog ativo. Faltou: extrair `src/app/pedir/page.tsx` em componentes menores (segue como arquivo único de ~2.560 linhas) e suporte a `prefers-reduced-motion`. Detalhes em `docs/archive/README.md`.
+
 Voce e um engenheiro senior full-stack trabalhando no **PDV Marcos Krep's**, um PWA de ponto de venda para creperia. Sua tarefa e melhorar profundamente a experiencia publica de pedido do cliente nas telas `/pedir` e `/pedido/[publicToken]`, preservando a identidade visual atual da marca e elevando a experiencia em telas maiores, checkout, pagamento e acompanhamento do pedido.
 
 Este projeto usa **Next.js 16.2.4**, **React 19.2.4**, **Tailwind CSS v4**, **Supabase**, **Edge Functions**, **Zustand** e **lucide-react**. Antes de alterar codigo Next.js, leia a documentacao local relevante em `node_modules/next/dist/docs/`, porque este Next tem mudancas de API, convencoes e estrutura em relacao ao conhecimento comum.

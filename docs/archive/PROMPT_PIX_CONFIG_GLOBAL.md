@@ -1,5 +1,7 @@
 # Prompt Mestre - Pix Copia e Cola, Webhook e Configuracoes Globais
 
+> **Status:** ✅ Implementado (verificado em 2026-08-04) — briefing histórico, não é backlog ativo. Ver `create-mercado-pago-payment` (fluxo Pix direto) e `mercado-pago-webhook` (validação `x-signature`). Detalhes em `docs/archive/README.md`.
+
 ## Contexto
 
 Projeto Marcos Krep's em Next.js + Supabase + Mercado Pago. A tela publica de pedido fica em `/pedir`, cria pedidos pendentes de pagamento e deve permitir Pix copia e cola com validacao por webhook. Configuracoes de horario de atendimento, WhatsApp e impressora sao globais: existe uma unica linha por chave na tabela `settings`, visivel para todos conforme permissao, e o admin deve sempre editar o valor real usado pelo sistema.

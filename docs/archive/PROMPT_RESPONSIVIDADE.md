@@ -1,5 +1,7 @@
 # Prompt: Responsividade Completa — PDV Marcos Krep's
 
+> **Status:** ✅ Implementado (verificado em 2026-08-04) — briefing histórico, não é backlog ativo. Ver `src/components/layout/Sidebar.tsx` e `src/lib/nav-items.ts`. Detalhes em `docs/archive/README.md`.
+
 ---
 
 ## Contexto do Sistema

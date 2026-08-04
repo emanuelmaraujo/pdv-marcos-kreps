@@ -20,8 +20,9 @@ Esta versão do Next difere do que está no seu treinamento (ex.: `proxy.ts` sub
 
 ## Onde procurar contexto (nessa ordem)
 1. `walkthrough.md` — arquitetura por tela (pedidos, impressão, cardápio, caixa, usuários). É o doc mais confiável sobre *como o sistema funciona hoje*, mas pode estar um passo atrás do código mais recente — confira o código quando a dúvida for crítica.
-2. `docs/` — operacional: `deployment-checklist.md`, `mvp-operational-test.md`, `whatsapp-cloud-setup.md`, `release-notes-mvp.md` (esta última é um snapshot antigo da fase RC1, não reflete o estado atual).
-3. Os arquivos `PROMPT_*.md` e `PROPOSTA_FIDELIDADE.md` na raiz **são briefings históricos de tarefas** escritos para uma sessão de IA específica, não specs vivas mantidas. Antes de tratar algo ali como "a fazer", confira no código/`git log` se já foi implementado. Exemplo real: `PROMPT_CHECKOUT_MERCADO_PAGO.md` descreve um checkout que **já está implementado** (`supabase/functions/create-mercado-pago-payment`, `supabase/functions/mercado-pago-webhook`, migration `20260511000000_public_checkout_mercado_pago.sql`, uso em `src/app/pedir/page.tsx`). Não reimplemente algo que já existe só porque um PROMPT_*.md pede.
+2. `docs/` — operacional: `deployment-checklist.md`, `mvp-operational-test.md`, `whatsapp-cloud-setup.md`, `caixa-action-plan.md` (plano faseado do módulo de caixa).
+3. `docs/archive/` — os 6 `PROMPT_*.md` e `release-notes-mvp.md` **são briefings históricos**, já auditados contra o código em 2026-08-04 (ver `docs/archive/README.md` para a tabela completa de veredito/evidência) — todos implementados, exceto duas lacunas menores em `PROMPT_MELHORIA_PEDIR_PEDIDO_RETENCAO.md`. Não são backlog ativo; não reimplemente o que já existe.
+4. `docs/proposals/` — propostas em aberto ainda não iniciadas, ex.: `PROPOSTA_FIDELIDADE.md`.
 
 ## Comandos
 - Raiz: `npm run dev`, `npm run build`, `npm run lint`.
@@ -34,4 +35,5 @@ O MVP (release candidate) já foi entregue — pedidos, impressão, WhatsApp, ca
 - **Precisão financeira**: reconciliar caixa vs. relatório, custo/margem por produto, comparação entre períodos, gargalo por etapa do pedido.
 - **Multi-filial**: rollout de cardápios por filial (ex.: Águas Claras / Candangolândia).
 - **Login por passkey/WebAuthn** como alternativa a senha.
-- **Programa de fidelidade** (`PROPOSTA_FIDELIDADE.md`): proposta escrita e detalhada, mas **ainda não iniciada** — confirmar com o time antes de começar a implementar.
+- **Programa de fidelidade** (`docs/proposals/PROPOSTA_FIDELIDADE.md`): proposta escrita e detalhada, mas **ainda não iniciada** — confirmar com o time antes de começar a implementar.
+- **Caixa**: auditoria de pagamentos e abertura/fechamento formal de sessão (`cash_sessions` existe no schema mas está órfã) — ver plano faseado em `docs/caixa-action-plan.md`.

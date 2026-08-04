@@ -1,5 +1,7 @@
 # Prompt: Checkout Publico Seguro com Mercado Pago - PDV Marcos Krep's
 
+> **Status:** ✅ Implementado (verificado em 2026-08-04) — briefing histórico, não é backlog ativo. Ver `supabase/functions/create-mercado-pago-payment`, `supabase/functions/mercado-pago-webhook` e a migration `public_checkout_mercado_pago.sql`. Detalhes em `docs/archive/README.md`.
+
 ---
 
 ## Papel

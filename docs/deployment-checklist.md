@@ -4,29 +4,15 @@ Este guia contém os passos necessários para subir o MVP do PDV Marcos Krep's e
 
 ## 1. Banco de Dados e Infraestrutura
 - [ ] Criar novo projeto no Supabase Cloud.
-- [ ] Aplicar todas as migrations na ordem correta:
-  - `20260502232400_init_pdv_schema.sql`
-  - `20260503120000_add_whatsapp_logs.sql`
-  - `20260507150000_add_product_addons_constraint.sql`
-  - `20260508100000_fix_daily_number_trigger.sql`
+- [ ] Aplicar todas as migrations: `supabase db push` aplica tudo que estiver em `supabase/migrations/` em ordem cronológica automaticamente — não é necessário (nem recomendado) listar arquivos manualmente aqui, essa lista desatualiza a cada nova migration.
 - [ ] Executar o `seed.sql` para popular o cardápio real.
-- [ ] Configurar os segredos (Secrets) nas Edge Functions:
+- [ ] Configurar os segredos (Secrets) nas Edge Functions (ver `.github/workflows/deploy-functions.yml` e `docs/whatsapp-cloud-setup.md` para a lista completa; no mínimo):
   - `WHATSAPP_ACCESS_TOKEN`
   - `WHATSAPP_PHONE_NUMBER_ID`
   - `WHATSAPP_VERIFY_TOKEN`
 
 ## 2. Edge Functions
-- [ ] Fazer deploy de todas as funções:
-  - `add-items-to-order`
-  - `cash-report`
-  - `confirm-order`
-  - `create-attendant-order`
-  - `create-public-order`
-  - `get-public-order-status`
-  - `manage-users`
-  - `mark-payment`
-  - `reprint-order`
-  - `update-order-status`
+- [ ] Fazer deploy de todas as funções listadas em [`.github/workflows/deploy-functions.yml`](../.github/workflows/deploy-functions.yml) — esse workflow é a fonte da verdade da lista atual (é o que já roda em produção a cada push), então não duplicamos a lista aqui.
 - [ ] Testar uma chamada `OPTIONS` em cada função para garantir que o CORS está OK.
 
 ## 3. Frontend (Vercel/Netlify)

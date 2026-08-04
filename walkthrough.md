@@ -84,7 +84,7 @@ A tela de gestão do cardápio permite que o administrador visualize, edite e co
 O backend usa `menuApi.updateProduct()` e `menuApi.updateAddon()` (em `src/lib/api/menu-api.ts`) para fazer updates diretos na tabela via Supabase client, respeitando RLS.
 
 ### 8. Caixa / Fechamento do Dia (`/app/caixa`)
-A tela de caixa foi implementada como um resumo operacional simples do dia, sem Mercado Pago, Pix automático, abertura/fechamento formal de sessão, relatórios avançados ou exportação.
+A tela de caixa (`src/app/app/caixa/page.tsx`) é um resumo operacional do dia; o relatório gerencial completo (margem/custo, heatmap, comparação de períodos, gargalo por etapa) vive em `src/app/app/caixa/relatorio/page.tsx`, alimentado pela Edge Function `cash-report`. Mercado Pago/Pix já estão implementados em todo o app (ver `docs/archive/PROMPT_CHECKOUT_MERCADO_PAGO.md`). O que ainda não existe é abertura/fechamento formal de sessão de caixa — ver plano em `docs/caixa-action-plan.md`.
 
 **Tabelas usadas:**
 - `orders`: fonte principal para totais, status, forma de pagamento, descontos, taxa de embalagem e pedidos pendentes.
@@ -107,15 +107,14 @@ A tela de caixa foi implementada como um resumo operacional simples do dia, sem 
 - Cortesia e Pendente aparecem separados e não são tratados como faturamento recebido.
 
 **Limitações atuais:**
-- A tela usa `orders` como fonte principal. Ela não cruza com `payments`, então não audita múltiplos pagamentos, estornos parciais ou divergências entre pedido e pagamento.
+- A tabela `payments` já é usada (`cash-api.ts`, `cash-report/index.ts`) para agregar por método de pagamento e suportar split-bill (múltiplos métodos no mesmo pedido), mas não existe uma tela de auditoria que compare `payments` a `orders.total_amount` para achar divergências ou estornos parciais — o enum `REFUNDED` existe mas nenhum fluxo de estorno o usa.
 - O schema real usa a coluna `packing_fee`; a interface apresenta esse valor como taxa de embalagem. Não foi criada migration para renomear a coluna.
 - O schema atual não possui `subtotal_amount` em `orders`; por isso o resumo usa `total_amount` conforme a regra do MVP.
+- A tabela `cash_sessions` (abertura/fechamento de caixa) já existe no schema desde a migration inicial, mas está órfã: nenhuma Edge Function, tela ou código a lê/escreve hoje.
+- Exportação existe (CSV client-side na aba "Pedidos" de `relatorio/page.tsx`), mas só ali — o resumo diário em `caixa/page.tsx` não tem exportação, e não há PDF/xlsx em lugar nenhum.
 - A visibilidade depende da RLS do usuário logado. O frontend não usa service role.
 
-**Próximos passos específicos do caixa:**
-- Avaliar uso da tabela `payments` para auditoria quando houver fluxo financeiro mais completo.
-- Criar sessões reais de caixa (`cash_sessions`) somente quando a regra operacional de abertura/fechamento estiver definida.
-- Adicionar exportação e relatórios depois do piloto.
+**Próximos passos específicos do caixa:** ver `docs/caixa-action-plan.md` para o plano faseado (auditoria de pagamentos, abertura/fechamento de sessão, exportação).
 
 ### 9. Segurança Backend (Trust-no-client)
 Para garantir a integridade total do sistema, o backend (Edge Functions) revalida cada centavo e cada regra de negócio:
@@ -145,8 +144,5 @@ O sistema atinge o status de **Release Candidate (RC)** pronto para homologaçã
 - [x] **Comunicação:** WhatsApp e Impressão integrados via filas assíncronas.
 - [x] **Administração:** Controle total de cardápio e equipe via painel logado.
 
-### 13. Próximos Passos (Go-Live)
-1. **Implantação em Produção:** Seguir o [`docs/deployment-checklist.md`](docs/deployment-checklist.md).
-2. **Homologação Local:** Executar a bateria de testes em [`docs/mvp-operational-test.md`](docs/mvp-operational-test.md) com hardware real.
-3. **Treinamento:** Apresentar o fluxo de "Adição à Comanda" e "Reimpressão" para a equipe.
-4. **Monitoramento:** Acompanhar `audit_logs` nos primeiros dias de operação real.
+### 13. Estado atual e próximos passos
+O go-live do MVP já aconteceu; o projeto está em fase de expansão pós-MVP. Para o estado corrente (o que está em produção e em que o time está focado agora), veja a seção "Objetivos atuais" em [`AGENTS.md`](AGENTS.md) — mantida atualizada ali para não duplicar/desatualizar em dois lugares. Para provisionar um ambiente novo do zero, o checklist operacional segue em [`docs/deployment-checklist.md`](docs/deployment-checklist.md).

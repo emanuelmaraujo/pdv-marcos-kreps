@@ -1,5 +1,7 @@
 # Prompt mestre: vitrine publica, checkout e Mercado Pago
 
+> **Status:** ✅ Implementado (verificado em 2026-08-04) — briefing histórico, não é backlog ativo. Ver filtros por proteína/sabor derivados de `product_ingredients` em `src/app/pedir/page.tsx`. Detalhes em `docs/archive/README.md`.
+
 Voce e um agente senior trabalhando no projeto `D:\Dev\pdv`, um PDV Next.js 16 + Supabase do Marcos Krep's. Siga estritamente `AGENTS.md`: esta versao do Next.js tem mudancas importantes, entao leia a documentacao em `node_modules/next/dist/docs/` antes de alterar codigo.
 
 ## Objetivo

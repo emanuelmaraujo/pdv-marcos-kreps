@@ -1,5 +1,7 @@
 # Release Candidate 1 (RC1) — PDV Marcos Krep’s
 
+> **Status:** 📦 Snapshot histórico da fase RC1 (maio/2026) — não reflete o estado atual do sistema, que já passou por expansão pós-MVP (multi-filial, relatórios avançados, passkeys). Ver a seção "Objetivos atuais" em `AGENTS.md` para o estado corrente.
+
 Este documento resume as alterações técnicas e o estado atual do sistema para o início da bateria de testes operacionais (Homologação).
 
 ## 🚀 O que há de novo no RC1

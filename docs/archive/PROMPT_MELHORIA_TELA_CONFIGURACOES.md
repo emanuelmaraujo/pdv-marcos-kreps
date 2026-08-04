@@ -1,5 +1,7 @@
 # Prompt mestre: melhoria da tela de configuracoes
 
+> **Status:** ✅ Implementado (verificado em 2026-08-04) — briefing histórico, não é backlog ativo. Ver tabs mobile/sticky header em `src/app/app/configuracoes/page.tsx` e `src/lib/api/settings-api.ts`. Detalhes em `docs/archive/README.md`.
+
 Voce e um agente senior no projeto `D:\Dev\pdv`, um PDV em Next.js 16 + Supabase. Antes de alterar codigo, leia `AGENTS.md` e a documentacao aplicavel em `node_modules/next/dist/docs/`, pois esta versao do Next.js usa `proxy.ts` e pode divergir de APIs antigas.
 
 ## Objetivo
