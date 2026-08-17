@@ -511,40 +511,78 @@ serve(async (req) => {
       nowIso,
     });
 
-    const { data: order, error: orderErr } = await supabaseAdmin
-      .from("orders")
-      .insert({
-        branch_id: branch.id,
-        type: orderType,
-        source: "APP",
-        status: "AGUARDANDO_PAGAMENTO",
-        payment_status: "PENDING",
-        payment_method: "PENDING",
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        customer_email: customerEmail,
-        customer_id: customerId,
-        packing_fee: packingFeeValue,
-        delivery_fee: deliveryFeeValue,
-        delivery_street: isDelivery ? deliveryStreet : null,
-        delivery_number: isDelivery ? deliveryNumber : null,
-        delivery_complement: isDelivery ? deliveryComplement : null,
-        delivery_neighborhood: isDelivery ? deliveryNeighborhood : null,
-        delivery_city: isDelivery ? deliveryCity : null,
-        delivery_state: isDelivery ? deliveryState : null,
-        delivery_postal_code: isDelivery ? deliveryPostalCode : null,
-        delivery_reference: isDelivery ? deliveryReference : null,
-        total_amount: totalAmount,
-        notes,
-      })
-      .select("id, daily_number, public_token, total_amount, status, payment_status")
-      .single();
+    // Monta o payload já validado/precificado e delega a escrita atômica
+    // (pedido + itens + addons + ingredientes removidos + auditoria) pra RPC —
+    // ver supabase/migrations/20260817080000_create_public_order_transactional.sql.
+    const orderPayload = {
+      branch_id: branch.id,
+      order_type: orderType,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail,
+      customer_id: customerId,
+      packing_fee: packingFeeValue,
+      delivery_fee: deliveryFeeValue,
+      delivery: isDelivery ? {
+        street: deliveryStreet,
+        number: deliveryNumber,
+        complement: deliveryComplement,
+        neighborhood: deliveryNeighborhood,
+        city: deliveryCity,
+        state: deliveryState,
+        postal_code: deliveryPostalCode,
+        reference: deliveryReference,
+      } : null,
+      total_amount: totalAmount,
+      notes,
+      payment_method_code: paymentMethodCode,
+      items: items.map((item: any) => {
+        const product = products?.find((p: any) => p.id === item.product_id);
+        const quantity = Math.trunc(toNumber(item.quantity));
+        let itemTotalPrice = toNumber(product.price) * quantity;
 
-    if (orderErr) throw new Error("Erro ao criar pedido.");
+        const addonRows = (item.addons || []).map((itemAddon: any) => {
+          const addon = addons?.find((candidate: any) => candidate.id === itemAddon.addon_id);
+          const addonQuantity = Math.trunc(toNumber(itemAddon.quantity || 1));
+          itemTotalPrice += toNumber(addon.price) * addonQuantity * quantity;
+          return {
+            addon_id: addon.id,
+            quantity: addonQuantity,
+            addon_name_snapshot: addon.name,
+            addon_price_snapshot: addon.price,
+          };
+        });
+
+        const removedRows = (item.removed_ingredient_ids || []).map((removedId: string) => {
+          const ingredient = ingredients?.find((candidate: any) => candidate.id === removedId);
+          return { ingredient_id: removedId, ingredient_name_snapshot: ingredient.name };
+        });
+
+        return {
+          product_id: product.id,
+          product_name_snapshot: product.name,
+          product_price_snapshot: product.price,
+          cost_price_snapshot: product.cost_price ?? 0,
+          production_sector: resolveProductionSector(product),
+          quantity,
+          observation: cleanText(item.notes, 300),
+          total_price: Number(itemTotalPrice.toFixed(2)),
+          removed_ingredients: removedRows,
+          addons: addonRows,
+        };
+      }),
+    };
+
+    const { data: rpcResult, error: rpcErr } = await supabaseAdmin.rpc(
+      "create_public_order_transactional",
+      { p_payload: orderPayload },
+    );
+    if (rpcErr) throw new Error("Erro ao criar pedido.");
 
     // Salva o endereço digitado como novo endereço reutilizável do cliente,
     // só quando ele marcou explicitamente a opção — nunca por padrão. Endereço
     // já selecionado a partir de um salvo (delivery_address_id) não é duplicado.
+    // Non-blocking: não afeta o pedido, que já foi criado com sucesso acima.
     if (isDelivery && saveAddress && !deliveryAddressId && customerId) {
       const { error: addressErr } = await supabaseAdmin.from("customer_addresses").insert({
         customer_id: customerId,
@@ -562,86 +600,15 @@ serve(async (req) => {
       }
     }
 
-    for (const item of items) {
-      const product = products?.find((p: any) => p.id === item.product_id);
-      const quantity = Math.trunc(toNumber(item.quantity));
-      let itemTotalPrice = toNumber(product.price) * quantity;
-
-      for (const itemAddon of item.addons || []) {
-        const addon = addons?.find((candidate: any) => candidate.id === itemAddon.addon_id);
-        itemTotalPrice += toNumber(addon.price) * Math.trunc(toNumber(itemAddon.quantity || 1)) * quantity;
-      }
-
-      const { data: orderItem, error: itemErr } = await supabaseAdmin
-        .from("order_items")
-        .insert({
-          order_id: order.id,
-          product_id: product.id,
-          product_name_snapshot: product.name,
-          product_price_snapshot: product.price,
-          cost_price_snapshot: product.cost_price ?? 0,
-          production_sector: resolveProductionSector(product),
-          quantity,
-          observation: cleanText(item.notes, 300),
-          total_price: Number(itemTotalPrice.toFixed(2)),
-        })
-        .select("id")
-        .single();
-
-      if (itemErr) throw new Error("Erro ao inserir item do pedido.");
-
-      if (Array.isArray(item.removed_ingredient_ids) && item.removed_ingredient_ids.length > 0) {
-        const removedRows = item.removed_ingredient_ids.map((removedId: string) => {
-          const ingredient = ingredients?.find((candidate: any) => candidate.id === removedId);
-          return {
-            order_item_id: orderItem.id,
-            ingredient_id: removedId,
-            ingredient_name_snapshot: ingredient.name,
-          };
-        });
-        const { error } = await supabaseAdmin.from("order_item_removed_ingredients").insert(removedRows);
-        if (error) throw new Error("Erro ao inserir ingredientes removidos.");
-      }
-
-      if (Array.isArray(item.addons) && item.addons.length > 0) {
-        const addonRows = item.addons.map((itemAddon: any) => {
-          const addon = addons?.find((candidate: any) => candidate.id === itemAddon.addon_id);
-          return {
-            order_item_id: orderItem.id,
-            addon_id: addon.id,
-            quantity: Math.trunc(toNumber(itemAddon.quantity || 1)),
-            addon_name_snapshot: addon.name,
-            addon_price_snapshot: addon.price,
-          };
-        });
-        const { error } = await supabaseAdmin.from("order_item_addons").insert(addonRows);
-        if (error) throw new Error("Erro ao inserir adicionais do item.");
-      }
-    }
-
-    await supabaseAdmin.from("audit_logs").insert({
-      action: "PUBLIC_ORDER_CREATED_AWAITING_PAYMENT",
-      table_name: "orders",
-      record_id: order.id,
-      new_data: {
-        daily_number: order.daily_number,
-        total_amount: order.total_amount,
-        payment_method_code: paymentMethodCode,
-        source: "APP",
-        order_type: orderType,
-        delivery_fee: isDelivery ? deliveryFeeValue : undefined,
-      },
-    });
-
     return jsonResponse(req, {
       success: true,
       order: {
-        order_id: order.id,
-        daily_number: order.daily_number,
-        public_token: order.public_token,
-        total_amount: Number(order.total_amount),
-        status: order.status,
-        payment_status: order.payment_status,
+        order_id: rpcResult.order_id,
+        daily_number: rpcResult.daily_number,
+        public_token: rpcResult.public_token,
+        total_amount: Number(rpcResult.total_amount),
+        status: rpcResult.status,
+        payment_status: rpcResult.payment_status,
         payment_method_code: paymentMethodCode,
         delivery_fee: isDelivery ? deliveryFeeValue : undefined,
       },

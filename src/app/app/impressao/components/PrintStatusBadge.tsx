@@ -1,9 +1,11 @@
 import { Badge, BadgeVariant } from "@/components/ui/Badge";
 
 const MAP: Record<string, { label: string; variant: BadgeVariant }> = {
-  PENDING: { label: "Pendente", variant: "warning" },
-  PRINTED: { label: "Impresso", variant: "success" },
-  FAILED:  { label: "Falha",    variant: "destructive" },
+  PENDING:    { label: "Pendente",   variant: "warning" },
+  PROCESSING: { label: "Imprimindo", variant: "warning" },
+  PRINTED:    { label: "Impresso",   variant: "success" },
+  FAILED:     { label: "Falha",      variant: "destructive" },
+  SKIPPED:    { label: "Pulado",     variant: "neutral" },
 };
 
 export function PrintStatusBadge({ status }: { status: string }) {
