@@ -1,6 +1,6 @@
-// CRUD de filiais, zonas de entrega e vínculos de atendentes — apenas ADMIN.
+// CRUD de filiais, zonas de entrega, entregadores e vínculos de atendentes — apenas ADMIN.
 import { createClient } from '../supabase/client';
-import { Branch, BranchType, DeliveryZone } from '@/types/pdv';
+import { Branch, BranchType, Courier, DeliveryZone } from '@/types/pdv';
 import { normalizeNeighborhood } from '../utils/delivery';
 
 export interface BranchInput {
@@ -188,5 +188,58 @@ export const deliveryZonesApi = {
     const supabase = createClient();
     const { error } = await supabase.from('delivery_zones').delete().eq('id', id);
     if (error) throw new Error(`Erro ao remover zona de entrega: ${error.message}`);
+  },
+};
+
+export interface CourierInput {
+  name: string;
+  phone?: string;
+  active?: boolean;
+}
+
+// CRUD de entregadores cadastrados por filial — apenas ADMIN, mesmo padrão de
+// deliveryZonesApi. Entregador avulso (sem cadastro) continua funcionando no
+// despacho digitando nome/telefone livremente.
+export const couriersApi = {
+  listByBranch: async (branchId: string): Promise<Courier[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('couriers')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('name');
+    if (error) throw new Error(`Erro ao listar entregadores: ${error.message}`);
+    return (data ?? []) as Courier[];
+  },
+
+  create: async (branchId: string, input: CourierInput): Promise<Courier> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('couriers')
+      .insert([{
+        branch_id: branchId,
+        name: input.name.trim(),
+        phone: input.phone?.trim() || null,
+        active: input.active ?? true,
+      }])
+      .select()
+      .single();
+    if (error) throw new Error(`Erro ao criar entregador: ${error.message}`);
+    return data as Courier;
+  },
+
+  update: async (id: string, patch: Partial<CourierInput>): Promise<void> => {
+    const supabase = createClient();
+    const payload: Record<string, unknown> = { ...patch };
+    if (typeof patch.name === 'string') payload.name = patch.name.trim();
+    if (typeof patch.phone === 'string') payload.phone = patch.phone.trim() || null;
+    const { error } = await supabase.from('couriers').update(payload).eq('id', id);
+    if (error) throw new Error(`Erro ao atualizar entregador: ${error.message}`);
+  },
+
+  remove: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from('couriers').delete().eq('id', id);
+    if (error) throw new Error(`Erro ao remover entregador: ${error.message}`);
   },
 };

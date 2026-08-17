@@ -9,6 +9,8 @@ import { PayItemsModal } from "./PayItemsModal";
 import { EditOrderItemSheet } from "./EditOrderItemSheet";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { pdvApi } from "@/lib/api/pdv-api";
+import { couriersApi } from "@/lib/api/branches-admin-api";
+import type { Courier } from "@/types/pdv";
 import { useRouter } from "next/navigation";
 import {
   X, PlusCircle, Printer, CheckCircle2, Package, XCircle,
@@ -111,6 +113,8 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [courierNameInput, setCourierNameInput] = useState("");
   const [courierPhoneInput, setCourierPhoneInput] = useState("");
+  const [courierIdInput, setCourierIdInput] = useState<string>("");
+  const [registeredCouriers, setRegisteredCouriers] = useState<Courier[]>([]);
 
   // Close on Escape
   useEffect(() => {
@@ -164,8 +168,9 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
     try {
       await pdvApi.dispatchDelivery({
         orderId: order.id,
-        courierName: courierNameInput.trim() || undefined,
-        courierPhone: courierPhoneInput.trim() || undefined,
+        courierId: courierIdInput || undefined,
+        courierName: courierIdInput ? undefined : (courierNameInput.trim() || undefined),
+        courierPhone: courierIdInput ? undefined : (courierPhoneInput.trim() || undefined),
       });
       await onOrderUpdated();
       setShowDispatchForm(false);
@@ -173,6 +178,17 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
       setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro ao despachar.");
     } finally {
       setIsLoading(false);
+    }
+  };
+  const openDispatchForm = async () => {
+    setCourierNameInput(order.courier_name || "");
+    setCourierPhoneInput(order.courier_phone || "");
+    setCourierIdInput("");
+    setShowDispatchForm(true);
+    try {
+      setRegisteredCouriers(await couriersApi.listByBranch(order.branch_id));
+    } catch {
+      setRegisteredCouriers([]);
     }
   };
   const onConfirmDelivery = () =>
@@ -222,6 +238,8 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const queueMinutes = minutesBetween(queueAt, order.ready_at ?? (isPRONTO ? new Date().toISOString() : null));
   const readyToDeliveredMinutes = minutesBetween(order.ready_at, order.delivered_at);
   const totalMinutes = minutesBetween(order.created_at, order.delivered_at ?? (isENTREGUE ? order.updated_at : null));
+  const readyToDispatchedMinutes = minutesBetween(order.ready_at, order.dispatched_at);
+  const dispatchedToDeliveredMinutes = minutesBetween(order.dispatched_at, order.delivery_delivered_at);
 
   const historyEvents = [
     { label: "Criado",     time: order.created_at },
@@ -419,11 +437,20 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              <TimeMetric label="Fila" value={formatDuration(queueMinutes)} />
-              <TimeMetric label="Pronto > entrega" value={formatDuration(readyToDeliveredMinutes)} />
-              <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
-            </div>
+            {isDelivery ? (
+              <div className="grid grid-cols-4 gap-2">
+                <TimeMetric label="Fila" value={formatDuration(queueMinutes)} />
+                <TimeMetric label="Pronto > saiu" value={formatDuration(readyToDispatchedMinutes)} />
+                <TimeMetric label="Saiu > entregue" value={formatDuration(dispatchedToDeliveredMinutes)} />
+                <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                <TimeMetric label="Fila" value={formatDuration(queueMinutes)} />
+                <TimeMetric label="Pronto > entrega" value={formatDuration(readyToDeliveredMinutes)} />
+                <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
+              </div>
+            )}
 
             {/* Notes */}
             {order.notes && (
@@ -517,11 +544,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   <div className="flex gap-2">
                     <Button
                       className="h-14 flex-1 rounded-2xl bg-blue-500 text-base font-black shadow-lg shadow-blue-200 hover:bg-blue-600 gap-2"
-                      onClick={() => {
-                        setCourierNameInput(order.courier_name || "");
-                        setCourierPhoneInput(order.courier_phone || "");
-                        setShowDispatchForm(true);
-                      }}
+                      onClick={openDispatchForm}
                       disabled={isLoading}
                     >
                       <Bike size={18} /> DESPACHAR
@@ -543,20 +566,36 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                       <Bike size={16} />
                       <h4 className="text-xs font-black uppercase tracking-widest">Despachar Entrega</h4>
                     </div>
-                    <input
-                      type="text"
-                      className="w-full rounded-xl border border-blue-100 bg-white p-2.5 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                      placeholder="Nome do entregador"
-                      value={courierNameInput}
-                      onChange={(e) => setCourierNameInput(e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      className="w-full rounded-xl border border-blue-100 bg-white p-2.5 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                      placeholder="Telefone do entregador (opcional)"
-                      value={courierPhoneInput}
-                      onChange={(e) => setCourierPhoneInput(e.target.value)}
-                    />
+                    {registeredCouriers.length > 0 && (
+                      <select
+                        className="w-full rounded-xl border border-blue-100 bg-white p-2.5 text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        value={courierIdInput}
+                        onChange={(e) => setCourierIdInput(e.target.value)}
+                      >
+                        <option value="">Digitar entregador avulso...</option>
+                        {registeredCouriers.filter((c) => c.active).map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ""}</option>
+                        ))}
+                      </select>
+                    )}
+                    {!courierIdInput && (
+                      <>
+                        <input
+                          type="text"
+                          className="w-full rounded-xl border border-blue-100 bg-white p-2.5 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          placeholder="Nome do entregador"
+                          value={courierNameInput}
+                          onChange={(e) => setCourierNameInput(e.target.value)}
+                        />
+                        <input
+                          type="text"
+                          className="w-full rounded-xl border border-blue-100 bg-white p-2.5 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          placeholder="Telefone do entregador (opcional)"
+                          value={courierPhoneInput}
+                          onChange={(e) => setCourierPhoneInput(e.target.value)}
+                        />
+                      </>
+                    )}
                     <div className="flex gap-2">
                       <Button
                         className="flex-1 h-11 rounded-xl bg-blue-500 text-sm font-black shadow-lg shadow-blue-200 hover:bg-blue-600"

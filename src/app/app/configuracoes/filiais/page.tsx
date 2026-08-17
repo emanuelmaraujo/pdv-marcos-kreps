@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Branch, BranchType, DeliveryZone } from '@/types/pdv';
-import { branchesAdminApi, BranchInput, deliveryZonesApi } from '@/lib/api/branches-admin-api';
+import { Branch, BranchType, Courier, DeliveryZone } from '@/types/pdv';
+import { branchesAdminApi, BranchInput, couriersApi, deliveryZonesApi } from '@/lib/api/branches-admin-api';
 import { useBranch } from '@/contexts/BranchContext';
 import { Button } from '@/components/ui/Button';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
@@ -95,6 +95,10 @@ export default function FiliaisPage() {
   const [zonesLoading, setZonesLoading] = useState(false);
   const [newZone, setNewZone] = useState({ neighborhood: '', fee: '' });
   const [savingZone, setSavingZone] = useState(false);
+  const [couriers, setCouriers] = useState<Courier[]>([]);
+  const [couriersLoading, setCouriersLoading] = useState(false);
+  const [newCourier, setNewCourier] = useState({ name: '', phone: '' });
+  const [savingCourier, setSavingCourier] = useState(false);
   const { currentBranchId, refresh: refreshCtx } = useBranch();
   const { toasts, addToast, removeToast } = useToast();
 
@@ -125,6 +129,17 @@ export default function FiliaisPage() {
     }
   }, [addToast]);
 
+  const loadCouriers = useCallback(async (branchId: string) => {
+    setCouriersLoading(true);
+    try {
+      setCouriers(await couriersApi.listByBranch(branchId));
+    } catch (e: unknown) {
+      addToast('error', e instanceof Error ? e.message : 'Erro ao carregar entregadores.');
+    } finally {
+      setCouriersLoading(false);
+    }
+  }, [addToast]);
+
   function openCreate() {
     setEditing({ ...EMPTY });
     setEditingId(null);
@@ -132,6 +147,8 @@ export default function FiliaisPage() {
     setWaCfg({});
     setZones([]);
     setNewZone({ neighborhood: '', fee: '' });
+    setCouriers([]);
+    setNewCourier({ name: '', phone: '' });
     setOpenSection('basic');
   }
 
@@ -152,8 +169,11 @@ export default function FiliaisPage() {
     setWaCfg(parseTemplates(b.whatsapp_templates));
     setZones([]);
     setNewZone({ neighborhood: '', fee: '' });
+    setCouriers([]);
+    setNewCourier({ name: '', phone: '' });
     setOpenSection('basic');
     void loadZones(b.id);
+    void loadCouriers(b.id);
   }
 
   async function addZone() {
@@ -192,6 +212,40 @@ export default function FiliaisPage() {
       await loadZones(editingId);
     } catch (e: unknown) {
       addToast('error', e instanceof Error ? e.message : 'Erro ao remover bairro.');
+    }
+  }
+
+  async function addCourier() {
+    if (!editingId || !newCourier.name.trim()) return;
+    setSavingCourier(true);
+    try {
+      await couriersApi.create(editingId, { name: newCourier.name.trim(), phone: newCourier.phone.trim() || undefined });
+      setNewCourier({ name: '', phone: '' });
+      await loadCouriers(editingId);
+    } catch (e: unknown) {
+      addToast('error', e instanceof Error ? e.message : 'Erro ao adicionar entregador.');
+    } finally {
+      setSavingCourier(false);
+    }
+  }
+
+  async function toggleCourierActive(courier: Courier) {
+    if (!editingId) return;
+    try {
+      await couriersApi.update(courier.id, { active: !courier.active });
+      await loadCouriers(editingId);
+    } catch (e: unknown) {
+      addToast('error', e instanceof Error ? e.message : 'Erro ao atualizar entregador.');
+    }
+  }
+
+  async function removeCourier(courier: Courier) {
+    if (!editingId) return;
+    try {
+      await couriersApi.remove(courier.id);
+      await loadCouriers(editingId);
+    } catch (e: unknown) {
+      addToast('error', e instanceof Error ? e.message : 'Erro ao remover entregador.');
     }
   }
 
@@ -645,6 +699,90 @@ export default function FiliaisPage() {
                               aria-label="Adicionar bairro"
                             >
                               {savingZone ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3 space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+                        Entregadores cadastrados
+                      </p>
+                      <p className="text-[11px] text-[var(--text-secondary)]">
+                        Opcional — o despacho sempre permite digitar um entregador avulso também.
+                      </p>
+
+                      {!editingId ? (
+                        <p className="text-[11px] font-semibold text-[var(--status-warning)]">
+                          Salve a filial primeiro para cadastrar entregadores.
+                        </p>
+                      ) : (
+                        <>
+                          {couriersLoading ? (
+                            <div className="flex items-center gap-2 py-2 text-xs text-[var(--text-secondary)]">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando entregadores...
+                            </div>
+                          ) : couriers.length > 0 ? (
+                            <div className="space-y-1.5">
+                              {couriers.map((courier) => (
+                                <div
+                                  key={courier.id}
+                                  className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1.5"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleCourierActive(courier)}
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      courier.active
+                                        ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]'
+                                        : 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]'
+                                    }`}
+                                  >
+                                    {courier.active ? 'Ativo' : 'Inativo'}
+                                  </button>
+                                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--text-primary)]">
+                                    {courier.name}
+                                  </span>
+                                  {courier.phone && (
+                                    <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{courier.phone}</span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeCourier(courier)}
+                                    className="shrink-0 rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
+                                    aria-label={`Remover ${courier.name}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          <div className="flex gap-2 pt-1">
+                            <input
+                              type="text"
+                              value={newCourier.name}
+                              onChange={(e) => setNewCourier((p) => ({ ...p, name: e.target.value }))}
+                              placeholder="Nome do entregador"
+                              className={`${INPUT_CLS} flex-1`}
+                            />
+                            <input
+                              type="text"
+                              value={newCourier.phone}
+                              onChange={(e) => setNewCourier((p) => ({ ...p, phone: e.target.value }))}
+                              placeholder="Telefone"
+                              className={`${INPUT_CLS} w-32`}
+                            />
+                            <button
+                              type="button"
+                              onClick={addCourier}
+                              disabled={savingCourier || !newCourier.name.trim()}
+                              className="flex shrink-0 items-center justify-center rounded-xl bg-brand-red px-3 text-white disabled:opacity-40"
+                              aria-label="Adicionar entregador"
+                            >
+                              {savingCourier ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                             </button>
                           </div>
                         </>
