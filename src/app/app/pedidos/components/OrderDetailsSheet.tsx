@@ -8,6 +8,8 @@ import { PayItemsModal } from "./PayItemsModal";
 import { EditOrderItemSheet } from "./EditOrderItemSheet";
 import { useState } from "react";
 import { pdvApi } from "@/lib/api/pdv-api";
+import { couriersApi } from "@/lib/api/branches-admin-api";
+import type { Courier } from "@/types/pdv";
 import { useRouter } from "next/navigation";
 import {
   PlusCircle,
@@ -131,6 +133,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [courierNameInput, setCourierNameInput] = useState("");
   const [courierPhoneInput, setCourierPhoneInput] = useState("");
+  const [courierIdInput, setCourierIdInput] = useState<string>("");
+  const [registeredCouriers, setRegisteredCouriers] = useState<Courier[]>([]);
 
   if (!order) return null;
 
@@ -159,8 +163,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
     try {
       await pdvApi.dispatchDelivery({
         orderId: order.id,
-        courierName: courierNameInput.trim() || undefined,
-        courierPhone: courierPhoneInput.trim() || undefined,
+        courierId: courierIdInput || undefined,
+        courierName: courierIdInput ? undefined : (courierNameInput.trim() || undefined),
+        courierPhone: courierIdInput ? undefined : (courierPhoneInput.trim() || undefined),
       });
       await onOrderUpdated();
       setShowDispatchForm(false);
@@ -168,6 +173,17 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
       setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro ao despachar.");
     } finally {
       setIsLoading(false);
+    }
+  };
+  const openDispatchForm = async () => {
+    setCourierNameInput(order.courier_name || "");
+    setCourierPhoneInput(order.courier_phone || "");
+    setCourierIdInput("");
+    setShowDispatchForm(true);
+    try {
+      setRegisteredCouriers(await couriersApi.listByBranch(order.branch_id));
+    } catch {
+      setRegisteredCouriers([]);
     }
   };
   const onConfirmDelivery = () =>
@@ -221,6 +237,10 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const queueMinutes = minutesBetween(queueAt, order.ready_at ?? (isPRONTO ? new Date().toISOString() : null));
   const readyToDeliveredMinutes = minutesBetween(order.ready_at, order.delivered_at);
   const totalMinutes = minutesBetween(order.created_at, order.delivered_at ?? (isENTREGUE ? order.updated_at : null));
+  // Métricas de tempo específicas de entrega (Fase 3): quanto tempo o pedido
+  // ficou pronto esperando o entregador, e quanto tempo o entregador levou.
+  const readyToDispatchedMinutes = minutesBetween(order.ready_at, order.dispatched_at);
+  const dispatchedToDeliveredMinutes = minutesBetween(order.dispatched_at, order.delivery_delivered_at);
 
   return (
     <>
@@ -332,11 +352,20 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <TimeMetric label="Fila" value={formatDuration(queueMinutes)} />
-          <TimeMetric label="Pronto > entrega" value={formatDuration(readyToDeliveredMinutes)} />
-          <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
-        </div>
+        {isDelivery ? (
+          <div className="grid grid-cols-4 gap-2">
+            <TimeMetric label="Fila" value={formatDuration(queueMinutes)} />
+            <TimeMetric label="Pronto > saiu" value={formatDuration(readyToDispatchedMinutes)} />
+            <TimeMetric label="Saiu > entregue" value={formatDuration(dispatchedToDeliveredMinutes)} />
+            <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            <TimeMetric label="Fila" value={formatDuration(queueMinutes)} />
+            <TimeMetric label="Pronto > entrega" value={formatDuration(readyToDeliveredMinutes)} />
+            <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
+          </div>
+        )}
 
         {/* Items com controles por item */}
         <div className="space-y-3">
@@ -427,11 +456,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 <div className="flex gap-2">
                   <Button
                     className="h-14 flex-1 rounded-2xl bg-blue-500 text-lg font-black shadow-lg shadow-blue-200 hover:bg-blue-600 gap-2"
-                    onClick={() => {
-                      setCourierNameInput(order.courier_name || "");
-                      setCourierPhoneInput(order.courier_phone || "");
-                      setShowDispatchForm(true);
-                    }}
+                    onClick={openDispatchForm}
                     disabled={isLoading}
                   >
                     <Bike size={20} /> DESPACHAR
@@ -453,20 +478,36 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                     <Bike size={18} />
                     <h4 className="text-sm font-black uppercase tracking-widest">Despachar Entrega</h4>
                   </div>
-                  <input
-                    type="text"
-                    className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    placeholder="Nome do entregador"
-                    value={courierNameInput}
-                    onChange={(e) => setCourierNameInput(e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    placeholder="Telefone do entregador (opcional)"
-                    value={courierPhoneInput}
-                    onChange={(e) => setCourierPhoneInput(e.target.value)}
-                  />
+                  {registeredCouriers.length > 0 && (
+                    <select
+                      className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      value={courierIdInput}
+                      onChange={(e) => setCourierIdInput(e.target.value)}
+                    >
+                      <option value="">Digitar entregador avulso...</option>
+                      {registeredCouriers.filter((c) => c.active).map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ""}</option>
+                      ))}
+                    </select>
+                  )}
+                  {!courierIdInput && (
+                    <>
+                      <input
+                        type="text"
+                        className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        placeholder="Nome do entregador"
+                        value={courierNameInput}
+                        onChange={(e) => setCourierNameInput(e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        placeholder="Telefone do entregador (opcional)"
+                        value={courierPhoneInput}
+                        onChange={(e) => setCourierPhoneInput(e.target.value)}
+                      />
+                    </>
+                  )}
                   <div className="flex gap-3">
                     <Button
                       className="flex-1 h-12 rounded-xl bg-blue-500 font-black shadow-lg shadow-blue-200 hover:bg-blue-600"

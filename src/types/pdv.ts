@@ -175,6 +175,16 @@ export interface DeliveryZone {
   updated_at?: string;
 }
 
+export interface Courier {
+  id: string;
+  branch_id: string;
+  name: string;
+  phone?: string;
+  active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface CustomerAddress {
   id: string;
   customer_id?: string;
@@ -219,6 +229,7 @@ export interface Order {
   delivery_state?: string;
   delivery_postal_code?: string;
   delivery_reference?: string;
+  courier_id?: string;
   courier_name?: string;
   courier_phone?: string;
   dispatched_at?: string;
