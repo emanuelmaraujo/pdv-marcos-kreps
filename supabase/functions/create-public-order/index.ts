@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { resolveProductionSector } from "../_shared/print-format.ts";
 import { resolveDeliveryFee } from "../_shared/delivery.ts";
+import { isAllowedOrigin, publicCorsHeaders } from "../_shared/public-cors.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -12,24 +13,7 @@ const DEFAULT_ORDERING_END = "23:30";
 const ORDERING_TIME_ZONE = "America/Sao_Paulo";
 
 function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
-  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
-  const allowed = configured.split(",").map((value) => value.trim()).filter(Boolean);
-  const allowOrigin = configured === "*" || allowed.includes(origin) ? origin || "*" : allowed[0] ?? "";
-
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-idempotency-key",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
-  };
-}
-
-function isAllowedOrigin(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
-  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
-  if (configured === "*" || !origin) return true;
-  return configured.split(",").map((value) => value.trim()).filter(Boolean).includes(origin);
+  return publicCorsHeaders(req, { extraHeaders: "x-idempotency-key" });
 }
 
 function jsonResponse(req: Request, body: JsonRecord, status = 200) {

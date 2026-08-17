@@ -7,21 +7,13 @@
 // enumerar telefones aleatórios.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
+import { checkRateLimit, getClientIp } from "../_shared/rate-limit.ts";
 
 const LOOKUP_WINDOW_HOURS = 4;
 
 function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
-  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
-  const allowed = configured.split(",").map((v) => v.trim()).filter(Boolean);
-  const allowOrigin = configured === "*" || allowed.includes(origin) ? origin || "*" : allowed[0] ?? "";
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
-    "Cache-Control": "no-store",
-  };
+  return publicCorsHeaders(req, { cacheControl: "no-store" });
 }
 
 function jsonResponse(req: Request, body: Record<string, unknown>, status = 200) {
@@ -68,6 +60,27 @@ serve(async (req) => {
         error: "Informe um WhatsApp válido com DDD.",
         orders: [],
       }, 400);
+    }
+
+    // Rate limit: por telefone normalizado (mais restrito) e por IP (contra
+    // um único cliente varrendo vários telefones). Falha em qualquer um dos
+    // dois bloqueia — mensagem genérica pra não revelar qual limite bateu.
+    const clientIp = getClientIp(req);
+    const [phoneOk, ipOk] = await Promise.all([
+      checkRateLimit(supabaseAdmin, `lookup-phone:${phone}`, 5, 15 * 60),
+      checkRateLimit(supabaseAdmin, `lookup-ip:${clientIp}`, 20, 15 * 60),
+    ]);
+    if (!phoneOk || !ipOk) {
+      await supabaseAdmin.from("audit_logs").insert({
+        action: "LOOKUP_RATE_LIMITED",
+        table_name: "orders",
+        new_data: { phone, ip: clientIp, scope: !phoneOk ? "PHONE" : "IP" },
+      });
+      return jsonResponse(req, {
+        success: false,
+        error: "Muitas tentativas. Tente novamente em alguns minutos.",
+        orders: [],
+      }, 429);
     }
 
     // Janela: últimas 4 horas, apenas pedidos ativos
