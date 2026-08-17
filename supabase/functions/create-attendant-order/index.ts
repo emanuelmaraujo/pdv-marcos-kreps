@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildCustomerReceipt, buildProductionReceipt, settingBool, settingNumber } from "../_shared/print-format.ts";
 import { parseBranchPrinterConfig, shouldPrint } from "../_shared/branch-print-cfg.ts";
 import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
+import { resolveDeliveryFee } from "../_shared/delivery.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -117,7 +118,7 @@ serve(async (req) => {
     // Valida que o atendente pode operar essa filial (RLS via JWT).
     const { data: branch, error: branchErr } = await supabaseClientAuth
       .from('branches')
-      .select('id, code, name, active, printer_config, packing_fee')
+      .select('id, code, name, active, printer_config, packing_fee, delivery_enabled')
       .eq('id', branch_id)
       .single();
     if (branchErr || !branch) throw new Error('Filial inválida ou usuário sem permissão.');
@@ -262,14 +263,17 @@ serve(async (req) => {
       }
     }
 
-    // Taxa de entrega: Fase 1 usa um valor fixo global (`default_delivery_fee`),
-    // sem zonas por bairro ainda. Nunca confia em um valor vindo do client.
+    // Taxa de entrega (Fase 2): calculada a partir da zona/bairro cadastrado
+    // para a filial, com fallback para a taxa fixa da filial quando ela ainda
+    // não tem nenhuma zona cadastrada. Nunca confia em valor vindo do client.
     let deliveryFee = 0;
     if (isDelivery) {
-      if (!settingBool(settings.delivery_enabled)) {
-        throw new Error('Entrega não está habilitada no momento.');
+      if (!(branch as any).delivery_enabled) {
+        throw new Error('Entrega não está habilitada para esta filial.');
       }
-      deliveryFee = settingNumber(settings.default_delivery_fee);
+      const feeResult = await resolveDeliveryFee(supabaseAdmin, branch.id, deliveryNeighborhood!);
+      if (feeResult.blocked) throw new Error(feeResult.reason);
+      deliveryFee = feeResult.fee;
     }
 
     let discountAmount = 0;

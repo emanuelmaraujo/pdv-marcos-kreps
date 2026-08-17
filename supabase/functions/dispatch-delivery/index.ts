@@ -12,6 +12,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -55,7 +56,7 @@ serve(async (req) => {
     // Lê o pedido via JWT — RLS valida filial do user.
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
-      .select("id, branch_id, type, status")
+      .select("id, branch_id, daily_number, type, status, customer_name, customer_phone, branches ( code, name )")
       .eq("id", order_id)
       .single();
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
@@ -89,6 +90,19 @@ serve(async (req) => {
       user_id: user.id,
       branch_id: order.branch_id,
       new_data: { from: order.status, to: "SAIU_PARA_ENTREGA", courier_name: courierName, courier_phone: courierPhone },
+    });
+
+    // WhatsApp "saiu para entrega" — non-blocking, nunca falha o despacho.
+    const branchInfo = Array.isArray((order as any).branches) ? (order as any).branches[0] : (order as any).branches;
+    await enqueueWhatsAppMessage(supabaseAdmin, {
+      orderId: order.id,
+      branchId: order.branch_id,
+      eventType: "order_out_for_delivery",
+      phone: (order as any).customer_phone,
+      customerName: (order as any).customer_name,
+      dailyNumber: order.daily_number,
+      branchCode: branchInfo?.code,
+      branchName: branchInfo?.name,
     });
 
     const { data: orderAfter } = await supabaseAdmin

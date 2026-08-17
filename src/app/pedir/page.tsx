@@ -34,8 +34,9 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PedirLanding } from "./PedirLanding";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
-import { Addon, Ingredient, Product } from "@/types/pdv";
+import { Addon, CustomerAddress, DeliveryZone, Ingredient, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
+import { normalizeNeighborhood } from "@/lib/utils/delivery";
 
 declare global {
   interface Window {
@@ -71,9 +72,25 @@ type SavedPublicCustomerProfile = {
   phone_e164: string;
   name: string;
   email?: string;
-  order_type: "BALCAO" | "VIAGEM";
+  order_type: "BALCAO" | "VIAGEM" | "ENTREGA";
   marketing_opt_in: boolean;
   saved_at: string;
+};
+
+type DeliveryAddressForm = {
+  street: string;
+  number: string;
+  complement: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  reference: string;
+};
+
+const EMPTY_DELIVERY_ADDRESS: DeliveryAddressForm = {
+  street: "", number: "", complement: "", neighborhood: "",
+  city: "", state: "", postal_code: "", reference: "",
 };
 
 type SavedPublicOrderSession = {
@@ -894,6 +911,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [orderingClosedReason, setOrderingClosedReason] = useState("");
   const [packagingFee, setPackagingFee] = useState(0);
   const [applyPackagingFeeForTakeout, setApplyPackagingFeeForTakeout] = useState(false);
+  const [branchId, setBranchId] = useState<string | null>(null);
+  const [deliveryEnabled, setDeliveryEnabled] = useState(false);
+  const [defaultDeliveryFee, setDefaultDeliveryFee] = useState(0);
+  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
+  const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddressForm>(EMPTY_DELIVERY_ADDRESS);
+  const [saveThisAddress, setSaveThisAddress] = useState(false);
   const [orderingSchedule, setOrderingSchedule] = useState({
     start: DEFAULT_ORDERING_START,
     end: DEFAULT_ORDERING_END,
@@ -933,6 +958,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
         const resolvedBranchId = config.branch?.id ?? null;
         setBranchName(config.branch?.name ?? null);
+        setBranchId(resolvedBranchId);
+        setDeliveryEnabled(config.branch?.delivery_enabled === true);
+        setDefaultDeliveryFee(Number(config.branch?.default_delivery_fee ?? 0));
         const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
@@ -957,6 +985,20 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
     loadMenu();
   }, [clearCart, branchSlug]);
+
+  // Zonas de entrega da filial (leitura pública direta, só para estimar a
+  // taxa antes do envio — o cálculo autoritativo roda no servidor).
+  useEffect(() => {
+    if (!branchId || !deliveryEnabled) {
+      const timer = window.setTimeout(() => setDeliveryZones([]), 0);
+      return () => window.clearTimeout(timer);
+    }
+    let cancelled = false;
+    pdvApi.listDeliveryZones(branchId).then((zones) => {
+      if (!cancelled) setDeliveryZones(zones);
+    });
+    return () => { cancelled = true; };
+  }, [branchId, deliveryEnabled]);
 
   // Carrega métricas de social proof (orders_today + top product por categoria).
   // Falha silenciosa: se der erro, simplesmente não exibe os badges.
@@ -1056,6 +1098,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setMarketingOptIn(false);
       setRememberCheckoutData(false);
       setProfileNotice("");
+      setSavedAddresses([]);
+      setSelectedAddressId(null);
     }
 
     let cancelled = false;
@@ -1071,6 +1115,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           if (response.profile.order_type === "BALCAO" || response.profile.order_type === "VIAGEM") {
             setOrderType(response.profile.order_type);
           }
+          const addresses = response.addresses ?? [];
+          setSavedAddresses(addresses);
+          setSelectedAddressId(addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? null);
           setRememberCheckoutData(true);
           lastAutofilledPhoneRef.current = normalizedPhone;
           setProfileLookupState("found");
@@ -1078,6 +1125,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         } else {
           setProfileLookupState("not_found");
           setProfileNotice("");
+          setSavedAddresses([]);
+          setSelectedAddressId(null);
         }
       } catch {
         if (!cancelled) {
@@ -1258,7 +1307,24 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
   const estimatedSubtotal = getEstimatedSubtotal();
   const estimatedPackagingFee = orderType === "VIAGEM" && applyPackagingFeeForTakeout ? packagingFee : 0;
-  const estimatedTotal = estimatedSubtotal + estimatedPackagingFee;
+
+  // Estimativa de taxa de entrega — mesma regra do servidor (resolveDeliveryFee):
+  // sem zona cadastrada usa a taxa padrão da filial; com zonas, bairro fora da
+  // lista fica bloqueado. O total oficial sempre é recalculado no backend.
+  const selectedSavedAddress = savedAddresses.find((a) => a.id === selectedAddressId) ?? null;
+  const effectiveNeighborhood = selectedSavedAddress ? selectedSavedAddress.neighborhood : deliveryAddress.neighborhood;
+  const deliveryNeighborhoodNormalized = normalizeNeighborhood(effectiveNeighborhood);
+  const matchedDeliveryZone = deliveryZones.find(
+    (zone) => zone.neighborhood_normalized === deliveryNeighborhoodNormalized,
+  );
+  const deliveryBlocked = orderType === "ENTREGA"
+    && deliveryZones.length > 0
+    && !!deliveryNeighborhoodNormalized
+    && !matchedDeliveryZone;
+  const estimatedDeliveryFee = orderType === "ENTREGA"
+    ? (matchedDeliveryZone ? matchedDeliveryZone.fee : deliveryZones.length === 0 ? defaultDeliveryFee : 0)
+    : 0;
+  const estimatedTotal = estimatedSubtotal + estimatedPackagingFee + estimatedDeliveryFee;
   const checkoutPhone = useMemo(() => normalizeBrazilPhone(customerPhone), [customerPhone]);
   const isProfileChecking = !!checkoutPhone && profileLookupState === "checking";
   const selectedAddonCount = useMemo(() => {
@@ -1366,12 +1432,24 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setCheckoutError("Se informar e-mail, use um endereco valido.");
       return;
     }
+    if (orderType === "ENTREGA") {
+      if (!normalizedPhone) {
+        setCheckoutError("Informe um WhatsApp valido com DDD para pedidos de entrega.");
+        return;
+      }
+      if (!selectedSavedAddress && (!deliveryAddress.street.trim() || !deliveryAddress.neighborhood.trim())) {
+        setCheckoutError("Informe ao menos rua e bairro para a entrega.");
+        return;
+      }
+      if (deliveryBlocked) {
+        setCheckoutError("Não realizamos entregas nesse bairro no momento.");
+        return;
+      }
+    }
 
     setIsSubmittingOrder(true);
     try {
-      // Checkout público ainda não suporta ENTREGA (fica para uma fase futura) —
-      // BALCAO/VIAGEM são os únicos tipos aceitos por create-public-order hoje.
-      const publicOrderType: "BALCAO" | "VIAGEM" = orderType === "VIAGEM" ? "VIAGEM" : "BALCAO";
+      const publicOrderType: "BALCAO" | "VIAGEM" | "ENTREGA" = orderType;
       const response = await pdvApi.createPublicOrder({
         order_type: publicOrderType,
         customer_name: customerName.trim() || undefined,
@@ -1382,6 +1460,18 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         notes: orderNotes.trim() || undefined,
         payment_method_code: PAYMENT_METHOD_CODE,
         branch_slug: branchSlug,
+        delivery_address_id: orderType === "ENTREGA" ? selectedSavedAddress?.id : undefined,
+        delivery_address: orderType === "ENTREGA" && !selectedSavedAddress ? {
+          street: deliveryAddress.street.trim(),
+          number: deliveryAddress.number.trim() || undefined,
+          complement: deliveryAddress.complement.trim() || undefined,
+          neighborhood: deliveryAddress.neighborhood.trim(),
+          city: deliveryAddress.city.trim() || undefined,
+          state: deliveryAddress.state.trim() || undefined,
+          postal_code: deliveryAddress.postal_code.trim() || undefined,
+          reference: deliveryAddress.reference.trim() || undefined,
+        } : undefined,
+        save_address: orderType === "ENTREGA" && !selectedSavedAddress && saveThisAddress,
         items: items.map((item) => ({
           product_id: item.product.id,
           quantity: item.quantity,
@@ -2051,7 +2141,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <div>
                   <p className="mb-1 text-[11px] font-medium text-[var(--text-muted)]">Modalidade</p>
                   <div className="flex rounded-xl bg-[var(--bg-subtle)] p-0.5">
-                    {([{ v: "BALCAO", label: "Comer aqui" }, { v: "VIAGEM", label: "Para levar" }] as const).map((opt) => {
+                    {([
+                      { v: "BALCAO", label: "Comer aqui" },
+                      { v: "VIAGEM", label: "Para levar" },
+                      ...(deliveryEnabled ? [{ v: "ENTREGA", label: "Entrega" }] as const : []),
+                    ] as const).map((opt) => {
                       const isActive = orderType === opt.v;
                       return (
                         <button
@@ -2069,6 +2163,113 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     })}
                   </div>
                 </div>
+
+                {orderType === "ENTREGA" && (
+                  <div className="space-y-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+                      Endereço de entrega
+                    </p>
+
+                    {savedAddresses.length > 0 && (
+                      <div className="space-y-1.5">
+                        {savedAddresses.map((addr) => (
+                          <label
+                            key={addr.id}
+                            className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs ${
+                              selectedAddressId === addr.id
+                                ? "border-brand-red bg-[var(--status-danger-bg)]"
+                                : "border-[var(--border)] bg-[var(--bg-surface)]"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="saved-address"
+                              className="mt-0.5 accent-brand-red"
+                              checked={selectedAddressId === addr.id}
+                              onChange={() => setSelectedAddressId(addr.id)}
+                            />
+                            <span className="text-[var(--text-primary)]">
+                              {addr.label && <strong className="font-semibold">{addr.label}: </strong>}
+                              {addr.street}{addr.number ? `, ${addr.number}` : ""} — {addr.neighborhood}
+                            </span>
+                          </label>
+                        ))}
+                        <label
+                          className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs ${
+                            selectedAddressId === null
+                              ? "border-brand-red bg-[var(--status-danger-bg)]"
+                              : "border-[var(--border)] bg-[var(--bg-surface)]"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="saved-address"
+                            className="accent-brand-red"
+                            checked={selectedAddressId === null}
+                            onChange={() => setSelectedAddressId(null)}
+                          />
+                          <span className="text-[var(--text-primary)]">Usar um novo endereço</span>
+                        </label>
+                      </div>
+                    )}
+
+                    {selectedAddressId === null && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          placeholder="Rua *"
+                          value={deliveryAddress.street}
+                          onChange={(e) => setDeliveryAddress((p) => ({ ...p, street: e.target.value }))}
+                        />
+                        <input
+                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          placeholder="Número"
+                          value={deliveryAddress.number}
+                          onChange={(e) => setDeliveryAddress((p) => ({ ...p, number: e.target.value }))}
+                        />
+                        <input
+                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          placeholder="Complemento"
+                          value={deliveryAddress.complement}
+                          onChange={(e) => setDeliveryAddress((p) => ({ ...p, complement: e.target.value }))}
+                        />
+                        <input
+                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          placeholder="Bairro *"
+                          value={deliveryAddress.neighborhood}
+                          onChange={(e) => setDeliveryAddress((p) => ({ ...p, neighborhood: e.target.value }))}
+                        />
+                        <input
+                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          placeholder="Ponto de referência (opcional)"
+                          value={deliveryAddress.reference}
+                          onChange={(e) => setDeliveryAddress((p) => ({ ...p, reference: e.target.value }))}
+                        />
+                        {checkoutPhone && (
+                          <label className="col-span-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                            <input
+                              type="checkbox"
+                              checked={saveThisAddress}
+                              onChange={(e) => setSaveThisAddress(e.target.checked)}
+                              className="h-3.5 w-3.5 accent-brand-red"
+                            />
+                            Salvar este endereço para próximos pedidos
+                          </label>
+                        )}
+                      </div>
+                    )}
+
+                    {deliveryBlocked ? (
+                      <p className="text-xs font-semibold text-[var(--status-danger)]">
+                        Não realizamos entregas nesse bairro no momento.
+                      </p>
+                    ) : effectiveNeighborhood.trim() ? (
+                      <p className="text-xs font-semibold text-[var(--text-secondary)]">
+                        Taxa de entrega estimada: {currency.format(estimatedDeliveryFee)}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
 
                 <textarea
                   value={orderNotes}

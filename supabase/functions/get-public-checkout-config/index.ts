@@ -111,7 +111,7 @@ serve(async (req) => {
     if (branchSlug) {
       const { data } = await supabaseAdmin
         .from("branches")
-        .select("id, code, name, slug, active, ordering_enabled, ordering_start_time, ordering_end_time, packing_fee")
+        .select("id, code, name, slug, active, ordering_enabled, ordering_start_time, ordering_end_time, packing_fee, delivery_enabled, default_delivery_fee")
         .eq("slug", branchSlug)
         .maybeSingle();
       branch = data;
@@ -169,7 +169,14 @@ serve(async (req) => {
 
     return jsonResponse(req, {
       success: true,
-      branch: branch ? { id: branch.id, code: branch.code, name: branch.name, slug: branch.slug } : null,
+      branch: branch ? {
+        id: branch.id,
+        code: branch.code,
+        name: branch.name,
+        slug: branch.slug,
+        delivery_enabled: branch.delivery_enabled === true,
+        default_delivery_fee: Number(branch.default_delivery_fee ?? 0),
+      } : null,
       settings: {
         public_ordering_enabled: String(enabledByAdmin),
         public_ordering_start_time: start,

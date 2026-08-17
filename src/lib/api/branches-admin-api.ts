@@ -1,6 +1,7 @@
-// CRUD de filiais e vínculos de atendentes — apenas ADMIN.
+// CRUD de filiais, zonas de entrega e vínculos de atendentes — apenas ADMIN.
 import { createClient } from '../supabase/client';
-import { Branch, BranchType } from '@/types/pdv';
+import { Branch, BranchType, DeliveryZone } from '@/types/pdv';
+import { normalizeNeighborhood } from '../utils/delivery';
 
 export interface BranchInput {
   code: string;
@@ -17,6 +18,8 @@ export interface BranchInput {
   whatsapp_enabled?: boolean;
   whatsapp_templates?: Record<string, { template_name?: string; language?: string; enabled?: boolean }>;
   printer_config?: Record<string, unknown>;
+  delivery_enabled?: boolean;
+  default_delivery_fee?: number;
 }
 
 export const branchesAdminApi = {
@@ -128,5 +131,62 @@ export const branchesAdminApi = {
       .single();
     if (cloneErr || !cloned) throw new Error(`Erro ao duplicar produto: ${cloneErr?.message}`);
     return (cloned as { id: string }).id;
+  },
+};
+
+export interface DeliveryZoneInput {
+  neighborhood: string;
+  fee: number;
+  active?: boolean;
+}
+
+// CRUD de zonas de entrega por filial — apenas ADMIN (RLS: "Admin controla
+// delivery_zones"). A taxa aqui é só o que o ADMIN cadastra; o cálculo
+// autoritativo por pedido sempre roda no servidor (Edge Functions).
+export const deliveryZonesApi = {
+  listByBranch: async (branchId: string): Promise<DeliveryZone[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('delivery_zones')
+      .select('*')
+      .eq('branch_id', branchId)
+      .order('neighborhood');
+    if (error) throw new Error(`Erro ao listar zonas de entrega: ${error.message}`);
+    return (data ?? []) as DeliveryZone[];
+  },
+
+  create: async (branchId: string, input: DeliveryZoneInput): Promise<DeliveryZone> => {
+    const supabase = createClient();
+    const neighborhood = input.neighborhood.trim();
+    const { data, error } = await supabase
+      .from('delivery_zones')
+      .insert([{
+        branch_id: branchId,
+        neighborhood,
+        neighborhood_normalized: normalizeNeighborhood(neighborhood),
+        fee: input.fee,
+        active: input.active ?? true,
+      }])
+      .select()
+      .single();
+    if (error) throw new Error(`Erro ao criar zona de entrega: ${error.message}`);
+    return data as DeliveryZone;
+  },
+
+  update: async (id: string, patch: Partial<DeliveryZoneInput>): Promise<void> => {
+    const supabase = createClient();
+    const payload: Record<string, unknown> = { ...patch };
+    if (patch.neighborhood) {
+      payload.neighborhood = patch.neighborhood.trim();
+      payload.neighborhood_normalized = normalizeNeighborhood(patch.neighborhood);
+    }
+    const { error } = await supabase.from('delivery_zones').update(payload).eq('id', id);
+    if (error) throw new Error(`Erro ao atualizar zona de entrega: ${error.message}`);
+  },
+
+  remove: async (id: string): Promise<void> => {
+    const supabase = createClient();
+    const { error } = await supabase.from('delivery_zones').delete().eq('id', id);
+    if (error) throw new Error(`Erro ao remover zona de entrega: ${error.message}`);
   },
 };

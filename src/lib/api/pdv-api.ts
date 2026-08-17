@@ -1,5 +1,5 @@
 import { createClient } from '../supabase/client';
-import { PaymentMethod, OrderStatus, OrderItemStatus, Order, PaymentTransaction } from '@/types/pdv';
+import { PaymentMethod, OrderStatus, OrderItemStatus, Order, PaymentTransaction, CustomerAddress, DeliveryZone } from '@/types/pdv';
 
 export class OrderingClosedError extends Error {
   constructor(message: string) {
@@ -167,7 +167,7 @@ export type AddItemsToOrderResponse = {
 };
 
 export type CreatePublicOrderPayload = {
-  order_type: 'BALCAO' | 'VIAGEM';
+  order_type: 'BALCAO' | 'VIAGEM' | 'ENTREGA';
   customer_name?: string;
   customer_phone?: string;
   customer_email?: string;
@@ -176,6 +176,18 @@ export type CreatePublicOrderPayload = {
   notes?: string;
   payment_method_code?: string;
   branch_slug?: string;
+  delivery_address?: {
+    street: string;
+    number?: string;
+    complement?: string;
+    neighborhood: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    reference?: string;
+  };
+  delivery_address_id?: string;
+  save_address?: boolean;
   items: Array<{
     product_id: string;
     quantity: number;
@@ -275,6 +287,7 @@ export type PublicCustomerProfileResponse = {
     order_type?: 'BALCAO' | 'VIAGEM' | null;
     marketing_opt_in?: boolean;
   };
+  addresses?: CustomerAddress[];
 };
 
 export type AttendantCustomerProfileResponse = {
@@ -338,7 +351,10 @@ export type PublicBranchStatsResponse = {
 export type PublicCheckoutConfigResponse = {
   success: boolean;
   error?: string;
-  branch?: { id: string; code: string; name: string; slug: string } | null;
+  branch?: {
+    id: string; code: string; name: string; slug: string;
+    delivery_enabled?: boolean; default_delivery_fee?: number;
+  } | null;
   settings: {
     public_ordering_enabled: string;
     public_ordering_start_time: string;
@@ -442,7 +458,7 @@ export const pdvApi = {
         branchSlug
           ? supabase
             .from('branches')
-            .select('id, code, name, slug, active, ordering_enabled, ordering_start_time, ordering_end_time, packing_fee')
+            .select('id, code, name, slug, active, ordering_enabled, ordering_start_time, ordering_end_time, packing_fee, delivery_enabled, default_delivery_fee')
             .eq('slug', branchSlug)
             .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
@@ -496,6 +512,8 @@ export const pdvApi = {
         ordering_start_time?: string | null;
         ordering_end_time?: string | null;
         packing_fee?: number | string | null;
+        delivery_enabled?: boolean | null;
+        default_delivery_fee?: number | string | null;
       } | null;
       const publicOrderingEnabled = readSetting('public_ordering_enabled', 'true') === 'true';
       const branchEnabled = !branch || (branch.active !== false && branch.ordering_enabled !== false);
@@ -507,7 +525,11 @@ export const pdvApi = {
 
       return {
         success: true,
-        branch: branch ? { id: branch.id, code: branch.code, name: branch.name, slug: branch.slug } : null,
+        branch: branch ? {
+          id: branch.id, code: branch.code, name: branch.name, slug: branch.slug,
+          delivery_enabled: branch.delivery_enabled === true,
+          default_delivery_fee: Number(branch.default_delivery_fee ?? 0),
+        } : null,
         settings: {
           public_ordering_enabled: String(publicOrderingEnabled),
           public_ordering_start_time: start,
@@ -519,6 +541,22 @@ export const pdvApi = {
         ordering_closed_reason: branchEnabled ? '' : 'No momento essa unidade nao esta recebendo pedidos.',
       };
     }
+  },
+
+  // Zonas de entrega ativas de uma filial (leitura pública direta — RLS
+  // "Public read active delivery_zones" já restringe a filiais/zonas ativas).
+  // Usado só para mostrar a taxa estimada antes de enviar o pedido; o cálculo
+  // autoritativo sempre roda em create-public-order no servidor.
+  listDeliveryZones: async (branchId: string): Promise<DeliveryZone[]> => {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('delivery_zones')
+      .select('*')
+      .eq('branch_id', branchId)
+      .eq('active', true)
+      .order('neighborhood');
+    if (error) return [];
+    return (data ?? []) as DeliveryZone[];
   },
 
   // Lista publica de filiais ativas com pedidos online habilitados.
