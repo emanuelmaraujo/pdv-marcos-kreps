@@ -17,6 +17,7 @@ export interface ServerCredential {
   credential_id: string;
   device_name: string;
   created_at: string;
+  last_used_at?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
