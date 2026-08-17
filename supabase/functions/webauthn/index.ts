@@ -232,14 +232,21 @@ function arrayEq(a: Uint8Array, b: Uint8Array): boolean {
   return a.every((v, i) => v === b[i]);
 }
 
+// Previews aprovados explicitamente (ex: "pdv-marcos-kreps-git-staging.vercel.app").
+// Preenchida via env var — NÃO aceitamos mais qualquer *.vercel.app: como
+// qualquer pessoa pode publicar um app nesse domínio, um subdomínio
+// malicioso conseguiria registrar/autenticar passkeys se confiássemos nele
+// só por terminar em ".vercel.app".
+const WEBAUTHN_ALLOWED_ORIGINS = (Deno.env.get("WEBAUTHN_ALLOWED_ORIGINS") ?? "")
+  .split(",").map((v) => v.trim()).filter(Boolean);
+
 function isAllowedOrigin(origin: string): boolean {
   try {
     const { protocol, hostname } = new URL(origin);
     if (hostname === "localhost" || hostname === "127.0.0.1") return true;
     if (protocol !== "https:") return false;
     if (hostname === RP_ID || hostname.endsWith(`.${RP_ID}`)) return true;
-    if (hostname.endsWith(".vercel.app")) return true;
-    return false;
+    return WEBAUTHN_ALLOWED_ORIGINS.includes(origin);
   } catch {
     return false;
   }
@@ -348,6 +355,13 @@ async function registerComplete(
   });
   if (error) throw new Error(`Erro ao salvar credencial: ${error.message}`);
 
+  await supabaseAdmin.from("audit_logs").insert({
+    action: "WEBAUTHN_CREDENTIAL_REGISTERED",
+    table_name: "webauthn_credentials",
+    user_id: userId,
+    new_data: { credential_id: credentialId, device_name: deviceName ?? "Dispositivo" },
+  });
+
   return { credentialId };
 }
 
@@ -437,8 +451,18 @@ async function authCompleteDiscoverable(
   // Anti-replay
   const view = new DataView(authDataBytes.buffer, authDataBytes.byteOffset);
   const newCount = view.getUint32(33, false);
-  if (newCount > 0 && newCount <= stored.sign_count) throw new Error("Possível replay detectado");
-  await supabaseAdmin.from("webauthn_credentials").update({ sign_count: newCount }).eq("id", stored.id);
+  if (newCount > 0 && newCount <= stored.sign_count) {
+    await supabaseAdmin.from("audit_logs").insert({
+      action: "WEBAUTHN_REPLAY_DETECTED",
+      table_name: "webauthn_credentials",
+      user_id: stored.user_id,
+      new_data: { credential_id: stored.credential_id, stored_sign_count: stored.sign_count, received_sign_count: newCount },
+    });
+    throw new Error("Possível replay detectado");
+  }
+  await supabaseAdmin.from("webauthn_credentials")
+    .update({ sign_count: newCount, last_used_at: new Date().toISOString() })
+    .eq("id", stored.id);
 
   // Cria sessão
   const { data: { user }, error: userErr } = await supabaseAdmin.auth.admin.getUserById(stored.user_id);
@@ -449,6 +473,13 @@ async function authCompleteDiscoverable(
     email: user.email!,
   });
   if (linkErr || !linkData) throw new Error(`Erro ao criar sessão: ${linkErr?.message}`);
+
+  await supabaseAdmin.from("audit_logs").insert({
+    action: "WEBAUTHN_LOGIN_SUCCESS",
+    table_name: "webauthn_credentials",
+    user_id: stored.user_id,
+    new_data: { credential_id: stored.credential_id, mode: "discoverable" },
+  });
 
   return {
     token_hash: linkData.properties.hashed_token,
@@ -527,8 +558,18 @@ async function authComplete(
   // Anti-replay: sign count
   const view = new DataView(authDataBytes.buffer, authDataBytes.byteOffset);
   const newCount = view.getUint32(33, false);
-  if (newCount > 0 && newCount <= stored.sign_count) throw new Error("Possível replay detectado");
-  await supabaseAdmin.from("webauthn_credentials").update({ sign_count: newCount }).eq("id", stored.id);
+  if (newCount > 0 && newCount <= stored.sign_count) {
+    await supabaseAdmin.from("audit_logs").insert({
+      action: "WEBAUTHN_REPLAY_DETECTED",
+      table_name: "webauthn_credentials",
+      user_id: userId,
+      new_data: { credential_id: stored.credential_id, stored_sign_count: stored.sign_count, received_sign_count: newCount },
+    });
+    throw new Error("Possível replay detectado");
+  }
+  await supabaseAdmin.from("webauthn_credentials")
+    .update({ sign_count: newCount, last_used_at: new Date().toISOString() })
+    .eq("id", stored.id);
 
   // Create a Supabase session without sending email (admin generateLink)
   const { data: { user }, error: userErr } = await supabaseAdmin.auth.admin.getUserById(userId);
@@ -539,6 +580,13 @@ async function authComplete(
     email: user.email!,
   });
   if (linkErr || !linkData) throw new Error(`Erro ao criar sessão: ${linkErr?.message}`);
+
+  await supabaseAdmin.from("audit_logs").insert({
+    action: "WEBAUTHN_LOGIN_SUCCESS",
+    table_name: "webauthn_credentials",
+    user_id: userId,
+    new_data: { credential_id: stored.credential_id, mode: "direct" },
+  });
 
   return {
     token_hash: linkData.properties.hashed_token,
@@ -575,19 +623,29 @@ Deno.serve(async (req) => {
       } else if (action === "list_credentials") {
         const { data: creds, error: listErr } = await supabaseAdmin
           .from("webauthn_credentials")
-          .select("id, credential_id, device_name, created_at")
+          .select("id, credential_id, device_name, created_at, last_used_at")
           .eq("user_id", user.id)
           .order("created_at", { ascending: true });
         if (listErr) throw listErr;
         result = { credentials: creds ?? [] };
       } else if (action === "delete_credential") {
         if (!data.credentialRowId) throw new Error("credentialRowId ausente");
-        const { error: delErr } = await supabaseAdmin
+        const { data: deletedCred, error: delErr } = await supabaseAdmin
           .from("webauthn_credentials")
           .delete()
           .eq("id", data.credentialRowId)
-          .eq("user_id", user.id); // ensures users can only delete their own
+          .eq("user_id", user.id) // ensures users can only delete their own
+          .select("credential_id, device_name")
+          .maybeSingle();
         if (delErr) throw delErr;
+        if (deletedCred) {
+          await supabaseAdmin.from("audit_logs").insert({
+            action: "WEBAUTHN_CREDENTIAL_DELETED",
+            table_name: "webauthn_credentials",
+            user_id: user.id,
+            old_data: deletedCred,
+          });
+        }
         result = { deleted: true };
       }
     } else if (action === "auth_begin") {

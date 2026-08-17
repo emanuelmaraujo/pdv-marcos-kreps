@@ -14,7 +14,7 @@ _Atualizado em 2026-08-17. Cada item linka o PR correspondente. "Validado" signi
 | P0.4 | Claim atômico de impressão (`claim_printer_jobs`, SKIPPED distinto de PRINTED) | ✅ Em produção | [#113](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/113) |
 | P1.1 | RLS multi-filial — corrigido bug crítico de escrita direta por ATTENDANT | ✅ Em produção | [#115](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/115) |
 | P1.2 | Segurança de endpoints públicos — CORS + rate limit | ⚠️ Parcial | — |
-| P1.3 | WebAuthn/Biometria | ⬜ Não iniciado | — |
+| P1.3 | WebAuthn/Biometria — origem restrita, auditoria, último uso | ⚠️ Parcial | — |
 | P2.x | Performance/UX operacional | ⬜ Não iniciado | — |
 | P3.x | Offline-first/observabilidade/auditoria financeira | ⬜ Não iniciado | — |
 
@@ -31,6 +31,16 @@ _Atualizado em 2026-08-17. Cada item linka o PR correspondente. "Validado" signi
 - OTP via WhatsApp pra revelar token de pedido por telefone (feature maior, precisa de decisão de produto — hoje o rate limit já reduz bastante o risco de enumeração, mas não elimina).
 - Auditoria linha-a-linha de vazamento de UUID interno nos 5 endpoints de leitura pública (`get-public-order-status`, `get-public-customer-profile`, `get-public-checkout-config`, `list-public-branches`, `get-public-branch-stats`) — só uma checagem superficial foi feita.
 - Mensagens genéricas de erro em falha de credencial/token não foram revisadas sistematicamente.
+
+**P1.3 — feito nesta sessão:**
+- `isAllowedOrigin` (supabase/functions/webauthn/index.ts) não aceita mais qualquer `*.vercel.app` — troca por `WEBAUTHN_ALLOWED_ORIGINS`, allowlist explícita via env var (vazia por padrão; domínio oficial + localhost continuam liberados sempre). Confirmado que produção não dependia do wildcard (só `WEBAUTHN_RP_ID` estava configurado).
+- `webauthn_credentials.last_used_at` adicionado e atualizado a cada login bem-sucedido; exposto na UI (`BiometricManager.tsx`).
+- Eventos de auditoria (`audit_logs`): `WEBAUTHN_CREDENTIAL_REGISTERED`, `WEBAUTHN_CREDENTIAL_DELETED`, `WEBAUTHN_LOGIN_SUCCESS` (com modo discoverable/direct), `WEBAUTHN_REPLAY_DETECTED`.
+- Limite de 3 credenciais por usuário **já existia** (trigger `check_webauthn_credential_limit`) — só corrigido `SET search_path` que faltava nela (mesma classe de problema do `get_my_role`, já corrigido em P1.1).
+
+**P1.3 — não feito:**
+- Testes manuais em Chrome/Edge desktop, Android Chrome e iOS Safari — não fazem sentido num ambiente sem browser real; precisa ser feito manualmente pelo time.
+- Nenhuma biblioteca WebAuthn consolidada foi adotada — a implementação manual (parser CBOR próprio, verificação ECDSA manual) continua como está; avaliar troca fica pra decisão futura se a compatibilidade cross-browser virar problema real.
 
 ## Objetivos
 
