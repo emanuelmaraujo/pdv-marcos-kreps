@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Order, OrderItem, OrderItemStatus } from "@/types/pdv";
-import { Clock, ShoppingBag, User, Utensils, Package, CheckCircle2, Loader2 } from "lucide-react";
+import { Clock, ShoppingBag, User, Utensils, Package, CheckCircle2, Loader2, Bike } from "lucide-react";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 
@@ -58,17 +58,24 @@ const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
  */
 function OrderTypeBadge({ type }: { type: Order["type"] }) {
   const isViagem = type === "VIAGEM";
+  const isEntrega = type === "ENTREGA";
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-        isViagem
+        isEntrega
+          ? "bg-blue-100 text-blue-700 ring-1 ring-blue-300/50"
+          : isViagem
           ? "bg-[var(--status-warning-bg)] text-[var(--status-warning)] ring-1 ring-[var(--status-warning)]/30"
           : "bg-[var(--bg-subtle)] text-[var(--text-secondary)] ring-1 ring-[var(--border)]"
       }`}
-      title={isViagem ? "Pedido para viagem" : "Pedido para o balcão"}
+      title={isEntrega ? "Pedido para entrega" : isViagem ? "Pedido para viagem" : "Pedido para o balcão"}
     >
-      {isViagem ? <ShoppingBag className="h-2.5 w-2.5" strokeWidth={2.25} /> : <Utensils className="h-2.5 w-2.5" strokeWidth={2.25} />}
-      {isViagem ? "Viagem" : "Balcão"}
+      {isEntrega
+        ? <Bike className="h-2.5 w-2.5" strokeWidth={2.25} />
+        : isViagem
+        ? <ShoppingBag className="h-2.5 w-2.5" strokeWidth={2.25} />
+        : <Utensils className="h-2.5 w-2.5" strokeWidth={2.25} />}
+      {isEntrega ? "Entrega" : isViagem ? "Viagem" : "Balcão"}
     </span>
   );
 }
@@ -94,13 +101,14 @@ const ACCENT: Record<Order["status"], string> = {
   NA_FILA:                "bg-[var(--status-info)]",
   PRONTO_PARCIAL:         "bg-[var(--status-warning)]",
   PRONTO:                 "bg-[var(--status-success)]",
+  SAIU_PARA_ENTREGA:      "bg-blue-500",
   ENTREGUE:               "bg-[var(--status-neutral)]",
   CANCELADO:              "bg-[var(--status-danger)]",
   EXPIRADO:               "bg-[var(--status-neutral)]",
 };
 
 const ACTIVE_STATUSES: Order["status"][] = [
-  "NA_FILA", "AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "PRONTO_PARCIAL", "PRONTO",
+  "NA_FILA", "AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "PRONTO_PARCIAL", "PRONTO", "SAIU_PARA_ENTREGA",
 ];
 
 export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
@@ -135,6 +143,8 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
   // Banner/borda de pagamento pendente para pedidos ativos E para entregues não pagos
   const showPendingPayBanner = isPendingPayment && order.status !== "CANCELADO" && order.status !== "EXPIRADO";
 
+  // Pedidos de ENTREGA em PRONTO não têm ação rápida: despachar exige escolher/confirmar
+  // o entregador no OrderDetailsSheet, não cabe num toque só no card.
   const quickActionConfig =
     order.status === "AGUARDANDO_CONFIRMACAO"
       ? { label: "Confirmar",       Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90" }
@@ -142,8 +152,10 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
       ? { label: "Pronto",          Icon: Package,      color: "bg-[var(--status-warning)] text-white hover:opacity-90" }
       : order.status === "PRONTO_PARCIAL"
       ? { label: "Entregar prontos", Icon: Package,      color: "bg-[var(--status-warning)] text-white hover:opacity-90" }
-      : order.status === "PRONTO"
+      : order.status === "PRONTO" && order.type !== "ENTREGA"
       ? { label: "Entregar",        Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90" }
+      : order.status === "SAIU_PARA_ENTREGA"
+      ? { label: "Confirmar entrega", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90" }
       : null;
 
   const handleQuickClick = async (e: React.MouseEvent) => {

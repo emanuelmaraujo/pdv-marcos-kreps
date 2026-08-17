@@ -34,6 +34,7 @@ type TabStatus =
   | "NA_FILA"
   | "PRONTO_PARCIAL"
   | "PRONTO"
+  | "SAIU_PARA_ENTREGA"
   | "ENTREGUE_PENDENTE"
   | "ENTREGUE"
   | "CANCELADO";
@@ -57,9 +58,10 @@ const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
   AGUARDANDO_PAGAMENTO: 2,
   PRONTO_PARCIAL: 3,
   PRONTO: 4,
-  ENTREGUE: 5,
-  CANCELADO: 6,
-  EXPIRADO: 7,
+  SAIU_PARA_ENTREGA: 5,
+  ENTREGUE: 6,
+  CANCELADO: 7,
+  EXPIRADO: 8,
 };
 
 const KANBAN_COLUMNS: KanbanColumnConfig[] = [
@@ -93,6 +95,14 @@ const KANBAN_COLUMNS: KanbanColumnConfig[] = [
     topColor: "bg-[var(--status-success)]",
     headerBg: "bg-[var(--status-success-bg)] border-transparent",
     emptyText: "Nenhum pedido pronto",
+    showAvgWait: true,
+  },
+  {
+    status: "SAIU_PARA_ENTREGA",
+    label: "Saiu p/ Entrega",
+    topColor: "bg-blue-500",
+    headerBg: "bg-blue-50 border-transparent",
+    emptyText: "Nenhuma entrega em rota",
     showAvgWait: true,
   },
   {
@@ -408,8 +418,10 @@ export default function PedidosPage() {
       for (const id of readyItemIds) {
         await pdvApi.updateOrderItemStatus({ orderItemId: id, newStatus: "DELIVERED" });
       }
-    } else if (order.status === "PRONTO") {
+    } else if (order.status === "PRONTO" && order.type !== "ENTREGA") {
       await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
+    } else if (order.status === "SAIU_PARA_ENTREGA") {
+      await pdvApi.confirmDelivery({ orderId: order.id });
     }
     await fetchOrders(false);
   }, [fetchOrders]);
@@ -453,11 +465,13 @@ export default function PedidosPage() {
     });
 
   const partialCount = getCount("PRONTO_PARCIAL");
+  const dispatchedCount = getCount("SAIU_PARA_ENTREGA");
   const tabs: { id: TabStatus; label: string; count?: number }[] = [
     { id: "PAGAMENTO_PENDENTE",    label: "Ag. pagto",  count: pendingPayCount },
     { id: "NA_FILA",               label: "Na fila",    count: queueCount },
     { id: "PRONTO_PARCIAL",        label: "Parciais",   count: partialCount },
     { id: "PRONTO",                label: "Prontos",    count: readyCount },
+    { id: "SAIU_PARA_ENTREGA",     label: "Em entrega", count: dispatchedCount },
     { id: "ENTREGUE_PENDENTE",     label: "Pend. pagto", count: deliveredPendingCount },
     { id: "AGUARDANDO_CONFIRMACAO",label: "Aguardando", count: waitingCount },
     { id: "ENTREGUE",              label: "Entregues",  count: orders.filter((o) => o.status === "ENTREGUE" && !isDeliveredPendingPayment(o)).length },

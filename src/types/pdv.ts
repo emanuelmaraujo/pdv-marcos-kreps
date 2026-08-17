@@ -8,6 +8,7 @@ export type OrderStatus =
   | 'NA_FILA'
   | 'PRONTO_PARCIAL'
   | 'PRONTO'
+  | 'SAIU_PARA_ENTREGA'
   | 'ENTREGUE'
   | 'CANCELADO'
   | 'EXPIRADO';
@@ -21,7 +22,18 @@ export type OrderItemStatus =
 
 export type PaymentStatus = 'PENDING' | 'PARTIAL' | 'PAID' | 'REFUNDED' | 'CANCELED' | 'COURTESY';
 export type PaymentMethod = 'PIX' | 'CASH' | 'DEBIT_CARD' | 'CREDIT_CARD' | 'IFOOD' | 'PENDING' | 'COURTESY';
-export type OrderType = 'BALCAO' | 'VIAGEM';
+export type OrderType = 'BALCAO' | 'VIAGEM' | 'ENTREGA';
+
+export interface DeliveryAddress {
+  street: string;
+  number?: string;
+  complement?: string;
+  neighborhood: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  reference?: string;
+}
 export type OrderSource = 'ATTENDANT' | 'QR_CODE' | 'WHATSAPP' | 'APP';
 
 // ─── Menu ─────────────────────────────────────────────────────────────────────
@@ -170,6 +182,19 @@ export interface Order {
   discount_reason?: string;
   discount_applied_by?: string;
   packing_fee: number;
+  delivery_fee: number;
+  delivery_street?: string;
+  delivery_number?: string;
+  delivery_complement?: string;
+  delivery_neighborhood?: string;
+  delivery_city?: string;
+  delivery_state?: string;
+  delivery_postal_code?: string;
+  delivery_reference?: string;
+  courier_name?: string;
+  courier_phone?: string;
+  dispatched_at?: string;
+  delivery_delivered_at?: string;
   total_amount: number;
   created_by?: string;
   confirmed_by?: string;

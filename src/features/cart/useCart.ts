@@ -73,12 +73,13 @@ export const useCart = create<CartState>()(
   
   setSource: (source) => set({ source }),
 
-  clearCart: () => set({ 
-    items: [], 
-    customerName: '', 
-    customerPhone: '', 
-    orderNotes: '', 
-    targetOrderId: null 
+  clearCart: () => set({
+    items: [],
+    orderType: 'BALCAO',
+    customerName: '',
+    customerPhone: '',
+    orderNotes: '',
+    targetOrderId: null
   }),
   
   getEstimatedSubtotal: () => {

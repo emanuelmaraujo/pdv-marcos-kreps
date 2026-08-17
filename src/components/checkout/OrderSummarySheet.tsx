@@ -26,6 +26,8 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
+  Bike,
+  MapPin,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PayItemsModal } from "@/app/app/pedidos/components/PayItemsModal";
@@ -137,13 +139,20 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   const [discountReason, setDiscountReason] = useState("");
   const [packagingFee, setPackagingFee] = useState(0);
   const [applyPackagingForTakeout, setApplyPackagingForTakeout] = useState(false);
+  const [deliveryEnabled, setDeliveryEnabled] = useState(false);
+  const [defaultDeliveryFee, setDefaultDeliveryFee] = useState(0);
+  const [deliveryStreet, setDeliveryStreet] = useState("");
+  const [deliveryNumber, setDeliveryNumber] = useState("");
+  const [deliveryComplement, setDeliveryComplement] = useState("");
+  const [deliveryNeighborhood, setDeliveryNeighborhood] = useState("");
+  const [deliveryReference, setDeliveryReference] = useState("");
 
   const [recentNames, setRecentNames] = useState<string[]>([]);
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number; ifood_charged_amount?: number | null; order_type?: "BALCAO" | "VIAGEM" } | null>(null);
+  const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number; ifood_charged_amount?: number | null; order_type?: "BALCAO" | "VIAGEM" | "ENTREGA" } | null>(null);
   const [customAmountStr, setCustomAmountStr] = useState("");
   const [ifoodAmountStr, setIfoodAmountStr] = useState("");
 
@@ -167,6 +176,8 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
       const branchFee = Number(currentBranch?.packing_fee ?? 0);
       setPackagingFee(branchFee > 0 ? branchFee : globalFee);
       setApplyPackagingForTakeout(s.apply_packaging_fee_for_takeout === "true");
+      setDeliveryEnabled(s.delivery_enabled === "true");
+      setDefaultDeliveryFee(parseFloat(s.default_delivery_fee ?? "0") || 0);
     }).catch(() => {});
   }, [currentBranch?.packing_fee]);
 
@@ -176,6 +187,19 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     const timer = window.setTimeout(() => {
       setRecentNames(getRecentNames());
       setStep(0);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
+
+  // Reset delivery address fields when the sheet closes (next order starts clean)
+  useEffect(() => {
+    if (isOpen) return;
+    const timer = window.setTimeout(() => {
+      setDeliveryStreet("");
+      setDeliveryNumber("");
+      setDeliveryComplement("");
+      setDeliveryNeighborhood("");
+      setDeliveryReference("");
     }, 0);
     return () => window.clearTimeout(timer);
   }, [isOpen]);
@@ -246,18 +270,22 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
     };
   }, [customerPhone, isOpen, setCustomerInfo]);
 
+  const isDeliveryOrder = orderType === "ENTREGA";
   const estimatedSubtotal = getEstimatedSubtotal();
-  // Embalagem cobrada por krep marcado como Para Levar
-  const takeoutQuantity = items.filter((i) => i.is_takeout).reduce((s, i) => s + i.quantity, 0);
+  // Embalagem cobrada por krep marcado como Para Levar (entrega força embalagem em todos os itens)
+  const takeoutQuantity = isDeliveryOrder
+    ? items.reduce((s, i) => s + i.quantity, 0)
+    : items.filter((i) => i.is_takeout).reduce((s, i) => s + i.quantity, 0);
   const packagingTotal = applyPackagingForTakeout && packagingFee > 0 ? takeoutQuantity * packagingFee : 0;
   const showPackagingFee = packagingTotal > 0;
+  const deliveryFeeEstimate = isDeliveryOrder && deliveryEnabled ? defaultDeliveryFee : 0;
   const discountNum = parseFloat(discountValue.replace(",", ".")) || 0;
   const discountAmount = hasDiscount && discountNum > 0
     ? discountType === "AMOUNT"
       ? discountNum
       : (estimatedSubtotal * discountNum) / 100
     : 0;
-  const estimatedTotal = estimatedSubtotal + packagingTotal - discountAmount;
+  const estimatedTotal = estimatedSubtotal + packagingTotal + deliveryFeeEstimate - discountAmount;
   const ifoodAmount = parseFloat(ifoodAmountStr.replace(",", ".")) || 0;
 
   const handleCheckout = async () => {
@@ -276,6 +304,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         setIsSubmitting(false);
         return;
       }
+      if (isDeliveryOrder && (!deliveryStreet.trim() || !deliveryNeighborhood.trim())) {
+        setError("Informe ao menos rua e bairro para entrega.");
+        setIsSubmitting(false);
+        return;
+      }
 
       let paymentStatus = "PAID";
       if (selectedPaymentMethod === "PENDING")   paymentStatus = "PENDING";
@@ -288,7 +321,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         finalDiscount = { type: discountType, value: discountNum, reason: discountReason.trim() };
       }
 
-      const derivedOrderType = items.some((i) => i.is_takeout) ? "VIAGEM" : "BALCAO";
+      const derivedOrderType = isDeliveryOrder ? "ENTREGA" : (items.some((i) => i.is_takeout) ? "VIAGEM" : "BALCAO");
       const normalizedPhone = normalizeBrazilPhone(customerPhone);
       const payload = {
         branch_id: currentBranchId,
@@ -302,13 +335,20 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         split_bill: splitBill || undefined, // flag para o edge function não imprimir antes do pagamento
         ifood_charged_amount: !splitBill && selectedPaymentMethod === "IFOOD" ? ifoodAmount : undefined,
         discount: finalDiscount,
+        delivery_address: isDeliveryOrder ? {
+          street: deliveryStreet.trim(),
+          number: deliveryNumber.trim() || undefined,
+          complement: deliveryComplement.trim() || undefined,
+          neighborhood: deliveryNeighborhood.trim(),
+          reference: deliveryReference.trim() || undefined,
+        } : undefined,
         items: items.map((item) => ({
           product_id: item.product.id,
           quantity: item.quantity,
-          is_takeout: item.is_takeout ?? false,
+          is_takeout: isDeliveryOrder ? true : (item.is_takeout ?? false),
           removed_ingredient_ids: item.removed_ingredients,
           addons: item.addons.map((a) => ({ addon_id: a.addon_id, quantity: a.quantity })),
-          notes: item.is_takeout
+          notes: isDeliveryOrder || item.is_takeout
             ? `[VIAGEM] ${item.notes || ""}`.trim()
             : item.notes,
         })),
@@ -398,6 +438,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
               <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[var(--status-warning-bg)] px-3 py-1 text-xs font-black uppercase tracking-wider text-[var(--status-warning)] ring-1 ring-[var(--status-warning)]/30">
                 <ShoppingBag className="h-3.5 w-3.5" strokeWidth={2.25} />
                 Para Viagem
+              </span>
+            )}
+            {successData.order_type === "ENTREGA" && (
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-wider text-blue-700 ring-1 ring-blue-200">
+                <Bike className="h-3.5 w-3.5" strokeWidth={2.25} />
+                Entrega
               </span>
             )}
           </div>
@@ -542,6 +588,92 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         {step === 1 && (
           <div className="flex-1 space-y-5 px-4 pb-4">
 
+            {/* Entrega toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isDeliveryOrder;
+                setOrderType(next ? "ENTREGA" : "BALCAO");
+                if (next) setSplitBill(false);
+              }}
+              className={`flex w-full items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition-all ${
+                isDeliveryOrder
+                  ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
+                  : "border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]"
+              }`}
+            >
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isDeliveryOrder ? "bg-blue-500 text-white" : "bg-[var(--bg-subtle)] text-[var(--text-secondary)]"}`}>
+                <Bike className="h-4.5 w-4.5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={`block text-sm font-black ${isDeliveryOrder ? "text-blue-700" : "text-[var(--text-primary)]"}`}>
+                  Pedido para entrega
+                </span>
+                <span className="block text-[11px] text-[var(--text-secondary)]">
+                  Cobra taxa de entrega e exige endereço do cliente
+                </span>
+              </span>
+              <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${isDeliveryOrder ? "bg-blue-500" : "bg-zinc-300"}`}>
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isDeliveryOrder ? "translate-x-4" : "translate-x-0.5"}`} />
+              </span>
+            </button>
+
+            {/* Delivery address form */}
+            {isDeliveryOrder && (
+              <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4 animate-in fade-in slide-in-from-top-2">
+                <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-blue-700">
+                  <MapPin className="h-3.5 w-3.5" /> Endereço de Entrega
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Rua *"
+                    value={deliveryStreet}
+                    onChange={(e) => setDeliveryStreet(e.target.value)}
+                    className="col-span-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Nº"
+                    value={deliveryNumber}
+                    onChange={(e) => setDeliveryNumber(e.target.value)}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Complemento (apto, bloco...)"
+                  value={deliveryComplement}
+                  onChange={(e) => setDeliveryComplement(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+                <input
+                  type="text"
+                  placeholder="Bairro *"
+                  value={deliveryNeighborhood}
+                  onChange={(e) => setDeliveryNeighborhood(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+                <input
+                  type="text"
+                  placeholder="Ponto de referência (opcional)"
+                  value={deliveryReference}
+                  onChange={(e) => setDeliveryReference(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+                {deliveryEnabled && deliveryFeeEstimate > 0 && (
+                  <p className="text-[11px] font-bold text-blue-700">
+                    Taxa de entrega estimada: {currency.format(deliveryFeeEstimate)}
+                  </p>
+                )}
+                {!deliveryEnabled && (
+                  <p className="text-[11px] font-bold text-amber-700">
+                    ⚠ Entrega não está habilitada nas configurações. O pedido será rejeitado pelo servidor.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Packaging fee notice (per-item takeout) */}
             {showPackagingFee && (
               <div className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
@@ -671,8 +803,8 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         {step === 2 && (
           <div className="flex-1 space-y-5 px-4 pb-4">
 
-            {/* Dividir conta toggle — só aparece quando há 2+ itens */}
-            {items.length > 1 && (
+            {/* Dividir conta toggle — só aparece quando há 2+ itens e não é entrega */}
+            {items.length > 1 && !isDeliveryOrder && (
               <button
                 type="button"
                 onClick={() => { setSplitBill((v) => !v); }}
@@ -899,6 +1031,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                   <span>{currency.format(packagingTotal)}</span>
                 </div>
               )}
+              {deliveryFeeEstimate > 0 && (
+                <div className="flex justify-between text-sm font-semibold text-[var(--text-secondary)]">
+                  <span>Entrega</span>
+                  <span>{currency.format(deliveryFeeEstimate)}</span>
+                </div>
+              )}
               {discountAmount > 0 && (
                 <div className="flex justify-between text-sm font-bold text-emerald-600">
                   <span>Desconto</span>
@@ -969,11 +1107,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         }}
         onClose={() => {
           setSplitOrder(null);
-          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | undefined) ?? orderType });
+          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | "ENTREGA" | undefined) ?? orderType });
         }}
         onPaid={() => {
           setSplitOrder(null);
-          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | undefined) ?? orderType });
+          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | "ENTREGA" | undefined) ?? orderType });
         }}
       />
     )}

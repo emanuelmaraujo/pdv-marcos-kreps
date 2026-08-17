@@ -117,6 +117,7 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   NA_FILA: "Na fila",
   PRONTO_PARCIAL: "Pronto parcial",
   PRONTO: "Pronto",
+  SAIU_PARA_ENTREGA: "Saiu para entrega",
   ENTREGUE: "Entregue",
   CANCELADO: "Cancelado",
   EXPIRADO: "Expirado",

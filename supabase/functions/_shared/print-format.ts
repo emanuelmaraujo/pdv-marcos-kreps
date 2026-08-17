@@ -149,6 +149,14 @@ function header(order: any, section: string, options: ReceiptOptions) {
   if (order?.customer_phone) lines.push(`Fone: ${text(order.customer_phone)}`);
   lines.push(`Hora: ${options.timestamp || timestampNow()}`);
   if (order?.notes) lines.push(`Obs pedido: ${text(order.notes)}`);
+  if (order?.type === "ENTREGA") {
+    lines.push(">>> ENTREGA <<<");
+    const addressLine = [text(order?.delivery_street), text(order?.delivery_number)].filter(Boolean).join(", ");
+    if (addressLine) lines.push(`End: ${addressLine}`);
+    if (text(order?.delivery_complement)) lines.push(`Compl: ${text(order.delivery_complement)}`);
+    if (text(order?.delivery_neighborhood)) lines.push(`Bairro: ${text(order.delivery_neighborhood)}`);
+    if (text(order?.delivery_reference)) lines.push(`Ref: ${text(order.delivery_reference)}`);
+  }
   lines.push(LINE);
   return `${lines.join("\n")}\n`;
 }
@@ -208,6 +216,7 @@ export function buildCustomerReceipt(order: any, items: any[], options: ReceiptO
   content += DASH + "\n";
   if (settingNumber(order?.discount_amount) > 0) content += `Desconto: -${formatBRL(order.discount_amount)}\n`;
   if (settingNumber(order?.packing_fee) > 0) content += `Taxa embalagem: ${formatBRL(order.packing_fee)}\n`;
+  if (settingNumber(order?.delivery_fee) > 0) content += `Taxa entrega: ${formatBRL(order.delivery_fee)}\n`;
   content += `TOTAL: ${formatBRL(order?.total_amount)}\n`;
   content += `Pagamento: ${text(order?.payment_status)}\n`;
   if (text(order?.payment_method) && text(order?.payment_method) !== "PENDING") {

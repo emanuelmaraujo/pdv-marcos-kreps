@@ -31,7 +31,7 @@ const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 
 // ── Configuração declarativa por estado ──────────────────────────────────────
 
-type StateKey = "AWAITING_PAYMENT" | "CONFIRMED" | "IN_PREP" | "READY" | "DELIVERED" | "CANCELED";
+type StateKey = "AWAITING_PAYMENT" | "CONFIRMED" | "IN_PREP" | "READY" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELED";
 
 type PillTone = "warning" | "neutral-translucent" | "brand" | "success" | "muted-translucent" | "danger";
 
@@ -53,6 +53,8 @@ function statusToStateKey(status: OrderStatus): StateKey {
       return "IN_PREP";
     case "PRONTO":
       return "READY";
+    case "SAIU_PARA_ENTREGA":
+      return "OUT_FOR_DELIVERY";
     case "ENTREGUE":
       return "DELIVERED";
     case "CANCELADO":
@@ -81,6 +83,11 @@ const STATE_CONFIG: Record<StateKey, StateConfig> = {
     pill: { label: "Pronto para retirada", tone: "success", pulsing: false },
     hint: "Retire seu pedido no balcão. Bom apetite!",
     activeStepIndex: 3,
+  },
+  OUT_FOR_DELIVERY: {
+    pill: { label: "Saiu para entrega", tone: "brand", pulsing: true },
+    hint: "Seu pedido está a caminho.",
+    activeStepIndex: 3.5,
   },
   DELIVERED: {
     pill: { label: "Entregue", tone: "muted-translucent", pulsing: false },

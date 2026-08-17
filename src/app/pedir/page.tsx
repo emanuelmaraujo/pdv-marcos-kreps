@@ -1369,8 +1369,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
     setIsSubmittingOrder(true);
     try {
+      // Checkout público ainda não suporta ENTREGA (fica para uma fase futura) —
+      // BALCAO/VIAGEM são os únicos tipos aceitos por create-public-order hoje.
+      const publicOrderType: "BALCAO" | "VIAGEM" = orderType === "VIAGEM" ? "VIAGEM" : "BALCAO";
       const response = await pdvApi.createPublicOrder({
-        order_type: orderType,
+        order_type: publicOrderType,
         customer_name: customerName.trim() || undefined,
         customer_phone: normalizedPhone ?? undefined,
         customer_email: customerEmail.trim() || undefined,
@@ -1396,7 +1399,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           phone_e164: normalizedPhone,
           name: customerName.trim(),
           email: customerEmail.trim() || undefined,
-          order_type: orderType,
+          order_type: publicOrderType,
           marketing_opt_in: marketingOptIn,
           saved_at: new Date().toISOString(),
         });

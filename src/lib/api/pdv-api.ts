@@ -606,6 +606,16 @@ export const pdvApi = {
       force_delivery: payload.forceDelivery
     }),
 
+  dispatchDelivery: (payload: { orderId: string; courierName?: string; courierPhone?: string }) =>
+    invokeEdgeFunction('dispatch-delivery', {
+      order_id: payload.orderId,
+      courier_name: payload.courierName,
+      courier_phone: payload.courierPhone,
+    }),
+
+  confirmDelivery: (payload: { orderId: string }) =>
+    invokeEdgeFunction('confirm-delivery', { order_id: payload.orderId }),
+
   updateOrderItemStatus: (payload: {
     orderItemId: string;
     newStatus: OrderItemStatus;
