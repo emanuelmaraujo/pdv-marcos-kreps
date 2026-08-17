@@ -6,20 +6,11 @@
 // Não exige auth — é dado agregado, não exposto granular.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
 function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
-  const configured = Deno.env.get("PUBLIC_CHECKOUT_ALLOWED_ORIGINS") ?? "*";
-  const allowed = configured.split(",").map((v) => v.trim()).filter(Boolean);
-  const allowOrigin = configured === "*" || allowed.includes(origin) ? origin || "*" : allowed[0] ?? "";
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Vary": "Origin",
-    // Cache de 60s — métricas não precisam ser instantâneas
-    "Cache-Control": "public, max-age=60",
-  };
+  // Cache de 60s — métricas não precisam ser instantâneas
+  return publicCorsHeaders(req, { methods: "GET, POST, OPTIONS", cacheControl: "public, max-age=60" });
 }
 
 function jsonResponse(req: Request, body: Record<string, unknown>, status = 200) {

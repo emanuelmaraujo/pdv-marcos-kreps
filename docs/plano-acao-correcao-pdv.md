@@ -2,6 +2,36 @@
 
 Este documento consolida o plano de ação para corrigir os riscos identificados no diagnóstico operacional do PDV Marcos Krep's. O foco é elevar a confiabilidade de caixa, pedidos, pagamentos, impressão, segurança pública e experiência de uso em operação real de balcão, cozinha e delivery.
 
+## Status de implementação
+
+_Atualizado em 2026-08-17. Cada item linka o PR correspondente. "Validado" significa testado contra Supabase local real (Docker + `supabase functions serve` + HTTP real), não só leitura de código._
+
+| Fase | Item | Status | PR |
+|---|---|---|---|
+| P0.1 | Pagamento transacional (`pay_order_items_transactional`) | ✅ Em produção | [#112](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/112) |
+| P0.2 | Criação atômica de pedido do atendente (`create_attendant_order_transactional`) | ✅ Em produção | [#112](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/112) |
+| P0.3 | Criação atômica de pedido público (`create_public_order_transactional`) | ✅ Em produção | [#113](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/113) |
+| P0.4 | Claim atômico de impressão (`claim_printer_jobs`, SKIPPED distinto de PRINTED) | ✅ Em produção | [#113](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/113) |
+| P1.1 | RLS multi-filial — corrigido bug crítico de escrita direta por ATTENDANT | ✅ Em produção | [#115](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/115) |
+| P1.2 | Segurança de endpoints públicos — CORS + rate limit | ⚠️ Parcial | — |
+| P1.3 | WebAuthn/Biometria | ⬜ Não iniciado | — |
+| P2.x | Performance/UX operacional | ⬜ Não iniciado | — |
+| P3.x | Offline-first/observabilidade/auditoria financeira | ⬜ Não iniciado | — |
+
+**Riscos residuais conhecidos (P0-P1.1):**
+- P0.2: `printer_jobs` é inserido pela Edge Function depois da RPC retornar (não é atômico com o resto — precisa de `daily_number`, que só existe após o INSERT). Risco pequeno, recuperável via `reprint-order`.
+- Dois incidentes de deploy durante o P0 (ordem de timestamp de migration vs. banco remoto; arquivo órfão por squash-merge) — corrigidos, deploy confirmado verde depois de cada um.
+- Testes de concorrência/RLS desta sessão foram manuais (`curl`/`docker exec psql`), não scripts de CI automatizados.
+
+**P1.2 — feito nesta sessão:**
+- CORS consolidado num helper único (`supabase/functions/_shared/public-cors.ts`) usado pelos 8 endpoints públicos que tinham a lógica duplicada. Fallback silencioso pra `"*"` quando `PUBLIC_CHECKOUT_ALLOWED_ORIGINS` não está configurada foi removido — agora só `"*"` explícito libera qualquer origem. Confirmado que a env var já está configurada em produção (`supabase secrets list`), então essa mudança não quebra o checkout ao vivo.
+- Rate limit por janela deslizante (`check_rate_limit` RPC + tabela `rate_limit_hits`) aplicado em `lookup-orders-by-phone`: 5 tentativas/15min por telefone normalizado, 20/15min por IP. Tentativas bloqueadas ficam em `audit_logs` (`LOOKUP_RATE_LIMITED`). Validado batendo o limite real via HTTP.
+
+**P1.2 — não feito, fica pra próxima sessão:**
+- OTP via WhatsApp pra revelar token de pedido por telefone (feature maior, precisa de decisão de produto — hoje o rate limit já reduz bastante o risco de enumeração, mas não elimina).
+- Auditoria linha-a-linha de vazamento de UUID interno nos 5 endpoints de leitura pública (`get-public-order-status`, `get-public-customer-profile`, `get-public-checkout-config`, `list-public-branches`, `get-public-branch-stats`) — só uma checagem superficial foi feita.
+- Mensagens genéricas de erro em falha de credencial/token não foram revisadas sistematicamente.
+
 ## Objetivos
 
 1. Eliminar inconsistências financeiras e operacionais em pedidos, pagamentos parciais e fechamento de caixa.
