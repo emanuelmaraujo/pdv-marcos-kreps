@@ -12,6 +12,12 @@
 //
 // orders.payment_status é DERIVADO dos itens via trigger (PAID/PARTIAL/PENDING/COURTESY/REFUNDED).
 // Esta função NÃO escreve mais em orders.payment_status — só nos itens.
+//
+// A regra financeira (seleção de itens elegíveis, checagem de duplicidade,
+// soma de totais, taxa de embalagem/entrega e o insert em payments) roda
+// dentro da RPC transacional pay_order_items_transactional, que trava o
+// pedido e os itens (SELECT ... FOR UPDATE) para serializar chamadas
+// concorrentes. Esta função só autentica, autoriza e delega.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
@@ -68,7 +74,8 @@ serve(async (req) => {
       throw new Error("Apenas ADMIN pode estornar (REFUNDED).");
     }
 
-    // Lê o pedido via JWT (RLS valida que o user opera a filial).
+    // Lê o pedido via JWT (RLS valida que o user opera a filial) — isso é o
+    // que garante que ATTENDANT só paga pedidos da própria filial.
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
       .select("id, branch_id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at")
@@ -76,143 +83,29 @@ serve(async (req) => {
       .single();
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
 
-    if (order.status === "CANCELADO" || order.status === "EXPIRADO") {
-      throw new Error("Não é possível alterar pagamento de pedido cancelado/expirado.");
-    }
-
-    // Calcula o total relevante (pedido inteiro vs subset de itens) e popula o set de items alvo.
-    let targetItemIds: string[];
-    let targetTotal: number;
-
-    if (Array.isArray(order_item_ids) && order_item_ids.length > 0) {
-      const { data: items, error: itemsErr } = await supabaseAdmin
-        .from("order_items")
-        .select("id, order_id, total_price, status, payment_status")
-        .in("id", order_item_ids);
-      if (itemsErr) throw new Error(`Erro ao ler itens: ${itemsErr.message}`);
-      if (!items || items.length !== order_item_ids.length) {
-        throw new Error("Algum order_item_id é inválido.");
-      }
-      const wrong = items.find((i) => i.order_id !== order.id);
-      if (wrong) throw new Error("Itens devem pertencer ao mesmo pedido.");
-      const cancelled = items.find((i) => i.status === "CANCELLED");
-      if (cancelled) throw new Error("Item cancelado não pode receber pagamento.");
-
-      if (payment_status === "PAID" || payment_status === "COURTESY") {
-        const alreadyPaid = items.find((i) => i.payment_status === "PAID" || i.payment_status === "COURTESY");
-        if (alreadyPaid) throw new Error("Um ou mais itens selecionados ja foram pagos.");
-      }
-
-      targetItemIds = items.map((i) => i.id);
-      targetTotal   = items.reduce((sum, i) => sum + Number(i.total_price ?? 0), 0);
-    } else {
-      const { data: items, error: itemsErr } = await supabaseAdmin
-        .from("order_items")
-        .select("id, total_price")
-        .eq("order_id", order.id)
-        .neq("status", "CANCELLED")
-        .not("payment_status", "in", "(PAID,COURTESY)");
-      if (itemsErr) throw new Error(`Erro ao ler itens do pedido: ${itemsErr.message}`);
-
-      targetItemIds = (items ?? []).map((i) => i.id);
-      targetTotal   = (items ?? []).reduce((sum, i) => sum + Number(i.total_price ?? 0), 0);
-      // Ao pagar o pedido inteiro (sem subset de itens), inclui a taxa de embalagem
-      // que fica em orders.packing_fee (não rateada por item).
-      // Taxa de embalagem e cobrada apenas quando este pagamento quita os
-      // itens restantes e o pedido ainda nao tinha sido totalmente pago.
-    }
-
-    if ((payment_status === "PAID" || payment_status === "COURTESY") && targetItemIds.length > 0) {
-      const { count: unpaidOutsideCount, error: unpaidOutsideErr } = await supabaseAdmin
-        .from("order_items")
-        .select("id", { count: "exact", head: true })
-        .eq("order_id", order.id)
-        .neq("status", "CANCELLED")
-        .not("payment_status", "in", "(PAID,COURTESY)")
-        .not("id", "in", `(${targetItemIds.join(",")})`);
-      if (unpaidOutsideErr) throw new Error(`Erro ao validar itens pendentes: ${unpaidOutsideErr.message}`);
-
-      if (unpaidOutsideCount === 0 && !order.paid_at) {
-        targetTotal += Number((order as any).packing_fee ?? 0);
-      }
-    }
-
-    // Para PAID, exige bate-confere financeiro com o subset.
-    let paymentRecordAmount = 0;
-    if (payment_status === "PAID") {
-      if (Math.round(Number(amount) * 100) !== Math.round(Number(targetTotal) * 100)) {
-        throw new Error(`Valor (R$ ${amount}) difere do total (R$ ${targetTotal.toFixed(2)}).`);
-      }
-      paymentRecordAmount = targetTotal;
-    } else if (payment_status === "COURTESY") {
-      paymentRecordAmount = targetTotal;
-    } else if (payment_status === "REFUNDED") {
-      paymentRecordAmount = -Math.abs(Number(amount) || targetTotal);
-    }
-    // Para PENDING/CANCELED, nada de payment record.
-
-    const now = new Date().toISOString();
-
-    // Atualiza os itens — o trigger no DB recalcula orders.payment_status.
-    const itemUpdate: Record<string, unknown> = {
-      payment_status,
-      payment_method,
-    };
-    if (payment_status === "PAID" || payment_status === "COURTESY") {
-      itemUpdate.paid_at = now;
-    } else if (payment_status === "PENDING") {
-      itemUpdate.paid_at = null;
-    }
-
-    if (targetItemIds.length === 0) {
-      throw new Error("Pedido sem itens elegíveis pra pagamento.");
-    }
-
-    const { error: itemErr } = await supabaseAdmin
-      .from("order_items")
-      .update(itemUpdate)
-      .in("id", targetItemIds);
-    if (itemErr) throw new Error(`Erro ao atualizar itens: ${itemErr.message}`);
-
-    // Registro de pagamento (histórico do caixa).
-    if (["PAID", "COURTESY", "REFUNDED"].includes(payment_status)) {
-      const { error: payErr } = await supabaseAdmin
-        .from("payments")
-        .insert({
-          order_id:       order.id,
-          amount:         paymentRecordAmount,
-          payment_method,
-          payment_status,
-          received_by:    user.id,
-          notes:          notes ?? null,
-          order_item_ids: targetItemIds,
-        });
-      if (payErr) throw new Error(`Erro ao registrar pagamento: ${payErr.message}`);
-    }
-
-    if (payment_method === "IFOOD") {
-      const { error: ifoodErr } = await supabaseAdmin
-        .from("orders")
-        .update({ ifood_charged_amount })
-        .eq("id", order.id);
-      if (ifoodErr) throw new Error(`Erro ao salvar valor do iFood: ${ifoodErr.message}`);
-    }
-
-    await supabaseAdmin.from("audit_logs").insert({
-      action:     `PAYMENT_${payment_status}`,
-      table_name: "orders",
-      record_id:  order.id,
-      user_id:    user.id,
-      branch_id:  order.branch_id,
-      new_data:   {
-        payment_method,
-        amount: paymentRecordAmount,
-        item_ids_count: targetItemIds.length,
-        scope: order_item_ids ? "ITEMS" : "ORDER",
+    // Toda a regra financeira (seleção de itens, checagem de duplicidade,
+    // soma de totais, taxa de embalagem/entrega, bate-confere de amount e o
+    // insert em payments/audit_logs) roda dentro da RPC transacional, que
+    // trava o pedido e os itens via SELECT ... FOR UPDATE.
+    const { data: rpcResult, error: rpcErr } = await supabaseAdmin.rpc(
+      "pay_order_items_transactional",
+      {
+        p_order_id: order.id,
+        p_actor_id: user.id,
+        p_payment_method: payment_method,
+        p_payment_status: payment_status,
+        p_amount: typeof amount === "number" ? amount : null,
+        p_item_ids: Array.isArray(order_item_ids) && order_item_ids.length > 0 ? order_item_ids : null,
+        p_notes: notes ?? null,
+        p_ifood_charged_amount: payment_method === "IFOOD" ? ifood_charged_amount : null,
       },
-    });
+    );
+    if (rpcErr) throw new Error(rpcErr.message);
 
-    // Relê pedido pra ver se ficou totalmente pago (após trigger derivar payment_status)
+    const targetItemIds: string[] = rpcResult?.target_item_ids ?? [];
+
+    // Relê pedido com o relacionamento de branches (a RPC já retorna o
+    // pedido, mas sem o join de branches necessário pra montar os tickets).
     const { data: orderAfter } = await supabaseAdmin
       .from("orders")
       .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at, branch_id, branches(code, name, printer_config)")
