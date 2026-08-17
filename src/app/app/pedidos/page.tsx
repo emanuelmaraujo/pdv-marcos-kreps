@@ -367,17 +367,29 @@ export default function PedidosPage() {
   // 2. Polling a cada 15s (fallback caso o Realtime esteja desligado na
   //    tabela ou a conexão WS caia — comum em redes ruins de feira/popup).
   // 3. Refresh ao voltar a aba para foreground (visibilitychange).
+  //
+  // Debounce nos eventos de realtime: um pedido com vários itens dispara
+  // vários eventos "orders"/"order_items" quase simultâneos (um INSERT por
+  // item, updates em cadeia dos triggers de status). Sem debounce, cada um
+  // vira um fetchOrders completo — rajada de requests pro mesmo pedido.
+  // Coalesce numa janela curta e refaz só uma vez.
   useEffect(() => {
     const timer = window.setTimeout(() => fetchOrders(), 0);
     const supabase = createClient();
+
+    let debounceTimer: number | null = null;
+    const scheduleFetch = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        fetchOrders(false);
+      }, 400);
+    };
+
     const channel = supabase
       .channel("orders-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
-        fetchOrders(false);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, () => {
-        fetchOrders(false);
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleFetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleFetch)
       .subscribe();
 
     const POLL_MS = 15_000;
@@ -394,6 +406,7 @@ export default function PedidosPage() {
 
     return () => {
       window.clearTimeout(timer);
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       window.clearInterval(pollInterval);
       document.removeEventListener("visibilitychange", onVisibility);
       supabase.removeChannel(channel);

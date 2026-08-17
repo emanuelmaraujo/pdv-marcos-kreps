@@ -15,7 +15,8 @@ _Atualizado em 2026-08-17. Cada item linka o PR correspondente. "Validado" signi
 | P1.1 | RLS multi-filial — corrigido bug crítico de escrita direta por ATTENDANT | ✅ Em produção | [#115](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/115) |
 | P1.2 | Segurança de endpoints públicos — CORS + rate limit | ⚠️ Parcial | — |
 | P1.3 | WebAuthn/Biometria — origem restrita, auditoria, último uso | ⚠️ Parcial | — |
-| P2.x | Performance/UX operacional | ⬜ Não iniciado | — |
+| P2.1 | Performance do board de pedidos — debounce realtime + índice | ⚠️ Parcial | — |
+| P2.2/P2.3 | Feedback visual / ergonomia de balcão | ⬜ Não iniciado | — |
 | P3.x | Offline-first/observabilidade/auditoria financeira | ⬜ Não iniciado | — |
 
 **Riscos residuais conhecidos (P0-P1.1):**
@@ -41,6 +42,14 @@ _Atualizado em 2026-08-17. Cada item linka o PR correspondente. "Validado" signi
 **P1.3 — não feito:**
 - Testes manuais em Chrome/Edge desktop, Android Chrome e iOS Safari — não fazem sentido num ambiente sem browser real; precisa ser feito manualmente pelo time.
 - Nenhuma biblioteca WebAuthn consolidada foi adotada — a implementação manual (parser CBOR próprio, verificação ECDSA manual) continua como está; avaliar troca fica pra decisão futura se a compatibilidade cross-browser virar problema real.
+
+**P2.1 — feito nesta sessão:**
+- Debounce (400ms) nos eventos de realtime de `/app/pedidos`: um pedido com vários itens dispara vários eventos quase simultâneos (INSERT por item, updates em cadeia dos triggers de status) — antes, cada um virava um `fetchOrders` completo; agora coalescem numa janela curta.
+- Índice `idx_orders_branch_payment_status_created_at` (branch_id, payment_status, created_at) — os índices por (branch_id, created_at) e (status, created_at) já existiam.
+
+**P2.1 — não feito, é o grosso do trabalho real:**
+- Separar consulta leve (board) de consulta detalhada (modal) não foi feito. Investiguei e o board **usa dados de item diretamente** hoje (`handleQuickAction` em `pedidos/page.tsx` filtra `order.items` por status pra decidir o que entregar no card do "PRONTO_PARCIAL") — um split exigiria adaptar essa lógica também, não só trocar a query. Escopo maior do que cabia nesta sessão; fica pra próxima.
+- Testado só com `npm run build`/`npm run lint` — não abri a tela num browser real pra confirmar visualmente que o debounce não introduziu atraso perceptível incômodo.
 
 ## Objetivos
 
