@@ -128,6 +128,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
   }, [cappedCurrent, cappedCompare, effectiveMode, branchId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 

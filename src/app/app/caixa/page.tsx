@@ -251,11 +251,13 @@ export default function CaixaPage() {
 
   // Carrega quando muda dia ou filial
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCash(false, selectedDayLabel);
   }, [selectedDayLabel, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (showComparison) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadComparison(selectedDayLabel);
     } else {
       setPrevData(null);
