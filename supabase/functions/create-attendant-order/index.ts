@@ -358,136 +358,76 @@ serve(async (req) => {
       }
     }
 
-    // 5. Inserir Pedido (Avança o status para NA_FILA)
-    const { data: createdOrder, error: insertError } = await supabaseAdmin
-      .from('orders')
-      .insert({
-        branch_id: branch.id,
-        source: 'ATTENDANT',
-        type: order_type,
-        // split_bill: fica em AGUARDANDO_PAGAMENTO até todos pagarem → mark-payment imprime depois
-        status: isSplitBill ? 'AGUARDANDO_PAGAMENTO' : 'NA_FILA',
-        customer_name: customer_name || null,
-        customer_phone: customerPhoneE164 ?? (customer_phone || null),
-        customer_id: customerId,
-        notes: notes || null,
-        discount_amount: discountAmount,
-        packing_fee: packingFee,
-        delivery_fee: deliveryFee,
-        delivery_street: isDelivery ? deliveryStreet : null,
-        delivery_number: isDelivery ? (deliveryAddr.number || null) : null,
-        delivery_complement: isDelivery ? (deliveryAddr.complement || null) : null,
-        delivery_neighborhood: isDelivery ? deliveryNeighborhood : null,
-        delivery_city: isDelivery ? (deliveryAddr.city || null) : null,
-        delivery_state: isDelivery ? (deliveryAddr.state || null) : null,
-        delivery_postal_code: isDelivery ? (deliveryAddr.postal_code || null) : null,
-        delivery_reference: isDelivery ? (deliveryAddr.reference || null) : null,
-        courier_name: isDelivery ? (courier_name || null) : null,
-        courier_phone: isDelivery ? (courier_phone || null) : null,
-        total_amount: totalAmount,
-        payment_method: payment_method,
-        payment_status: payment_status,
-        created_by: user.id,
-        confirmed_by: isSplitBill ? null : user.id, // confirmação acontece após pagamento no split
-        confirmed_at: isSplitBill ? null : nowIso,
-        queue_entered_at: isSplitBill ? null : nowIso,
-        paid_at: paidAt
-      })
-      .select('id, daily_number')
-      .single();
-
-    if (insertError) throw new Error('Erro ao criar pedido principal: ' + insertError.message);
-
-    const auditLogsToInsert = [];
-    auditLogsToInsert.push({ action: 'ORDER_CREATED', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
-    if (!isSplitBill) {
-      auditLogsToInsert.push({ action: 'ORDER_SENT_TO_QUEUE', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
-    }
-
-    // 6. Registrar Desconto
-    if (discountAmount > 0) {
-      await supabaseAdmin.from('discounts').insert({
-        order_id: createdOrder.id,
+    // 5-8. Criação atômica do pedido (pedido, itens, addons, removidos, desconto,
+    // pagamento e auditoria) via RPC transacional — se qualquer insert falhar,
+    // nada fica gravado (ver supabase/migrations/20260817070000_create_attendant_order_transactional.sql).
+    const orderPayload = {
+      branch_id: branch.id,
+      order_type,
+      is_split_bill: isSplitBill,
+      customer_name: customer_name || null,
+      customer_phone: customerPhoneE164 ?? (customer_phone || null),
+      customer_id: customerId,
+      notes: notes || null,
+      discount_amount: discountAmount,
+      discount: discountAmount > 0 ? {
         type: discount.type,
         value: discount.value,
         amount_applied: discountAmount,
         reason: discount.reason,
-        granted_by: user.id
-      });
-      auditLogsToInsert.push({ action: 'DISCOUNT_APPLIED', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
-    }
+      } : null,
+      packing_fee: packingFee,
+      delivery_fee: deliveryFee,
+      delivery: isDelivery ? {
+        street: deliveryStreet,
+        number: deliveryAddr.number || null,
+        complement: deliveryAddr.complement || null,
+        neighborhood: deliveryNeighborhood,
+        city: deliveryAddr.city || null,
+        state: deliveryAddr.state || null,
+        postal_code: deliveryAddr.postal_code || null,
+        reference: deliveryAddr.reference || null,
+      } : null,
+      courier_name: isDelivery ? (courier_name || null) : null,
+      courier_phone: isDelivery ? (courier_phone || null) : null,
+      total_amount: totalAmount,
+      payment_method,
+      payment_status,
+      payment_amount: ifoodChargedAmount ?? totalAmount,
+      payment_notes: ifoodChargedAmount !== null
+        ? `iFood cobrado: ${ifoodChargedAmount.toFixed(2)}; total interno: ${totalAmount.toFixed(2)}`
+        : null,
+      items: finalItemsData.map((itemData) => ({
+        product_id: itemData.product.id,
+        product_name_snapshot: itemData.product.name,
+        product_price_snapshot: itemData.product.price,
+        cost_price_snapshot: itemData.product.cost_price ?? 0,
+        production_sector: itemData.product.sector,
+        quantity: itemData.quantity,
+        observation: itemData.notes,
+        is_takeout: itemData.is_takeout,
+        total_price: itemData.itemTotalPrice,
+        removed_ingredients: itemData.removedIngredientsSnapshots.map((r: any) => ({
+          ingredient_id: r.ingredient_id,
+          ingredient_name_snapshot: r.ingredient_name_snapshot,
+        })),
+        addons: itemData.addonsSnapshots.map((a: any) => ({
+          addon_id: a.addon_id,
+          quantity: a.quantity,
+          addon_name_snapshot: a.addon_name_snapshot,
+          addon_price_snapshot: a.addon_price_snapshot,
+        })),
+      })),
+    };
 
-    // 7. Registrar Pagamento em Histórico
-    if (payment_status === 'PAID') {
-       const paymentAmount = ifoodChargedAmount ?? totalAmount;
-       await supabaseAdmin.from('payments').insert({
-         order_id: createdOrder.id,
-         amount: paymentAmount,
-         payment_method: payment_method,
-         payment_status: 'PAID',
-         received_by: user.id,
-         notes: ifoodChargedAmount !== null
-           ? `iFood cobrado: ${ifoodChargedAmount.toFixed(2)}; total interno: ${totalAmount.toFixed(2)}`
-           : null
-       });
-       auditLogsToInsert.push({ action: 'PAYMENT_MARKED_PAID', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
-    } else if (payment_status === 'COURTESY') {
-       await supabaseAdmin.from('payments').insert({
-         order_id: createdOrder.id,
-         amount: totalAmount,
-         payment_method: 'COURTESY',
-         payment_status: 'COURTESY',
-         received_by: user.id
-       });
-       auditLogsToInsert.push({ action: 'PAYMENT_MARKED_COURTESY', table_name: 'orders', record_id: createdOrder.id, user_id: user.id });
-    }
+    const { data: rpcResult, error: rpcErr } = await supabaseAdmin.rpc(
+      'create_attendant_order_transactional',
+      { p_payload: orderPayload, p_actor_id: user.id },
+    );
+    if (rpcErr) throw new Error('Erro ao criar pedido: ' + rpcErr.message);
 
-    // 8. Inserir Itens
-    // Para pedidos pagos no ato (não split_bill), os itens já nascem com payment_status
-    // correspondente — o trigger recompute_order_payment_status_from_items deriva o
-    // orders.payment_status dos itens, então sem isso o status voltaria a PENDING após
-    // cada INSERT de item.
-    const itemPaymentStatus = !isSplitBill && (payment_status === 'PAID' || payment_status === 'COURTESY')
-      ? payment_status : 'PENDING';
-    const itemPaymentMethod = itemPaymentStatus !== 'PENDING' ? payment_method : 'PENDING';
-    const itemPaidAt       = itemPaymentStatus !== 'PENDING' ? nowIso : null;
-
-    for (const itemData of finalItemsData) {
-      const { data: oi, error: oiErr } = await supabaseAdmin
-        .from('order_items')
-        .insert({
-          order_id: createdOrder.id,
-          product_id: itemData.product.id,
-          product_name_snapshot: itemData.product.name,
-          product_price_snapshot: itemData.product.price,
-          cost_price_snapshot: itemData.product.cost_price ?? 0,
-          production_sector: itemData.product.sector,
-          quantity: itemData.quantity,
-          observation: itemData.notes,
-          total_price: itemData.itemTotalPrice,
-          payment_status: itemPaymentStatus,
-          payment_method: itemPaymentMethod,
-          paid_at: itemPaidAt,
-        })
-        .select('id')
-        .single();
-
-      if (oiErr) throw new Error('Erro ao inserir item do pedido.');
-
-      if (itemData.removedIngredientsSnapshots.length > 0) {
-        const rems = itemData.removedIngredientsSnapshots.map(r => ({
-          order_item_id: oi.id, ...r
-        }));
-        await supabaseAdmin.from('order_item_removed_ingredients').insert(rems);
-      }
-
-      if (itemData.addonsSnapshots.length > 0) {
-        const adds = itemData.addonsSnapshots.map(a => ({
-          order_item_id: oi.id, ...a
-        }));
-        await supabaseAdmin.from('order_item_addons').insert(adds);
-      }
-    }
+    const createdOrder = { id: rpcResult.order_id, daily_number: rpcResult.daily_number };
+    const auditLogsToInsert: any[] = [];
 
     // 9. Fila de Impressão — respeita override por filial (branches.printer_config)
     // split_bill: NÃO imprime agora — mark-payment dispara a impressão quando tudo for pago
