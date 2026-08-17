@@ -187,7 +187,10 @@ export function BiometricManager() {
                 <p className="text-sm font-bold text-zinc-800">
                   {cred.device_name || `Digital ${i + 1}`}
                 </p>
-                <p className="text-xs text-zinc-400">Adicionada em {relativeDate(cred.created_at)}</p>
+                <p className="text-xs text-zinc-400">
+                  Adicionada em {relativeDate(cred.created_at)}
+                  {cred.last_used_at ? ` · Último uso em ${relativeDate(cred.last_used_at)}` : ""}
+                </p>
               </div>
               <button
                 type="button"
