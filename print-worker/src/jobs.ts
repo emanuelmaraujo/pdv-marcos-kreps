@@ -1,6 +1,11 @@
+import os from 'os';
 import { supabase } from './supabase';
 import { printWithConfig } from './printer';
 import { config } from './config';
+
+// Estável por processo — usado pra reivindicar jobs via claim_printer_jobs
+// (SELECT ... FOR UPDATE SKIP LOCKED) e saber quem está com cada job travado.
+export const WORKER_ID = `${os.hostname()}:${process.pid}`;
 
 let remoteConfigCache: any = null;
 let lastFetchTime = 0;
@@ -27,10 +32,14 @@ function settingString(value: unknown, fallback: string) {
   return String(value);
 }
 
-async function updateJobStatus(jobId: string, status: 'PENDING' | 'PRINTED' | 'FAILED', extra: Record<string, unknown> = {}) {
+async function updateJobStatus(jobId: string, status: 'PENDING' | 'PROCESSING' | 'PRINTED' | 'FAILED' | 'SKIPPED', extra: Record<string, unknown> = {}) {
+  // Ao devolver o job pra fila (retry), libera o lock — senão ele fica
+  // marcado como travado por este worker mesmo depois de virar PENDING de novo.
+  const releaseLock = status === 'PENDING' ? { locked_by: null, locked_at: null } : {};
+
   const { error } = await supabase
     .from('printer_jobs')
-    .update({ status, ...extra })
+    .update({ status, ...releaseLock, ...extra })
     .eq('id', jobId);
 
   if (!error) return;
@@ -38,7 +47,7 @@ async function updateJobStatus(jobId: string, status: 'PENDING' | 'PRINTED' | 'F
   console.warn(`[JOBS] Atualizacao com metadados falhou para job ${jobId}; tentando somente status:`, error.message);
   const { error: fallbackError } = await supabase
     .from('printer_jobs')
-    .update({ status })
+    .update({ status, ...releaseLock })
     .eq('id', jobId);
 
   if (fallbackError) throw fallbackError;
@@ -159,10 +168,7 @@ export async function processJob(job: any) {
     const override = await resolveBranchOverride(job, remoteConfig);
     if (!override.enabled) {
       console.log(`[JOBS] Job ${job.id} pulado: ${override.reason}`);
-      await updateJobStatus(job.id, 'PRINTED', {
-        printed_at: new Date().toISOString(),
-        error_message: `SKIPPED: ${override.reason}`,
-      });
+      await updateJobStatus(job.id, 'SKIPPED', { error_message: override.reason });
       return;
     }
 
@@ -205,19 +211,21 @@ export async function processJob(job: any) {
 
 let isProcessing = false;
 
+// Reivindica jobs via claim_printer_jobs (SELECT ... FOR UPDATE SKIP LOCKED)
+// em vez de um SELECT simples por PENDING — garante que, se dois workers
+// rodarem ao mesmo tempo, cada um só processa os jobs que ele mesmo travou.
 export async function pollPendingJobs() {
   if (isProcessing) return;
   isProcessing = true;
 
   try {
-    const { data: jobs, error } = await supabase
-      .from('printer_jobs')
-      .select('*')
-      .eq('status', 'PENDING')
-      .order('created_at', { ascending: true });
+    const { data: jobs, error } = await supabase.rpc('claim_printer_jobs', {
+      p_worker_id: WORKER_ID,
+      p_limit: 10,
+    });
 
     if (error) {
-      console.error('[JOBS] Erro ao buscar jobs pendentes:', error);
+      console.error('[JOBS] Erro ao reivindicar jobs pendentes:', error);
       return;
     }
 
@@ -238,10 +246,12 @@ export function subscribeToJobs() {
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'printer_jobs' },
       (payload) => {
-        const job = payload.new;
+        const job = payload.new as any;
         if (job.status === 'PENDING') {
-          console.log(`[JOBS] Realtime: Novo job recebido via canal: ${job.id}`);
-          processJob(job);
+          // Não processa o payload do realtime direto — ele não está travado.
+          // Dispara um poll, que reivindica via claim_printer_jobs antes de imprimir.
+          console.log(`[JOBS] Realtime: novo job ${job.id} — disparando poll pra reivindicar.`);
+          void pollPendingJobs();
         }
       }
     )

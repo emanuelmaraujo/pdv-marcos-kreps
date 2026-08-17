@@ -322,12 +322,15 @@ export interface PrinterJob {
   id: string;
   order_id: string;
   sector: 'KITCHEN' | 'JUICE_POTATO' | 'CUSTOMER';
-  status: 'PENDING' | 'PRINTED' | 'FAILED';
+  status: 'PENDING' | 'PROCESSING' | 'PRINTED' | 'FAILED' | 'SKIPPED';
   content: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   printed_at?: string;
   error_message?: string;
+  locked_by?: string;
+  locked_at?: string;
+  attempt_count?: number;
   order?: {
     daily_number: number;
     status: OrderStatus;

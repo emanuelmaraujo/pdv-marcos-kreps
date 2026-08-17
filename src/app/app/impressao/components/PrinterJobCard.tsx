@@ -56,14 +56,18 @@ export function PrinterJobCard({ job, onJobUpdated }: Props) {
     }
   };
 
-  const isFailed  = job.status === "FAILED";
-  const isPending = job.status === "PENDING";
-  const isPrinted = job.status === "PRINTED";
+  const isFailed     = job.status === "FAILED";
+  const isPending    = job.status === "PENDING";
+  const isProcessing = job.status === "PROCESSING";
+  const isPrinted    = job.status === "PRINTED";
+  const isSkipped    = job.status === "SKIPPED";
 
   const cardBg = isFailed
     ? "bg-[var(--status-danger-bg)] border-[var(--status-danger)]/30"
-    : isPending
+    : (isPending || isProcessing)
     ? "bg-[var(--status-warning-bg)]/60 border-[var(--status-warning)]/30"
+    : isSkipped
+    ? "bg-[var(--status-neutral-bg)]/60 border-[var(--border)]"
     : "bg-[var(--bg-surface)] border-[var(--border)]";
 
   return (
@@ -72,7 +76,8 @@ export function PrinterJobCard({ job, onJobUpdated }: Props) {
       <div className="flex items-center gap-3 px-4 py-3">
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
           isFailed  ? "bg-[var(--status-danger)]/15 text-[var(--status-danger)]"
-          : isPending ? "bg-[var(--status-warning)]/15 text-[var(--status-warning)]"
+          : (isPending || isProcessing) ? "bg-[var(--status-warning)]/15 text-[var(--status-warning)]"
+          : isSkipped ? "bg-[var(--status-neutral)]/15 text-[var(--status-neutral)]"
           : "bg-[var(--status-success)]/15 text-[var(--status-success)]"
         }`}>
           {isFailed  ? <AlertTriangle className="h-4 w-4" strokeWidth={1.75} />
@@ -107,9 +112,13 @@ export function PrinterJobCard({ job, onJobUpdated }: Props) {
         </span>
       </div>
 
-      {/* ── Error message ───────────────────────────────────────── */}
-      {isFailed && job.error_message && (
-        <div className="mx-4 mb-3 rounded-xl border border-[var(--status-danger)]/30 bg-[var(--bg-surface)] px-3 py-2 text-xs font-medium text-[var(--status-danger)]">
+      {/* ── Error / skip reason ─────────────────────────────────── */}
+      {(isFailed || isSkipped) && job.error_message && (
+        <div className={`mx-4 mb-3 rounded-xl border px-3 py-2 text-xs font-medium ${
+          isFailed
+            ? "border-[var(--status-danger)]/30 bg-[var(--bg-surface)] text-[var(--status-danger)]"
+            : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+        }`}>
           {job.error_message}
         </div>
       )}

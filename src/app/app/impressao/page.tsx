@@ -17,14 +17,16 @@ import { printerApi } from "@/lib/api/printer-api";
 import { PrinterJob } from "@/types/pdv";
 import { PrinterJobCard } from "./components/PrinterJobCard";
 
-type PrintStatusFilter = "PENDING" | "FAILED" | "PRINTED" | "TODOS";
+type PrintStatusFilter = "PENDING" | "PROCESSING" | "FAILED" | "PRINTED" | "SKIPPED" | "TODOS";
 type PrintSectorFilter = "ALL" | PrinterJob["sector"];
 
 const statusFilters: { id: PrintStatusFilter; label: string }[] = [
-  { id: "PENDING",  label: "Pendentes" },
-  { id: "FAILED",   label: "Falhas" },
-  { id: "PRINTED",  label: "Impressos" },
-  { id: "TODOS",    label: "Todos" },
+  { id: "PENDING",    label: "Pendentes" },
+  { id: "PROCESSING", label: "Imprimindo" },
+  { id: "FAILED",     label: "Falhas" },
+  { id: "PRINTED",    label: "Impressos" },
+  { id: "SKIPPED",    label: "Pulados" },
+  { id: "TODOS",      label: "Todos" },
 ];
 
 const sectorFilters: { id: PrintSectorFilter; label: string }[] = [
