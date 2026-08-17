@@ -18,7 +18,8 @@
 export type WhatsAppEventType =
   | "order_received"
   | "order_ready"
-  | "order_partial_ready";
+  | "order_partial_ready"
+  | "order_out_for_delivery";
 
 interface EnqueuePayload {
   orderId: string;
@@ -33,14 +34,16 @@ interface EnqueuePayload {
 
 const SETTING_ENABLED = "whatsapp_enabled";
 const SETTING_TEMPLATE: Record<WhatsAppEventType, string> = {
-  order_received:      "whatsapp_template_received",
-  order_ready:         "whatsapp_template_ready",
-  order_partial_ready: "whatsapp_template_partial_ready",
+  order_received:         "whatsapp_template_received",
+  order_ready:            "whatsapp_template_ready",
+  order_partial_ready:    "whatsapp_template_partial_ready",
+  order_out_for_delivery: "whatsapp_template_out_for_delivery",
 };
 const DEFAULT_TEMPLATE: Record<WhatsAppEventType, string> = {
-  order_received:      "novo_pedido",
-  order_ready:         "pedido_pronto",
-  order_partial_ready: "pedido_parcial_pronto",
+  order_received:         "novo_pedido",
+  order_ready:            "pedido_pronto",
+  order_partial_ready:    "pedido_parcial_pronto",
+  order_out_for_delivery: "pedido_saiu_entrega",
 };
 
 function parseBoolSetting(value: unknown, fallback = false): boolean {

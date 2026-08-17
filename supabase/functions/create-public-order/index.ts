@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { resolveProductionSector } from "../_shared/print-format.ts";
+import { resolveDeliveryFee } from "../_shared/delivery.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -134,7 +135,7 @@ async function registerCustomer(supabaseAdmin: any, payload: {
   customerPhone: string | null;
   customerName: string | null;
   customerEmail: string | null;
-  orderType: "BALCAO" | "VIAGEM";
+  orderType: "BALCAO" | "VIAGEM" | "ENTREGA";
   marketingOptIn: boolean;
   rememberCheckoutData: boolean;
   nowIso: string;
@@ -238,13 +239,36 @@ serve(async (req) => {
     const orderType = body.order_type;
     const paymentMethodCode = cleanText(body.payment_method_code, 80) ?? DEFAULT_PAYMENT_METHOD_CODE;
     const branchSlug = cleanText(body.branch_slug, 32);
+    const isDelivery = orderType === "ENTREGA";
+    const saveAddress = body.save_address === true;
 
     if (items.length === 0) throw new Error("Carrinho vazio.");
     if (items.length > 50) throw new Error("Carrinho excede o limite de itens.");
     if (body.customer_phone && !customerPhone) throw new Error("Informe um WhatsApp valido com DDD.");
-    if (orderType !== "BALCAO" && orderType !== "VIAGEM") {
+    if (orderType !== "BALCAO" && orderType !== "VIAGEM" && orderType !== "ENTREGA") {
       throw new Error("Tipo de pedido invalido.");
     }
+    if (isDelivery && !customerPhone) {
+      throw new Error("Informe um WhatsApp valido com DDD para pedidos de entrega.");
+    }
+
+    // Endereço de entrega: obrigatório (rua + bairro) quando order_type = ENTREGA.
+    // Aceita endereço digitado no formulário (delivery_address) ou o id de um
+    // endereço salvo do cliente (delivery_address_id) — resolvido mais abaixo,
+    // depois de sabermos a filial (o endereço salvo não carrega o bairro/filial
+    // sozinho, então revalidamos e recalculamos a taxa nos dois casos do mesmo jeito).
+    const deliveryAddrInput = (body.delivery_address && typeof body.delivery_address === "object")
+      ? body.delivery_address
+      : {};
+    const deliveryAddressId = cleanText(body.delivery_address_id, 64);
+    let deliveryStreet = isDelivery ? cleanText(deliveryAddrInput.street, 200) : null;
+    let deliveryNumber = isDelivery ? cleanText(deliveryAddrInput.number, 20) : null;
+    let deliveryComplement = isDelivery ? cleanText(deliveryAddrInput.complement, 120) : null;
+    let deliveryNeighborhood = isDelivery ? cleanText(deliveryAddrInput.neighborhood, 120) : null;
+    let deliveryCity = isDelivery ? cleanText(deliveryAddrInput.city, 120) : null;
+    let deliveryState = isDelivery ? cleanText(deliveryAddrInput.state, 2) : null;
+    let deliveryPostalCode = isDelivery ? cleanText(deliveryAddrInput.postal_code, 16) : null;
+    let deliveryReference = isDelivery ? cleanText(deliveryAddrInput.reference, 200) : null;
 
     // Resolve filial:
     // - Com slug: caminho normal (/pedir/{slug})
@@ -259,12 +283,15 @@ serve(async (req) => {
       ordering_enabled: boolean;
       ordering_start_time: string | null;
       ordering_end_time: string | null;
+      delivery_enabled: boolean;
     } | null = null;
+
+    const BRANCH_SELECT = "id, code, name, active, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time, delivery_enabled";
 
     if (branchSlug) {
       const { data, error: branchErr } = await supabaseAdmin
         .from("branches")
-        .select("id, code, name, active, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time")
+        .select(BRANCH_SELECT)
         .eq("slug", branchSlug)
         .single();
       if (branchErr || !data) throw new Error("Filial inexistente.");
@@ -272,7 +299,7 @@ serve(async (req) => {
     } else {
       const { data: activeBranches } = await supabaseAdmin
         .from("branches")
-        .select("id, code, name, active, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time")
+        .select(BRANCH_SELECT)
         .eq("active", true)
         .eq("ordering_enabled", true)
         .limit(2);
@@ -351,6 +378,44 @@ serve(async (req) => {
         error: `No momento nao estamos recebendo pedidos. Atendimento online das ${orderingStart} as ${orderingEnd}.`,
         ordering_closed: true,
       }, 403);
+    }
+
+    // Endereço de entrega: resolve endereço salvo (se veio delivery_address_id)
+    // ou usa o digitado no formulário. Em ambos os casos revalida rua+bairro e
+    // recalcula a taxa no servidor — nunca confia em taxa vinda do cliente.
+    let deliveryFeeValue = 0;
+    if (isDelivery) {
+      if (!branch.delivery_enabled) {
+        throw new Error("Entrega não está disponível para esta unidade no momento.");
+      }
+
+      if (deliveryAddressId) {
+        const { data: savedAddress, error: savedAddressErr } = await supabaseAdmin
+          .from("customer_addresses")
+          .select("street, number, complement, neighborhood, city, state, postal_code, reference")
+          .eq("id", deliveryAddressId)
+          .eq("customer_id", customerPhone)
+          .maybeSingle();
+        if (savedAddressErr || !savedAddress) {
+          throw new Error("Endereço salvo não encontrado.");
+        }
+        deliveryStreet = savedAddress.street;
+        deliveryNumber = savedAddress.number;
+        deliveryComplement = savedAddress.complement;
+        deliveryNeighborhood = savedAddress.neighborhood;
+        deliveryCity = savedAddress.city;
+        deliveryState = savedAddress.state;
+        deliveryPostalCode = savedAddress.postal_code;
+        deliveryReference = savedAddress.reference;
+      }
+
+      if (!deliveryStreet || !deliveryNeighborhood) {
+        throw new Error("Endereço de entrega incompleto: informe ao menos rua e bairro.");
+      }
+
+      const feeResult = await resolveDeliveryFee(supabaseAdmin, branch.id, deliveryNeighborhood);
+      if (feeResult.blocked) throw new Error(feeResult.reason);
+      deliveryFeeValue = feeResult.fee;
     }
 
     let packingFeeValue = 0;
@@ -434,7 +499,7 @@ serve(async (req) => {
       }
     }
 
-    const totalAmount = Number((productsSubtotal + addonsTotal + packingFeeValue).toFixed(2));
+    const totalAmount = Number((productsSubtotal + addonsTotal + packingFeeValue + deliveryFeeValue).toFixed(2));
     const nowIso = new Date().toISOString();
     const customerId = await registerCustomer(supabaseAdmin, {
       customerPhone,
@@ -460,6 +525,15 @@ serve(async (req) => {
         customer_email: customerEmail,
         customer_id: customerId,
         packing_fee: packingFeeValue,
+        delivery_fee: deliveryFeeValue,
+        delivery_street: isDelivery ? deliveryStreet : null,
+        delivery_number: isDelivery ? deliveryNumber : null,
+        delivery_complement: isDelivery ? deliveryComplement : null,
+        delivery_neighborhood: isDelivery ? deliveryNeighborhood : null,
+        delivery_city: isDelivery ? deliveryCity : null,
+        delivery_state: isDelivery ? deliveryState : null,
+        delivery_postal_code: isDelivery ? deliveryPostalCode : null,
+        delivery_reference: isDelivery ? deliveryReference : null,
         total_amount: totalAmount,
         notes,
       })
@@ -467,6 +541,26 @@ serve(async (req) => {
       .single();
 
     if (orderErr) throw new Error("Erro ao criar pedido.");
+
+    // Salva o endereço digitado como novo endereço reutilizável do cliente,
+    // só quando ele marcou explicitamente a opção — nunca por padrão. Endereço
+    // já selecionado a partir de um salvo (delivery_address_id) não é duplicado.
+    if (isDelivery && saveAddress && !deliveryAddressId && customerId) {
+      const { error: addressErr } = await supabaseAdmin.from("customer_addresses").insert({
+        customer_id: customerId,
+        street: deliveryStreet,
+        number: deliveryNumber,
+        complement: deliveryComplement,
+        neighborhood: deliveryNeighborhood,
+        city: deliveryCity,
+        state: deliveryState,
+        postal_code: deliveryPostalCode,
+        reference: deliveryReference,
+      });
+      if (addressErr) {
+        logDbError("save customer address failed (non-blocking)", addressErr);
+      }
+    }
 
     for (const item of items) {
       const product = products?.find((p: any) => p.id === item.product_id);
@@ -534,6 +628,8 @@ serve(async (req) => {
         total_amount: order.total_amount,
         payment_method_code: paymentMethodCode,
         source: "APP",
+        order_type: orderType,
+        delivery_fee: isDelivery ? deliveryFeeValue : undefined,
       },
     });
 
@@ -547,6 +643,7 @@ serve(async (req) => {
         status: order.status,
         payment_status: order.payment_status,
         payment_method_code: paymentMethodCode,
+        delivery_fee: isDelivery ? deliveryFeeValue : undefined,
       },
     }, 201);
   } catch (error) {

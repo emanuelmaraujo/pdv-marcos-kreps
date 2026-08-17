@@ -72,7 +72,7 @@ serve(async (req) => {
 
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from("customers")
-      .select("name, email, last_order_type, marketing_opt_in")
+      .select("id, name, email, last_order_type, marketing_opt_in")
       .eq("phone_e164", phone)
       .eq("remember_checkout_data", true)
       .maybeSingle();
@@ -111,6 +111,13 @@ serve(async (req) => {
       return jsonResponse(req, { success: true, found: false }, 200);
     }
 
+    const { data: addresses } = await supabaseAdmin
+      .from("customer_addresses")
+      .select("id, label, street, number, complement, neighborhood, city, state, postal_code, reference, is_default")
+      .eq("customer_id", profile.id)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false });
+
     return jsonResponse(req, {
       success: true,
       found: true,
@@ -120,6 +127,7 @@ serve(async (req) => {
         order_type: profile.last_order_type,
         marketing_opt_in: profile.marketing_opt_in === true,
       },
+      addresses: addresses ?? [],
     }, 200);
   } catch (error: any) {
     console.error("[get-public-customer-profile]", error);

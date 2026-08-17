@@ -1,14 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Branch, BranchType } from '@/types/pdv';
-import { branchesAdminApi, BranchInput } from '@/lib/api/branches-admin-api';
+import { Branch, BranchType, DeliveryZone } from '@/types/pdv';
+import { branchesAdminApi, BranchInput, deliveryZonesApi } from '@/lib/api/branches-admin-api';
 import { useBranch } from '@/contexts/BranchContext';
 import { Button } from '@/components/ui/Button';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import {
   Building2, Edit3, Plus, Power, Loader2, Save, X,
-  Printer, MessageSquare, Clock, ChevronDown, ChevronUp, Check,
+  Printer, MessageSquare, Clock, ChevronDown, ChevronUp, Check, Bike, Trash2,
 } from 'lucide-react';
 
 const TYPE_OPTIONS: { value: BranchType; label: string; desc: string }[] = [
@@ -45,6 +45,7 @@ function parseTemplates(raw?: Record<string, { template_name?: string; language?
 const EMPTY: BranchInput = {
   code: '', slug: '', name: '', type: 'STORE', active: true,
   packing_fee: 0, ordering_enabled: true, whatsapp_enabled: true,
+  delivery_enabled: false, default_delivery_fee: 0,
 };
 
 // Classe de input tematizada (light/dark/warm) — substitui o `.input` global.
@@ -87,9 +88,13 @@ export default function FiliaisPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [printerCfg, setPrinterCfg] = useState<PrinterConfig>({});
   const [waCfg, setWaCfg] = useState<WaTemplates>({});
-  const [openSection, setOpenSection] = useState<'basic' | 'hours' | 'printer' | 'whatsapp'>('basic');
+  const [openSection, setOpenSection] = useState<'basic' | 'hours' | 'delivery' | 'printer' | 'whatsapp'>('basic');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [zones, setZones] = useState<DeliveryZone[]>([]);
+  const [zonesLoading, setZonesLoading] = useState(false);
+  const [newZone, setNewZone] = useState({ neighborhood: '', fee: '' });
+  const [savingZone, setSavingZone] = useState(false);
   const { currentBranchId, refresh: refreshCtx } = useBranch();
   const { toasts, addToast, removeToast } = useToast();
 
@@ -109,11 +114,24 @@ export default function FiliaisPage() {
     load();
   }, [load]);
 
+  const loadZones = useCallback(async (branchId: string) => {
+    setZonesLoading(true);
+    try {
+      setZones(await deliveryZonesApi.listByBranch(branchId));
+    } catch (e: unknown) {
+      addToast('error', e instanceof Error ? e.message : 'Erro ao carregar zonas de entrega.');
+    } finally {
+      setZonesLoading(false);
+    }
+  }, [addToast]);
+
   function openCreate() {
     setEditing({ ...EMPTY });
     setEditingId(null);
     setPrinterCfg({});
     setWaCfg({});
+    setZones([]);
+    setNewZone({ neighborhood: '', fee: '' });
     setOpenSection('basic');
   }
 
@@ -126,11 +144,55 @@ export default function FiliaisPage() {
       ordering_start_time: b.ordering_start_time,
       ordering_end_time: b.ordering_end_time,
       whatsapp_enabled: b.whatsapp_enabled,
+      delivery_enabled: b.delivery_enabled,
+      default_delivery_fee: Number(b.default_delivery_fee ?? 0),
     });
     setEditingId(b.id);
     setPrinterCfg(parseConfig(b.printer_config as Record<string, unknown>));
     setWaCfg(parseTemplates(b.whatsapp_templates));
+    setZones([]);
+    setNewZone({ neighborhood: '', fee: '' });
     setOpenSection('basic');
+    void loadZones(b.id);
+  }
+
+  async function addZone() {
+    if (!editingId || !newZone.neighborhood.trim()) return;
+    const fee = Number(newZone.fee.replace(',', '.'));
+    if (!Number.isFinite(fee) || fee < 0) {
+      addToast('error', 'Informe uma taxa válida para o bairro.');
+      return;
+    }
+    setSavingZone(true);
+    try {
+      await deliveryZonesApi.create(editingId, { neighborhood: newZone.neighborhood.trim(), fee });
+      setNewZone({ neighborhood: '', fee: '' });
+      await loadZones(editingId);
+    } catch (e: unknown) {
+      addToast('error', e instanceof Error ? e.message : 'Erro ao adicionar bairro.');
+    } finally {
+      setSavingZone(false);
+    }
+  }
+
+  async function toggleZoneActive(zone: DeliveryZone) {
+    if (!editingId) return;
+    try {
+      await deliveryZonesApi.update(zone.id, { active: !zone.active });
+      await loadZones(editingId);
+    } catch (e: unknown) {
+      addToast('error', e instanceof Error ? e.message : 'Erro ao atualizar bairro.');
+    }
+  }
+
+  async function removeZone(zone: DeliveryZone) {
+    if (!editingId) return;
+    try {
+      await deliveryZonesApi.remove(zone.id);
+      await loadZones(editingId);
+    } catch (e: unknown) {
+      addToast('error', e instanceof Error ? e.message : 'Erro ao remover bairro.');
+    }
   }
 
   function setField<K extends keyof BranchInput>(k: K, v: BranchInput[K]) {
@@ -471,6 +533,124 @@ export default function FiliaisPage() {
                   <p className="rounded-lg bg-[var(--status-info-bg)] px-3 py-2 text-[11px] text-[var(--status-info)]">
                     Aceita pedidos das <strong>{editing.ordering_start_time}</strong> às <strong>{editing.ordering_end_time}</strong>
                   </p>
+                )}
+              </Section>
+
+              <Section
+                id="delivery"
+                label="Entrega"
+                icon={<Bike className="h-3.5 w-3.5" />}
+                open={openSection === 'delivery'}
+                onToggle={() => setOpenSection(openSection === 'delivery' ? 'basic' : 'delivery')}
+              >
+                <Toggle
+                  label="Aceitar pedidos de entrega"
+                  desc="Habilita a opção Entrega no atendente e no checkout público desta filial"
+                  checked={editing.delivery_enabled === true}
+                  onChange={(v) => setField('delivery_enabled', v)}
+                />
+
+                {editing.delivery_enabled && (
+                  <>
+                    <Field
+                      label="Taxa padrão (R$)"
+                      hint="Usada enquanto nenhum bairro estiver cadastrado abaixo"
+                    >
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editing.default_delivery_fee ?? 0}
+                        onChange={(e) => setField('default_delivery_fee', Number(e.target.value))}
+                        className={INPUT_CLS}
+                      />
+                    </Field>
+
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3 space-y-2">
+                      <p className="text-[11px] text-[var(--text-secondary)]">
+                        {zones.length > 0
+                          ? 'Assim que há bairros cadastrados, entregas fora da lista são bloqueadas — o cliente vê que não atendemos aquele endereço.'
+                          : 'Nenhum bairro cadastrado ainda: toda entrega usa a taxa padrão acima.'}
+                      </p>
+
+                      {!editingId ? (
+                        <p className="text-[11px] font-semibold text-[var(--status-warning)]">
+                          Salve a filial primeiro para cadastrar bairros.
+                        </p>
+                      ) : (
+                        <>
+                          {zonesLoading ? (
+                            <div className="flex items-center gap-2 py-2 text-xs text-[var(--text-secondary)]">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando bairros...
+                            </div>
+                          ) : zones.length > 0 ? (
+                            <div className="space-y-1.5">
+                              {zones.map((zone) => (
+                                <div
+                                  key={zone.id}
+                                  className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1.5"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleZoneActive(zone)}
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      zone.active
+                                        ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]'
+                                        : 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]'
+                                    }`}
+                                  >
+                                    {zone.active ? 'Ativo' : 'Inativo'}
+                                  </button>
+                                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--text-primary)]">
+                                    {zone.neighborhood}
+                                  </span>
+                                  <span className="shrink-0 text-xs font-bold text-[var(--text-secondary)]">
+                                    R$ {Number(zone.fee).toFixed(2).replace('.', ',')}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeZone(zone)}
+                                    className="shrink-0 rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
+                                    aria-label={`Remover ${zone.neighborhood}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          <div className="flex gap-2 pt-1">
+                            <input
+                              type="text"
+                              value={newZone.neighborhood}
+                              onChange={(e) => setNewZone((p) => ({ ...p, neighborhood: e.target.value }))}
+                              placeholder="Bairro (ex: Águas Claras)"
+                              className={`${INPUT_CLS} flex-1`}
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={newZone.fee}
+                              onChange={(e) => setNewZone((p) => ({ ...p, fee: e.target.value }))}
+                              placeholder="Taxa"
+                              className={`${INPUT_CLS} w-24`}
+                            />
+                            <button
+                              type="button"
+                              onClick={addZone}
+                              disabled={savingZone || !newZone.neighborhood.trim()}
+                              className="flex shrink-0 items-center justify-center rounded-xl bg-brand-red px-3 text-white disabled:opacity-40"
+                              aria-label="Adicionar bairro"
+                            >
+                              {savingZone ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </>
                 )}
               </Section>
 

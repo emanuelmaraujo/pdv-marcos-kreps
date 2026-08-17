@@ -158,8 +158,36 @@ export interface Branch {
   ordering_end_time?: string;
   whatsapp_enabled: boolean;
   whatsapp_templates?: Record<string, { template_name?: string; language?: string; enabled?: boolean }>;
+  delivery_enabled: boolean;
+  default_delivery_fee: number;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface DeliveryZone {
+  id: string;
+  branch_id: string;
+  neighborhood: string;
+  neighborhood_normalized: string;
+  fee: number;
+  active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CustomerAddress {
+  id: string;
+  customer_id?: string;
+  label?: string;
+  street: string;
+  number?: string;
+  complement?: string;
+  neighborhood: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  reference?: string;
+  is_default?: boolean;
 }
 
 export interface Order {
