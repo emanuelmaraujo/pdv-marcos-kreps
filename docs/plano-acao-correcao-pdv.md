@@ -13,11 +13,17 @@ _Atualizado em 2026-08-17. Cada item linka o PR correspondente. "Validado" signi
 | P0.3 | Criação atômica de pedido público (`create_public_order_transactional`) | ✅ Em produção | [#113](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/113) |
 | P0.4 | Claim atômico de impressão (`claim_printer_jobs`, SKIPPED distinto de PRINTED) | ✅ Em produção | [#113](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/113) |
 | P1.1 | RLS multi-filial — corrigido bug crítico de escrita direta por ATTENDANT | ✅ Em produção | [#115](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/115) |
-| P1.2 | Segurança de endpoints públicos — CORS + rate limit | ⚠️ Parcial | — |
-| P1.3 | WebAuthn/Biometria — origem restrita, auditoria, último uso | ⚠️ Parcial | — |
-| P2.1 | Performance do board de pedidos — debounce realtime + índice | ⚠️ Parcial | — |
+| P1.2 | Segurança de endpoints públicos — CORS + rate limit | ⚠️ Parcial | [#116](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/116) |
+| P1.3 | WebAuthn/Biometria — origem restrita, auditoria, último uso | ⚠️ Parcial | [#117](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/117) |
+| P2.1 | Performance do board de pedidos — debounce realtime + índice | ⚠️ Parcial | [#118](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/118), [#120](https://github.com/emanuelmaraujo/pdv-marcos-kreps/pull/120) |
 | P2.2/P2.3 | Feedback visual / ergonomia de balcão | ⬜ Não iniciado | — |
 | P3.x | Offline-first/observabilidade/auditoria financeira | ⬜ Não iniciado | — |
+
+**Lições sobre deploy nesta sessão (pra não repetir):**
+- `supabase db push` recusa migrations com timestamp anterior ao último já aplicado no remoto — nunca "encaixar" uma migration de fix com data do passado. Sempre datar como "agora", mesmo que logicamente devesse rodar antes de uma migration antiga.
+- PRs squash-merged quebram detecção de rename do git em PRs subsequentes da mesma branch — depois de um squash-merge, sempre criar uma branch nova a partir do `main` atualizado, nunca continuar empurrando pra branch antiga.
+- **Timestamp de migration pode colidir com trabalho de outra sessão/pessoa rodando em paralelo no mesmo repo** (aconteceu com `20260817140000` batendo com uma migration de outro PR mesclado quase ao mesmo tempo). Antes de commitar uma nova migration, vale conferir `git log --all -- supabase/migrations` ou puxar o `main` mais recente pra reduzir a chance de colisão — mas não elimina completamente se dois trabalhos rodam de verdade em paralelo.
+- Depois de qualquer merge que toque `supabase/migrations/**` ou `supabase/functions/**`, sempre checar `gh run list --workflow=deploy-functions.yml --limit 1` — merge não é sinônimo de deploy com sucesso.
 
 **Riscos residuais conhecidos (P0-P1.1):**
 - P0.2: `printer_jobs` é inserido pela Edge Function depois da RPC retornar (não é atômico com o resto — precisa de `daily_number`, que só existe após o INSERT). Risco pequeno, recuperável via `reprint-order`.
