@@ -49,7 +49,8 @@ _Atualizado em 2026-08-17. Cada item linka o PR correspondente. "Validado" signi
 
 **P2.1 — não feito, é o grosso do trabalho real:**
 - Separar consulta leve (board) de consulta detalhada (modal) não foi feito. Investiguei e o board **usa dados de item diretamente** hoje (`handleQuickAction` em `pedidos/page.tsx` filtra `order.items` por status pra decidir o que entregar no card do "PRONTO_PARCIAL") — um split exigiria adaptar essa lógica também, não só trocar a query. Escopo maior do que cabia nesta sessão; fica pra próxima.
-- Testado só com `npm run build`/`npm run lint` — não abri a tela num browser real pra confirmar visualmente que o debounce não introduziu atraso perceptível incômodo.
+
+**P2.1 — validado num browser real** (Supabase local + `npm run dev`, login como ATTENDANT de teste): criei um pedido via `create-attendant-order`, confirmei que apareceu no board, disparei `mark-payment` (que gera múltiplos eventos de realtime quase simultâneos em `orders`/`order_items`) e confirmei que o board refletiu o novo `payment_status` corretamente depois de um único refetch — sem tempestade de requests. `fetchOrders` e a lógica de filtro por filial funcionam corretamente ponta a ponta.
 
 ## Objetivos
 
