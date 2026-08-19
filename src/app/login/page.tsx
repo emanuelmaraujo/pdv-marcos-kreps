@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -37,7 +37,15 @@ export default function LoginPage() {
   // o SO sabe se há passkey sincronizada (iCloud Keychain, Google Password
   // Manager, etc) e mostra a UI nativa. Se não houver, o clique abre prompt
   // de cross-device (QR code do celular).
-  const [showBiometric] = useState(() => canTryDiscoverablePasskey());
+  // useSyncExternalStore com getServerSnapshot=false evita o mismatch de
+  // hidratação que useState(() => canTryDiscoverablePasskey()) causava
+  // (servidor sempre falso, cliente às vezes verdadeiro) — snapshot é
+  // estático (sem subscription real), só precisa diferir SSR de CSR.
+  const showBiometric = useSyncExternalStore(
+    () => () => {},
+    canTryDiscoverablePasskey,
+    () => false,
+  );
   const router = useRouter();
   const supabase = createClient();
 
