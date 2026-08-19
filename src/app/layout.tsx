@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme";
 
@@ -40,11 +41,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
-      <head>
-        {/* Aplica o tema antes do React montar para evitar flash do tema errado */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
-      </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* Aplica o tema antes do React montar para evitar flash do tema errado.
+            next/script com beforeInteractive injeta no <head> automaticamente
+            (independente de onde é declarado) sem conflitar com a hidratação,
+            diferente de um <script> bruto colocado manualmente no <head>. */}
+        <Script
+          id="theme-bootstrap"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

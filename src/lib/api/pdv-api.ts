@@ -595,13 +595,28 @@ export const pdvApi = {
 
   // Busca endereço por CEP (ViaCEP, via proxy) — autofill do formulário de
   // entrega. O servidor sempre revalida o CEP na criação do pedido; isto é
-  // só UX.
-  lookupCep: (cep: string): Promise<CepLookupResponse> =>
-    invokeEdgeFunction<CepLookupResponse>('lookup-cep', { cep })
-      .catch((err) => ({
-        success: false,
-        error: err instanceof Error ? err.message : 'Erro ao buscar CEP.',
-      })),
+  // só UX. lookup-cep sempre responde com {success, error} estruturado, até
+  // em 400/404 — não usa o extractEdgeFunctionError genérico (que produz
+  // texto de diagnóstico técnico, não uma mensagem pra mostrar ao cliente).
+  lookupCep: async (cep: string): Promise<CepLookupResponse> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.functions.invoke('lookup-cep', { body: { cep } });
+    if (error) {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === 'function') {
+        try {
+          const body = await ctx.clone().json();
+          if (body && typeof body.error === 'string') {
+            return { success: false, error: body.error };
+          }
+        } catch {
+          // corpo não é JSON válido, cai no fallback genérico abaixo
+        }
+      }
+      return { success: false, error: 'Erro ao buscar CEP.' };
+    }
+    return data as CepLookupResponse;
+  },
 
   // Recupera pedidos ATIVOS recentes (≤4h) de um telefone — para o
   // cliente que perdeu o link de acompanhamento.
