@@ -50,7 +50,11 @@ BEGIN
   LIMIT 1;
 
   IF v_branch_id IS NULL THEN
-    RAISE EXCEPTION 'Filial Águas Claras não encontrada. Crie a filial antes de aplicar este seed.';
+    -- Filial é dado operacional (criada pela UI, não por seed/migration) —
+    -- ambientes novos (reset local do zero, CI) legitimamente não a têm
+    -- ainda. Pula em silêncio em vez de abortar a migration inteira.
+    RAISE NOTICE 'Filial Águas Claras não encontrada — pulando seed.';
+    RETURN;
   END IF;
 
   IF EXISTS (SELECT 1 FROM products WHERE branch_id = v_branch_id) THEN

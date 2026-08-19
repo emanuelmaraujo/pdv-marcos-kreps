@@ -7,6 +7,7 @@ import { useCart, CartItem } from "@/features/cart/useCart";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useCurrentBranchId } from "@/contexts/BranchContext";
 import { settingsApi } from "@/lib/api/settings-api";
+import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
 import {
   CheckCircle2,
   Trash2,
@@ -145,7 +146,13 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   const [deliveryNumber, setDeliveryNumber] = useState("");
   const [deliveryComplement, setDeliveryComplement] = useState("");
   const [deliveryNeighborhood, setDeliveryNeighborhood] = useState("");
+  const [deliveryCity, setDeliveryCity] = useState("");
+  const [deliveryState, setDeliveryState] = useState("");
+  const [deliveryPostalCode, setDeliveryPostalCode] = useState("");
   const [deliveryReference, setDeliveryReference] = useState("");
+  const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "resolved" | "error">("idle");
+  const [cepError, setCepError] = useState("");
+  const cepRequestIdRef = useRef(0);
 
   const [recentNames, setRecentNames] = useState<string[]>([]);
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
@@ -288,6 +295,39 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   const estimatedTotal = estimatedSubtotal + packagingTotal + deliveryFeeEstimate - discountAmount;
   const ifoodAmount = parseFloat(ifoodAmountStr.replace(",", ".")) || 0;
 
+  // CEP é a fonte de verdade pra rua/bairro/cidade/UF — mesma regra do
+  // checkout público. Número/complemento/referência continuam livres. O
+  // servidor sempre revalida o CEP de novo.
+  const handleCepChange = (raw: string) => {
+    const formatted = formatCep(raw);
+    const digits = onlyCepDigits(raw);
+    setDeliveryPostalCode(formatted);
+    setDeliveryStreet("");
+    setDeliveryNeighborhood("");
+    setDeliveryCity("");
+    setDeliveryState("");
+    setCepStatus("idle");
+    setCepError("");
+
+    if (digits.length !== 8) return;
+
+    const requestId = ++cepRequestIdRef.current;
+    setCepStatus("loading");
+    pdvApi.lookupCep(digits).then((result) => {
+      if (cepRequestIdRef.current !== requestId) return; // usuário já digitou outro CEP
+      if (!result.success || !result.address) {
+        setCepStatus("error");
+        setCepError(result.error || "CEP não encontrado.");
+        return;
+      }
+      setDeliveryStreet(result.address.street);
+      setDeliveryNeighborhood(result.address.neighborhood);
+      setDeliveryCity(result.address.city);
+      setDeliveryState(result.address.state);
+      setCepStatus("resolved");
+    });
+  };
+
   const handleCheckout = async () => {
     setIsSubmitting(true);
     setError(null);
@@ -304,10 +344,22 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         setIsSubmitting(false);
         return;
       }
-      if (isDeliveryOrder && (!deliveryStreet.trim() || !deliveryNeighborhood.trim())) {
-        setError("Informe ao menos rua e bairro para entrega.");
-        setIsSubmitting(false);
-        return;
+      if (isDeliveryOrder) {
+        if (!isValidCepFormat(deliveryPostalCode)) {
+          setError("Informe um CEP válido para a entrega.");
+          setIsSubmitting(false);
+          return;
+        }
+        if (cepStatus !== "resolved") {
+          setError(cepStatus === "error" ? (cepError || "CEP não encontrado.") : "Aguarde a confirmação do CEP.");
+          setIsSubmitting(false);
+          return;
+        }
+        if (!deliveryStreet.trim() || !deliveryNeighborhood.trim()) {
+          setError("Informe ao menos rua e bairro para entrega.");
+          setIsSubmitting(false);
+          return;
+        }
       }
 
       let paymentStatus = "PAID";
@@ -340,6 +392,9 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
           number: deliveryNumber.trim() || undefined,
           complement: deliveryComplement.trim() || undefined,
           neighborhood: deliveryNeighborhood.trim(),
+          city: deliveryCity.trim() || undefined,
+          state: deliveryState.trim() || undefined,
+          postal_code: onlyCepDigits(deliveryPostalCode) || undefined,
           reference: deliveryReference.trim() || undefined,
         } : undefined,
         items: items.map((item) => ({
@@ -624,42 +679,51 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                 <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-blue-700">
                   <MapPin className="h-3.5 w-3.5" /> Endereço de Entrega
                 </p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={9}
+                  placeholder="CEP *"
+                  value={deliveryPostalCode}
+                  onChange={(e) => handleCepChange(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+                {cepStatus === "loading" && (
+                  <p className="text-[11px] font-bold text-blue-700">Buscando endereço…</p>
+                )}
+                {cepStatus === "error" && (
+                  <p className="text-[11px] font-bold text-red-600">{cepError || "CEP não encontrado."}</p>
+                )}
+                {cepStatus === "resolved" && (
+                  <p className="text-[11px] font-bold text-blue-700">
+                    {deliveryStreet}, {deliveryNeighborhood} — {deliveryCity}/{deliveryState}
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-2">
                   <input
                     type="text"
-                    placeholder="Rua *"
-                    value={deliveryStreet}
-                    onChange={(e) => setDeliveryStreet(e.target.value)}
-                    className="col-span-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    placeholder="Nº"
+                    disabled={cepStatus !== "resolved"}
+                    value={deliveryNumber}
+                    onChange={(e) => setDeliveryNumber(e.target.value)}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
                   />
                   <input
                     type="text"
-                    placeholder="Nº"
-                    value={deliveryNumber}
-                    onChange={(e) => setDeliveryNumber(e.target.value)}
-                    className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                    placeholder="Complemento"
+                    disabled={cepStatus !== "resolved"}
+                    value={deliveryComplement}
+                    onChange={(e) => setDeliveryComplement(e.target.value)}
+                    className="col-span-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
                   />
                 </div>
                 <input
                   type="text"
-                  placeholder="Complemento (apto, bloco...)"
-                  value={deliveryComplement}
-                  onChange={(e) => setDeliveryComplement(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-                <input
-                  type="text"
-                  placeholder="Bairro *"
-                  value={deliveryNeighborhood}
-                  onChange={(e) => setDeliveryNeighborhood(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-                <input
-                  type="text"
                   placeholder="Ponto de referência (opcional)"
+                  disabled={cepStatus !== "resolved"}
                   value={deliveryReference}
                   onChange={(e) => setDeliveryReference(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
                 />
                 {deliveryEnabled && deliveryFeeEstimate > 0 && (
                   <p className="text-[11px] font-bold text-blue-700">
