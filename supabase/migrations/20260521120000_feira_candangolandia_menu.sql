@@ -7,6 +7,20 @@
 --   * Cria adicionais R$0 ("Com açúcar", "Sem açúcar", "Com adoçante", "Sem gelo")
 --     na Loja Principal e vincula aos sucos para que o atendente registre o preparo.
 --   * Idempotente: as inserções são protegidas por ON CONFLICT e NOT EXISTS.
+--   * addons.sort_order/products.sort_order usados abaixo nunca foram criados
+--     por nenhuma migration anterior a esta (existiam em produção só por drift
+--     manual fora de migration — por isso o seed original rodou sem erro lá).
+--     Garantidos aqui, na frente de onde são usados pela primeira vez, pra que
+--     um `supabase db reset` do zero também funcione. Ver
+--     20260817100000_fix_addons_sort_order_drift.sql pro relato completo —
+--     mantido como no-op idempotente redundante, não removido (já aplicado em
+--     produção, não reexecuta).
+
+ALTER TABLE addons
+  ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
 
 -- ============================================================================
 -- 1. Filial Feira-Candangolândia
