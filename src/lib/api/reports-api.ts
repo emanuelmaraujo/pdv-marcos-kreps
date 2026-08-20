@@ -139,6 +139,23 @@ export interface OrderRecord {
   paid_at: string | null;
 }
 
+export interface CourierDeliveryReportFilters {
+  start_date?: string;
+  end_date?: string;
+  branch_id?: string | null;
+}
+
+export interface CourierDeliveryReportRow {
+  courier_id: string | null;
+  courier_name: string;
+  branch_id: string;
+  branch_name: string;
+  day: string;
+  deliveries: number;
+  avg_dispatch_to_delivered_minutes: number | null;
+  avg_ready_to_dispatch_minutes: number | null;
+}
+
 export const reportsApi = {
   async getCashReport(filters: CashReportFilters): Promise<CashReportResponse> {
     const { data, error } = await supabase.functions.invoke('cash-report', {
@@ -173,6 +190,15 @@ export const reportsApi = {
       discount_amount: row.discount_amount != null ? Number(row.discount_amount) : null,
       packing_fee: row.packing_fee != null ? Number(row.packing_fee) : null,
     }));
+  },
+
+  async getCourierDeliveryReport(filters: CourierDeliveryReportFilters): Promise<CourierDeliveryReportRow[]> {
+    const { data, error } = await supabase.functions.invoke('courier-delivery-report', {
+      body: filters
+    });
+    if (error) throw error;
+    if (!data?.success) throw new Error(data?.error || 'Falha ao carregar relatório de entregadores');
+    return data.rows ?? [];
   },
 
   async getCategories() {

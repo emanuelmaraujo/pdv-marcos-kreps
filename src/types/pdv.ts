@@ -1,6 +1,6 @@
 // Types aligned with the real Supabase schema (init_pdv_schema + migrations)
 
-export type UserRole = 'ADMIN' | 'ATTENDANT';
+export type UserRole = 'ADMIN' | 'ATTENDANT' | 'COURIER';
 export type ProductionSector = 'KITCHEN' | 'JUICE_POTATO' | 'NONE';
 export type OrderStatus =
   | 'AGUARDANDO_CONFIRMACAO'
@@ -198,6 +198,8 @@ export interface CustomerAddress {
   postal_code?: string;
   reference?: string;
   is_default?: boolean;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Order {
@@ -229,6 +231,8 @@ export interface Order {
   delivery_state?: string;
   delivery_postal_code?: string;
   delivery_reference?: string;
+  delivery_latitude?: number;
+  delivery_longitude?: number;
   courier_id?: string;
   courier_name?: string;
   courier_phone?: string;

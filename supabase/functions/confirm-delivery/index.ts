@@ -42,20 +42,31 @@ serve(async (req) => {
       .eq("id", user.id)
       .single();
     if (!profile || !profile.active) throw new Error("Usuário sem profile ou inativo.");
-    if (profile.role !== "ADMIN" && profile.role !== "ATTENDANT") {
+    if (profile.role !== "ADMIN" && profile.role !== "ATTENDANT" && profile.role !== "COURIER") {
       throw new Error("Role não autorizada.");
     }
 
     const { order_id } = await req.json();
     if (!order_id) throw new Error("order_id ausente.");
 
-    // Lê o pedido via JWT — RLS valida filial do user.
+    // Lê o pedido via JWT — RLS valida filial (ADMIN/ATTENDANT) ou posse (COURIER).
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
-      .select("id, branch_id, type, status")
+      .select("id, branch_id, type, status, courier_id")
       .eq("id", order_id)
       .single();
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
+
+    if (profile.role === "COURIER") {
+      const { data: courier } = await supabaseAdmin
+        .from("couriers")
+        .select("id")
+        .eq("profile_id", user.id)
+        .single();
+      if (!courier || order.courier_id !== courier.id) {
+        throw new Error("Pedido não pertence a este entregador.");
+      }
+    }
 
     if (order.type !== "ENTREGA") throw new Error("Só é possível confirmar entrega de pedidos do tipo ENTREGA.");
     if (order.status !== "SAIU_PARA_ENTREGA") {

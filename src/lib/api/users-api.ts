@@ -18,7 +18,7 @@ export type UserProfile = {
   id: string;
   email: string;
   name: string;
-  role: 'ADMIN' | 'ATTENDANT';
+  role: 'ADMIN' | 'ATTENDANT' | 'COURIER';
   active: boolean;
   last_sign_in_at?: string;
   created_at: string;
@@ -27,11 +27,13 @@ export type UserProfile = {
 export interface CreateUserData {
   email: string;
   name: string;
-  role: 'ADMIN' | 'ATTENDANT';
+  role: 'ADMIN' | 'ATTENDANT' | 'COURIER';
   password?: string;
   active?: boolean;
   branch_ids?: string[];
   home_branch_id?: string | null;
+  /** Só usado quando role === 'COURIER' — vira couriers.phone. */
+  phone?: string;
 }
 
 async function extractFunctionError(error: EdgeFunctionError, fallback: string) {

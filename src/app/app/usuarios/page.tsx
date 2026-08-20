@@ -30,6 +30,7 @@ import {
   Fingerprint,
   CheckCircle2,
   Trash2,
+  Phone,
 } from "lucide-react";
 
 function getInitials(name: string) {
@@ -92,9 +93,10 @@ export default function GestaoUsuarios() {
     name: "",
     email: "",
     password: "",
-    role: "ATTENDANT" as "ADMIN" | "ATTENDANT",
+    role: "ATTENDANT" as "ADMIN" | "ATTENDANT" | "COURIER",
     active: true,
     branch_ids: [] as string[],
+    phone: "",
   });
 
   const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
@@ -130,7 +132,7 @@ export default function GestaoUsuarios() {
 
   function handleAdd() {
     setEditingUser(null);
-    setFormData({ name: "", email: "", password: "", role: "ATTENDANT", active: true, branch_ids: [] });
+    setFormData({ name: "", email: "", password: "", role: "ATTENDANT", active: true, branch_ids: [], phone: "" });
     setIsModalOpen(true);
   }
 
@@ -141,7 +143,7 @@ export default function GestaoUsuarios() {
     try {
       branch_ids = await branchesAdminApi.listProfileBranches(user.id);
     } catch { /* não bloqueia abertura do form */ }
-    setFormData({ name: user.name, email: user.email, password: "", role: user.role, active: user.active, branch_ids });
+    setFormData({ name: user.name, email: user.email, password: "", role: user.role, active: user.active, branch_ids, phone: "" });
     setIsModalOpen(true);
   }
 
@@ -153,6 +155,10 @@ export default function GestaoUsuarios() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!editingUser && formData.role === "COURIER" && formData.branch_ids.length !== 1) {
+      addToast("error", "Selecione exatamente uma filial para o motoboy.");
+      return;
+    }
     setSaving(true);
     try {
       if (editingUser) {
@@ -372,10 +378,10 @@ export default function GestaoUsuarios() {
                           {user.name}
                         </span>
                         <Badge
-                          variant={user.role === "ADMIN" ? "brand" : "secondary"}
+                          variant={user.role === "ADMIN" ? "brand" : user.role === "COURIER" ? "info" : "secondary"}
                           className="text-[10px] py-0.5 px-2 font-black uppercase tracking-wider rounded-lg"
                         >
-                          {user.role === "ADMIN" ? "Admin" : "Equipe"}
+                          {user.role === "ADMIN" ? "Admin" : user.role === "COURIER" ? "Motoboy" : "Equipe"}
                         </Badge>
                         {user.role === "ADMIN" && <ShieldCheck size={14} className="text-amber-500" strokeWidth={3} />}
                       </div>
@@ -532,23 +538,50 @@ export default function GestaoUsuarios() {
                 <Select
                   value={formData.role}
                   className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-bold appearance-none"
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as "ADMIN" | "ATTENDANT" })}
+                  onChange={(e) => {
+                    const role = e.target.value as "ADMIN" | "ATTENDANT" | "COURIER";
+                    const branch_ids = role === "COURIER" ? formData.branch_ids.slice(0, 1) : formData.branch_ids;
+                    setFormData({ ...formData, role, branch_ids });
+                  }}
                 >
                   <option value="ATTENDANT">Atendente (PDV & Balcão)</option>
                   <option value="ADMIN">Administrador (Controle Total)</option>
+                  <option value="COURIER">Motoboy (Entregas)</option>
                 </Select>
               </div>
-              <p className="text-[10px] text-zinc-400 italic px-2">Administradores podem gerenciar estoque, financeiro e outros usuários.</p>
+              <p className="text-[10px] text-zinc-400 italic px-2">
+                {formData.role === "COURIER"
+                  ? "Motoboy vê só os próprios pedidos de entrega e confirma a entrega pelo celular."
+                  : "Administradores podem gerenciar estoque, financeiro e outros usuários."}
+              </p>
             </div>
+
+            {!editingUser && formData.role === "COURIER" && (
+              <div className="space-y-2">
+                <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Telefone do Motoboy</label>
+                <div className="relative group">
+                  <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
+                  <Input
+                    type="tel"
+                    placeholder="(61) 99999-9999"
+                    className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Filiais autorizadas */}
             {branches.length > 0 && (
               <div className="space-y-2">
                 <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">
-                  Filiais Autorizadas
+                  {formData.role === "COURIER" ? "Filial do Motoboy" : "Filiais Autorizadas"}
                 </label>
                 <p className="text-[10px] text-zinc-400 italic px-2">
-                  Selecione em quais filiais este usuário pode operar. ADMIN tem acesso a todas independente da seleção.
+                  {formData.role === "COURIER"
+                    ? "Motoboy opera em uma única filial — selecione qual."
+                    : "Selecione em quais filiais este usuário pode operar. ADMIN tem acesso a todas independente da seleção."}
                 </p>
                 <div className="space-y-1.5">
                   {branches.map((b) => {
@@ -561,9 +594,14 @@ export default function GestaoUsuarios() {
                         }`}
                       >
                         <input
-                          type="checkbox"
+                          type={formData.role === "COURIER" ? "radio" : "checkbox"}
+                          name="branch_ids"
                           checked={checked}
                           onChange={(e) => {
+                            if (formData.role === "COURIER") {
+                              setFormData({ ...formData, branch_ids: [b.id] });
+                              return;
+                            }
                             const next = e.target.checked
                               ? [...formData.branch_ids, b.id]
                               : formData.branch_ids.filter((x) => x !== b.id);
@@ -582,7 +620,7 @@ export default function GestaoUsuarios() {
                     );
                   })}
                 </div>
-                {formData.branch_ids.length > 0 && (
+                {formData.branch_ids.length > 0 && formData.role !== "COURIER" && (
                   <p className="text-[10px] font-bold text-zinc-500 px-2">
                     Filial padrão (home): <span className="text-brand-red">
                       {branches.find((b) => b.id === formData.branch_ids[0])?.name ?? "—"}

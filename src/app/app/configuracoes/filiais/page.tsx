@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Branch, BranchType, Courier, DeliveryZone } from '@/types/pdv';
 import { branchesAdminApi, BranchInput, couriersApi, deliveryZonesApi } from '@/lib/api/branches-admin-api';
 import { useBranch } from '@/contexts/BranchContext';
@@ -712,6 +713,13 @@ export default function FiliaisPage() {
                       <p className="text-[11px] text-[var(--text-secondary)]">
                         Opcional — o despacho sempre permite digitar um entregador avulso também.
                       </p>
+                      <Link
+                        href="/app/relatorios/entregadores"
+                        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-brand-red hover:underline"
+                      >
+                        <Bike className="h-3.5 w-3.5" />
+                        Ver métricas de entrega por motoboy
+                      </Link>
 
                       {!editingId ? (
                         <p className="text-[11px] font-semibold text-[var(--status-warning)]">

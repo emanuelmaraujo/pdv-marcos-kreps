@@ -2,7 +2,7 @@
 
 > Documento vivo — diferente dos antigos `PROMPT_*.md` (specs de tarefa única, descartadas depois de prontas), este arquivo é atualizado a cada fase da funcionalidade de delivery. Mantenha-o em sincronia com o código real.
 
-## Status atual: **Fase 3 concluída + validação de endereço por CEP (pós-Fase 3) — CONCLUÍDA**
+## Status atual: **Fase 4 concluída (motoboy com login próprio) + localização GPS do endereço de entrega**
 
 ## Contexto
 
@@ -131,11 +131,74 @@ Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrati
 - Sem fallback manual quando o ViaCEP está fora do ar — decisão consciente, mas significa que uma instabilidade do serviço de terceiro bloqueia checkout de entrega até normalizar.
 - Não há geocodificação real (lat/lng) nem zonas por polígono/raio — o match de zona continua por nome de bairro (agora vindo do CEP, não mais digitado). Isso é suficiente para o objetivo desta melhoria, mas ainda não dá suporte a cálculo de distância/rota, que é relevante para a Fase 4 (motoboy).
 
+## O que foi entregue na Fase 4 (motoboy com login próprio)
+
+### Banco de dados
+- `user_role` ganha o valor `'COURIER'` — em migration isolada, porque um novo valor de enum precisa estar commitado antes de ser usado em policies/queries.
+  - Migration: `supabase/migrations/20260820000000_courier_role.sql`
+- `couriers.profile_id` (nullable, FK para `profiles`, único quando presente) — motoboy loga com o próprio usuário. RLS novas: motoboy lê o próprio registro em `couriers`, e lê só os próprios pedidos/itens (`orders`/`order_items`) via `courier_id` → `couriers.profile_id = auth.uid()`. Somam-se às policies ADMIN/ATTENDANT existentes (RLS combina com OR), não substituem.
+  - Migration: `supabase/migrations/20260820000100_courier_login.sql`
+
+### Backend
+- `supabase/functions/manage-users/index.ts`: aceita `role = 'COURIER'` em `create_user`. Exige exatamente 1 `branch_id` (motoboy é por filial). Cria uma nova linha em `couriers` (`name`, `phone`, `branch_id`, `profile_id`) junto com o `profiles`/`profile_branches` — sempre um registro novo, não reaproveita um `couriers` avulso já cadastrado sem login (ver limitações abaixo).
+- `supabase/functions/confirm-delivery/index.ts`: aceita JWT de `COURIER` além de `ADMIN`/`ATTENDANT`. Quando é `COURIER`, valida no servidor que o `courier_id` do pedido bate com o `couriers.id` vinculado ao `profile_id` do chamador — rejeita com "Pedido não pertence a este entregador." caso contrário (defesa em profundidade: a RLS de `orders` já impede o courier de sequer *ler* o pedido de outro entregador).
+- `supabase/functions/dispatch-delivery/index.ts`: **sem mudança** — despacho continua exclusivo de ADMIN/ATTENDANT; o motoboy só confirma a entrega pelo próprio celular, não se auto-despacha.
+- `supabase/functions/courier-delivery-report/index.ts` **(novo, ADMIN-only)**: métricas agregadas por entregador/filial/dia — nº de entregas, tempo médio pronto→despacho e despacho→entrega, calculados a partir de `orders` com `delivery_delivered_at` preenchido. Mesmo padrão de auth/agregação em JS do `cash-report`.
+
+### Frontend
+- `src/types/pdv.ts`: `UserRole` ganha `'COURIER'`.
+- `src/contexts/UserContext.tsx`: `isCourier`.
+- `src/lib/nav-items.ts`: item "Minhas Entregas" (`/app/motoboy`) restrito a `COURIER`; nav agora é role-aware (`isNavItemVisible`) em vez de só `adminOnly`.
+- `src/app/app/motoboy/page.tsx` **(novo)**: painel do motoboy — lista os próprios pedidos `SAIU_PARA_ENTREGA`/`ENTREGUE` (leitura direta via Supabase client, coberta pela RLS nova) com botão "Confirmar entrega" (reaproveita `pdvApi.confirmDelivery`).
+- `src/app/app/page.tsx`: redireciona `COURIER` para `/app/motoboy` (não vê o dashboard de staff).
+- `src/app/app/usuarios/page.tsx`: opção "Motoboy (Entregas)" no formulário de usuário — exige exatamente 1 filial, mostra campo de telefone.
+- `src/app/app/relatorios/entregadores/page.tsx` **(novo, ADMIN-only)**: tabela do painel de métricas (`courier-delivery-report`), últimos 30 dias. Link de acesso a partir de "Entregadores cadastrados" em `/app/configuracoes/filiais`.
+
+### Validação já feita
+- `npx tsc --noEmit`, `npx eslint .` sem erros novos, `npm run build` compila e type-checks (prerender de `/app/caixa` falha só por falta de `.env.local` neste ambiente, não é regressão).
+- `supabase db reset` local aplica as duas migrations novas em sequência sem erro.
+- Testado ponta a ponta contra Supabase local real (via `supabase functions serve`, chamadas diretas às Edge Functions): criar usuário COURIER cria `couriers` com `profile_id` corretamente; ATTENDANT/ADMIN despacha pedido pro motoboy cadastrado; motoboy lê o próprio pedido via RLS direta (client) mas **não** vê pedidos de outro motoboy (lista vazia); motoboy confirma a própria entrega com sucesso (`confirm-delivery`); motoboy tentando confirmar um pedido de outro entregador é rejeitado (bloqueado já na leitura por RLS, antes mesmo da checagem de posse em código).
+- **Testado no navegador**: login do motoboy redireciona automaticamente para `/app/motoboy`; nav mostra só "Minhas Entregas"; formulário de `/app/usuarios` reage certo ao escolher "Motoboy (Entregas)" (campo de telefone, filial única); motoboy é redirecionado para longe do relatório ADMIN-only ao tentar acessar a URL direto.
+- **`scripts/test-fase4-motoboy.js`** (novo): regressão automatizada do fluxo completo — roda contra o Supabase local real via Edge Functions (não insere direto no banco, exceto para montar os pedidos de teste), cria e limpa os próprios dados a cada execução (idempotente, roda quantas vezes precisar). Cobre: `manage-users` rejeita COURIER sem exatamente 1 filial; `manage-users` cria COURIER com `couriers.profile_id` vinculado; `dispatch-delivery` atribui o motoboy cadastrado; isolamento de RLS (motoboy só lê o próprio pedido); `confirm-delivery` rejeita pedido alheio e aceita o próprio; regressão de `confirm-delivery` para ADMIN; `courier-delivery-report` retorna métricas pro ADMIN e nega (403) pro COURIER. Ver o cabeçalho do arquivo para como rodar.
+
+### Limitações conhecidas
+- Criar um usuário COURIER sempre cria um **novo** registro em `couriers` — não reaproveita um cadastro avulso já existente da Fase 3. Se o admin já tinha esse entregador cadastrado sem login, precisa desativar manualmente o registro antigo (decisão consciente, simplicidade > merge de dados).
+- Editar o papel de um usuário existente para/de `COURIER` via "Editar usuário" não cria/atualiza a linha em `couriers` automaticamente — só a criação inicial faz isso.
+- Motoboy não se auto-despacha; só confirma entrega. Atribuição de entregador continua exclusiva de ADMIN/ATTENDANT.
+- Sem rastreamento em tempo real (GPS) — status discreto, decisão já tomada. (Ver melhoria abaixo: motoboy passou a ter só um "pin" estático do endereço, não rastreamento contínuo.)
+- `/app/usuarios` não tem redirect de rota para papéis não-ADMIN (diferente de `/app/caixa/relatorio` e `/app/relatorios/entregadores`) — um COURIER navegando direto pra lá vê a tela vazia (sem dados, porque `manage-users` já bloqueia no servidor), mas não é redirecionado. Gap pré-existente, não introduzido por esta fase; a proteção real (dados) já é 100% server-side.
+
+## Melhoria pós-Fase 4: localização GPS do endereço de entrega
+
+Cliente pode opcionalmente marcar a localização atual do navegador (Geolocation API) no checkout público — um "pin" de latitude/longitude complementar ao endereço digitado, pra o motoboy achar o lugar exato em vez de só o endereço por extenso. **Não é rastreamento em tempo real** (decisão de escopo já resolvida) — é um ponto único, marcado uma vez no momento do pedido.
+
+### Banco de dados
+- `orders.delivery_latitude`/`delivery_longitude` (nullable) e `customer_addresses.latitude`/`longitude` (nullable, pra endereço salvo reaproveitar o pin em pedidos futuros).
+  - Migration: `supabase/migrations/20260821000000_delivery_geolocation.sql` — também reaplica `create_public_order_transactional` com as duas colunas novas no INSERT.
+
+### Backend
+- `supabase/functions/create-public-order/index.ts`: aceita `delivery_address.latitude`/`longitude` opcionais; `cleanCoordinate()` valida o intervalo (-90..90 / -180..180) e descarta silenciosamente se inválido — **nunca bloqueia o pedido** por causa do pin, diferente do CEP (que é obrigatório). Endereço salvo (`delivery_address_id`) carrega o pin salvo junto. Ao salvar novo endereço (`save_address`), o pin é persistido em `customer_addresses`.
+- `supabase/functions/get-public-customer-profile/index.ts`: `addresses[]` retorna `latitude`/`longitude` também.
+- `dispatch-delivery`/`confirm-delivery`: sem mudança — o pin só é lido, nunca usado pra cálculo de taxa/zona (isso continua vindo só do bairro resolvido pelo CEP).
+
+### Frontend
+- `src/lib/utils/geolocation.ts` **(novo)**: `getCurrentPosition()` (wrapper em Promise da Geolocation API, timeout 10s, mensagem de erro pronta em pt-BR) e helpers de link (`mapsUrlForCoordinates`, `mapsUrlForAddress` — Google Maps universal, abre app no celular ou site no desktop).
+- `src/app/pedir/page.tsx`: botão "Marcar minha localização atual (opcional)" no formulário de endereço de entrega (depois dos campos de CEP/número/complemento/referência) — opcional, nunca bloqueia o "Continuar para pagamento"; trocar o CEP reseta o pin (endereço mudou, pin antigo não vale mais).
+- `src/app/app/motoboy/page.tsx`: cada pedido "A caminho" ganha um link "Abrir localização marcada no mapa" (usa lat/lng exatos) ou "Abrir endereço no mapa" (fallback por busca de texto quando não há pin) — sempre tem algum link, nunca fica sem opção de navegação.
+- `src/types/pdv.ts`, `src/lib/api/pdv-api.ts`: `Order`/`CustomerAddress`/`CreatePublicOrderPayload` ganham os campos de latitude/longitude.
+
+### Validação já feita
+- `npx tsc --noEmit`, `npx eslint .` sem erros novos, `npm run build` compila.
+- `npx supabase db reset` local aplica a migration nova sem erro.
+- Testado ponta a ponta contra Supabase local real: pedido com pin válido grava `delivery_latitude`/`delivery_longitude` corretos; pedido sem pin segue normalmente (nulos, sem bloqueio); coordenada fora do intervalo válido é descartada sem travar o pedido; endereço salvo com pin é reaproveitado corretamente num pedido novo (`delivery_address_id`).
+- Testado no navegador: botão de localização no checkout público — permissão negada mostra erro e deixa continuar normalmente; permissão concedida (mockada) marca o pin e trava o botão; motoboy vê o link certo em cada caso (com pin: abre a coordenada exata; sem pin: abre busca pelo endereço), conferido o `href` de cada link.
+
+### Limitações conhecidas
+- Só no checkout público (`/pedir`) — o fluxo do atendente (`/app/novo-pedido`) não tem esse botão (decisão de escopo).
+- Motoboy não tem rastreamento contínuo — o pin é estático, marcado uma vez no checkout, não atualiza durante a entrega.
+
 ## Próximas fases (pendentes)
 
-- **Fase 4 — Motoboy com login próprio (se a decisão de negócio for tomada)**
-  - `couriers.profile_id` habilitado — motoboy loga e atualiza status pelo próprio celular.
-  - Painel agregado de métricas de tempo por entregador/filial/dia.
 - **Fase 5 — Integrações externas (fora do escopo desta proposta)**
   - Aceitar pedidos do iFood/Rappi como fulfillment real (hoje `IFOOD` só existe como `payment_method`, não como origem de pedido) — projeto à parte.
 
@@ -149,18 +212,28 @@ Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrati
 
 **Fase 3:**
 5. Entregador é por filial (não compartilhado entre todas) — decidido para manter consistência com o padrão operacional existente (`packing_fee`, `delivery_zones`).
-6. `couriers.profile_id`/login próprio **não implementado nesta fase** — fica para quando a decisão "motoboy próprio vs. terceirizado" for tomada.
-7. Painel agregado de métricas **não implementado nesta fase** — só tempo por pedido individual.
+6. `couriers.profile_id`/login próprio — implementado na Fase 4 (abaixo).
+7. Painel agregado de métricas — implementado na Fase 4 (abaixo).
 
 **Pós-Fase 3 (validação de CEP):**
 8. Bairro retornado pelo ViaCEP substitui o texto digitado como fonte de verdade para o match de zona.
 9. CEP não encontrado/serviço fora do ar → bloqueia o pedido, sem fallback manual.
 10. Aplicar a validação tanto no checkout público quanto no fluxo do atendente.
-11. Motoboy será **próprio** (não terceirizado) — desbloqueia a Fase 4, ainda não implementada.
+11. Motoboy será **próprio** (não terceirizado) — decisão que desbloqueou a Fase 4.
+
+**Fase 4 (motoboy com login próprio):**
+12. Login: email/senha, mesmo fluxo Supabase Auth dos outros perfis.
+13. Motoboy vê só os próprios pedidos — não o board da filial.
+14. Painel de métricas agregadas é ADMIN-only.
+15. Criar usuário motoboy sempre cria um novo registro em `couriers` — não reaproveita um cadastro avulso já existente (simplicidade > merge de dados).
+
+**Pós-Fase 4 (localização GPS):**
+16. Pin de localização só no checkout público, não no fluxo do atendente.
+17. Marcação de localização é **opcional** — endereço digitado (com CEP) continua sendo o obrigatório e o que vale pra taxa; GPS é só um complemento de UX, nunca bloqueia o pedido.
 
 ## Decisões de negócio ainda em aberto
 
-1. Rastreamento em tempo real (GPS do motoboy) — fora do escopo realista atual; a proposta é status discreto.
+1. Rastreamento em tempo real e contínuo (GPS do motoboy durante o trajeto) — fora do escopo realista atual; o que existe é um pin estático marcado uma vez no checkout (pós-Fase 4), não rastreamento ao vivo.
 2. Interação com split-bill — continua bloqueado explicitamente para `ENTREGA`; confirmar se essa é a regra desejada a longo prazo.
 
 ## Arquivos-chave
@@ -172,6 +245,10 @@ Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrati
 **Comuns às duas fases:** `src/lib/api/pdv-api.ts`, `src/types/pdv.ts`, `supabase/functions/create-attendant-order/index.ts`
 
 **Validação de CEP (pós-Fase 3):** `supabase/migrations/20260818000000_customer_addresses_postal_code_format.sql`, `supabase/functions/_shared/cep.ts`, `supabase/functions/lookup-cep/index.ts`, `src/lib/utils/cep.ts`, `src/lib/api/pdv-api.ts` (`lookupCep`), `src/app/pedir/page.tsx`, `src/components/checkout/OrderSummarySheet.tsx`
+
+**Fase 4 (motoboy com login próprio):** `supabase/migrations/20260820000000_courier_role.sql`, `20260820000100_courier_login.sql`, `supabase/functions/manage-users/index.ts`, `confirm-delivery/index.ts`, `courier-delivery-report/index.ts`, `src/contexts/UserContext.tsx`, `src/lib/nav-items.ts`, `src/app/app/motoboy/page.tsx`, `src/app/app/relatorios/entregadores/page.tsx`, `src/app/app/usuarios/page.tsx`, `src/lib/api/users-api.ts`, `src/lib/api/reports-api.ts`
+
+**Localização GPS (pós-Fase 4):** `supabase/migrations/20260821000000_delivery_geolocation.sql`, `src/lib/utils/geolocation.ts`, `supabase/functions/create-public-order/index.ts`, `get-public-customer-profile/index.ts`, `src/app/pedir/page.tsx`, `src/app/app/motoboy/page.tsx`
 
 ## Como testar
 
@@ -188,3 +265,11 @@ Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrati
 11. Depois de confirmar a entrega, conferir as métricas "Pronto > saiu" e "Saiu > entregue" no `OrderDetailsSheet`/`OrderDetailsModal`.
 12. (Validação de CEP) Em `/pedir` e em `/app/novo-pedido` → pedido de entrega: digitar um CEP válido e conferir o autofill de rua/bairro/cidade/UF; digitar um CEP inexistente ou mal formatado e conferir que o pedido fica bloqueado com mensagem clara; conferir que a taxa de entrega estimada bate com a zona do bairro retornado pelo CEP.
 13. Reutilizar um endereço salvo antigo sem CEP no checkout público e confirmar que continua funcionando normalmente (a exigência de CEP vale só para endereço novo).
+14. (Fase 4) Em `/app/usuarios`, criar um usuário com papel "Motoboy (Entregas)" selecionando uma filial → conferir que `couriers` ganhou uma linha nova com `profile_id` preenchido.
+15. Logar como esse motoboy → conferir redirect automático de `/app` para `/app/motoboy` e que a navegação mostra só "Minhas Entregas".
+16. Como ATTENDANT/ADMIN, despachar um pedido de `ENTREGA` atribuindo esse motoboy cadastrado.
+17. Como o motoboy, conferir que o pedido aparece em "A caminho" em `/app/motoboy` e confirmar a entrega → status vira `ENTREGUE`, pedido some da lista de pendentes e aparece em "Entregues hoje".
+18. Conferir que o motoboy não vê pedidos despachados para outro entregador (nem na lista, nem tentando confirmar via chamada direta à function).
+19. Em `/app/relatorios/entregadores` (ADMIN), conferir que a entrega confirmada aparece na tabela com tempo médio despacho→entrega calculado.
+20. (Localização GPS) Em `/pedir`, escolher "Entrega" e clicar "Marcar minha localização atual" → permitir no navegador e conferir a mensagem de sucesso; negar a permissão e conferir que o pedido continua sendo possível de finalizar normalmente.
+21. Despachar esse pedido pro motoboy e conferir em `/app/motoboy` que aparece "Abrir localização marcada no mapa" e o link abre a coordenada exata; despachar um pedido sem pin e conferir que aparece "Abrir endereço no mapa" com busca pelo texto do endereço.

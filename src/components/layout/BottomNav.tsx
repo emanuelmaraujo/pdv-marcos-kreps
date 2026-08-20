@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navItems } from "@/lib/nav-items";
+import { navItems, isNavItemVisible } from "@/lib/nav-items";
 import { useUser } from "@/contexts/UserContext";
 import { useNavBadges } from "@/lib/nav-badges";
 
 export function BottomNav() {
   const pathname = usePathname();
-  const { isAdmin } = useUser();
+  const { user } = useUser();
   const badges = useNavBadges();
-  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const visibleItems = navItems.filter((item) => isNavItemVisible(item, user?.role));
 
   return (
     <nav

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Banknote,
@@ -55,10 +56,15 @@ const adminShortcuts: Shortcut[] = [
 ];
 
 export default function AppDashboard() {
-  const { isAdmin, user } = useUser();
+  const { isAdmin, isCourier, user } = useUser();
   const { currentBranchId } = useBranch();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isCourier) router.replace("/app/motoboy");
+  }, [isCourier, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +87,8 @@ export default function AppDashboard() {
 
   const greeting = getGreeting();
   const firstName = (user?.name ?? "").split(" ")[0];
+
+  if (isCourier) return null;
 
   return (
     <div className="flex-1 p-4 md:p-6 lg:p-8">
