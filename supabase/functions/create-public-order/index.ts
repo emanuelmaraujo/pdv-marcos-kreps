@@ -36,6 +36,17 @@ function cleanEmail(value: unknown) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email.toLowerCase() : null;
 }
 
+// Pin de GPS é só um complemento de UX pro motoboy achar o lugar — nunca
+// bloqueia o pedido. Fora do intervalo válido de lat/lng, ignora em vez de
+// rejeitar o checkout inteiro.
+function cleanCoordinate(value: unknown, min: number, max: number) {
+  // Só aceita number de verdade — nunca coage string/null/false via Number(),
+  // que transformaria "", null ou false em 0 (uma coordenada válida e falsa:
+  // "Null Island", no meio do oceano) em vez de "sem localização".
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) return null;
+  return value;
+}
+
 function normalizeBrazilPhone(value: unknown) {
   if (typeof value !== "string") return null;
   let digits = value.replace(/\D/g, "");
@@ -254,6 +265,8 @@ serve(async (req) => {
     let deliveryState = isDelivery ? cleanText(deliveryAddrInput.state, 2) : null;
     let deliveryPostalCode = isDelivery ? cleanText(deliveryAddrInput.postal_code, 16) : null;
     let deliveryReference = isDelivery ? cleanText(deliveryAddrInput.reference, 200) : null;
+    let deliveryLatitude = isDelivery ? cleanCoordinate(deliveryAddrInput.latitude, -90, 90) : null;
+    let deliveryLongitude = isDelivery ? cleanCoordinate(deliveryAddrInput.longitude, -180, 180) : null;
 
     // Resolve filial:
     // - Com slug: caminho normal (/pedir/{slug})
@@ -377,7 +390,7 @@ serve(async (req) => {
       if (deliveryAddressId) {
         const { data: savedAddress, error: savedAddressErr } = await supabaseAdmin
           .from("customer_addresses")
-          .select("street, number, complement, neighborhood, city, state, postal_code, reference")
+          .select("street, number, complement, neighborhood, city, state, postal_code, reference, latitude, longitude")
           .eq("id", deliveryAddressId)
           .eq("customer_id", customerPhone)
           .maybeSingle();
@@ -392,6 +405,8 @@ serve(async (req) => {
         deliveryState = savedAddress.state;
         deliveryPostalCode = savedAddress.postal_code;
         deliveryReference = savedAddress.reference;
+        deliveryLatitude = savedAddress.latitude;
+        deliveryLongitude = savedAddress.longitude;
       }
 
       if (!deliveryStreet || !deliveryNeighborhood) {
@@ -535,6 +550,8 @@ serve(async (req) => {
         state: deliveryState,
         postal_code: deliveryPostalCode,
         reference: deliveryReference,
+        latitude: deliveryLatitude,
+        longitude: deliveryLongitude,
       } : null,
       total_amount: totalAmount,
       notes,
@@ -597,6 +614,8 @@ serve(async (req) => {
         state: deliveryState,
         postal_code: deliveryPostalCode,
         reference: deliveryReference,
+        latitude: deliveryLatitude,
+        longitude: deliveryLongitude,
       });
       if (addressErr) {
         logDbError("save customer address failed (non-blocking)", addressErr);

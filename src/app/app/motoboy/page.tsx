@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bike, CheckCircle2, MapPin, Phone, RefreshCw } from "lucide-react";
+import { Bike, CheckCircle2, MapPin, Navigation, Phone, RefreshCw } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 import { createClient } from "@/lib/supabase/client";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { Order } from "@/types/pdv";
+import { mapsUrlForAddress, mapsUrlForCoordinates } from "@/lib/utils/geolocation";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -30,6 +31,14 @@ function fullAddress(order: Order) {
     order.delivery_neighborhood,
   ].filter(Boolean);
   return parts.join(", ");
+}
+
+function mapsUrlForOrder(order: Order): string | null {
+  if (order.delivery_latitude != null && order.delivery_longitude != null) {
+    return mapsUrlForCoordinates(order.delivery_latitude, order.delivery_longitude);
+  }
+  const address = fullAddress(order);
+  return address ? mapsUrlForAddress(address) : null;
 }
 
 export default function MotoboyPage() {
@@ -139,7 +148,9 @@ export default function MotoboyPage() {
                 A caminho
               </h2>
               <div className="space-y-3">
-                {pending.map((order) => (
+                {pending.map((order) => {
+                  const mapsUrl = mapsUrlForOrder(order);
+                  return (
                   <Card key={order.id}>
                     <CardContent className="space-y-3 pt-4">
                       <div className="flex items-start justify-between">
@@ -158,6 +169,18 @@ export default function MotoboyPage() {
                         <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
                         <span>{fullAddress(order) || "Endereço não informado"}</span>
                       </div>
+
+                      {mapsUrl && (
+                        <a
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-sm font-medium text-brand-red underline underline-offset-2"
+                        >
+                          <Navigation className="h-4 w-4 shrink-0" />
+                          {order.delivery_latitude != null ? "Abrir localização marcada no mapa" : "Abrir endereço no mapa"}
+                        </a>
+                      )}
 
                       {order.customer_phone && (
                         <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
@@ -182,7 +205,8 @@ export default function MotoboyPage() {
                       </Button>
                     </CardContent>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}

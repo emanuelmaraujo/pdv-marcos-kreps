@@ -2,7 +2,7 @@
 
 > Documento vivo — diferente dos antigos `PROMPT_*.md` (specs de tarefa única, descartadas depois de prontas), este arquivo é atualizado a cada fase da funcionalidade de delivery. Mantenha-o em sincronia com o código real.
 
-## Status atual: **Fase 4 concluída (motoboy com login próprio)**
+## Status atual: **Fase 4 concluída (motoboy com login próprio) + localização GPS do endereço de entrega**
 
 ## Contexto
 
@@ -165,8 +165,37 @@ Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrati
 - Criar um usuário COURIER sempre cria um **novo** registro em `couriers` — não reaproveita um cadastro avulso já existente da Fase 3. Se o admin já tinha esse entregador cadastrado sem login, precisa desativar manualmente o registro antigo (decisão consciente, simplicidade > merge de dados).
 - Editar o papel de um usuário existente para/de `COURIER` via "Editar usuário" não cria/atualiza a linha em `couriers` automaticamente — só a criação inicial faz isso.
 - Motoboy não se auto-despacha; só confirma entrega. Atribuição de entregador continua exclusiva de ADMIN/ATTENDANT.
-- Sem rastreamento em tempo real (GPS) — status discreto, decisão já tomada.
+- Sem rastreamento em tempo real (GPS) — status discreto, decisão já tomada. (Ver melhoria abaixo: motoboy passou a ter só um "pin" estático do endereço, não rastreamento contínuo.)
 - `/app/usuarios` não tem redirect de rota para papéis não-ADMIN (diferente de `/app/caixa/relatorio` e `/app/relatorios/entregadores`) — um COURIER navegando direto pra lá vê a tela vazia (sem dados, porque `manage-users` já bloqueia no servidor), mas não é redirecionado. Gap pré-existente, não introduzido por esta fase; a proteção real (dados) já é 100% server-side.
+
+## Melhoria pós-Fase 4: localização GPS do endereço de entrega
+
+Cliente pode opcionalmente marcar a localização atual do navegador (Geolocation API) no checkout público — um "pin" de latitude/longitude complementar ao endereço digitado, pra o motoboy achar o lugar exato em vez de só o endereço por extenso. **Não é rastreamento em tempo real** (decisão de escopo já resolvida) — é um ponto único, marcado uma vez no momento do pedido.
+
+### Banco de dados
+- `orders.delivery_latitude`/`delivery_longitude` (nullable) e `customer_addresses.latitude`/`longitude` (nullable, pra endereço salvo reaproveitar o pin em pedidos futuros).
+  - Migration: `supabase/migrations/20260821000000_delivery_geolocation.sql` — também reaplica `create_public_order_transactional` com as duas colunas novas no INSERT.
+
+### Backend
+- `supabase/functions/create-public-order/index.ts`: aceita `delivery_address.latitude`/`longitude` opcionais; `cleanCoordinate()` valida o intervalo (-90..90 / -180..180) e descarta silenciosamente se inválido — **nunca bloqueia o pedido** por causa do pin, diferente do CEP (que é obrigatório). Endereço salvo (`delivery_address_id`) carrega o pin salvo junto. Ao salvar novo endereço (`save_address`), o pin é persistido em `customer_addresses`.
+- `supabase/functions/get-public-customer-profile/index.ts`: `addresses[]` retorna `latitude`/`longitude` também.
+- `dispatch-delivery`/`confirm-delivery`: sem mudança — o pin só é lido, nunca usado pra cálculo de taxa/zona (isso continua vindo só do bairro resolvido pelo CEP).
+
+### Frontend
+- `src/lib/utils/geolocation.ts` **(novo)**: `getCurrentPosition()` (wrapper em Promise da Geolocation API, timeout 10s, mensagem de erro pronta em pt-BR) e helpers de link (`mapsUrlForCoordinates`, `mapsUrlForAddress` — Google Maps universal, abre app no celular ou site no desktop).
+- `src/app/pedir/page.tsx`: botão "Marcar minha localização atual (opcional)" no formulário de endereço de entrega (depois dos campos de CEP/número/complemento/referência) — opcional, nunca bloqueia o "Continuar para pagamento"; trocar o CEP reseta o pin (endereço mudou, pin antigo não vale mais).
+- `src/app/app/motoboy/page.tsx`: cada pedido "A caminho" ganha um link "Abrir localização marcada no mapa" (usa lat/lng exatos) ou "Abrir endereço no mapa" (fallback por busca de texto quando não há pin) — sempre tem algum link, nunca fica sem opção de navegação.
+- `src/types/pdv.ts`, `src/lib/api/pdv-api.ts`: `Order`/`CustomerAddress`/`CreatePublicOrderPayload` ganham os campos de latitude/longitude.
+
+### Validação já feita
+- `npx tsc --noEmit`, `npx eslint .` sem erros novos, `npm run build` compila.
+- `npx supabase db reset` local aplica a migration nova sem erro.
+- Testado ponta a ponta contra Supabase local real: pedido com pin válido grava `delivery_latitude`/`delivery_longitude` corretos; pedido sem pin segue normalmente (nulos, sem bloqueio); coordenada fora do intervalo válido é descartada sem travar o pedido; endereço salvo com pin é reaproveitado corretamente num pedido novo (`delivery_address_id`).
+- Testado no navegador: botão de localização no checkout público — permissão negada mostra erro e deixa continuar normalmente; permissão concedida (mockada) marca o pin e trava o botão; motoboy vê o link certo em cada caso (com pin: abre a coordenada exata; sem pin: abre busca pelo endereço), conferido o `href` de cada link.
+
+### Limitações conhecidas
+- Só no checkout público (`/pedir`) — o fluxo do atendente (`/app/novo-pedido`) não tem esse botão (decisão de escopo).
+- Motoboy não tem rastreamento contínuo — o pin é estático, marcado uma vez no checkout, não atualiza durante a entrega.
 
 ## Próximas fases (pendentes)
 
@@ -198,9 +227,13 @@ Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrati
 14. Painel de métricas agregadas é ADMIN-only.
 15. Criar usuário motoboy sempre cria um novo registro em `couriers` — não reaproveita um cadastro avulso já existente (simplicidade > merge de dados).
 
+**Pós-Fase 4 (localização GPS):**
+16. Pin de localização só no checkout público, não no fluxo do atendente.
+17. Marcação de localização é **opcional** — endereço digitado (com CEP) continua sendo o obrigatório e o que vale pra taxa; GPS é só um complemento de UX, nunca bloqueia o pedido.
+
 ## Decisões de negócio ainda em aberto
 
-1. Rastreamento em tempo real (GPS do motoboy) — fora do escopo realista atual; a proposta é status discreto.
+1. Rastreamento em tempo real e contínuo (GPS do motoboy durante o trajeto) — fora do escopo realista atual; o que existe é um pin estático marcado uma vez no checkout (pós-Fase 4), não rastreamento ao vivo.
 2. Interação com split-bill — continua bloqueado explicitamente para `ENTREGA`; confirmar se essa é a regra desejada a longo prazo.
 
 ## Arquivos-chave
@@ -214,6 +247,8 @@ Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrati
 **Validação de CEP (pós-Fase 3):** `supabase/migrations/20260818000000_customer_addresses_postal_code_format.sql`, `supabase/functions/_shared/cep.ts`, `supabase/functions/lookup-cep/index.ts`, `src/lib/utils/cep.ts`, `src/lib/api/pdv-api.ts` (`lookupCep`), `src/app/pedir/page.tsx`, `src/components/checkout/OrderSummarySheet.tsx`
 
 **Fase 4 (motoboy com login próprio):** `supabase/migrations/20260820000000_courier_role.sql`, `20260820000100_courier_login.sql`, `supabase/functions/manage-users/index.ts`, `confirm-delivery/index.ts`, `courier-delivery-report/index.ts`, `src/contexts/UserContext.tsx`, `src/lib/nav-items.ts`, `src/app/app/motoboy/page.tsx`, `src/app/app/relatorios/entregadores/page.tsx`, `src/app/app/usuarios/page.tsx`, `src/lib/api/users-api.ts`, `src/lib/api/reports-api.ts`
+
+**Localização GPS (pós-Fase 4):** `supabase/migrations/20260821000000_delivery_geolocation.sql`, `src/lib/utils/geolocation.ts`, `supabase/functions/create-public-order/index.ts`, `get-public-customer-profile/index.ts`, `src/app/pedir/page.tsx`, `src/app/app/motoboy/page.tsx`
 
 ## Como testar
 
@@ -236,3 +271,5 @@ Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrati
 17. Como o motoboy, conferir que o pedido aparece em "A caminho" em `/app/motoboy` e confirmar a entrega → status vira `ENTREGUE`, pedido some da lista de pendentes e aparece em "Entregues hoje".
 18. Conferir que o motoboy não vê pedidos despachados para outro entregador (nem na lista, nem tentando confirmar via chamada direta à function).
 19. Em `/app/relatorios/entregadores` (ADMIN), conferir que a entrega confirmada aparece na tabela com tempo médio despacho→entrega calculado.
+20. (Localização GPS) Em `/pedir`, escolher "Entrega" e clicar "Marcar minha localização atual" → permitir no navegador e conferir a mensagem de sucesso; negar a permissão e conferir que o pedido continua sendo possível de finalizar normalmente.
+21. Despachar esse pedido pro motoboy e conferir em `/app/motoboy` que aparece "Abrir localização marcada no mapa" e o link abre a coordenada exata; despachar um pedido sem pin e conferir que aparece "Abrir endereço no mapa" com busca pelo texto do endereço.

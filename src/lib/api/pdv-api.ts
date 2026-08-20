@@ -185,6 +185,8 @@ export type CreatePublicOrderPayload = {
     state?: string;
     postal_code?: string;
     reference?: string;
+    latitude?: number;
+    longitude?: number;
   };
   delivery_address_id?: string;
   save_address?: boolean;

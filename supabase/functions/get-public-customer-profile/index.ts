@@ -97,7 +97,7 @@ serve(async (req) => {
 
     const { data: addresses } = await supabaseAdmin
       .from("customer_addresses")
-      .select("id, label, street, number, complement, neighborhood, city, state, postal_code, reference, is_default")
+      .select("id, label, street, number, complement, neighborhood, city, state, postal_code, reference, is_default, latitude, longitude")
       .eq("customer_id", profile.id)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false });

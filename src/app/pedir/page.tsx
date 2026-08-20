@@ -14,6 +14,7 @@ import {
   Flame,
   Leaf,
   Loader2,
+  LocateFixed,
   Minus,
   Package,
   Plus,
@@ -38,6 +39,7 @@ import { Addon, CustomerAddress, DeliveryZone, Ingredient, Product } from "@/typ
 import { CartItem, useCart } from "@/features/cart/useCart";
 import { normalizeNeighborhood } from "@/lib/utils/delivery";
 import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
+import { getCurrentPosition } from "@/lib/utils/geolocation";
 
 declare global {
   interface Window {
@@ -87,11 +89,14 @@ type DeliveryAddressForm = {
   state: string;
   postal_code: string;
   reference: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 const EMPTY_DELIVERY_ADDRESS: DeliveryAddressForm = {
   street: "", number: "", complement: "", neighborhood: "",
   city: "", state: "", postal_code: "", reference: "",
+  latitude: undefined, longitude: undefined,
 };
 
 type SavedPublicOrderSession = {
@@ -923,6 +928,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "resolved" | "error">("idle");
   const [cepError, setCepError] = useState("");
   const cepRequestIdRef = useRef(0);
+  const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "resolved" | "error">("idle");
+  const [locationError, setLocationError] = useState("");
   const [orderingSchedule, setOrderingSchedule] = useState({
     start: DEFAULT_ORDERING_START,
     end: DEFAULT_ORDERING_END,
@@ -1402,9 +1409,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const handleCepChange = useCallback((raw: string) => {
     const formatted = formatCep(raw);
     const digits = onlyCepDigits(raw);
-    setDeliveryAddress((p) => ({ ...p, postal_code: formatted, street: "", neighborhood: "", city: "", state: "" }));
+    setDeliveryAddress((p) => ({ ...p, postal_code: formatted, street: "", neighborhood: "", city: "", state: "", latitude: undefined, longitude: undefined }));
     setCepStatus("idle");
     setCepError("");
+    setLocationStatus("idle");
+    setLocationError("");
 
     if (digits.length !== 8) return;
 
@@ -1426,6 +1435,21 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       }));
       setCepStatus("resolved");
     });
+  }, []);
+
+  // Pin de GPS é só um complemento pro motoboy achar o lugar mais fácil —
+  // nunca bloqueia o pedido. Sem permissão, segue normalmente sem o pin.
+  const handleUseCurrentLocation = useCallback(async () => {
+    setLocationStatus("loading");
+    setLocationError("");
+    try {
+      const { latitude, longitude } = await getCurrentPosition();
+      setDeliveryAddress((p) => ({ ...p, latitude, longitude }));
+      setLocationStatus("resolved");
+    } catch (err) {
+      setLocationStatus("error");
+      setLocationError(err instanceof Error ? err.message : "Não foi possível obter sua localização agora.");
+    }
   }, []);
 
   const handleCreateOrder = async () => {
@@ -1516,6 +1540,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           state: deliveryAddress.state.trim() || undefined,
           postal_code: onlyCepDigits(deliveryAddress.postal_code) || undefined,
           reference: deliveryAddress.reference.trim() || undefined,
+          latitude: deliveryAddress.latitude,
+          longitude: deliveryAddress.longitude,
         } : undefined,
         save_address: orderType === "ENTREGA" && !selectedSavedAddress && saveThisAddress,
         items: items.map((item) => ({
@@ -2303,6 +2329,26 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           value={deliveryAddress.reference}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, reference: e.target.value }))}
                         />
+                        <div className="col-span-2 flex flex-col gap-1">
+                          <button
+                            type="button"
+                            onClick={handleUseCurrentLocation}
+                            disabled={locationStatus === "loading"}
+                            className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs font-medium text-[var(--text-secondary)] outline-none transition-colors hover:border-brand-red hover:text-brand-red disabled:cursor-default disabled:opacity-70"
+                          >
+                            {locationStatus === "loading" ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <LocateFixed size={14} className={locationStatus === "resolved" ? "text-emerald-600" : undefined} />
+                            )}
+                            {locationStatus === "resolved"
+                              ? "Localização marcada — toque para remarcar"
+                              : "Marcar minha localização atual (opcional)"}
+                          </button>
+                          {locationStatus === "error" && (
+                            <p className="text-[11px] text-[var(--text-secondary)]">{locationError}</p>
+                          )}
+                        </div>
                         {checkoutPhone && (
                           <label className="col-span-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                             <input
