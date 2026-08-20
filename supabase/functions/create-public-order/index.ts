@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { resolveProductionSector } from "../_shared/print-format.ts";
 import { resolveDeliveryFee } from "../_shared/delivery.ts";
+import { fetchCepAddress } from "../_shared/cep.ts";
 import { isAllowedOrigin, publicCorsHeaders } from "../_shared/public-cors.ts";
 import { checkRateLimit, getClientIp } from "../_shared/rate-limit.ts";
 
@@ -417,6 +418,24 @@ serve(async (req) => {
 
       if (!deliveryStreet || !deliveryNeighborhood) {
         throw new Error("Endereço de entrega incompleto: informe ao menos rua e bairro.");
+      }
+
+      // Endereço digitado agora (não veio de um salvo): CEP é obrigatório e o
+      // bairro/cidade/UF usados daqui pra frente vêm da consulta ao ViaCEP, não
+      // do que o cliente digitou — fecha a brecha de digitar um bairro atendido
+      // pra escapar do bloqueio de zona. Endereço salvo já foi validado quando
+      // criado, não revalida de novo aqui.
+      if (!deliveryAddressId) {
+        if (!deliveryPostalCode) {
+          throw new Error("Informe o CEP para calcular a entrega.");
+        }
+        const cepAddress = await fetchCepAddress(deliveryPostalCode);
+        if (!cepAddress) {
+          throw new Error("CEP não encontrado. Verifique o número informado.");
+        }
+        deliveryNeighborhood = cepAddress.neighborhood;
+        deliveryCity = cepAddress.city || deliveryCity;
+        deliveryState = cepAddress.state || deliveryState;
       }
 
       const feeResult = await resolveDeliveryFee(supabaseAdmin, branch.id, deliveryNeighborhood);

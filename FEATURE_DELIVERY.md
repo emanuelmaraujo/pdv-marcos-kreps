@@ -2,7 +2,7 @@
 
 > Documento vivo — diferente dos antigos `PROMPT_*.md` (specs de tarefa única, descartadas depois de prontas), este arquivo é atualizado a cada fase da funcionalidade de delivery. Mantenha-o em sincronia com o código real.
 
-## Status atual: **Fase 3 (cadastro de entregadores + métricas de tempo) — CONCLUÍDA**
+## Status atual: **Fase 3 concluída + validação de endereço por CEP (pós-Fase 3) — CONCLUÍDA**
 
 ## Contexto
 
@@ -88,6 +88,49 @@ Toda regra de preço/validação continua rodando em Edge Functions (arquitetura
 - **Sem painel agregado de métricas** (média por entregador/filial/dia) — só o tempo por pedido individual nesta fase.
 - **Entregador é sempre por filial** — se a mesma pessoa entrega para mais de uma filial, precisa de um cadastro por filial (sem vínculo N:N ainda).
 
+## Melhoria pós-Fase 3: validação de endereço por CEP (ViaCEP)
+
+Até aqui, "validar" um endereço de entrega era só texto livre com match de bairro por string normalizada (ver `resolveDeliveryFee`) — qualquer erro de digitação bloqueava um pedido válido, e qualquer pessoa podia digitar o nome de um bairro atendido para escapar do bloqueio, mesmo morando em outro lugar. Esta melhoria fecha as duas brechas.
+
+### Banco de dados
+- `customer_addresses.postal_code` ganha uma constraint de formato (permite `NULL` para não quebrar endereços salvos antigos; exige 8 dígitos quando presente).
+  - Migration: `supabase/migrations/20260818000000_customer_addresses_postal_code_format.sql`
+
+### Backend (Edge Functions)
+- `supabase/functions/_shared/cep.ts` **(novo)**: `fetchCepAddress` — consulta o ViaCEP com timeout (5s via `AbortController`), retorna `null` em qualquer falha (CEP inexistente, timeout, erro de rede). `lookup-cep/index.ts` **(novo, público)**: proxy pro ViaCEP com rate limit por IP (30/15min) — só autofill de UX.
+- `create-public-order/index.ts` e `create-attendant-order/index.ts`: CEP passa a ser obrigatório para endereço digitado na hora (endereço salvo reaproveitado não revalida de novo). O servidor refaz a consulta ao ViaCEP e usa o **bairro retornado pelo ViaCEP** — não o que o cliente/atendente digitou — para chamar `resolveDeliveryFee`. CEP não encontrado ou serviço fora do ar → pedido **bloqueado** (sem fallback manual, mesma filosofia de "nunca confiar no client" que já regia o cálculo de taxa).
+
+### Frontend
+- `src/lib/utils/cep.ts` **(novo)**: máscara e validação de formato de CEP.
+- `src/lib/api/pdv-api.ts`: `lookupCep`.
+- `src/app/pedir/page.tsx` e `src/components/checkout/OrderSummarySheet.tsx` (checkout público e fluxo do atendente): CEP vira o primeiro campo do formulário de entrega, obrigatório; ao completar 8 dígitos, busca o endereço e trava rua/bairro/cidade/UF como somente-leitura (derivados do CEP) — número/complemento/referência continuam livres. Envio do pedido bloqueado até o CEP resolver com sucesso.
+
+### Decisões de negócio confirmadas
+- Aplicar tanto no checkout público quanto no fluxo do atendente.
+- Bairro do CEP é a fonte de verdade para o match de zona (substitui o texto digitado).
+- CEP não encontrado/serviço fora do ar → bloqueia o pedido, sem fallback manual.
+- Endereços salvos sem CEP continuam válidos como estão — a exigência vale só para endereços novos.
+
+### Validação já feita
+- `npx tsc --noEmit`, `npx eslint .` sem erros novos, `npm run build` compila.
+- `supabase db reset` local agora completa do zero (ver "Bugs de infra pré-existentes corrigidos" abaixo) — migration nova aplicada de verdade, não só lida.
+- `lookup-cep` testado via `supabase functions serve` contra o ViaCEP real: CEP válido retorna endereço correto, formato inválido rejeitado (400), CEP inexistente retorna 404 com mensagem clara; rate limit confirmado "fail open".
+- `create-public-order` testado ponta a ponta contra o Supabase local real (não só lido): pedido de entrega com CEP válido cria normalmente e grava `delivery_neighborhood`/`city`/`state` vindos do ViaCEP (não do que foi digitado); pedido sem CEP é bloqueado; CEP inexistente é bloqueado; e o caso que motivou a mudança — cliente digita o nome de uma zona cadastrada ("Asa Sul") mas o CEP real aponta pra outro bairro ("Bela Vista", não cadastrado) — é corretamente **bloqueado**, confirmando que a brecha de spoofing de bairro está fechada.
+- **Não testado no navegador** (só via `curl` direto nas Edge Functions) — falta o teste visual do autofill/trava de campos em `/pedir` e `/app/novo-pedido`, e o teste do `create-attendant-order` (exige JWT de atendente, não testado nesta rodada).
+
+### Bugs de infra pré-existentes corrigidos (não relacionados à Fase 2/3, mas bloqueavam `supabase db reset` local)
+Descobertos ao tentar validar esta mudança localmente — sem eles, nenhuma mudança de schema neste repo conseguia ser testada com reset do zero:
+1. `supabase/seed.sql`: `public_ordering_start_time`/`public_ordering_end_time` eram inseridos como `'17:00'`/`'23:30'` — não é JSON válido pra uma coluna `JSONB` (falta aspas de string). Corrigido pra `'"17:00"'`/`'"23:30"'`.
+2. `supabase/migrations/20260521120000_feira_candangolandia_menu.sql`: usava `addons.sort_order`/`products.sort_order`, colunas que só foram criadas 3 meses depois por `20260817100000_fix_addons_sort_order_drift.sql` (drift manual em produção, nunca formalizado em migration na época). Corrigido adicionando `ADD COLUMN IF NOT EXISTS` no topo desta migration, antes do primeiro uso — a migration de "fix" mais tardia continua existindo como no-op idempotente redundante (já aplicada em produção, não é removida).
+3. `supabase/migrations/20260530140000_aguas_claras_menu.sql` e `20260530150000_aguas_claras_rename_to_candangolandia.sql`: abortavam com `RAISE EXCEPTION` se a filial "Águas Claras" não existisse — mas essa filial é dado operacional (criado pela UI), não por seed, então nunca existe num ambiente novo. Trocado por `RAISE NOTICE` + `RETURN` (skip silencioso), mesmo padrão já usado no arquivo pro caso "cardápio já existe".
+4. `supabase/seed.sql`: todo o cardápio da Loja Principal (categorias, ingredientes, addons, produtos) era inserido sem `branch_id` — coluna `NOT NULL` desde a migration de multi-filial (`20260515230100`), nunca atualizada no seed. Corrigido: resolve `v_branch_id` pela filial `slug='principal'` e passa a inserir/limpar tudo escopado a ela (antes a limpeza também apagava produtos de **todas** as filiais, não só da Loja Principal — corrigido junto).
+
+Nenhum desses 4 bugs afeta produção (schema já tem os dados via drift/migrations já aplicadas lá) — só bloqueavam ambiente local do zero e CI.
+
+### Limitações conhecidas
+- Sem fallback manual quando o ViaCEP está fora do ar — decisão consciente, mas significa que uma instabilidade do serviço de terceiro bloqueia checkout de entrega até normalizar.
+- Não há geocodificação real (lat/lng) nem zonas por polígono/raio — o match de zona continua por nome de bairro (agora vindo do CEP, não mais digitado). Isso é suficiente para o objetivo desta melhoria, mas ainda não dá suporte a cálculo de distância/rota, que é relevante para a Fase 4 (motoboy).
+
 ## Próximas fases (pendentes)
 
 - **Fase 4 — Motoboy com login próprio (se a decisão de negócio for tomada)**
@@ -109,11 +152,16 @@ Toda regra de preço/validação continua rodando em Edge Functions (arquitetura
 6. `couriers.profile_id`/login próprio **não implementado nesta fase** — fica para quando a decisão "motoboy próprio vs. terceirizado" for tomada.
 7. Painel agregado de métricas **não implementado nesta fase** — só tempo por pedido individual.
 
+**Pós-Fase 3 (validação de CEP):**
+8. Bairro retornado pelo ViaCEP substitui o texto digitado como fonte de verdade para o match de zona.
+9. CEP não encontrado/serviço fora do ar → bloqueia o pedido, sem fallback manual.
+10. Aplicar a validação tanto no checkout público quanto no fluxo do atendente.
+11. Motoboy será **próprio** (não terceirizado) — desbloqueia a Fase 4, ainda não implementada.
+
 ## Decisões de negócio ainda em aberto
 
-1. Motoboy próprio, terceirizado, ou ambos? (define se/quando habilitar `couriers.profile_id`)
-2. Rastreamento em tempo real (GPS do motoboy) — fora do escopo realista atual; a proposta é status discreto.
-3. Interação com split-bill — continua bloqueado explicitamente para `ENTREGA`; confirmar se essa é a regra desejada a longo prazo.
+1. Rastreamento em tempo real (GPS do motoboy) — fora do escopo realista atual; a proposta é status discreto.
+2. Interação com split-bill — continua bloqueado explicitamente para `ENTREGA`; confirmar se essa é a regra desejada a longo prazo.
 
 ## Arquivos-chave
 
@@ -122,6 +170,8 @@ Toda regra de preço/validação continua rodando em Edge Functions (arquitetura
 **Fase 3:** `supabase/migrations/20260817130000_couriers.sql`, `supabase/functions/dispatch-delivery/index.ts`, `src/lib/api/branches-admin-api.ts` (`couriersApi`), `src/app/app/configuracoes/filiais/page.tsx`, `src/app/app/pedidos/components/OrderDetailsSheet.tsx`, `OrderDetailsModal.tsx`
 
 **Comuns às duas fases:** `src/lib/api/pdv-api.ts`, `src/types/pdv.ts`, `supabase/functions/create-attendant-order/index.ts`
+
+**Validação de CEP (pós-Fase 3):** `supabase/migrations/20260818000000_customer_addresses_postal_code_format.sql`, `supabase/functions/_shared/cep.ts`, `supabase/functions/lookup-cep/index.ts`, `src/lib/utils/cep.ts`, `src/lib/api/pdv-api.ts` (`lookupCep`), `src/app/pedir/page.tsx`, `src/components/checkout/OrderSummarySheet.tsx`
 
 ## Como testar
 
@@ -136,3 +186,5 @@ Toda regra de preço/validação continua rodando em Edge Functions (arquitetura
 9. Ao despachar um pedido de entrega em `/app/pedidos`, selecionar o entregador cadastrado no lugar de digitar avulso → conferir que nome/telefone aparecem corretos no pedido e no recibo.
 10. Conferir que um entregador cadastrado em outra filial não aparece/não pode ser usado para despachar um pedido desta filial.
 11. Depois de confirmar a entrega, conferir as métricas "Pronto > saiu" e "Saiu > entregue" no `OrderDetailsSheet`/`OrderDetailsModal`.
+12. (Validação de CEP) Em `/pedir` e em `/app/novo-pedido` → pedido de entrega: digitar um CEP válido e conferir o autofill de rua/bairro/cidade/UF; digitar um CEP inexistente ou mal formatado e conferir que o pedido fica bloqueado com mensagem clara; conferir que a taxa de entrega estimada bate com a zona do bairro retornado pelo CEP.
+13. Reutilizar um endereço salvo antigo sem CEP no checkout público e confirmar que continua funcionando normalmente (a exigência de CEP vale só para endereço novo).

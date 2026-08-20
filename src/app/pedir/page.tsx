@@ -45,6 +45,7 @@ import { ProgressSteps } from "./_components/ProgressSteps";
 import { FloatingInput } from "./_components/FloatingInput";
 import { TimelineStep } from "./_components/TimelineStep";
 import { PAYMENT_METHOD_CODE, isValidEmail } from "./_components/payment-helpers";
+import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
 
 interface MenuIndexes {
   ingredientsById: Map<string, Ingredient>;
@@ -380,6 +381,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddressForm>(EMPTY_DELIVERY_ADDRESS);
   const [saveThisAddress, setSaveThisAddress] = useState(false);
+  const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "resolved" | "error">("idle");
+  const [cepError, setCepError] = useState("");
+  const cepRequestIdRef = useRef(0);
   const [orderingSchedule, setOrderingSchedule] = useState({
     start: DEFAULT_ORDERING_START,
     end: DEFAULT_ORDERING_END,
@@ -873,6 +877,38 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     addToast("success", "Dados salvos neste dispositivo foram apagados.");
   }, [addToast, customerPhone, setCustomerInfo]);
 
+  // CEP é a fonte de verdade pra rua/bairro/cidade/UF — bloqueia digitar um
+  // bairro atendido só pra escapar do bloqueio de zona. Número/complemento/
+  // referência continuam livres. O servidor sempre revalida o CEP de novo.
+  const handleCepChange = useCallback((raw: string) => {
+    const formatted = formatCep(raw);
+    const digits = onlyCepDigits(raw);
+    setDeliveryAddress((p) => ({ ...p, postal_code: formatted, street: "", neighborhood: "", city: "", state: "" }));
+    setCepStatus("idle");
+    setCepError("");
+
+    if (digits.length !== 8) return;
+
+    const requestId = ++cepRequestIdRef.current;
+    setCepStatus("loading");
+    pdvApi.lookupCep(digits).then((result) => {
+      if (cepRequestIdRef.current !== requestId) return; // usuário já digitou outro CEP
+      if (!result.success || !result.address) {
+        setCepStatus("error");
+        setCepError(result.error || "CEP não encontrado.");
+        return;
+      }
+      setDeliveryAddress((p) => ({
+        ...p,
+        street: result.address!.street,
+        neighborhood: result.address!.neighborhood,
+        city: result.address!.city,
+        state: result.address!.state,
+      }));
+      setCepStatus("resolved");
+    });
+  }, []);
+
   const handleCreateOrder = async () => {
     if (isSubmittingOrder || orderData) return;
     setCheckoutError("");
@@ -918,9 +954,19 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setCheckoutError("Informe um WhatsApp valido com DDD para pedidos de entrega.");
         return;
       }
-      if (!selectedSavedAddress && (!deliveryAddress.street.trim() || !deliveryAddress.neighborhood.trim())) {
-        setCheckoutError("Informe ao menos rua e bairro para a entrega.");
-        return;
+      if (!selectedSavedAddress) {
+        if (!isValidCepFormat(deliveryAddress.postal_code)) {
+          setCheckoutError("Informe um CEP válido para a entrega.");
+          return;
+        }
+        if (cepStatus !== "resolved") {
+          setCheckoutError(cepStatus === "error" ? (cepError || "CEP não encontrado.") : "Aguarde a confirmação do CEP.");
+          return;
+        }
+        if (!deliveryAddress.street.trim() || !deliveryAddress.neighborhood.trim()) {
+          setCheckoutError("Informe ao menos rua e bairro para a entrega.");
+          return;
+        }
       }
       if (deliveryBlocked) {
         setCheckoutError("Não realizamos entregas nesse bairro no momento.");
@@ -949,7 +995,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           neighborhood: deliveryAddress.neighborhood.trim(),
           city: deliveryAddress.city.trim() || undefined,
           state: deliveryAddress.state.trim() || undefined,
-          postal_code: deliveryAddress.postal_code.trim() || undefined,
+          postal_code: onlyCepDigits(deliveryAddress.postal_code) || undefined,
           reference: deliveryAddress.reference.trim() || undefined,
         } : undefined,
         save_address: orderType === "ENTREGA" && !selectedSavedAddress && saveThisAddress,
@@ -1745,32 +1791,44 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       <div className="grid grid-cols-2 gap-2">
                         <input
                           className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
-                          placeholder="Rua *"
-                          value={deliveryAddress.street}
-                          onChange={(e) => setDeliveryAddress((p) => ({ ...p, street: e.target.value }))}
+                          placeholder="CEP *"
+                          inputMode="numeric"
+                          maxLength={9}
+                          value={deliveryAddress.postal_code}
+                          onChange={(e) => handleCepChange(e.target.value)}
                         />
+                        {cepStatus === "loading" && (
+                          <p className="col-span-2 text-xs text-[var(--text-secondary)]">Buscando endereço…</p>
+                        )}
+                        {cepStatus === "error" && (
+                          <p className="col-span-2 text-xs font-semibold text-[var(--status-danger)]">
+                            {cepError || "CEP não encontrado."}
+                          </p>
+                        )}
+                        {cepStatus === "resolved" && (
+                          <p className="col-span-2 text-xs text-[var(--text-secondary)]">
+                            {deliveryAddress.street}, {deliveryAddress.neighborhood} — {deliveryAddress.city}/{deliveryAddress.state}
+                          </p>
+                        )}
                         <input
-                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
                           placeholder="Número"
                           inputMode="numeric"
+                          disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.number}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, number: e.target.value }))}
                         />
                         <input
-                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
                           placeholder="Complemento"
+                          disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.complement}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, complement: e.target.value }))}
                         />
                         <input
-                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
-                          placeholder="Bairro *"
-                          value={deliveryAddress.neighborhood}
-                          onChange={(e) => setDeliveryAddress((p) => ({ ...p, neighborhood: e.target.value }))}
-                        />
-                        <input
-                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
                           placeholder="Ponto de referência (opcional)"
+                          disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.reference}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, reference: e.target.value }))}
                         />

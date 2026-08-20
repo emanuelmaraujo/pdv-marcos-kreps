@@ -30,7 +30,10 @@ BEGIN
   ORDER BY created_at DESC
   LIMIT 1;
   IF v_ac_branch IS NULL THEN
-    RAISE EXCEPTION 'Filial Águas Claras não encontrada.';
+    -- Mesma razão do seed de Águas Claras: filial é dado operacional, pode
+    -- legitimamente não existir ainda num ambiente novo (reset local, CI).
+    RAISE NOTICE 'Filial Águas Claras não encontrada — pulando rename.';
+    RETURN;
   END IF;
 
   SELECT id INTO v_fc_branch

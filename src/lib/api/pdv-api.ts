@@ -322,6 +322,17 @@ export type PublicOrderLookupResponse = {
   orders: PublicOrderLookupItem[];
 };
 
+export type CepLookupResponse = {
+  success: boolean;
+  error?: string;
+  address?: {
+    street: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+  };
+};
+
 export type PublicBranch = {
   id: string;
   code: string;
@@ -587,6 +598,16 @@ export const pdvApi = {
       return { success: false, error: error?.message, branches: [] };
     }
   },
+
+  // Busca endereço por CEP (ViaCEP, via proxy) — autofill do formulário de
+  // entrega. O servidor sempre revalida o CEP na criação do pedido; isto é
+  // só UX.
+  lookupCep: (cep: string): Promise<CepLookupResponse> =>
+    invokeEdgeFunction<CepLookupResponse>('lookup-cep', { cep })
+      .catch((err) => ({
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro ao buscar CEP.',
+      })),
 
   // Recupera pedidos ATIVOS recentes (≤4h) de um telefone — para o
   // cliente que perdeu o link de acompanhamento.

@@ -41,14 +41,17 @@ jobs:
             add-items-to-order \
             cash-report \
             change-payment-method \
+            confirm-delivery \
             confirm-order \
             create-attendant-order \
+            dispatch-delivery \
             edit-order-item \
             get-customer-profile \
             manage-users \
             mark-payment \
             reprint-order \
             test-printer \
+            update-order-item-status \
             update-order-status; do
             supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
           done
@@ -59,8 +62,13 @@ jobs:
           for fn in \
             create-public-order \
             create-mercado-pago-payment \
-            get-public-order-status \
+            get-public-branch-stats \
             get-public-checkout-config \
+            get-public-customer-profile \
+            get-public-order-status \
+            list-public-branches \
+            lookup-cep \
+            lookup-orders-by-phone \
             mercado-pago-webhook \
             webauthn \
             expire-pending-public-orders \

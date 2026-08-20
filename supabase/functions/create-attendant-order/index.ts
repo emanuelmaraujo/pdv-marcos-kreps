@@ -4,6 +4,7 @@ import { buildCustomerReceipt, buildProductionReceipt, settingBool, settingNumbe
 import { parseBranchPrinterConfig, shouldPrint } from "../_shared/branch-print-cfg.ts";
 import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 import { resolveDeliveryFee } from "../_shared/delivery.ts";
+import { fetchCepAddress } from "../_shared/cep.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -130,7 +131,10 @@ serve(async (req) => {
     // Endereço de entrega: obrigatório (rua + bairro) quando order_type = ENTREGA.
     const deliveryAddr = (delivery_address && typeof delivery_address === 'object') ? delivery_address : {};
     const deliveryStreet = isDelivery ? String(deliveryAddr.street || '').trim() : null;
-    const deliveryNeighborhood = isDelivery ? String(deliveryAddr.neighborhood || '').trim() : null;
+    let deliveryNeighborhood = isDelivery ? String(deliveryAddr.neighborhood || '').trim() : null;
+    let deliveryCity = isDelivery ? String(deliveryAddr.city || '').trim() : null;
+    let deliveryState = isDelivery ? String(deliveryAddr.state || '').trim() : null;
+    const deliveryPostalCode = isDelivery ? String(deliveryAddr.postal_code || '').trim() : null;
     if (isDelivery && (!deliveryStreet || !deliveryNeighborhood)) {
       throw new Error('Endereço de entrega incompleto: informe ao menos rua e bairro.');
     }
@@ -271,6 +275,21 @@ serve(async (req) => {
       if (!(branch as any).delivery_enabled) {
         throw new Error('Entrega não está habilitada para esta filial.');
       }
+
+      // CEP obrigatório: o bairro/cidade/UF usados no cálculo de taxa e
+      // gravados no pedido vêm da consulta ao ViaCEP, não do que o atendente
+      // digitou — mesma regra aplicada no checkout público.
+      if (!deliveryPostalCode) {
+        throw new Error('Informe o CEP para calcular a entrega.');
+      }
+      const cepAddress = await fetchCepAddress(deliveryPostalCode);
+      if (!cepAddress) {
+        throw new Error('CEP não encontrado. Verifique o número informado.');
+      }
+      deliveryNeighborhood = cepAddress.neighborhood;
+      deliveryCity = cepAddress.city || deliveryCity;
+      deliveryState = cepAddress.state || deliveryState;
+
       const feeResult = await resolveDeliveryFee(supabaseAdmin, branch.id, deliveryNeighborhood!);
       if (feeResult.blocked) throw new Error(feeResult.reason);
       deliveryFee = feeResult.fee;
@@ -383,9 +402,9 @@ serve(async (req) => {
         number: deliveryAddr.number || null,
         complement: deliveryAddr.complement || null,
         neighborhood: deliveryNeighborhood,
-        city: deliveryAddr.city || null,
-        state: deliveryAddr.state || null,
-        postal_code: deliveryAddr.postal_code || null,
+        city: deliveryCity || null,
+        state: deliveryState || null,
+        postal_code: deliveryPostalCode || null,
         reference: deliveryAddr.reference || null,
       } : null,
       courier_name: isDelivery ? (courier_name || null) : null,
