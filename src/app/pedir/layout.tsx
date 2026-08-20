@@ -12,6 +12,9 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "Pedir · Marcos Krep's",
   description: "Faça seu pedido online no Marcos Krep's — crepes na hora, pagamento seguro.",
+  // Manifest próprio (src/app/pedir/manifest.ts) — sem isso, "Adicionar à tela
+  // inicial" pegaria o manifest raiz do app interno (start_url "/app").
+  manifest: "/pedir/manifest.webmanifest",
   openGraph: {
     title: "Pedir · Marcos Krep's",
     description: "Faça seu pedido online no Marcos Krep's — crepes na hora, pagamento seguro.",

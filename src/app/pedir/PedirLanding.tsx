@@ -247,7 +247,7 @@ export function PedirLanding() {
                   </>
                 )}
               </button>
-              <p className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] pt-0.5">
+              <p className="flex items-center gap-1 text-caption text-[var(--text-muted)] pt-0.5">
                 <CheckCircle2 className="h-3 w-3" strokeWidth={1.75} />
                 Busca apenas pedidos ativos das últimas 4h
               </p>
@@ -296,7 +296,7 @@ export function PedirLanding() {
                         className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl text-white"
                         style={{ backgroundColor: avatarColor }}
                       >
-                        <span className="text-[10px] font-medium opacity-80">{branch.code}</span>
+                        <span className="text-micro font-medium opacity-80">{branch.code}</span>
                         <Icon className="h-4 w-4 mt-0.5" strokeWidth={1.75} />
                       </div>
 
@@ -304,7 +304,7 @@ export function PedirLanding() {
                         <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
                           {branch.name}
                         </p>
-                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+                        <div className="mt-0.5 flex items-center gap-2 text-caption text-[var(--text-secondary)]">
                           <span className="inline-flex items-center gap-0.5">
                             <span>{meta.label}</span>
                           </span>
@@ -319,7 +319,7 @@ export function PedirLanding() {
                           )}
                         </div>
                         {branch.address && (
-                          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--text-muted)] truncate">
+                          <p className="mt-0.5 flex items-center gap-1 text-caption text-[var(--text-muted)] truncate">
                             <MapPin className="h-3 w-3 shrink-0" strokeWidth={1.75} />
                             <span className="truncate">{branch.address}</span>
                           </p>
@@ -336,7 +336,7 @@ export function PedirLanding() {
         </section>
 
         {/* ── Bullet de ajuda ─────────────────────────────────────── */}
-        <p className="px-2 pt-2 text-center text-[11px] text-[var(--text-muted)] leading-relaxed">
+        <p className="px-2 pt-2 text-center text-caption text-[var(--text-muted)] leading-relaxed">
           <ShoppingBag className="inline h-3 w-3 mr-1 align-text-bottom" strokeWidth={1.75} />
           Pagamento seguro via PIX ou cartão. Notificação por WhatsApp quando o pedido ficar pronto.
         </p>

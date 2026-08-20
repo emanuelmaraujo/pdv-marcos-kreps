@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Product, Category } from "@/types/pdv";
-import { Loader2, X, Save } from "lucide-react";
+import { ImageOff, Loader2, X, Save } from "lucide-react";
 import { DuplicateProductButton } from "./DuplicateProductButton";
 
 interface ProductModalProps {
@@ -21,6 +22,7 @@ export function ProductModal({
   product,
 }: ProductModalProps) {
   const [loading, setLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const [formData, setFormData] = useState<Partial<Product>>(
     product || {
       name: "",
@@ -29,6 +31,7 @@ export function ProductModal({
       category_id: categories[0]?.id || "",
       sector: "KITCHEN",
       active: true,
+      image_url: "",
     }
   );
 
@@ -38,7 +41,10 @@ export function ProductModal({
     e.preventDefault();
     try {
       setLoading(true);
-      await onSave(formData);
+      await onSave({
+        ...formData,
+        image_url: formData.image_url?.trim() || null,
+      });
       onClose();
     } finally {
       setLoading(false);
@@ -76,6 +82,43 @@ export function ProductModal({
               className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
               placeholder="Ex: Krep Especial"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+              Foto do produto (URL)
+            </label>
+            <div className="flex items-center gap-3">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 text-zinc-300">
+                {formData.image_url?.trim() && !imageError ? (
+                  <Image
+                    key={formData.image_url}
+                    src={formData.image_url.trim()}
+                    alt=""
+                    width={64}
+                    height={64}
+                    unoptimized
+                    className="h-16 w-16 object-cover"
+                    onError={() => setImageError(true)}
+                  />
+                ) : (
+                  <ImageOff className="h-6 w-6" strokeWidth={1.5} />
+                )}
+              </div>
+              <input
+                type="url"
+                value={formData.image_url ?? ""}
+                onChange={(e) => {
+                  setImageError(false);
+                  setFormData({ ...formData, image_url: e.target.value });
+                }}
+                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
+                placeholder="https://... (opcional)"
+              />
+            </div>
+            <p className="mt-1 ml-1 text-[11px] text-zinc-400">
+              Sem foto, o produto aparece com um ícone no cardápio público.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

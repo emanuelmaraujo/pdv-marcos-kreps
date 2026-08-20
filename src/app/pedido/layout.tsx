@@ -11,6 +11,9 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "Meu pedido · Marcos Krep's",
   description: "Acompanhe o status do seu pedido em tempo real.",
+  // Mesmo manifest do /pedir (start_url "/pedir") — sem isso, instalar a
+  // partir de um link de rastreio pegaria o manifest raiz do app interno.
+  manifest: "/pedir/manifest.webmanifest",
 };
 
 // `data-context="public"` ativa os tokens da identidade pública (bege + marrom)

@@ -9,13 +9,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Copy,
   CreditCard,
   Flame,
   Leaf,
   Loader2,
   Minus,
   Package,
+  PackageX,
   Plus,
   QrCode,
   RefreshCw,
@@ -31,22 +31,20 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { PedirLanding } from "./PedirLanding";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { Addon, CustomerAddress, DeliveryZone, Ingredient, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
 import { normalizeNeighborhood } from "@/lib/utils/delivery";
-
-declare global {
-  interface Window {
-    MercadoPago?: new (publicKey: string, options?: Record<string, unknown>) => {
-      bricks: () => {
-        create: (type: string, containerId: string, settings: Record<string, unknown>) => Promise<{ unmount: () => void }>;
-      };
-    };
-  }
-}
+import { MercadoPagoBrick } from "./_components/MercadoPagoBrick";
+import { PixCheckout } from "./_components/PixCheckout";
+import { PixResult } from "./_components/PixResult";
+import { ProgressSteps } from "./_components/ProgressSteps";
+import { FloatingInput } from "./_components/FloatingInput";
+import { TimelineStep } from "./_components/TimelineStep";
+import { PAYMENT_METHOD_CODE, isValidEmail } from "./_components/payment-helpers";
 
 interface MenuIndexes {
   ingredientsById: Map<string, Ingredient>;
@@ -56,14 +54,11 @@ interface MenuIndexes {
 }
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const PAYMENT_METHOD_CODE = "MERCADO_PAGO_PAYMENT_BRICK";
-const PIX_PAYMENT_METHOD_CODE = "PIX";
 const ALL_FILTER = "Todos";
 const DEFAULT_ORDERING_START = "17:00";
 const DEFAULT_ORDERING_END = "23:30";
 const INSTAGRAM_URL = "https://www.instagram.com/marcos_kreps/";
 const SITE_BASE = "https://marcoskreps.com.br";
-const PIX_WAIT_MINUTES = 5;
 const PUBLIC_ORDER_STORAGE_KEY = "pdv-public-order";
 const PUBLIC_CUSTOMER_PROFILE_KEY = "pdv-public-customer-profile";
 const PENDING_ORDER_RESTORE_MS = 20 * 60 * 1000;
@@ -254,157 +249,6 @@ function useHorizontalDragScroll() {
   };
 }
 
-function loadMercadoPagoScript() {
-  return new Promise<void>((resolve, reject) => {
-    if (window.MercadoPago) {
-      resolve();
-      return;
-    }
-
-    const existing = document.querySelector<HTMLScriptElement>('script[src="https://sdk.mercadopago.com/js/v2"]');
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Erro ao carregar Mercado Pago.")), { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://sdk.mercadopago.com/js/v2";
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Erro ao carregar Mercado Pago."));
-    document.body.appendChild(script);
-  });
-}
-
-function MercadoPagoBrick({
-  order,
-  onResult,
-  onPaid,
-}: {
-  order: CreatePublicOrderResponse["order"];
-  onResult: (result: MercadoPagoPaymentResponse) => void;
-  onPaid: () => void;
-}) {
-  const [isReady, setIsReady] = useState(false);
-  const [error, setError] = useState("");
-  const publicKey = process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY;
-
-  useEffect(() => {
-    let controller: { unmount: () => void } | null = null;
-    let cancelled = false;
-
-    async function renderBrick() {
-      if (!publicKey) return;
-
-      try {
-        await loadMercadoPagoScript();
-        if (cancelled || !window.MercadoPago) return;
-
-        const mercadoPago = new window.MercadoPago(publicKey, { locale: "pt-BR" });
-        const bricksBuilder = mercadoPago.bricks();
-        controller = await bricksBuilder.create("payment", "public-payment-brick", {
-          initialization: {
-            amount: Number(order.total_amount),
-          },
-          customization: {
-            paymentMethods: {
-              creditCard: "all",
-              prepaidCard: "all",
-              debitCard: "all",
-            },
-          },
-          callbacks: {
-            onReady: () => setIsReady(true),
-            onSubmit: ({ formData }: { selectedPaymentMethod: string; formData: Record<string, unknown> }) => {
-              return new Promise<void>((resolve, reject) => {
-                const idempotencyKey = crypto.randomUUID();
-                pdvApi.createMercadoPagoPayment({
-                  order_id: order.order_id,
-                  public_token: order.public_token,
-                  payment_method_code: PAYMENT_METHOD_CODE,
-                  form_data: formData,
-                  idempotency_key: idempotencyKey,
-                })
-                  .then((response) => {
-                    onResult(response);
-                    if (!response.success) {
-                      setError(response.error || "Nao foi possivel processar o pagamento.");
-                      reject();
-                      return;
-                    }
-                    if (response.payment?.status === "approved" || response.already_paid) {
-                      onPaid();
-                    }
-                    resolve();
-                  })
-                  .catch((err) => {
-                    setError(err instanceof Error ? err.message : "Erro ao processar pagamento.");
-                    reject();
-                  });
-              });
-            },
-            onError: (err: unknown) => {
-              console.error("[MercadoPagoBrick] error", JSON.stringify(err, null, 2), err);
-              setError("O checkout do Mercado Pago nao carregou corretamente.");
-            },
-          },
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Erro ao iniciar Mercado Pago.");
-      }
-    }
-
-    renderBrick();
-
-    return () => {
-      cancelled = true;
-      if (controller) controller.unmount();
-    };
-  }, [onPaid, onResult, order.order_id, order.public_token, order.total_amount, publicKey]);
-
-  if (!publicKey) {
-    return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
-        Configure `NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY` para habilitar o pagamento no checkout.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-emerald-900">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-emerald-600" />
-          <p className="text-sm font-black">Pagamento protegido pelo Mercado Pago</p>
-        </div>
-        <p className="mt-1 text-xs font-semibold leading-relaxed text-emerald-800/80">
-          Cartao de credito, debito e outros meios aparecem conforme disponibilidade do Mercado Pago.
-        </p>
-      </div>
-      {!isReady && !error && (
-        <div className="flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white p-4 text-sm font-bold text-zinc-500">
-          <Loader2 className="h-4 w-4 animate-spin text-brand-red" />
-          Carregando pagamento seguro...
-        </div>
-      )}
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-          {error}
-        </div>
-      )}
-      <div id="public-payment-brick" className="overflow-hidden rounded-2xl border border-zinc-200 bg-white p-3" />
-    </div>
-  );
-}
-
-function formatCountdown(milliseconds: number) {
-  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
 function normalizeBrazilPhone(value: string) {
   let digits = value.replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
@@ -426,13 +270,21 @@ function formatWhatsAppInput(value: string) {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
+const SAVED_PROFILE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias — dispositivo compartilhado não guarda autofill pra sempre.
+
 function readSavedPublicProfile(): SavedPublicCustomerProfile | null {
   if (typeof window === "undefined") return null;
   try {
     const stored = localStorage.getItem(PUBLIC_CUSTOMER_PROFILE_KEY);
     if (!stored) return null;
     const parsed = JSON.parse(stored) as SavedPublicCustomerProfile;
-    return parsed.phone_e164 && parsed.name ? parsed : null;
+    if (!parsed.phone_e164 || !parsed.name) return null;
+    const savedAt = parsed.saved_at ? new Date(parsed.saved_at).getTime() : NaN;
+    if (!Number.isFinite(savedAt) || Date.now() - savedAt > SAVED_PROFILE_TTL_MS) {
+      localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
     localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
     return null;
@@ -466,397 +318,6 @@ function isRecentPendingOrder(createdAt: string | undefined) {
   if (!createdAt) return false;
   const createdAtTime = new Date(createdAt).getTime();
   return Number.isFinite(createdAtTime) && Date.now() - createdAtTime <= PENDING_ORDER_RESTORE_MS;
-}
-
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
-function cpfDigits(value: string) {
-  return value.replace(/\D/g, "").slice(0, 11);
-}
-
-function isValidCpf(value: string) {
-  const digits = cpfDigits(value);
-  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
-
-  const calculateDigit = (length: number) => {
-    let sum = 0;
-    for (let index = 0; index < length; index += 1) {
-      sum += Number(digits[index]) * (length + 1 - index);
-    }
-    const remainder = (sum * 10) % 11;
-    return remainder === 10 ? 0 : remainder;
-  };
-
-  return calculateDigit(9) === Number(digits[9]) && calculateDigit(10) === Number(digits[10]);
-}
-
-function formatCpfInput(value: string) {
-  const digits = cpfDigits(value);
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
-}
-
-function PixResult({
-  payment,
-  waitExpiresAt,
-}: {
-  payment: MercadoPagoPaymentResponse;
-  waitExpiresAt?: string | null;
-}) {
-  const transaction = payment.transaction;
-  const qrBase64 = transaction?.qr_code_base64;
-  const qrCode = transaction?.qr_code;
-  const ticketUrl = transaction?.ticket_url;
-  const [copied, setCopied] = useState(false);
-  const [remainingMs, setRemainingMs] = useState(() => {
-    if (!waitExpiresAt) return PIX_WAIT_MINUTES * 60 * 1000;
-    return new Date(waitExpiresAt).getTime() - Date.now();
-  });
-
-  useEffect(() => {
-    if (!waitExpiresAt) return;
-    const updateRemaining = () => setRemainingMs(new Date(waitExpiresAt).getTime() - Date.now());
-    updateRemaining();
-    const interval = window.setInterval(updateRemaining, 1000);
-    return () => window.clearInterval(interval);
-  }, [waitExpiresAt]);
-
-  if (!qrBase64 && !qrCode && !ticketUrl) return null;
-
-  const isExpired = remainingMs <= 0;
-
-  return (
-    <div className="space-y-3 rounded-2xl border border-teal-100 bg-teal-50 p-4">
-      <div className="flex items-center justify-between gap-3 text-teal-800">
-        <div className="flex items-center gap-2">
-          <QrCode className="h-4 w-4" />
-          <p className="text-xs font-black uppercase tracking-widest">Pix gerado</p>
-        </div>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-black ${isExpired ? "bg-red-100 text-red-700" : "bg-white text-teal-700"}`}>
-          {isExpired ? "Tempo esgotado" : formatCountdown(remainingMs)}
-        </span>
-      </div>
-      <p className="text-sm font-semibold leading-relaxed text-teal-900/80">
-        Copie o codigo Pix ou escaneie o QR Code. Mantenha esta tela aberta enquanto conferimos a aprovacao.
-      </p>
-      {qrBase64 && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`data:image/png;base64,${qrBase64}`}
-          alt="QR Code Pix"
-          className="mx-auto h-56 w-56 rounded-xl bg-white p-2"
-        />
-      )}
-      {qrCode && (
-        <Button
-          variant="outline"
-          className="w-full gap-2 border-teal-200 text-teal-700"
-          onClick={async () => {
-            await navigator.clipboard.writeText(qrCode);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1800);
-          }}
-        >
-          <Copy className="h-4 w-4" />
-          {copied ? "Codigo copiado" : "Copiar Pix copia e cola"}
-        </Button>
-      )}
-      {ticketUrl && (
-        <a
-          href={ticketUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="block rounded-xl bg-teal-700 px-4 py-3 text-center text-sm font-black uppercase tracking-wide text-white"
-        >
-          Abrir Pix no Mercado Pago
-        </a>
-      )}
-    </div>
-  );
-}
-
-function PixCheckout({
-  order,
-  payerEmail,
-  onPayerEmailChange,
-  onPaid,
-}: {
-  order: CreatePublicOrderResponse["order"];
-  payerEmail: string;
-  onPayerEmailChange: (email: string) => void;
-  onPaid: () => void;
-}) {
-  const [payment, setPayment] = useState<MercadoPagoPaymentResponse | null>(null);
-  const [waitExpiresAt, setWaitExpiresAt] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState("");
-  const [pixIdempotencyKey, setPixIdempotencyKey] = useState(() => crypto.randomUUID());
-  const [now, setNow] = useState(() => Date.now());
-  const [payerCpf, setPayerCpf] = useState("");
-
-  useEffect(() => {
-    if (!payment) return;
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, [payment]);
-
-  const hasActivePix = !!payment?.transaction?.qr_code && !!waitExpiresAt && new Date(waitExpiresAt).getTime() > now;
-
-  const handleGeneratePix = async () => {
-    if (isGenerating || hasActivePix) return;
-    setError("");
-    if (!isValidEmail(payerEmail)) {
-      setError("Informe um e-mail valido para gerar o Pix pelo Mercado Pago.");
-      return;
-    }
-    if (payerCpf.trim() && !isValidCpf(payerCpf)) {
-      setError("Informe um CPF valido para gerar o Pix pelo Mercado Pago.");
-      return;
-    }
-
-    setIsGenerating(true);
-    const requestIdempotencyKey = payment && !hasActivePix ? crypto.randomUUID() : pixIdempotencyKey;
-    if (requestIdempotencyKey !== pixIdempotencyKey) setPixIdempotencyKey(requestIdempotencyKey);
-
-    try {
-      const formData: Record<string, unknown> = {
-        payment_method_id: "pix",
-        email: payerEmail.trim(),
-      };
-      if (isValidCpf(payerCpf)) {
-        formData.identificationType = "CPF";
-        formData.identificationNumber = cpfDigits(payerCpf);
-      }
-
-      const response = await pdvApi.createMercadoPagoPayment({
-        order_id: order.order_id,
-        public_token: order.public_token,
-        payment_method_code: PIX_PAYMENT_METHOD_CODE,
-        direct_payment_method: "pix",
-        form_data: formData,
-        idempotency_key: requestIdempotencyKey,
-      });
-
-      setPayment(response);
-      setWaitExpiresAt(response.transaction?.expires_at ?? null);
-
-      if (!response.success) {
-        setError(response.error || "Nao foi possivel gerar o Pix.");
-        setPixIdempotencyKey(crypto.randomUUID());
-        return;
-      }
-      if (response.payment?.status === "approved" || response.already_paid) {
-        onPaid();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao gerar Pix.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  return (
-    <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-      <div className="rounded-2xl border border-teal-100 bg-teal-50 p-4 text-teal-900">
-        <div className="flex items-center gap-2">
-          <QrCode className="h-5 w-5 text-teal-700" />
-          <p className="text-sm font-black">Pix copia e cola</p>
-        </div>
-        <p className="mt-1 text-xs font-semibold leading-relaxed text-teal-900/75">
-          Gere o codigo, pague pelo banco e deixe esta tela aberta. A confirmacao aparece automaticamente.
-        </p>
-      </div>
-
-      <input
-        value={payerEmail}
-        onChange={(event) => onPayerEmailChange(event.target.value)}
-        placeholder="E-mail exigido pelo Mercado Pago para Pix"
-        type="email"
-        disabled={!!payment}
-        className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-teal-700 disabled:opacity-60"
-      />
-      <input
-        value={payerCpf}
-        onChange={(event) => setPayerCpf(formatCpfInput(event.target.value))}
-        placeholder="CPF opcional, usado se o Mercado Pago exigir"
-        type="text"
-        inputMode="numeric"
-        disabled={!!payment}
-        className="h-12 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-base font-bold outline-none focus:border-teal-700 disabled:opacity-60"
-      />
-
-      {!payment && (
-        <Button className="w-full gap-2 bg-teal-700 hover:bg-teal-800" loading={isGenerating} onClick={handleGeneratePix}>
-          <QrCode className="h-4 w-4" />
-          Gerar Pix copia e cola
-        </Button>
-      )}
-
-      {payment && <PixResult payment={payment} waitExpiresAt={waitExpiresAt} />}
-
-      {payment && !hasActivePix && (
-        <Button variant="outline" className="w-full gap-2" loading={isGenerating} onClick={handleGeneratePix}>
-          <RefreshCw className="h-4 w-4" />
-          Gerar novo Pix
-        </Button>
-      )}
-
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-          {error}
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ── UI helpers do /pedir ──────────────────────────────────────────────────
-
-/** Progress indicator no topo das telas pós-cardápio.
- * 5 steps: Cardápio (0), Itens (1), Dados (2), Pagamento (3), Pronto (4). */
-function ProgressSteps({ current }: { current: 0 | 1 | 2 | 3 | 4 }) {
-  const steps = ["Cardápio", "Itens", "Dados", "Pagamento", "Pronto"];
-  return (
-    <nav aria-label="Progresso do pedido" className="flex items-center gap-2">
-      {steps.map((label, i) => {
-        const isDone = i < current;
-        const isCurrent = i === current;
-        return (
-          <div key={label} className="flex flex-1 items-center gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-                  isDone
-                    ? "bg-brand-red text-white"
-                    : isCurrent
-                      ? "bg-brand-red text-white shadow-[var(--shadow-sm)]"
-                      : "bg-[var(--bg-subtle)] text-[var(--text-muted)]"
-                }`}
-              >
-                {isDone ? <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} /> : i + 1}
-              </span>
-              <span
-                className={`text-xs truncate ${
-                  isCurrent
-                    ? "font-semibold text-[var(--text-primary)]"
-                    : isDone
-                      ? "font-medium text-[var(--text-secondary)]"
-                      : "text-[var(--text-muted)]"
-                }`}
-              >
-                {label}
-              </span>
-            </div>
-            {i < steps.length - 1 && (
-              <span className={`h-px flex-1 ${i < current ? "bg-brand-red" : "bg-[var(--border)]"}`} aria-hidden />
-            )}
-          </div>
-        );
-      })}
-    </nav>
-  );
-}
-
-/** Input com floating label estilo Material 3 — label sobe quando há valor ou foco. */
-function FloatingInput({
-  label,
-  value,
-  onChange,
-  onBlur,
-  placeholder,
-  type = "text",
-  inputMode,
-  help,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  onBlur?: () => void;
-  placeholder?: string;
-  type?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
-  help?: string;
-}) {
-  const filled = value.length > 0;
-  return (
-    <label className="block">
-      <div className="relative">
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={onBlur}
-          placeholder={filled ? placeholder : ""}
-          type={type}
-          inputMode={inputMode}
-          className="peer w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 pt-6 pb-2 text-sm font-medium text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
-          style={{ height: 56 }}
-        />
-        <span
-          className={`pointer-events-none absolute left-4 text-[var(--text-secondary)] transition-all ${
-            filled
-              ? "top-2 text-[11px] font-medium"
-              : "top-4 text-sm peer-focus:top-2 peer-focus:text-[11px] peer-focus:font-medium"
-          }`}
-        >
-          {label}
-        </span>
-      </div>
-      {help && (
-        <span className="mt-1 block text-[11px] leading-relaxed text-[var(--text-muted)]">
-          {help}
-        </span>
-      )}
-    </label>
-  );
-}
-
-/** Item de timeline vertical na tela de acompanhamento. */
-function TimelineStep({
-  label,
-  done,
-  active,
-  isLast,
-}: { label: string; done?: boolean; active?: boolean; isLast?: boolean }) {
-  return (
-    <li className="relative flex items-start gap-3">
-      <div className="flex flex-col items-center">
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
-            done
-              ? ""
-              : active
-                ? "bg-brand-red text-white"
-                : "border-2 border-[var(--border-strong)]"
-          }`}
-          style={done ? { backgroundColor: "var(--status-success)", color: "white" } : undefined}
-        >
-          {done && <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />}
-          {active && <span className="h-2 w-2 rounded-full bg-white animate-pulse" />}
-        </span>
-        {!isLast && (
-          <span
-            className={`mt-1 h-6 w-px ${done ? "bg-[var(--status-success)]" : "bg-[var(--border)]"}`}
-            aria-hidden
-          />
-        )}
-      </div>
-      <span
-        className={`text-sm pt-0.5 ${
-          done
-            ? "text-[var(--text-primary)] font-medium"
-            : active
-              ? "font-semibold text-[var(--text-primary)]"
-              : "text-[var(--text-muted)]"
-        }`}
-      >
-        {label}
-      </span>
-    </li>
-  );
 }
 
 export default function PedirPublicPage() {
@@ -942,6 +403,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
+  const { toasts, addToast, removeToast } = useToast();
   const lastAutofilledPhoneRef = useRef<string | null>(null);
   // Latest customerName captured for use inside the debounced profile lookup;
   // keeps the autofill effect from re-running on every keystroke in the name field.
@@ -1377,9 +839,13 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     if (editingCartItemId) updateItem(editingCartItemId, itemData);
     else addItem(itemData);
 
+    addToast("success", editingCartItemId
+      ? `${splitProductName(selectedProduct.name).title} atualizado`
+      : `${splitProductName(selectedProduct.name).title} adicionado ao pedido`);
     closeCustomization();
   }, [
     addItem,
+    addToast,
     closeCustomization,
     editingCartItemId,
     itemNotes,
@@ -1391,6 +857,21 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     selectedProduct,
     updateItem,
   ]);
+
+  /** "Não é você?" — descarta o autofill e limpa o perfil salvo neste dispositivo. */
+  const handleForgetSavedProfile = useCallback(() => {
+    localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
+    lastAutofilledPhoneRef.current = null;
+    setCustomerInfo("", customerPhone);
+    setCustomerEmail("");
+    setMarketingOptIn(false);
+    setRememberCheckoutData(false);
+    setSavedAddresses([]);
+    setSelectedAddressId(null);
+    setProfileNotice("");
+    setProfileLookupState("not_found");
+    addToast("success", "Dados salvos neste dispositivo foram apagados.");
+  }, [addToast, customerPhone, setCustomerInfo]);
 
   const handleCreateOrder = async () => {
     if (isSubmittingOrder || orderData) return;
@@ -1659,7 +1140,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               <button
                 type="button"
                 onClick={() => router.push(`/pedido/${encodeURIComponent(orderData.public_token)}`)}
-                className="flex items-center gap-1.5 rounded-full bg-[var(--status-success-bg)] px-3 py-1.5 text-[11px] font-semibold text-[var(--status-success)] hover:opacity-90 animate-pulse"
+                className="flex items-center gap-1.5 rounded-full bg-[var(--status-success-bg)] px-3 py-1.5 text-caption font-semibold text-[var(--status-success)] hover:opacity-90 animate-pulse"
               >
                 <Package className="h-3.5 w-3.5" strokeWidth={1.75} />
                 Pedido #{String(orderData.daily_number).padStart(3, "0")} em andamento
@@ -1726,7 +1207,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 >
                   <ShoppingCart className="h-5 w-5 text-white" strokeWidth={1.75} />
                   <div className="leading-tight">
-                    <p className="text-[11px] text-white/70">Seu pedido</p>
+                    <p className="text-caption text-white/70">Seu pedido</p>
                     <p className="text-sm font-semibold text-white tabular-nums">{items.length} {items.length === 1 ? "item" : "itens"} · {currency.format(estimatedTotal)}</p>
                   </div>
                 </button>
@@ -1767,6 +1248,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="min-w-0 space-y-6">
+          {(menuData?.products.length ?? 0) === 0 ? (
+            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-8 text-center">
+              <PackageX className="mx-auto h-8 w-8 text-[var(--text-muted)]" strokeWidth={1.5} />
+              <p className="mt-3 text-sm font-semibold text-[var(--text-primary)]">Cardápio indisponível no momento</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Esta unidade ainda não cadastrou itens pra pedido online. Volte mais tarde.</p>
+            </div>
+          ) : (
+          <>
           {/* Render TODAS as categorias como sections — usuário rola entre elas */}
           {menuData?.categories.map((category) => {
             const categoryProducts = productsByCategory[category.id] ?? [];
@@ -1832,24 +1321,35 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           className="group relative flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] hover:border-[var(--border-strong)] active:scale-[0.98]"
                         >
                           {isMostOrdered && (
-                            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
+                            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-micro font-semibold text-[var(--accent)]">
                               🔥 Mais pedido
                             </span>
                           )}
                           <div className="flex items-start gap-3">
-                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-brand-red">
-                              {categoryKind === "SAVORY" ? <Flame className="h-6 w-6" strokeWidth={1.75} />
-                              : categoryKind === "SWEET" ? <Sparkles className="h-6 w-6" strokeWidth={1.75} />
-                              : categoryKind === "DRINK" ? <Package className="h-6 w-6" strokeWidth={1.75} />
-                              : <Utensils className="h-6 w-6" strokeWidth={1.75} />}
-                            </div>
+                            {product.image_url ? (
+                              <Image
+                                src={product.image_url}
+                                alt=""
+                                width={56}
+                                height={56}
+                                sizes="56px"
+                                className="h-14 w-14 shrink-0 rounded-xl object-cover bg-[var(--bg-subtle)]"
+                              />
+                            ) : (
+                              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-brand-red">
+                                {categoryKind === "SAVORY" ? <Flame className="h-6 w-6" strokeWidth={1.75} />
+                                : categoryKind === "SWEET" ? <Sparkles className="h-6 w-6" strokeWidth={1.75} />
+                                : categoryKind === "DRINK" ? <Package className="h-6 w-6" strokeWidth={1.75} />
+                                : <Utensils className="h-6 w-6" strokeWidth={1.75} />}
+                              </div>
+                            )}
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {code && (
-                                  <span className="text-[11px] font-medium text-[var(--text-muted)] tabular-nums">#{code}</span>
+                                  <span className="text-caption font-medium text-[var(--text-muted)] tabular-nums">#{code}</span>
                                 )}
                                 {tags[0] && tags[0] !== "Outros" && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-light)] px-2 py-0.5 text-[10px] font-semibold text-brand-red">
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-light)] px-2 py-0.5 text-micro font-semibold text-brand-red">
                                     {tags[0] === "Vegetariano" ? <Leaf className="h-2.5 w-2.5" strokeWidth={1.75} /> : <Flame className="h-2.5 w-2.5" strokeWidth={1.75} />}
                                     {tags[0]}
                                   </span>
@@ -1877,6 +1377,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </section>
             );
           })}
+          </>
+          )}
             </div>
 
             <aside className="hidden xl:block">
@@ -1955,12 +1457,12 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               >
                 <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-red text-white">
                   <ShoppingCart className="h-5 w-5" strokeWidth={1.75} />
-                  <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-semibold text-brand-red ring-2 ring-[var(--bg-inverse)]">
+                  <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-micro font-semibold text-brand-red ring-2 ring-[var(--bg-inverse)]">
                     {items.length}
                   </span>
                 </div>
                 <div className="flex-1 text-left leading-tight">
-                  <p className="text-[11px] text-white/60">{items.length === 1 ? "1 item no pedido" : `${items.length} itens no pedido`}</p>
+                  <p className="text-caption text-white/60">{items.length === 1 ? "1 item no pedido" : `${items.length} itens no pedido`}</p>
                   <p className="text-base font-semibold text-white tabular-nums">
                     <span className="text-xs text-white/60 mr-0.5 font-medium">R$</span>
                     {estimatedTotal.toFixed(2).replace(".", ",")}
@@ -2000,6 +1502,20 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </button>
             </div>
 
+            {items.length === 0 ? (
+              <div className="mt-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-subtle)] p-6 text-center">
+                <ShoppingCart className="mx-auto h-6 w-6 text-[var(--text-muted)]" strokeWidth={1.5} />
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">Seu carrinho está vazio.</p>
+                <button
+                  type="button"
+                  onClick={() => setStep("MENU")}
+                  className="mt-3 text-sm font-semibold text-brand-red hover:text-brand-red-dark"
+                >
+                  Ver cardápio
+                </button>
+              </div>
+            ) : (
+            <>
             <div className="mt-3 divide-y divide-[var(--border)]">
               {items.map((item) => (
                 <div key={item.id} className="flex items-start gap-3 py-3">
@@ -2054,24 +1570,27 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <span className="text-xl tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(estimatedTotal)}</span>
               </div>
             </div>
+            </>
+            )}
           </section>
 
-          <button
-            type="button"
-            onClick={() => setStep("INFO")}
-            disabled={items.length === 0}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98] disabled:opacity-45"
-            style={{ height: 52 }}
-          >
-            Continuar
-            <ChevronRight className="h-5 w-5" strokeWidth={2} />
-          </button>
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setStep("INFO")}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
+              style={{ height: 52 }}
+            >
+              Continuar
+              <ChevronRight className="h-5 w-5" strokeWidth={2} />
+            </button>
+          )}
         </main>
       )}
 
       {/* ── Tela 4: INFO — dados do cliente + modalidade ───────────────── */}
       {step === "INFO" && (
-        <main className="mx-auto max-w-2xl space-y-3 p-3 sm:p-4">
+        <main className="mx-auto max-w-2xl space-y-3 p-3 pb-40 sm:p-4 sm:pb-40">
           {/* Linha compacta: voltar + progress inline (mobile só mostra textos curtos) */}
           <div className="flex items-center gap-3">
             <button
@@ -2115,7 +1634,16 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
             <>
                 {profileNotice && (
-                  <p className="text-xs font-medium text-[var(--status-success)]">{profileNotice}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-[var(--status-success)]">{profileNotice}</p>
+                    <button
+                      type="button"
+                      onClick={handleForgetSavedProfile}
+                      className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline hover:text-[var(--text-secondary)]"
+                    >
+                      Não é você?
+                    </button>
+                  </div>
                 )}
                 {checkoutPhone && profileLookupState === "not_found" && (
                   <p className="text-xs font-medium text-[var(--status-warning)]">
@@ -2139,7 +1667,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 />
 
                 <div>
-                  <p className="mb-1 text-[11px] font-medium text-[var(--text-muted)]">Modalidade</p>
+                  <p className="mb-1 text-caption font-medium text-[var(--text-muted)]">Modalidade</p>
                   <div className="flex rounded-xl bg-[var(--bg-subtle)] p-0.5">
                     {([
                       { v: "BALCAO", label: "Comer aqui" },
@@ -2152,7 +1680,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           key={opt.v}
                           type="button"
                           onClick={() => setOrderType(opt.v)}
-                          className={`flex-1 h-9 rounded-lg text-sm font-semibold ${
+                          className={`flex-1 h-11 rounded-lg text-sm font-semibold ${
                             isActive ? "text-white shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)]"
                           }`}
                           style={isActive ? { backgroundColor: "var(--bg-inverse)" } : undefined}
@@ -2166,7 +1694,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
                 {orderType === "ENTREGA" && (
                   <div className="space-y-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+                    <p className="text-caption font-semibold uppercase tracking-widest text-[var(--text-muted)]">
                       Endereço de entrega
                     </p>
 
@@ -2175,7 +1703,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                         {savedAddresses.map((addr) => (
                           <label
                             key={addr.id}
-                            className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs ${
+                            className={`flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2.5 text-xs ${
                               selectedAddressId === addr.id
                                 ? "border-brand-red bg-[var(--status-danger-bg)]"
                                 : "border-[var(--border)] bg-[var(--bg-surface)]"
@@ -2195,7 +1723,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           </label>
                         ))}
                         <label
-                          className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs ${
+                          className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2.5 text-xs ${
                             selectedAddressId === null
                               ? "border-brand-red bg-[var(--status-danger-bg)]"
                               : "border-[var(--border)] bg-[var(--bg-surface)]"
@@ -2224,6 +1752,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                         <input
                           className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
                           placeholder="Número"
+                          inputMode="numeric"
                           value={deliveryAddress.number}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, number: e.target.value }))}
                         />
@@ -2246,12 +1775,12 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, reference: e.target.value }))}
                         />
                         {checkoutPhone && (
-                          <label className="col-span-2 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                          <label className="col-span-2 flex min-h-11 cursor-pointer items-center gap-2.5 py-2 text-xs text-[var(--text-secondary)]">
                             <input
                               type="checkbox"
                               checked={saveThisAddress}
                               onChange={(e) => setSaveThisAddress(e.target.checked)}
-                              className="h-3.5 w-3.5 accent-brand-red"
+                              className="h-4 w-4 accent-brand-red"
                             />
                             Salvar este endereço para próximos pedidos
                           </label>
@@ -2279,24 +1808,24 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 />
 
                 {/* Consentimentos compactos lado a lado no espaço disponível */}
-                <div className="space-y-1">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                <div className="-my-2">
+                  <label className="flex min-h-11 cursor-pointer items-center gap-2.5 py-2 text-xs text-[var(--text-secondary)]">
                     <input
                       type="checkbox"
                       checked={rememberCheckoutData && !!checkoutPhone && !!customerName.trim()}
                       onChange={(event) => setRememberCheckoutData(event.target.checked)}
                       disabled={!checkoutPhone || !customerName.trim()}
-                      className="h-3.5 w-3.5 accent-brand-red"
+                      className="h-4 w-4 accent-brand-red"
                     />
                     Salvar para próximos pedidos
                   </label>
                   {checkoutPhone && (
-                    <label className="flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
+                    <label className="flex min-h-11 cursor-pointer items-center gap-2.5 py-2 text-xs text-[var(--text-secondary)]">
                     <input
                       type="checkbox"
                       checked={marketingOptIn}
                       onChange={(event) => setMarketingOptIn(event.target.checked)}
-                      className="h-3.5 w-3.5 accent-brand-red"
+                      className="h-4 w-4 accent-brand-red"
                     />
                     Receber novidades pelo WhatsApp
                     </label>
@@ -2305,39 +1834,47 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             </>
           </section>
 
-          {/* Resumo super compacto — uma linha */}
+          {/* Barra fixa no rodapé — resumo + CTA sempre na zona do polegar,
+             mesmo em formulários longos (endereço de entrega). */}
           <div
-            className="flex items-center justify-between rounded-xl px-4 py-2.5 text-white"
-            style={{ backgroundColor: "var(--bg-inverse)" }}
+            className="fixed inset-x-0 bottom-0 z-40 -mx-3 space-y-2 border-t border-[var(--border)] px-3 pt-3 sm:mx-0 sm:px-4"
+            style={{ backgroundColor: "var(--bg-base)", paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
           >
-            <span className="text-sm text-white/75">
-              {items.length} {items.length === 1 ? "item" : "itens"}
-              {estimatedPackagingFee > 0 && <span className="text-white/50"> · com embalagem</span>}
-            </span>
-            <span className="flex items-baseline gap-1">
-              <span className="text-[11px] text-white/60">Total</span>
-              <span className="text-base font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
-                {currency.format(estimatedTotal)}
-              </span>
-            </span>
-          </div>
+            <div className="mx-auto max-w-2xl space-y-2">
+              <div
+                className="flex items-center justify-between rounded-xl px-4 py-2.5 text-white"
+                style={{ backgroundColor: "var(--bg-inverse)" }}
+              >
+                <span className="text-sm text-white/75">
+                  {items.length} {items.length === 1 ? "item" : "itens"}
+                  {estimatedPackagingFee > 0 && <span className="text-white/50"> · com embalagem</span>}
+                </span>
+                <span className="flex items-baseline gap-1">
+                  <span className="text-caption text-white/60">Total</span>
+                  <span className="text-base font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
+                    {currency.format(estimatedTotal)}
+                  </span>
+                </span>
+              </div>
 
-          {checkoutError && (
-            <div className="rounded-2xl bg-[var(--status-danger-bg)] p-3 text-sm font-medium text-[var(--status-danger)]">
-              {checkoutError}
+              {checkoutError && (
+                <div className="rounded-2xl bg-[var(--status-danger-bg)] p-3 text-sm font-medium text-[var(--status-danger)]">
+                  {checkoutError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCreateOrder}
+                disabled={isSubmittingOrder}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
+                style={{ height: 52 }}
+              >
+                {isSubmittingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" strokeWidth={1.75} />}
+                Continuar para pagamento
+              </button>
             </div>
-          )}
-
-          <button
-            type="button"
-            onClick={handleCreateOrder}
-            disabled={isSubmittingOrder}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
-            style={{ height: 52 }}
-          >
-            {isSubmittingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" strokeWidth={1.75} />}
-            Continuar para pagamento
-          </button>
+          </div>
         </main>
       )}
 
@@ -2364,7 +1901,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           <section className="rounded-2xl px-5 py-4 text-white shadow-[var(--shadow-sm)]" style={{ backgroundColor: "var(--bg-inverse)" }}>
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-[11px] font-medium text-white/60">Pedido</p>
+                <p className="text-caption font-medium text-white/60">Pedido</p>
                 <h2 className="text-2xl font-bold leading-tight tabular-nums">#{String(orderData.daily_number).padStart(3, "0")}</h2>
               </div>
               <p className="text-2xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(orderData.total_amount)}</p>
@@ -2460,9 +1997,25 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       {step === "PAID" && (() => {
         const trackingUrl = orderData ? `${SITE_BASE}/pedido/${orderData.public_token}` : null;
         const orderNum = orderData ? String(orderData.daily_number).padStart(3, "0") : "---";
-        const waText = trackingUrl
-          ? encodeURIComponent(`Acompanhe meu pedido #${orderNum} no Marcos Krep's:\n${trackingUrl}`)
+        const shareText = trackingUrl
+          ? `Acompanhe meu pedido #${orderNum} no Marcos Krep's:\n${trackingUrl}`
           : null;
+        const waText = shareText ? encodeURIComponent(shareText) : null;
+
+        async function handleShareTracking() {
+          if (!shareText || !trackingUrl) return;
+          // Web Share API abre o menu nativo do celular (WhatsApp, SMS, etc.) —
+          // fallback pro link direto do WhatsApp em navegadores sem suporte (desktop).
+          if (typeof navigator !== "undefined" && navigator.share) {
+            try {
+              await navigator.share({ text: shareText, url: trackingUrl });
+              return;
+            } catch {
+              // Cancelado pelo usuário ou falhou — cai no fallback abaixo.
+            }
+          }
+          window.open(`https://wa.me/?text=${waText}`, "_blank", "noopener,noreferrer");
+        }
 
         return (
           <main className="mx-auto flex max-w-md flex-col gap-5 px-4 py-8">
@@ -2508,8 +2061,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   <button
                     type="button"
                     onClick={() => navigator.clipboard?.writeText(trackingUrl)}
-                    className="shrink-0 rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]"
                     title="Copiar link"
+                    aria-label="Copiar link de acompanhamento"
                   >
                     <ClipboardCopy className="h-4 w-4" strokeWidth={1.75} />
                   </button>
@@ -2531,16 +2085,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 </button>
               )}
               {waText && (
-                <a
-                  href={`https://wa.me/?text=${waText}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={handleShareTracking}
                   className="flex w-full items-center justify-center gap-2 rounded-full border border-[#25D366] bg-[#25D366]/10 text-sm font-semibold text-[#128C7E] hover:bg-[#25D366]/20 active:scale-[0.98]"
                   style={{ height: 48 }}
                 >
                   <Share2 className="h-4 w-4" strokeWidth={1.75} />
-                  Compartilhar link no WhatsApp
-                </a>
+                  Compartilhar link do pedido
+                </button>
               )}
               <button
                 type="button"
@@ -2563,6 +2116,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       {/* Sticky bottom cart agora vive dentro do MENU main (acima) — esse bloco
          duplicado foi removido durante o redesign. */}
 
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+
       <BottomSheet
         isOpen={!!selectedProduct}
         onClose={closeCustomization}
@@ -2572,13 +2127,26 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           <div className="p-5 pb-32">
             {/* Header do produto */}
             <div>
+              {selectedProduct.image_url && (
+                <div className="-mx-5 -mt-5 mb-4 aspect-[16/10] w-[calc(100%+2.5rem)] overflow-hidden bg-[var(--bg-subtle)]">
+                  <Image
+                    src={selectedProduct.image_url}
+                    alt=""
+                    width={480}
+                    height={300}
+                    sizes="(max-width: 448px) 100vw, 448px"
+                    className="h-full w-full object-cover"
+                    priority
+                  />
+                </div>
+              )}
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {getProductTags(selectedProduct, selectedProductCategory?.name, menuIndexes)
                   .filter((t) => t !== "Outros")
                   .map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-light)] px-2 py-0.5 text-[11px] font-semibold text-brand-red"
+                      className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-light)] px-2 py-0.5 text-caption font-semibold text-brand-red"
                     >
                       {tag === "Vegetariano" ? <Leaf className="h-3 w-3" strokeWidth={1.75} /> : <Flame className="h-3 w-3" strokeWidth={1.75} />}
                       {tag}
@@ -2642,7 +2210,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   className="flex w-full items-center justify-between gap-3 text-left"
                 >
                   <div>
-                    <p className="text-[11px] font-semibold text-brand-red">Adicionais</p>
+                    <p className="text-caption font-semibold text-brand-red">Adicionais</p>
                     <h3 className="mt-0.5 text-base font-semibold text-[var(--text-primary)]">Quer deixar ainda melhor?</h3>
                     <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
                       {selectedAddonCount > 0
@@ -2676,6 +2244,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                               type="button"
                               className="rounded-md bg-[var(--bg-surface)] p-1.5 text-[var(--text-secondary)] disabled:opacity-40"
                               disabled={qty === 0}
+                              aria-label={`Diminuir ${addon.name}`}
                               onClick={() => {
                                 setSelectedAddons((current) => {
                                   const next = new Map(current);
@@ -2692,6 +2261,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                             <button
                               type="button"
                               className="rounded-md bg-[var(--bg-surface)] p-1.5 text-brand-red"
+                              aria-label={`Aumentar ${addon.name}`}
                               onClick={() => {
                                 setSelectedAddons((current) => {
                                   const next = new Map(current);

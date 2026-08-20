@@ -139,7 +139,9 @@
   /* Texto sobre fundo claro / quente */
   --text-primary:     #1A0F0A;
   --text-secondary:   #6B5B4E;
-  --text-muted:       #A89080;
+  /* Original #A89080 media ~2.6:1 sobre --bg-subtle — abaixo do mínimo AA
+     (4.5:1 texto normal / 3:1 texto grande). #786754 mede ~4.7:1. */
+  --text-muted:       #786754;
   --text-on-inverse:  #FFFFFF;
 
   /* Bordas com matiz quente */
@@ -244,6 +246,13 @@ body[data-context="public"] {
      precisar do token PDV específico. */
 
   --font-sans: var(--font-inter);
+
+  /* Escala de legendas/rótulos pequenos — antes cada tela reinventava
+     text-[11px]/text-[10px] como valor solto. Registrado aqui uma vez como
+     utilitário real do Tailwind (composável com variants: peer-focus:text-caption
+     funciona, uma classe arbitrária "text-caption" sem isso não funcionaria). */
+  --text-caption: 11px;
+  --text-micro: 10px;
 }
 
 body {

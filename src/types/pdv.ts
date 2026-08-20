@@ -56,6 +56,8 @@ export interface Product {
   sector: ProductionSector;
   active: boolean;
   created_at?: string;
+  /** URL de foto hospedada externamente. Ausente/null → UI cai no ícone de fallback. */
+  image_url?: string | null;
 }
 
 export interface Ingredient {
