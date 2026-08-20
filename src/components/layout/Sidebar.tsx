@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navItems } from "@/lib/nav-items";
+import { navItems, isNavItemVisible } from "@/lib/nav-items";
 import { useUser } from "@/contexts/UserContext";
 
 interface SidebarProps {
@@ -12,8 +12,8 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const { isAdmin } = useUser();
-  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
+  const { user } = useUser();
+  const visibleItems = navItems.filter((item) => isNavItemVisible(item, user?.role));
 
   return (
     <>

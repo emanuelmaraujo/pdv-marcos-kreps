@@ -43,6 +43,7 @@ jobs:
             change-payment-method \
             confirm-delivery \
             confirm-order \
+            courier-delivery-report \
             create-attendant-order \
             dispatch-delivery \
             edit-order-item \

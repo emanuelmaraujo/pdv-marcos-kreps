@@ -25,6 +25,7 @@ interface UserContextValue {
   /** Convenience helpers */
   isAdmin: boolean;
   isAttendant: boolean;
+  isCourier: boolean;
 }
 
 const UserContext = createContext<UserContextValue>({
@@ -32,6 +33,7 @@ const UserContext = createContext<UserContextValue>({
   isLoading: true,
   isAdmin: false,
   isAttendant: false,
+  isCourier: false,
 });
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -127,6 +129,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAdmin: user?.role === "ADMIN",
         isAttendant: user?.role === "ATTENDANT",
+        isCourier: user?.role === "COURIER",
       }}
     >
       {children}

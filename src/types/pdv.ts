@@ -1,6 +1,6 @@
 // Types aligned with the real Supabase schema (init_pdv_schema + migrations)
 
-export type UserRole = 'ADMIN' | 'ATTENDANT';
+export type UserRole = 'ADMIN' | 'ATTENDANT' | 'COURIER';
 export type ProductionSector = 'KITCHEN' | 'JUICE_POTATO' | 'NONE';
 export type OrderStatus =
   | 'AGUARDANDO_CONFIRMACAO'

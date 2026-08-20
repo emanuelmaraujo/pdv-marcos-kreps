@@ -17,7 +17,7 @@ function cleanEmail(value: unknown) {
 }
 
 function cleanRole(value: unknown) {
-  return value === 'ADMIN' || value === 'ATTENDANT' ? value : '';
+  return value === 'ADMIN' || value === 'ATTENDANT' || value === 'COURIER' ? value : '';
 }
 
 function uniqueStrings(value: unknown) {
@@ -101,9 +101,14 @@ serve(async (req) => {
         const active = typeof data?.active === 'boolean' ? data.active : true;
         const branchIds = uniqueStrings(data?.branch_ids);
         const requestedHomeBranchId = typeof data?.home_branch_id === 'string' ? data.home_branch_id : null;
+        const phone = cleanText(data?.phone, 20);
 
         if (!email || !password || !name || !role) {
           throw new Error('Campos obrigatórios ausentes ou inválidos (email, senha, nome, perfil).');
+        }
+
+        if (role === 'COURIER' && branchIds.length !== 1) {
+          throw new Error('Selecione exatamente uma filial para o motoboy.');
         }
 
         if (password.length < 6) {
@@ -162,6 +167,17 @@ serve(async (req) => {
             const rows = branchIds.map((bid: string) => ({ profile_id: newUser.user.id, branch_id: bid }));
             const { error: branchInsertErr } = await supabaseAdmin.from('profile_branches').insert(rows);
             if (branchInsertErr) throw branchInsertErr;
+          }
+
+          if (role === 'COURIER') {
+            const { error: courierInsertErr } = await supabaseAdmin.from('couriers').insert({
+              branch_id: branchIds[0],
+              name,
+              phone: phone || null,
+              profile_id: newUser.user.id,
+              active,
+            });
+            if (courierInsertErr) throw courierInsertErr;
           }
 
           const { error: auditErr } = await supabaseAdmin.from('audit_logs').insert({
