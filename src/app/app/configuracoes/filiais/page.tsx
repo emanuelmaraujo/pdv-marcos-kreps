@@ -6,7 +6,9 @@ import { Branch, BranchType, Courier, DeliveryZone } from '@/types/pdv';
 import { branchesAdminApi, BranchInput, couriersApi, deliveryZonesApi } from '@/lib/api/branches-admin-api';
 import { useBranch } from '@/contexts/BranchContext';
 import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
+import { BRASILIA_NEIGHBORHOODS } from '@/lib/constants/brasilia-neighborhoods';
 import {
   Building2, Edit3, Plus, Power, Loader2, Save, X,
   Printer, MessageSquare, Clock, ChevronDown, ChevronUp, Check, Bike, Trash2,
@@ -682,13 +684,18 @@ export default function FiliaisPage() {
                           ) : null}
 
                           <div className="flex gap-2 pt-1">
-                            <input
-                              type="text"
+                            <Select
                               value={newZone.neighborhood}
                               onChange={(e) => setNewZone((p) => ({ ...p, neighborhood: e.target.value }))}
-                              placeholder="Bairro (ex: Águas Claras)"
                               className={`${INPUT_CLS} flex-1`}
-                            />
+                            >
+                              <option value="">Selecione o bairro...</option>
+                              {BRASILIA_NEIGHBORHOODS
+                                .filter((name) => !zones.some((z) => z.neighborhood === name))
+                                .map((name) => (
+                                  <option key={name} value={name}>{name}</option>
+                                ))}
+                            </Select>
                             <input
                               type="number"
                               step="0.01"
