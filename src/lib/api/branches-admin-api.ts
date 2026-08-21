@@ -20,6 +20,7 @@ export interface BranchInput {
   printer_config?: Record<string, unknown>;
   delivery_enabled?: boolean;
   default_delivery_fee?: number;
+  monthly_revenue_goal?: number | null;
 }
 
 export const branchesAdminApi = {

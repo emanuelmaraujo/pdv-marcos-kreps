@@ -164,6 +164,7 @@ export default function FiliaisPage() {
       whatsapp_enabled: b.whatsapp_enabled,
       delivery_enabled: b.delivery_enabled,
       default_delivery_fee: Number(b.default_delivery_fee ?? 0),
+      monthly_revenue_goal: b.monthly_revenue_goal != null ? Number(b.monthly_revenue_goal) : null,
     });
     setEditingId(b.id);
     setPrinterCfg(parseConfig(b.printer_config as Record<string, unknown>));
@@ -537,6 +538,18 @@ export default function FiliaisPage() {
                     onChange={(e) => setField('address', e.target.value)}
                     className={INPUT_CLS}
                     placeholder="Rua X, nº Y — Asa Norte"
+                  />
+                </Field>
+
+                <Field label="Meta mensal de faturamento (R$)">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editing.monthly_revenue_goal ?? ''}
+                    onChange={(e) => setField('monthly_revenue_goal', e.target.value === '' ? null : Number(e.target.value))}
+                    className={INPUT_CLS}
+                    placeholder="Deixe em branco pra não acompanhar meta"
                   />
                 </Field>
 

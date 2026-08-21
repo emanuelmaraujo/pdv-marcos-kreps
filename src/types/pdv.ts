@@ -162,6 +162,7 @@ export interface Branch {
   whatsapp_templates?: Record<string, { template_name?: string; language?: string; enabled?: boolean }>;
   delivery_enabled: boolean;
   default_delivery_fee: number;
+  monthly_revenue_goal?: number | null;
   created_at?: string;
   updated_at?: string;
 }

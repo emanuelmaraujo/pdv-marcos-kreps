@@ -96,6 +96,25 @@ export default function CardapioPage() {
     loadMenu();
   }, [loadMenu]);
 
+  // Deep-link ?product_id=<id> — usado pelo relatório de caixa (produtos sem
+  // saída) para abrir direto o modal de edição do produto, sem exigir busca
+  // manual. Só roda uma vez, quando o menu termina de carregar.
+  const deepLinkedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkedRef.current || !menuData) return;
+    const productId = new URLSearchParams(window.location.search).get("product_id");
+    if (!productId) return;
+    deepLinkedRef.current = true;
+    const product = menuData.products.find((p) => p.id === productId);
+    if (product) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActiveCategory(product.category_id);
+      setSelectedProduct(product);
+      setIsProductModalOpen(true);
+    }
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [menuData]);
+
   // ─── Product Actions ─────────────────────────────────
   const handleToggleProduct = async (product: Product) => {
     if (!isAdmin) return;
