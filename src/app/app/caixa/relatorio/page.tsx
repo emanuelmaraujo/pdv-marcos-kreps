@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -456,7 +457,25 @@ function ControlPanel({
     ? `${reportDateLabelFmt.format(labelToDate(rangeStart))} → ${reportDateLabelFmt.format(labelToDate(rangeEnd))}`
     : "Intervalo";
   const [showRangePopover, setShowRangePopover] = useState(false);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; right: number } | null>(null);
   const rangePopoverRef = useRef<HTMLDivElement>(null);
+  const rangeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // A linha de pills (período) tem overflow-x-auto pra rolar em telas
+  // pequenas — mas por spec de CSS, isso força overflow-y a virar "auto"
+  // também, e um popover posicionado absoluto dentro dela fica cortado no
+  // limite da linha (invisível/inclicável, mesmo com o estado "aberto"
+  // correto). Renderiza via portal em document.body, com posição calculada
+  // a partir do botão, pra escapar desse clipping.
+  const toggleRangePopover = () => {
+    if (!showRangePopover) {
+      const rect = rangeButtonRef.current?.getBoundingClientRect();
+      if (rect) {
+        setPopoverPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
+      }
+    }
+    setShowRangePopover((v) => !v);
+  };
 
   // Fecha o popover ao clicar fora — sem isso, a única saída era o botão
   // "Aplicar" (desabilitado até escolher as duas datas), dando a impressão
@@ -464,12 +483,25 @@ function ControlPanel({
   useEffect(() => {
     if (!showRangePopover) return;
     const handler = (e: MouseEvent) => {
-      if (rangePopoverRef.current && !rangePopoverRef.current.contains(e.target as Node)) {
-        setShowRangePopover(false);
-      }
+      const target = e.target as Node;
+      // Cliques dentro do popover ou no próprio botão de alternar não fecham
+      // por aqui — o botão já cuida de abrir/fechar via toggleRangePopover,
+      // e deixar os dois handlers competirem no mesmo clique reabre o
+      // popover que acabou de fechar (mousedown fecha, click seguinte reabre).
+      if (rangePopoverRef.current?.contains(target)) return;
+      if (rangeButtonRef.current?.contains(target)) return;
+      setShowRangePopover(false);
+    };
+    const reposition = () => {
+      const rect = rangeButtonRef.current?.getBoundingClientRect();
+      if (rect) setPopoverPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
     };
     document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    window.addEventListener("resize", reposition);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      window.removeEventListener("resize", reposition);
+    };
   }, [showRangePopover]);
 
   const hasActiveFilters =
@@ -527,10 +559,11 @@ function ControlPanel({
             />
           </label>
 
-          {/* Pill "Intervalo" — abre popover com dois date inputs */}
+          {/* Pill "Intervalo" — abre popover com dois date inputs (renderizado via portal, ver comentário acima) */}
           <div className="relative shrink-0">
             <button
-              onClick={() => setShowRangePopover((v) => !v)}
+              ref={rangeButtonRef}
+              onClick={toggleRangePopover}
               className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
                 period === "range"
                   ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
@@ -541,10 +574,11 @@ function ControlPanel({
               <CalendarDays className="h-3 w-3" strokeWidth={1.75} />
               <span className="max-w-[180px] truncate">{period === "range" && rangeStart && rangeEnd ? rangeLabel : "Intervalo"}</span>
             </button>
-            {showRangePopover && (
+            {showRangePopover && popoverPos && typeof document !== "undefined" && createPortal(
               <div
                 ref={rangePopoverRef}
-                className="absolute right-0 top-full z-20 mt-2 w-72 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-lg)]"
+                className="fixed z-50 w-72 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-lg)]"
+                style={{ top: popoverPos.top, right: popoverPos.right }}
               >
                 <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-[var(--text-muted)]">Intervalo (dias comerciais)</p>
                 <div className="space-y-2">
@@ -585,7 +619,8 @@ function ControlPanel({
                     Aplicar
                   </button>
                 </div>
-              </div>
+              </div>,
+              document.body,
             )}
           </div>
         </div>
