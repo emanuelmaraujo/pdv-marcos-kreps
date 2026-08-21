@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   AlertCircle,
   ArrowLeft,
@@ -18,11 +19,14 @@ import {
   Lightbulb,
   ListOrdered,
   Loader2,
+  Pencil,
   Pizza,
+  Printer,
   QrCode,
   RefreshCw,
   Search,
   ShoppingBag,
+  Target,
   TrendingDown,
   TrendingUp,
   Trophy,
@@ -46,9 +50,18 @@ import {
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { LoadingState } from "@/components/feedback/LoadingState";
 import { Card, CardContent } from "@/components/ui/Card";
-import { getBusinessDayRange } from "@/lib/utils/business-day";
 import { useBranch } from "@/contexts/BranchContext";
 import { SectionCompare } from "./compare";
+import {
+  Period,
+  PERIOD_LABELS,
+  labelToDate,
+  computeDates,
+  computePrevDates,
+  pctDelta,
+  isClosedRange,
+} from "@/lib/utils/report-periods";
+import { buildReportCacheKey, readReportCache, writeReportCache } from "@/lib/utils/report-cache";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -78,7 +91,6 @@ const reportTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Section = "overview" | "financial" | "sales" | "patterns" | "orders" | "compare";
-type Period = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "custom" | "range";
 type OrderFilter = "TODOS" | "PAGOS" | "PENDENTES" | "CANCELADOS" | "DESISTENCIAS";
 
 interface AbcProduct extends ProductStat {
@@ -106,120 +118,7 @@ const SECTIONS: { id: Section; label: string; short: string; icon: React.Element
   { id: "orders",    label: "Pedidos",           short: "Pedidos",   icon: ListOrdered },
 ];
 
-// ── Period helpers ────────────────────────────────────────────────────────────
-
-const PERIOD_LABELS: Record<Period, string> = {
-  today: "Hoje", yesterday: "Ontem", last7: "7 dias", last30: "30 dias", thisMonth: "Este mês", custom: "Data", range: "Intervalo",
-};
-
-function labelToDate(label: string): Date {
-  const [y, m, d] = label.split("-").map(Number);
-  return new Date(y, m - 1, d, 12, 0, 0);
-}
-
-function computeDates(period: Period, customDate?: string, rangeStart?: string, rangeEnd?: string): { start: Date; end: Date } {
-  const now = new Date();
-  // "Hoje", "Ontem" e "Data" usam o mesmo dia comercial do caixa (03h–02:59h Brasília)
-  // para que ambas as telas mostrem os mesmos pedidos.
-  if (period === "today") {
-    const bd = getBusinessDayRange(now);
-    return { start: bd.start, end: bd.end };
-  }
-  if (period === "yesterday") {
-    // Dia comercial anterior = start do dia de hoje - 24h
-    const todayBd = getBusinessDayRange(now);
-    const yesterdayStart = new Date(todayBd.start.getTime() - 24 * 60 * 60 * 1000);
-    return { start: yesterdayStart, end: todayBd.start };
-  }
-  if (period === "custom" && customDate) {
-    const bd = getBusinessDayRange(labelToDate(customDate));
-    return { start: bd.start, end: bd.end };
-  }
-  if (period === "range" && rangeStart && rangeEnd) {
-    // Range fecha por dia comercial inclusive: start do dia inicial até end do dia final.
-    const startBd = getBusinessDayRange(labelToDate(rangeStart));
-    const endBd = getBusinessDayRange(labelToDate(rangeEnd));
-    return { start: startBd.start, end: endBd.end };
-  }
-
-  const start = new Date();
-  const end = new Date();
-  switch (period) {
-    case "last7":
-      start.setDate(now.getDate() - 7); start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-      break;
-    case "last30":
-      start.setDate(now.getDate() - 30); start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-      break;
-    case "thisMonth":
-      start.setDate(1); start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-      break;
-    default:
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-  }
-  return { start, end };
-}
-
-function computePrevDates(period: Period, customDate?: string, rangeStart?: string, rangeEnd?: string): { start: Date; end: Date } {
-  const now = new Date();
-  const start = new Date();
-  const end = new Date();
-  if (period === "range" && rangeStart && rangeEnd) {
-    // Mesma duração imediatamente antes do range escolhido.
-    const cur = computeDates("range", undefined, rangeStart, rangeEnd);
-    const ms = cur.end.getTime() - cur.start.getTime();
-    end.setTime(cur.start.getTime());
-    start.setTime(cur.start.getTime() - ms);
-    return { start, end };
-  }
-  switch (period) {
-    case "today": {
-      // Período anterior = dia comercial de ontem
-      const todayBd = getBusinessDayRange(now);
-      const ystStart = new Date(todayBd.start.getTime() - 24 * 60 * 60 * 1000);
-      start.setTime(ystStart.getTime());
-      end.setTime(todayBd.start.getTime());
-      break;
-    }
-    case "custom": {
-      // Dia comercial anterior à data escolhida
-      const ref = customDate ? labelToDate(customDate) : now;
-      const curBd = getBusinessDayRange(ref);
-      const prevStart = new Date(curBd.start.getTime() - 24 * 60 * 60 * 1000);
-      start.setTime(prevStart.getTime());
-      end.setTime(curBd.start.getTime());
-      break;
-    }
-    case "yesterday":
-      start.setDate(now.getDate() - 2); start.setHours(0, 0, 0, 0);
-      end.setDate(now.getDate() - 2);   end.setHours(23, 59, 59, 999);
-      break;
-    case "last7":
-      start.setDate(now.getDate() - 14); start.setHours(0, 0, 0, 0);
-      end.setDate(now.getDate() - 7);    end.setHours(23, 59, 59, 999);
-      break;
-    case "last30":
-      start.setDate(now.getDate() - 60); start.setHours(0, 0, 0, 0);
-      end.setDate(now.getDate() - 30);   end.setHours(23, 59, 59, 999);
-      break;
-    case "thisMonth":
-      start.setDate(1); start.setMonth(now.getMonth() - 1); start.setHours(0, 0, 0, 0);
-      end.setDate(0); end.setHours(23, 59, 59, 999);
-      break;
-  }
-  return { start, end };
-}
-
 // ── Computation helpers ───────────────────────────────────────────────────────
-
-function pctDelta(curr: number, prev: number) {
-  if (prev === 0) return null;
-  return ((curr - prev) / prev) * 100;
-}
 
 function getSaleDate(order: OrderRecord): Date {
   return new Date(order.paid_at ?? order.confirmed_at ?? order.created_at);
@@ -269,6 +168,36 @@ function buildDailyRows(orders: OrderRecord[]): DailyRow[] {
   return rows;
 }
 
+// Desvio-padrão (z-score) de uma série pequena — usado pra marcar dias/horas
+// "atípicos" dentro do próprio período selecionado (sem precisar buscar
+// histórico fora do range já carregado). Com poucas amostras o z-score é
+// ruidoso, então os painéis só o usam a partir de um mínimo de pontos.
+function zScores(values: number[]): number[] {
+  const n = values.length;
+  if (n === 0) return [];
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  const sd = Math.sqrt(variance);
+  if (sd === 0) return values.map(() => 0);
+  return values.map((v) => (v - mean) / sd);
+}
+
+// Exportação de planilha (CSV com BOM p/ Excel abrir acentuação corretamente).
+// Usado por qualquer painel tabular do relatório — Pedidos, Receita dia a dia,
+// Classificação ABC — pra não reimplementar blob/download em cada um.
+function downloadCSV(filename: string, header: string[], rows: (string | number)[][]) {
+  const csv = [header, ...rows]
+    .map((r) => r.map((cell) => String(cell)).join(","))
+    .join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Payment meta ──────────────────────────────────────────────────────────────
 
 const PAYMENT_META: Record<string, { icon: React.ElementType; label: string; iconCls: string; barCls: string }> = {
@@ -286,7 +215,7 @@ const PAYMENT_META: Record<string, { icon: React.ElementType; label: string; ico
 export default function RelatorioPage() {
   const router = useRouter();
   const supabase = createClient();
-  const { currentBranchId } = useBranch();
+  const { currentBranchId, currentBranch } = useBranch();
 
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -323,7 +252,7 @@ export default function RelatorioPage() {
     if (isAdmin === true) reportsApi.getCategories().then(setCategories);
   }, [isAdmin]);
 
-  const loadReport = useCallback(async () => {
+  const loadReport = useCallback(async (opts?: { force?: boolean }) => {
     if (period === "custom" && !customDate) {
       setIsLoading(false);
       return;
@@ -342,6 +271,27 @@ export default function RelatorioPage() {
 
       const bf = currentBranchId ? { ...f, branch_id: currentBranchId } : f;
       const bpf = currentBranchId ? { ...pf, branch_id: currentBranchId } : pf;
+
+      // Períodos fechados (que não podem mais mudar) são cacheados na sessão
+      // do navegador — evita reprocessar a mesma janela ao revisitar um dia
+      // passado. "Atualizar" (force) sempre ignora e regrava o cache.
+      const closed = isClosedRange({ start, end });
+      const cacheKey = buildReportCacheKey({
+        start: bf.start_date, end: bf.end_date, prevStart: bpf.start_date, prevEnd: bpf.end_date,
+        categoryId: filters.category_id, paymentMethod: filters.payment_method, branchId: currentBranchId ?? null,
+      });
+
+      if (closed && !opts?.force) {
+        const cached = readReportCache(cacheKey);
+        if (cached) {
+          setReport(cached.report);
+          setPrevReport(cached.prevReport);
+          setOrders(cached.orders);
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const [cur, prev, ord] = await Promise.all([
         reportsApi.getCashReport(bf),
         reportsApi.getCashReport(bpf).catch(() => null),
@@ -350,6 +300,8 @@ export default function RelatorioPage() {
       setReport(cur);
       setPrevReport(prev);
       setOrders(ord);
+
+      if (closed) writeReportCache(cacheKey, { report: cur, prevReport: prev, orders: ord });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro ao carregar relatório");
     } finally {
@@ -402,8 +354,10 @@ export default function RelatorioPage() {
     );
   }
 
+  const printPeriodLabel = currentRangeForCompare?.label ?? PERIOD_LABELS[period];
+
   return (
-    <div className="flex h-full flex-col bg-[var(--bg-base)]">
+    <div className="flex h-full flex-col bg-[var(--bg-base)] print:block print:h-auto">
       {/* ── Control panel ── */}
       <ControlPanel
         period={period}
@@ -426,22 +380,36 @@ export default function RelatorioPage() {
           setRangeStart(start);
           setRangeEnd(end);
           if (start && end) setPeriod("range");
+          // "Limpar" no popover de intervalo: volta pro período padrão em vez de
+          // deixar period="range" com datas vazias (relatório ficava travado/stale).
+          else if (!start && !end && period === "range") setPeriod("today");
         }}
         onFilterChange={setFilters}
         onBack={() => router.push("/app/caixa")}
-        onRefresh={loadReport}
+        onRefresh={() => loadReport({ force: true })}
       />
 
       {/* ── Section navigation ── */}
       <SectionNav active={activeSection} onChange={setActiveSection} />
 
+      {/* Recarregando com dado antigo ainda na tela (troca de período/filtro) —
+          uma barra fina em vez de esconder o layout inteiro atrás de um spinner. */}
+      {isLoading && report && <TopLoadingBar />}
+
       {/* ── Content ── */}
-      <div className="flex-1 overflow-y-auto">
+      <div className={`flex-1 overflow-y-auto print:overflow-visible ${isLoading && report ? "opacity-60 transition-opacity duration-200" : "transition-opacity duration-200"}`}>
         {isLoading && !report ? (
           <div className="p-8"><LoadingState message="Carregando dados..." /></div>
         ) : !report ? null : (
-          <div className="mx-auto max-w-7xl space-y-5 px-4 pb-28 pt-5 md:px-6 lg:px-8">
-            {activeSection === "overview"  && <SectionOverview  report={report} prevReport={prevReport} score={operationalScore} projection={projection} />}
+          <div className="mx-auto max-w-7xl space-y-5 px-4 pb-28 pt-5 md:px-6 lg:px-8 print:max-w-none print:space-y-4 print:px-0 print:pb-4 print:pt-0">
+            {/* Cabeçalho só visível ao imprimir/exportar PDF — a tela usa o ControlPanel (que fica oculto no print). */}
+            <div className="hidden print:flex print:flex-col print:gap-0.5 print:border-b print:border-black/20 print:pb-3">
+              <p className="text-lg font-black text-black">Marcos Krep&apos;s — Relatório de Caixa</p>
+              <p className="text-xs font-medium text-black/70">
+                {SECTIONS.find((s) => s.id === activeSection)?.label} · {printPeriodLabel} · impresso em {longDate.format(new Date())} {reportTimeFormatter.format(new Date())}
+              </p>
+            </div>
+            {activeSection === "overview"  && <SectionOverview  report={report} prevReport={prevReport} score={operationalScore} projection={projection} monthlyGoal={currentBranch?.monthly_revenue_goal ?? null} />}
             {activeSection === "financial" && <SectionFinancial report={report} dailyRows={dailyRows} />}
             {activeSection === "sales"     && <SectionSales     report={report} abcProducts={abcProducts} />}
             {activeSection === "patterns"  && <SectionPatterns  report={report} />}
@@ -488,6 +456,22 @@ function ControlPanel({
     ? `${reportDateLabelFmt.format(labelToDate(rangeStart))} → ${reportDateLabelFmt.format(labelToDate(rangeEnd))}`
     : "Intervalo";
   const [showRangePopover, setShowRangePopover] = useState(false);
+  const rangePopoverRef = useRef<HTMLDivElement>(null);
+
+  // Fecha o popover ao clicar fora — sem isso, a única saída era o botão
+  // "Aplicar" (desabilitado até escolher as duas datas), dando a impressão
+  // de que o intervalo "não resolve".
+  useEffect(() => {
+    if (!showRangePopover) return;
+    const handler = (e: MouseEvent) => {
+      if (rangePopoverRef.current && !rangePopoverRef.current.contains(e.target as Node)) {
+        setShowRangePopover(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showRangePopover]);
+
   const hasActiveFilters =
     (filters.category_id && filters.category_id !== "ALL") ||
     (filters.payment_method && filters.payment_method !== "ALL");
@@ -496,7 +480,7 @@ function ControlPanel({
     onFilterChange({ ...filters, category_id: "ALL", payment_method: "ALL" });
 
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)]">
+    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)] print:hidden">
       {/* Row 1: navigation + refresh */}
       <div className="flex items-center gap-3 px-4 py-3 md:px-6">
         <button
@@ -558,7 +542,10 @@ function ControlPanel({
               <span className="max-w-[180px] truncate">{period === "range" && rangeStart && rangeEnd ? rangeLabel : "Intervalo"}</span>
             </button>
             {showRangePopover && (
-              <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-lg)]">
+              <div
+                ref={rangePopoverRef}
+                className="absolute right-0 top-full z-20 mt-2 w-72 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-lg)]"
+              >
                 <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-[var(--text-muted)]">Intervalo (dias comerciais)</p>
                 <div className="space-y-2">
                   <div>
@@ -612,6 +599,14 @@ function ControlPanel({
           {isLoading
             ? <Loader2 className="h-4 w-4 animate-spin" />
             : <RefreshCw className="h-4 w-4" strokeWidth={1.75} />}
+        </button>
+
+        <button
+          onClick={() => window.print()}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-95"
+          title="Imprimir / salvar PDF da aba atual"
+        >
+          <Printer className="h-4 w-4" strokeWidth={1.75} />
         </button>
       </div>
 
@@ -689,7 +684,7 @@ function FilterChip({
 
 function SectionNav({ active, onChange }: { active: Section; onChange: (s: Section) => void }) {
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)]">
+    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)] print:hidden">
       <div className="flex overflow-x-auto hide-scrollbar">
         {SECTIONS.map((s) => {
           const Icon = s.icon;
@@ -714,6 +709,75 @@ function SectionNav({ active, onChange }: { active: Section; onChange: (s: Secti
       </div>
     </div>
   );
+}
+
+// Barra fina e indeterminada no topo do conteúdo — indicador de "recarregando"
+// que não esconde o relatório atrás de um spinner de página inteira.
+function TopLoadingBar() {
+  return (
+    <div className="relative h-0.5 w-full overflow-hidden bg-brand-red/15 print:hidden">
+      <div className="absolute inset-y-0 w-1/3 animate-[top-loading-bar_1.1s_ease-in-out_infinite] rounded-full bg-brand-red" />
+      <style>{`
+        @keyframes top-loading-bar {
+          0%   { left: -33%; }
+          100% { left: 100%; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ── Alertas de desvio ─────────────────────────────────────────────────────────
+// Diferente dos "insights" (que narram o período), alertas de desvio comparam
+// contra o período anterior e só disparam quando o desvio é grande o
+// suficiente pra merecer atenção — pensado pra ser lido em 3 segundos no
+// início do relatório, não misturado com curiosidades operacionais.
+
+interface DeviationAlert {
+  key: string;
+  label: string;
+  message: string;
+  severity: "critical" | "warning";
+}
+
+function pushDeviationAlert(
+  alerts: DeviationAlert[],
+  key: string,
+  label: string,
+  curr: number,
+  prev: number,
+  opts: { minPrev: number; badDirection: "up" | "down"; threshold: number; unit: "currency" | "int" },
+) {
+  const delta = pctDelta(curr, prev);
+  if (delta === null || prev < opts.minPrev) return;
+  const isBad = opts.badDirection === "up" ? delta > 0 : delta < 0;
+  if (!isBad || Math.abs(delta) < opts.threshold) return;
+  const fmt = (v: number) => (opts.unit === "currency" ? currency.format(v) : String(Math.round(v)));
+  const verb = delta > 0 ? "subiu" : "caiu";
+  alerts.push({
+    key,
+    label,
+    message: `${label} ${verb} ${Math.abs(delta).toFixed(0)}% vs. o período anterior (${fmt(prev)} → ${fmt(curr)}).`,
+    severity: Math.abs(delta) >= opts.threshold * 1.5 ? "critical" : "warning",
+  });
+}
+
+function computeDeviationAlerts(report: CashReportResponse, prevReport: CashReportResponse | null): DeviationAlert[] {
+  if (!prevReport) return [];
+  const alerts: DeviationAlert[] = [];
+  pushDeviationAlert(alerts, "received", "Recebido", report.summary.received, prevReport.summary.received,
+    { minPrev: 50, badDirection: "down", threshold: 20, unit: "currency" });
+  pushDeviationAlert(alerts, "paid_orders", "Pedidos pagos", report.summary.paid_orders, prevReport.summary.paid_orders,
+    { minPrev: 5, badDirection: "down", threshold: 20, unit: "int" });
+  pushDeviationAlert(alerts, "average_ticket", "Ticket médio", report.summary.average_ticket, prevReport.summary.average_ticket,
+    { minPrev: 5, badDirection: "down", threshold: 15, unit: "currency" });
+  pushDeviationAlert(alerts, "canceled", "Cancelamentos", report.summary.canceled, prevReport.summary.canceled,
+    { minPrev: 20, badDirection: "up", threshold: 50, unit: "currency" });
+  pushDeviationAlert(alerts, "courtesy", "Cortesias", report.summary.courtesy, prevReport.summary.courtesy,
+    { minPrev: 20, badDirection: "up", threshold: 50, unit: "currency" });
+
+  const rank: Record<DeviationAlert["severity"], number> = { critical: 0, warning: 1 };
+  return alerts.sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, 4);
 }
 
 // ── Score operacional ─────────────────────────────────────────────────────────
@@ -815,17 +879,46 @@ function computeProjection(
   };
 }
 
+// ── Ritmo da meta mensal ──────────────────────────────────────────────────────
+// Só aparece quando a filial tem `monthly_revenue_goal` configurada
+// (Configurações → Filiais) e o período selecionado é "Este mês". Reaproveita
+// a mesma projeção de fechamento do mês já usada no ProjectionPanel.
+
+interface GoalPace {
+  goal: number;
+  received: number;
+  progressPct: number;
+  projectedMonthEnd: number;
+  onTrack: boolean;
+  gap: number;
+  daysRemaining: number;
+}
+
+function computeGoalPace(received: number, goal: number, projection: RevenueProjection): GoalPace {
+  const projectedMonthEnd = projection.projectedMonthEnd;
+  return {
+    goal,
+    received,
+    progressPct: goal > 0 ? (received / goal) * 100 : 0,
+    projectedMonthEnd,
+    onTrack: projectedMonthEnd >= goal,
+    gap: goal - projectedMonthEnd,
+    daysRemaining: projection.daysRemainingInMonth,
+  };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — VISÃO GERAL
 // ════════════════════════════════════════════════════════════════════════════
 
 function SectionOverview({
-  report, prevReport, score, projection,
+  report, prevReport, score, projection, monthlyGoal,
 }: {
   report: CashReportResponse;
   prevReport: CashReportResponse | null;
   score: OperationalScore | null;
   projection: RevenueProjection | null;
+  monthlyGoal: number | null;
 }) {
   const topPayment = report.payment_breakdown
     .filter((i) => i.count > 0 && i.method !== "PENDING")
@@ -833,9 +926,19 @@ function SectionOverview({
 
   const bestWeekday = [...report.weekday_sales].sort((a, b) => b.received - a.received)[0];
   const peakHour = getPeakHour(report.hourly_sales);
+  const deviationAlerts = computeDeviationAlerts(report, prevReport);
+  const goalPace = projection?.isMonthly && monthlyGoal
+    ? computeGoalPace(report.summary.received, monthlyGoal, projection)
+    : null;
 
   return (
     <div className="space-y-5">
+      {/* Alertas de desvio */}
+      {deviationAlerts.length > 0 && <DeviationAlertsPanel alerts={deviationAlerts} />}
+
+      {/* Ritmo da meta mensal */}
+      {goalPace && <GoalPacePanel pace={goalPace} />}
+
       {/* Scorecard */}
       <div>
         <SectionLabel>Resumo do período</SectionLabel>
@@ -960,6 +1063,24 @@ function SectionOverview({
   );
 }
 
+function DeviationAlertsPanel({ alerts }: { alerts: DeviationAlert[] }) {
+  return (
+    <div className="space-y-2">
+      {alerts.map((a) => {
+        const style = a.severity === "critical"
+          ? "border-red-500/30 bg-red-500/10 text-red-700"
+          : "border-amber-500/30 bg-amber-500/10 text-amber-700";
+        return (
+          <div key={a.key} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${style}`}>
+            <AlertCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
+            <p className="text-sm font-bold leading-snug">{a.message}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ScorePanel({ score }: { score: OperationalScore }) {
   const color =
     score.total >= 80 ? { ring: "text-emerald-600", bg: "bg-emerald-500", label: "Excelente", txt: "text-emerald-600", badge: "bg-emerald-500/10 text-emerald-600" }
@@ -1019,6 +1140,41 @@ function ScorePanel({ score }: { score: OperationalScore }) {
               </div>
             ))}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function GoalPacePanel({ pace }: { pace: GoalPace }) {
+  const tone = pace.onTrack
+    ? { text: "text-emerald-600", bar: "bg-emerald-500", badge: "bg-emerald-500/10 text-emerald-600", label: "No ritmo" }
+    : { text: "text-red-600", bar: "bg-red-500", badge: "bg-red-500/10 text-red-600", label: "Atrás do ritmo" };
+  return (
+    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-2">
+          <PanelHeader icon={Target} title="Meta mensal" />
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-black ${tone.badge}`}>{tone.label}</span>
+        </div>
+
+        <div className="mt-4 flex items-baseline justify-between gap-2">
+          <p className="text-2xl font-black text-[var(--text-primary)]">{currency.format(pace.received)}</p>
+          <p className="text-xs font-bold text-[var(--text-muted)]">meta {currency.format(pace.goal)}</p>
+        </div>
+        <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-[var(--bg-subtle)]">
+          <div className={`h-full rounded-full ${tone.bar}`} style={{ width: `${Math.min(100, pace.progressPct)}%` }} />
+        </div>
+        <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">{pace.progressPct.toFixed(0)}% da meta recebido até agora</p>
+
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Projeção de fechamento (no ritmo atual)</p>
+          <p className={`mt-1 text-xl font-black ${tone.text}`}>{currency.format(pace.projectedMonthEnd)}</p>
+          <p className="text-xs font-medium text-[var(--text-muted)]">
+            {pace.onTrack
+              ? `${currency.format(pace.projectedMonthEnd - pace.goal)} acima da meta se o ritmo continuar`
+              : `Faltam ${currency.format(pace.gap)} pra bater a meta · ${pace.daysRemaining} dia${pace.daysRemaining !== 1 ? "s" : ""} restantes no mês`}
+          </p>
         </div>
       </CardContent>
     </Card>
@@ -1370,12 +1526,23 @@ function PaymentPanel({ report }: { report: CashReportResponse }) {
   );
 }
 
+// Um dia é "atípico" quando seu recebido foge do padrão dos outros dias do
+// mesmo período selecionado (z-score, não histórico externo). Com menos de 4
+// dias no período o desvio-padrão é ruído — não marca nada.
+const ANOMALY_Z_THRESHOLD = 1.5;
+
 function DailyTablePanel({ rows }: { rows: DailyRow[] }) {
   const maxReceived = Math.max(...rows.map((r) => r.received), 1);
+  const zs = rows.length >= 4 ? zScores(rows.map((r) => r.received)) : rows.map(() => 0);
+  const exportCSV = () => downloadCSV(
+    `receita-dia-a-dia-${new Date().toISOString().substring(0, 10)}.csv`,
+    ["Data", "Pedidos", "Ticket médio", "Recebido"],
+    rows.map((r) => [r.label, r.orders, r.avg.toFixed(2).replace(".", ","), r.received.toFixed(2).replace(".", ",")]),
+  );
   return (
     <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
-        <PanelHeader icon={CalendarDays} title="Receita dia a dia" />
+        <PanelHeader icon={CalendarDays} title="Receita dia a dia" action={<ExportCsvButton onClick={exportCSV} />} />
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[480px] text-sm">
             <thead>
@@ -1388,12 +1555,27 @@ function DailyTablePanel({ rows }: { rows: DailyRow[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border)]">
-              {rows.map((r) => {
+              {rows.map((r, i) => {
                 const pct = (r.received / maxReceived) * 100;
                 const isBest = r.received === maxReceived;
+                const z = zs[i];
+                const isAnomaly = Math.abs(z) >= ANOMALY_Z_THRESHOLD;
                 return (
                   <tr key={r.date} className={isBest ? "bg-emerald-500/10" : ""}>
-                    <td className="py-2.5 text-left font-bold text-[var(--text-primary)]">{r.label}</td>
+                    <td className="py-2.5 text-left font-bold text-[var(--text-primary)]">
+                      <span className="inline-flex items-center gap-1.5">
+                        {r.label}
+                        {isAnomaly && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-600"
+                            title={`Recebido ${z > 0 ? "muito acima" : "muito abaixo"} do padrão dos outros dias deste período`}
+                          >
+                            <AlertCircle className="h-2.5 w-2.5" strokeWidth={2.5} />
+                            atípico
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="py-2.5 text-right font-medium text-[var(--text-secondary)]">{r.orders}</td>
                     <td className="py-2.5 text-right font-medium text-[var(--text-secondary)]">{currency.format(r.avg)}</td>
                     <td className={`py-2.5 text-right font-black ${isBest ? "text-emerald-600" : "text-[var(--text-primary)]"}`}>
@@ -1545,10 +1727,15 @@ function AbcPanel({ products }: { products: AbcProduct[] }) {
     B: "bg-blue-500/10 text-blue-600 border-blue-500/30",
     C: "bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border)]",
   };
+  const exportCSV = () => downloadCSV(
+    `classificacao-abc-${new Date().toISOString().substring(0, 10)}.csv`,
+    ["Produto", "Categoria", "Classe", "Qtd", "Receita", "% acumulado"],
+    products.map((p) => [p.name, p.category, p.cls, p.quantity, p.revenue.toFixed(2).replace(".", ","), p.cumPct.toFixed(1).replace(".", ",")]),
+  );
   return (
     <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
-        <PanelHeader icon={Trophy} title="Classificação ABC" />
+        <PanelHeader icon={Trophy} title="Classificação ABC" action={<ExportCsvButton onClick={exportCSV} />} />
         <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
           <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 font-bold text-emerald-600">A = 80% da receita</span>
           <span className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-2 py-1 font-bold text-blue-600">B = próximos 15%</span>
@@ -1649,13 +1836,21 @@ function LowSellersPanel({ report }: { report: CashReportResponse }) {
         </p>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {report.low_selling_products.map((item) => (
-            <div key={item.product_id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5">
+            <Link
+              key={item.product_id}
+              href={`/app/cardapio?product_id=${item.product_id}`}
+              className="group flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 transition-colors hover:border-brand-red/40 hover:bg-brand-red/5"
+              title="Editar produto no cardápio"
+            >
               <div className="min-w-0">
                 <p className="truncate text-sm font-bold text-[var(--text-primary)]">{item.name}</p>
                 <p className="text-[11px] font-medium text-[var(--text-muted)]">{item.category}</p>
               </div>
-              <span className="rounded-lg bg-[var(--bg-surface)] px-2 py-0.5 text-[10px] font-black text-[var(--text-muted)]">0 vendas</span>
-            </div>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[var(--bg-surface)] px-2 py-0.5 text-[10px] font-black text-[var(--text-muted)] group-hover:bg-brand-red group-hover:text-white">
+                <Pencil className="h-2.5 w-2.5" strokeWidth={2.5} />
+                Editar
+              </span>
+            </Link>
           ))}
         </div>
       </CardContent>
@@ -1906,6 +2101,16 @@ function HourlyPanel({ report }: { report: CashReportResponse }) {
     if (!best || hour.received > best.received) return hour;
     return best;
   }, null);
+
+  // Anomalia por horário: z-score do volume de pedidos entre as horas com
+  // movimento (ignora as zeradas, que só poluiriam a média). Limiar mais alto
+  // que o dos dias — 24 buckets geram mais ruído que uma série de dias.
+  const activeHours = report.hourly_sales.filter((h) => h.orders > 0);
+  const activeZs = activeHours.length >= 5 ? zScores(activeHours.map((h) => h.orders)) : [];
+  const anomalyRanges = new Set(
+    activeHours.filter((_, i) => Math.abs(activeZs[i] ?? 0) >= 1.75).map((h) => h.range),
+  );
+
   return (
     <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
@@ -1922,15 +2127,21 @@ function HourlyPanel({ report }: { report: CashReportResponse }) {
             {report.hourly_sales.map((hour) => {
               const h = hour.orders > 0 ? Math.max((hour.orders / maxOrders) * 100, 6) : 2;
               const isPeak = peakHour?.range === hour.range;
+              const isAnomaly = anomalyRanges.has(hour.range);
               return (
                 <div key={hour.range} className="flex h-full flex-1 flex-col justify-end gap-1">
                   {hour.orders > 0 && (
-                    <span className="text-center text-[9px] font-black text-[var(--text-muted)]">{hour.orders}</span>
+                    <span className="flex items-center justify-center gap-0.5 text-center text-[9px] font-black text-[var(--text-muted)]">
+                      {isAnomaly && <AlertCircle className="h-2 w-2 text-amber-500" strokeWidth={3} />}
+                      {hour.orders}
+                    </span>
                   )}
                   <div
-                    className={`rounded-t-md transition-all ${isPeak ? "bg-brand-red" : "bg-[var(--bg-subtle)] hover:bg-[var(--border-strong)]"}`}
+                    className={`rounded-t-md transition-all ${
+                      isPeak ? "bg-brand-red" : isAnomaly ? "bg-amber-400/70 ring-1 ring-inset ring-amber-500" : "bg-[var(--bg-subtle)] hover:bg-[var(--border-strong)]"
+                    }`}
                     style={{ height: `${h}%` }}
-                    title={`${hour.range}: ${hour.orders} pedidos · ${currency.format(hour.received)}`}
+                    title={`${hour.range}: ${hour.orders} pedidos · ${currency.format(hour.received)}${isAnomaly ? " — fora do padrão do período" : ""}`}
                   />
                 </div>
               );
@@ -2099,7 +2310,6 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
   const abandonmentRate = publicOrdersCount > 0 ? (abandonedCount / publicOrdersCount) * 100 : 0;
 
   const exportCSV = () => {
-    const header = "Número,Status,Pagamento,Valor,Desconto,Data,Hora\n";
     const rows = filtered.map((o) => {
       const d = getSaleDate(o);
       return [
@@ -2110,15 +2320,13 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
         (o.discount_amount ?? 0).toFixed(2).replace(".", ","),
         longDate.format(d),
         reportTimeFormatter.format(d),
-      ].join(",");
-    }).join("\n");
-    const blob = new Blob(["﻿" + header + rows], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pedidos-${new Date().toISOString().substring(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+      ];
+    });
+    downloadCSV(
+      `pedidos-${new Date().toISOString().substring(0, 10)}.csv`,
+      ["Número", "Status", "Pagamento", "Valor", "Desconto", "Data", "Hora"],
+      rows,
+    );
   };
 
   return (
@@ -2247,12 +2455,28 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PanelHeader({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
+function PanelHeader({ icon: Icon, title, action }: { icon: React.ElementType; title: string; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2">
-      <Icon className="h-4 w-4 text-brand-red" />
-      <h2 className="text-sm font-black text-[var(--text-primary)]">{title}</h2>
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-brand-red" />
+        <h2 className="text-sm font-black text-[var(--text-primary)]">{title}</h2>
+      </div>
+      {action}
     </div>
+  );
+}
+
+function ExportCsvButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1 text-[11px] font-black text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] print:hidden"
+      title="Exportar CSV"
+    >
+      <Download className="h-3 w-3" strokeWidth={2} />
+      CSV
+    </button>
   );
 }
 
