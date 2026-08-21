@@ -421,6 +421,12 @@ export const pdvApi = {
   getPublicOrderStatus: (payload: { public_token: string }) =>
     invokeEdgeFunction<PublicOrderStatusResponse>('get-public-order-status', payload),
 
+  // Inscreve o navegador pra receber Web Push quando o pedido ficar pronto —
+  // complementa o WhatsApp, opcional, exige permissão do cliente.
+  subscribeOrderPush: (payload: { public_token: string; subscription: PushSubscriptionJSON }) =>
+    invokeEdgeFunction<{ success: boolean; error?: string }>('subscribe-order-push', payload)
+      .catch((err) => ({ success: false, error: err instanceof Error ? err.message : 'Erro ao ativar notificações.' })),
+
   getPublicCustomerProfile: async (payload: { customer_phone: string }) => {
     const supabase = createClient();
     const { data, error } = await supabase.functions.invoke('get-public-customer-profile', {

@@ -15,6 +15,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
+import { sendOrderReadyPush } from "../_shared/push-enqueue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -160,6 +161,11 @@ serve(async (req) => {
         branchCode:   (orderAfter as any).branches?.code ?? null,
         branchName:   (orderAfter as any).branches?.name ?? null,
       });
+      await sendOrderReadyPush(supabaseAdmin, {
+        orderId:     orderAfter.id,
+        dailyNumber: orderAfter.daily_number,
+        partial:     true,
+      });
     } else if (orderAfter?.status === "PRONTO") {
       await enqueueWhatsAppMessage(supabaseAdmin, {
         orderId:      orderAfter.id,
@@ -170,6 +176,10 @@ serve(async (req) => {
         dailyNumber:  orderAfter.daily_number,
         branchCode:   (orderAfter as any).branches?.code ?? null,
         branchName:   (orderAfter as any).branches?.name ?? null,
+      });
+      await sendOrderReadyPush(supabaseAdmin, {
+        orderId:     orderAfter.id,
+        dailyNumber: orderAfter.daily_number,
       });
     }
 

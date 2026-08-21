@@ -71,6 +71,7 @@ jobs:
             lookup-cep \
             lookup-orders-by-phone \
             mercado-pago-webhook \
+            subscribe-order-push \
             webauthn \
             expire-pending-public-orders \
             send-whatsapp \

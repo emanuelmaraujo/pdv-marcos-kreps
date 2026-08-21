@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { isAllowedOrigin, publicCorsHeaders } from "../_shared/public-cors.ts";
+import { checkRateLimit, getClientIp } from "../_shared/rate-limit.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -53,6 +54,26 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
+
+    // Rate limit: sem isso, o autofill do checkout (chamado a cada telefone
+    // válido digitado) vira um oráculo de enumeração — dá pra varrer números
+    // e colher nome/e-mail/endereços de qualquer cliente cadastrado. Mesmo
+    // padrão do lookup-orders-by-phone: por telefone (mais restrito) e por
+    // IP (contra varredura de vários telefones). Falha genérica (found:false)
+    // pra não revelar que o limite bateu.
+    const clientIp = getClientIp(req);
+    const [phoneOk, ipOk] = await Promise.all([
+      checkRateLimit(supabaseAdmin, `profile-phone:${phone}`, 10, 15 * 60),
+      checkRateLimit(supabaseAdmin, `profile-ip:${clientIp}`, 30, 15 * 60),
+    ]);
+    if (!phoneOk || !ipOk) {
+      await supabaseAdmin.from("audit_logs").insert({
+        action: "PROFILE_LOOKUP_RATE_LIMITED",
+        table_name: "customers",
+        new_data: { phone, ip: clientIp, scope: !phoneOk ? "PHONE" : "IP" },
+      });
+      return jsonResponse(req, { success: true, found: false }, 200);
+    }
 
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from("customers")

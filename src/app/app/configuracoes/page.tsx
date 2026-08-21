@@ -122,14 +122,14 @@ function ToggleRow({
       className="group flex w-full items-start justify-between gap-5 py-4 text-left"
     >
       <span className="min-w-0">
-        <span className="block text-sm font-semibold text-zinc-800 group-hover:text-zinc-600 transition-colors">{label}</span>
+        <span className="block text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--text-secondary)] transition-colors">{label}</span>
         {description && (
-          <span className="mt-1 block text-xs leading-relaxed text-zinc-400">{description}</span>
+          <span className="mt-1 block text-xs leading-relaxed text-[var(--text-muted)]">{description}</span>
         )}
       </span>
       <span
         className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-all duration-300 ${
-          checked ? "bg-brand-red shadow-md shadow-brand-red/25" : "bg-zinc-200"
+          checked ? "bg-brand-red shadow-md shadow-brand-red/25" : "bg-[var(--border-strong)]"
         }`}
       >
         <span
@@ -144,7 +144,7 @@ function ToggleRow({
 
 function ToggleGroup({ children }: { children: ReactNode }) {
   return (
-    <div className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-100 bg-zinc-50/60 px-4">
+    <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)]/60 px-4">
       {children}
     </div>
   );
@@ -161,9 +161,9 @@ function Field({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400">{label}</span>
+      <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text-muted)]">{label}</span>
       {children}
-      {hint && <span className="block text-[11px] leading-relaxed text-zinc-400">{hint}</span>}
+      {hint && <span className="block text-[11px] leading-relaxed text-[var(--text-muted)]">{hint}</span>}
     </label>
   );
 }
@@ -199,18 +199,18 @@ function SettingsPanel({
   return (
     <section
       id={id}
-      className={`scroll-mt-6 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-zinc-200/80 ${className}`}
+      className={`scroll-mt-6 overflow-hidden rounded-3xl bg-[var(--bg-surface)] shadow-sm ring-1 ring-[var(--border)] ${className}`}
     >
       <header className="flex items-center gap-4 px-6 py-5">
         <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm ${accent.iconBg} ring-1 ring-black/5`}>
           <Icon className={`h-5 w-5 ${accent.iconColor}`} />
         </span>
         <span className="min-w-0 flex-1">
-          <h2 className="text-sm font-black text-zinc-900">{title}</h2>
-          <p className="mt-0.5 text-xs text-zinc-500">{description}</p>
+          <h2 className="text-sm font-black text-[var(--text-primary)]">{title}</h2>
+          <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{description}</p>
         </span>
       </header>
-      <div className="border-t border-zinc-100 px-6 py-5">{children}</div>
+      <div className="border-t border-[var(--border)] px-6 py-5">{children}</div>
     </section>
   );
 }
@@ -229,9 +229,9 @@ function StatPill({
   if (light) {
     // Light variant for use inside white content panels
     const styles = {
-      neutral: { card: "border-zinc-200 bg-zinc-50", value: "text-zinc-700", dot: "bg-zinc-400", label: "text-zinc-500" },
-      green:   { card: "border-emerald-100 bg-emerald-50", value: "text-emerald-700", dot: "bg-emerald-500", label: "text-emerald-600" },
-      red:     { card: "border-red-100 bg-red-50", value: "text-red-700", dot: "bg-red-500", label: "text-red-600" },
+      neutral: { card: "border-[var(--border)] bg-[var(--bg-subtle)]", value: "text-[var(--text-secondary)]", dot: "bg-[var(--text-muted)]", label: "text-[var(--text-muted)]" },
+      green:   { card: "border-[var(--status-success)]/25 bg-[var(--status-success-bg)]", value: "text-[var(--status-success)]", dot: "bg-[var(--status-success)]", label: "text-[var(--status-success)]" },
+      red:     { card: "border-[var(--status-danger)]/25 bg-[var(--status-danger-bg)]", value: "text-[var(--status-danger)]", dot: "bg-[var(--status-danger)]", label: "text-[var(--status-danger)]" },
     }[tone];
     return (
       <div className={`rounded-xl border px-3 py-2.5 ${styles.card}`}>
@@ -492,14 +492,14 @@ export default function ConfiguracoesSistema() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#F5F7FA]">
-        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+      <div className="flex h-full items-center justify-center bg-[var(--bg-base)]">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--text-muted)]" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-full bg-zinc-50">
+    <div className="min-h-full bg-[var(--bg-base)]">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* ── Sidebar fixa (desktop) ──────────────────────────────────── */}
@@ -683,8 +683,8 @@ export default function ConfiguracoesSistema() {
                   description="Aplica automaticamente a taxa de embalagem quando o cliente selecionar para levar."
                 />
               </ToggleGroup>
-              <div className="space-y-3 rounded-xl border border-zinc-100 bg-zinc-50 p-3">
-                <div className="flex items-center gap-2 text-zinc-700">
+              <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3">
+                <div className="flex items-center gap-2 text-[var(--text-secondary)]">
                   <Clock className="h-4 w-4" />
                   <p className="text-xs font-black uppercase tracking-wide">Horario online</p>
                 </div>
@@ -694,7 +694,7 @@ export default function ConfiguracoesSistema() {
                       type="time"
                       value={settings.public_ordering_start_time}
                       onChange={(event) => set("public_ordering_start_time", event.target.value)}
-                      className="bg-white"
+                      className="bg-[var(--bg-surface)]"
                     />
                   </Field>
                   <Field label="Fim">
@@ -702,7 +702,7 @@ export default function ConfiguracoesSistema() {
                       type="time"
                       value={settings.public_ordering_end_time}
                       onChange={(event) => set("public_ordering_end_time", event.target.value)}
-                      className="bg-white"
+                      className="bg-[var(--bg-surface)]"
                     />
                   </Field>
                 </div>
@@ -713,7 +713,7 @@ export default function ConfiguracoesSistema() {
                     placeholder="Ex: 1.00"
                     value={settings.packaging_fee}
                     onChange={(event) => set("packaging_fee", event.target.value)}
-                    className="bg-white"
+                    className="bg-[var(--bg-surface)]"
                   />
                 </Field>
               </div>
@@ -759,40 +759,40 @@ export default function ConfiguracoesSistema() {
             <div className="space-y-5">
               <div className={`rounded-xl border p-4 ${
                 printWorkerStatus.online
-                  ? "border-emerald-100 bg-emerald-50"
-                  : "border-red-100 bg-red-50"
+                  ? "border-[var(--status-success)]/25 bg-[var(--status-success-bg)]"
+                  : "border-[var(--status-danger)]/25 bg-[var(--status-danger-bg)]"
               }`}>
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex items-center gap-3">
                     <span className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                      printWorkerStatus.online ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                      printWorkerStatus.online ? "bg-[var(--status-success)]/15 text-[var(--status-success)]" : "bg-[var(--status-danger)]/15 text-[var(--status-danger)]"
                     }`}>
                       {printWorkerStatus.online ? <Wifi className="h-5 w-5" /> : <WifiOff className="h-5 w-5" />}
                     </span>
                     <span>
-                      <p className="text-sm font-black text-zinc-950">Raspberry Pi</p>
-                      <p className="text-xs font-semibold text-zinc-600">{printWorkerStatus.label} - {printWorkerStatus.lastSeen}</p>
+                      <p className="text-sm font-black text-[var(--text-primary)]">Raspberry Pi</p>
+                      <p className="text-xs font-semibold text-[var(--text-secondary)]">{printWorkerStatus.label} - {printWorkerStatus.lastSeen}</p>
                     </span>
                   </div>
-                  <Button variant="outline" onClick={() => void loadSettings(true)} className="h-10 gap-2 bg-white md:w-auto">
+                  <Button variant="outline" onClick={() => void loadSettings(true)} className="h-10 gap-2 md:w-auto">
                     <RefreshCw className="h-4 w-4" />
                     Atualizar
                   </Button>
                 </div>
-                <div className="mt-4 grid gap-3 text-xs font-semibold text-zinc-700 md:grid-cols-3">
-                  <div className="rounded-lg bg-white/80 p-3">
-                    <p className="font-black uppercase tracking-wide text-zinc-400">IP do Raspberry</p>
-                    <p className="mt-1 text-sm font-black text-zinc-900">{printWorkerStatus.raspberryIp}</p>
+                <div className="mt-4 grid gap-3 text-xs font-semibold text-[var(--text-secondary)] md:grid-cols-3">
+                  <div className="rounded-lg bg-[var(--bg-surface)]/80 p-3">
+                    <p className="font-black uppercase tracking-wide text-[var(--text-muted)]">IP do Raspberry</p>
+                    <p className="mt-1 text-sm font-black text-[var(--text-primary)]">{printWorkerStatus.raspberryIp}</p>
                   </div>
-                  <div className="rounded-lg bg-white/80 p-3">
-                    <p className="font-black uppercase tracking-wide text-zinc-400">IP lido pelo worker</p>
-                    <p className="mt-1 text-sm font-black text-zinc-900">
+                  <div className="rounded-lg bg-[var(--bg-surface)]/80 p-3">
+                    <p className="font-black uppercase tracking-wide text-[var(--text-muted)]">IP lido pelo worker</p>
+                    <p className="mt-1 text-sm font-black text-[var(--text-primary)]">
                       {printWorkerStatus.printerHost}:{printWorkerStatus.printerPort}
                     </p>
                   </div>
-                  <div className="rounded-lg bg-white/80 p-3">
-                    <p className="font-black uppercase tracking-wide text-zinc-400">Configurado no painel</p>
-                    <p className="mt-1 text-sm font-black text-zinc-900">{settings.printer_host}:{settings.printer_port}</p>
+                  <div className="rounded-lg bg-[var(--bg-surface)]/80 p-3">
+                    <p className="font-black uppercase tracking-wide text-[var(--text-muted)]">Configurado no painel</p>
+                    <p className="mt-1 text-sm font-black text-[var(--text-primary)]">{settings.printer_host}:{settings.printer_port}</p>
                   </div>
                 </div>
               </div>
@@ -824,7 +824,7 @@ export default function ConfiguracoesSistema() {
                 />
               </ToggleGroup>
 
-              <div className="grid gap-4 border-t border-zinc-100 pt-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 border-t border-[var(--border)] pt-4 md:grid-cols-2 lg:grid-cols-4">
                 <Field label="Endereco IP">
                   <Input
                     placeholder="192.168.0.50"
@@ -832,7 +832,7 @@ export default function ConfiguracoesSistema() {
                     onChange={(event) => set("printer_host", event.target.value)}
                     aria-describedby="printer-host-hint"
                   />
-                  <span id="printer-host-hint" className="block text-xs font-medium leading-relaxed text-zinc-400">
+                  <span id="printer-host-hint" className="block text-xs font-medium leading-relaxed text-[var(--text-muted)]">
                     Salve para o Raspberry assumir o novo IP; o worker atualiza sozinho em poucos segundos.
                   </span>
                 </Field>
@@ -853,8 +853,8 @@ export default function ConfiguracoesSistema() {
                         onClick={() => set("printer_paper_width", width)}
                         className={`h-12 rounded-lg border text-sm font-black transition-colors ${
                           settings.printer_paper_width === width
-                            ? "border-brand-red bg-red-50 text-brand-red"
-                            : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                            ? "border-brand-red bg-[var(--status-danger-bg)] text-brand-red"
+                            : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
                         }`}
                       >
                         {width}mm
@@ -885,7 +885,7 @@ export default function ConfiguracoesSistema() {
           >
             <div className="space-y-5">
               {whatsappStats.token_expired && (
-                <div className="flex gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
+                <div className="flex gap-3 rounded-xl border p-4" style={{ borderColor: "var(--status-danger)", backgroundColor: "var(--status-danger-bg)", color: "var(--status-danger)" }}>
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
                   <div className="text-xs font-semibold leading-relaxed">
                     <p className="font-black">Token Meta expirado nas ultimas 24h.</p>
@@ -911,7 +911,7 @@ export default function ConfiguracoesSistema() {
                 <StatPill light label="Falhas (24h)" value={whatsappStats.failed_24h} tone="red" />
               </div>
 
-              <div className="grid gap-4 border-t border-zinc-100 pt-4 md:grid-cols-2">
+              <div className="grid gap-4 border-t border-[var(--border)] pt-4 md:grid-cols-2">
                 <Field label="Template 'novo pedido'" hint="Enviado ao entrar em producao (UTILITY).">
                   <Input
                     placeholder="novo_pedido"
@@ -942,7 +942,7 @@ export default function ConfiguracoesSistema() {
                 </Field>
               </div>
 
-              <div className="grid gap-2 border-t border-zinc-100 pt-4 md:grid-cols-2">
+              <div className="grid gap-2 border-t border-[var(--border)] pt-4 md:grid-cols-2">
                 <Button
                   variant="outline"
                   onClick={() => handleTestWhatsApp("order_received")}
@@ -979,7 +979,7 @@ export default function ConfiguracoesSistema() {
                 </Button>
               </div>
 
-              <div className="flex gap-3 rounded-xl border border-amber-100 bg-amber-50 p-4 text-amber-900">
+              <div className="flex gap-3 rounded-xl border p-4" style={{ borderColor: "var(--status-warning)", backgroundColor: "var(--status-warning-bg)", color: "var(--status-warning)" }}>
                 <Info className="mt-0.5 h-5 w-5 shrink-0" />
                 <p className="text-xs font-semibold leading-relaxed">
                   Templates devem estar aprovados pela Meta (categoria UTILITY). Falhas definitivas (template inexistente, token invalido, destinatario fora do WhatsApp) nao sao reprocessadas automaticamente.

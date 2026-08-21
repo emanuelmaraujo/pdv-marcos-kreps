@@ -21,7 +21,6 @@ import {
   MessageCircle,
   Plus,
   RefreshCw,
-  Star,
   type LucideIcon,
 } from "lucide-react";
 import { pdvApi, PublicOrderStatusResponse } from "@/lib/api/pdv-api";
@@ -162,6 +161,20 @@ function isLikelyPublicToken(value: string) {
   return /^[a-f0-9]{32}$/i.test(value);
 }
 
+// ── Web Push opcional ("avisar quando pronto") ───────────────────────────────
+// Complementa o WhatsApp e o polling desta tela — útil pra quem deixa a aba em
+// segundo plano. Nunca substitui os outros dois: se a permissão for negada ou
+// o navegador não suportar, o fluxo segue normal sem push.
+
+type PushState = "idle" | "unsupported" | "requesting" | "enabled" | "denied" | "error";
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
 // ── Componente principal ────────────────────────────────────────────────────
 
 export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
@@ -196,6 +209,42 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
     return () => window.clearTimeout(timer);
   }, [fetchStatus]);
 
+  // Web Push opcional — ver seção de helpers acima. Estado inicial calculado
+  // uma vez, direto no useState (não em efeito): detecção de suporte do
+  // navegador é síncrona, não precisa sincronizar com nada externo.
+  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const [pushState, setPushState] = useState<PushState>(() => {
+    if (!canFetch || !vapidPublicKey || typeof window === "undefined") return "idle";
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
+    if (Notification.permission === "denied") return "denied";
+    return "idle";
+  });
+
+  const handleEnablePush = useCallback(async () => {
+    if (!vapidPublicKey) return;
+    setPushState("requesting");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushState(permission === "denied" ? "denied" : "idle");
+        return;
+      }
+      await navigator.serviceWorker.register("/sw.js");
+      const readyRegistration = await navigator.serviceWorker.ready;
+      let subscription = await readyRegistration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await readyRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
+        });
+      }
+      const result = await pdvApi.subscribeOrderPush({ public_token: publicToken, subscription: subscription.toJSON() });
+      setPushState(result.success ? "enabled" : "error");
+    } catch {
+      setPushState("error");
+    }
+  }, [publicToken, vapidPublicKey]);
+
   // Polling automático a cada 30s — para nos estados terminais.
   useEffect(() => {
     const status = statusData?.order.status;
@@ -219,7 +268,6 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
 
   const isAwaitingPayment = stateKey === "AWAITING_PAYMENT";
   const isInPrep = stateKey === "IN_PREP";
-  const isDelivered = stateKey === "DELIVERED";
 
   return (
     <div className="min-h-screen pb-8" style={{ backgroundColor: "var(--bg-base)" }}>
@@ -233,14 +281,14 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-white leading-tight">Marcos Krep&apos;s</p>
-              <p className="text-[11px] text-white/60 leading-tight">Pedido online</p>
+              <p className="text-caption text-white/60 leading-tight">Pedido online</p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => fetchStatus(true)}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-white hover:bg-white/15 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-caption font-medium text-white hover:bg-white/15 disabled:opacity-50"
             style={{ backgroundColor: "rgba(255,255,255,0.10)" }}
             aria-label="Atualizar status"
           >
@@ -287,7 +335,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
               className="rounded-2xl p-5 text-white shadow-[var(--shadow-md)]"
               style={{ backgroundColor: "var(--bg-inverse)" }}
             >
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/55">Seu pedido</p>
+              <p className="text-micro font-semibold uppercase tracking-wider text-white/55">Seu pedido</p>
               <h1 className="mt-1 text-4xl font-bold leading-none tabular-nums text-white">#{displayNumber}</h1>
               {order.customer_name && (
                 <p className="mt-2 text-[13px] text-white/60">
@@ -307,7 +355,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                 <span className="text-[12px] font-semibold leading-none">{cfg.pill.label}</span>
               </div>
 
-              <p className="mt-3 text-[11px] leading-relaxed text-white/40 max-w-[28rem]">
+              <p className="mt-3 text-caption leading-relaxed text-white/40 max-w-[28rem]">
                 {cfg.hint}
               </p>
             </section>
@@ -315,9 +363,9 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
             {/* ── 3. Andamento (timeline vertical) ─────────────────── */}
             <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
               <div className="flex items-baseline justify-between mb-4">
-                <h2 className="text-[11px] font-semibold text-[var(--text-muted)]">Andamento</h2>
+                <h2 className="text-caption font-semibold text-[var(--text-muted)]">Andamento</h2>
                 {cfg.activeStepIndex >= 0 && (
-                  <span className="text-[11px] text-[var(--text-muted)]">
+                  <span className="text-caption text-[var(--text-muted)]">
                     Etapa {cfg.activeStepIndex + 1} de {STEPS.length}
                   </span>
                 )}
@@ -388,7 +436,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                           {step.label}
                         </p>
                         {(isActive || isDone) && (
-                          <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                          <p className="text-caption text-[var(--text-muted)] mt-0.5">
                             {step.subtitle}
                           </p>
                         )}
@@ -396,7 +444,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                         {/* Estimativa de tempo — só quando step = "Em preparo" e ativo */}
                         {isActive && idx === 2 && (
                           <span
-                            className="inline-flex items-center gap-1 mt-2 rounded-md px-2.5 py-1 text-[11px] font-medium"
+                            className="inline-flex items-center gap-1 mt-2 rounded-md px-2.5 py-1 text-caption font-medium"
                             style={{
                               backgroundColor: "var(--status-warning-bg, #FFFBEB)",
                               color: "var(--status-warning, #D97706)",
@@ -417,9 +465,9 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
             {statusData?.items && statusData.items.length > 0 && (
               <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
                 <div className="flex items-baseline justify-between mb-3">
-                  <h2 className="text-[11px] font-semibold text-[var(--text-muted)]">Seus itens</h2>
+                  <h2 className="text-caption font-semibold text-[var(--text-muted)]">Seus itens</h2>
                   {itemsCounts.total > 1 && (
-                    <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
+                    <span className="text-caption text-[var(--text-muted)] tabular-nums">
                       {itemsCounts.ready} de {itemsCounts.total} prontos
                     </span>
                   )}
@@ -452,21 +500,21 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                             {item.quantity}× {item.product_name}
                           </p>
                           {item.addons.length > 0 && (
-                            <p className="mt-0.5 text-[11px]" style={{ color: "var(--status-success, #16A34A)" }}>
+                            <p className="mt-0.5 text-caption" style={{ color: "var(--status-success, #16A34A)" }}>
                               + {item.addons.map((a) => `${a.quantity}× ${a.name}`).join(", ")}
                             </p>
                           )}
                           {item.removed_ingredients.length > 0 && (
-                            <p className="mt-0.5 text-[11px] text-brand-red">
+                            <p className="mt-0.5 text-caption text-brand-red">
                               Sem {item.removed_ingredients.join(", ")}
                             </p>
                           )}
                           {item.observation && (
-                            <p className="mt-0.5 text-[11px] italic text-[var(--text-muted)]">
+                            <p className="mt-0.5 text-caption italic text-[var(--text-muted)]">
                               &ldquo;{item.observation}&rdquo;
                             </p>
                           )}
-                          <p className="mt-0.5 text-[11px] font-medium" style={{ color: meta.color }}>
+                          <p className="mt-0.5 text-caption font-medium" style={{ color: meta.color }}>
                             {meta.label}
                             {sectorLabel(item.production_sector) ? ` · ${sectorLabel(item.production_sector)}` : ""}
                           </p>
@@ -501,30 +549,38 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                 strokeWidth={1.75}
                 style={{ color: "var(--status-success, #16A34A)" }}
               />
-              <p className="text-[11px] leading-relaxed" style={{ color: "var(--status-success-text, #166534)" }}>
+              <p className="text-caption leading-relaxed" style={{ color: "var(--status-success-text, #166534)" }}>
                 Você receberá uma mensagem no WhatsApp quando seu pedido estiver pronto.
               </p>
             </div>
 
+            {/* ── 5b. Push opcional — só aparece se o navegador suportar e a permissão não foi negada ── */}
+            {pushState !== "unsupported" && pushState !== "denied" && vapidPublicKey && (
+              <button
+                type="button"
+                onClick={pushState === "enabled" ? undefined : handleEnablePush}
+                disabled={pushState === "requesting" || pushState === "enabled"}
+                className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-left disabled:cursor-default"
+              >
+                <Bell className="h-4 w-4 shrink-0" strokeWidth={1.75} style={{ color: pushState === "enabled" ? "var(--status-success, #16A34A)" : "var(--text-muted)" }} />
+                <span className="text-caption leading-relaxed text-[var(--text-secondary)]">
+                  {pushState === "enabled"
+                    ? "Notificações ativadas neste dispositivo."
+                    : pushState === "requesting"
+                      ? "Ativando..."
+                      : pushState === "error"
+                        ? "Não foi possível ativar. Toque para tentar de novo."
+                        : "Também avisar por notificação neste dispositivo"}
+                </span>
+              </button>
+            )}
+
             {/* ── 6. CTAs no rodapé ────────────────────────────────── */}
             <div className="space-y-2 pt-1">
-              {isDelivered && (
-                <button
-                  type="button"
-                  onClick={() => window.location.href = "/pedir"}
-                  className="w-full flex items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-white shadow-[var(--shadow-sm)] hover:opacity-90 active:scale-[0.98]"
-                  style={{ backgroundColor: "var(--brand)", height: 50 }}
-                >
-                  <Star className="h-4 w-4" strokeWidth={1.75} />
-                  Avaliar pedido
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => window.location.href = "/pedir"}
-                className={`w-full flex items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-white hover:opacity-90 active:scale-[0.98] ${
-                  isDelivered ? "" : "shadow-[var(--shadow-sm)]"
-                }`}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-white shadow-[var(--shadow-sm)] hover:opacity-90 active:scale-[0.98]"
                 style={{ backgroundColor: "var(--bg-inverse)", height: 50 }}
               >
                 <Plus className="h-4 w-4" strokeWidth={1.75} />

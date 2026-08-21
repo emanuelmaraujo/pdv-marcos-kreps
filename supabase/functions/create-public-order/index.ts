@@ -5,6 +5,7 @@ import { resolveProductionSector } from "../_shared/print-format.ts";
 import { resolveDeliveryFee } from "../_shared/delivery.ts";
 import { fetchCepAddress } from "../_shared/cep.ts";
 import { isAllowedOrigin, publicCorsHeaders } from "../_shared/public-cors.ts";
+import { checkRateLimit, getClientIp } from "../_shared/rate-limit.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -246,6 +247,27 @@ serve(async (req) => {
     }
     if (isDelivery && !customerPhone) {
       throw new Error("Informe um WhatsApp valido com DDD para pedidos de entrega.");
+    }
+
+    // Rate limit: sem isso, um script pode floodar a fila (e a impressora da
+    // cozinha, uma vez pago) com pedidos falsos. Por IP sempre; por telefone
+    // quando informado (BALCAO/VIAGEM podem não ter telefone).
+    const clientIp = getClientIp(req);
+    const rateLimitChecks = [checkRateLimit(supabaseAdmin, `order-ip:${clientIp}`, 10, 15 * 60)];
+    if (customerPhone) {
+      rateLimitChecks.push(checkRateLimit(supabaseAdmin, `order-phone:${customerPhone}`, 5, 15 * 60));
+    }
+    const rateLimitResults = await Promise.all(rateLimitChecks);
+    if (rateLimitResults.some((ok) => !ok)) {
+      await supabaseAdmin.from("audit_logs").insert({
+        action: "ORDER_CREATE_RATE_LIMITED",
+        table_name: "orders",
+        new_data: { phone: customerPhone, ip: clientIp },
+      });
+      return jsonResponse(req, {
+        success: false,
+        error: "Muitos pedidos em pouco tempo. Aguarde alguns minutos e tente novamente.",
+      }, 429);
     }
 
     // Endereço de entrega: obrigatório (rua + bairro) quando order_type = ENTREGA.

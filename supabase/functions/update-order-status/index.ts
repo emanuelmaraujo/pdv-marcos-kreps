@@ -18,6 +18,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
+import { sendOrderReadyPush } from "../_shared/push-enqueue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -140,6 +141,10 @@ serve(async (req) => {
         dailyNumber:  order.daily_number,
         branchCode:   (order as any).branches?.code ?? null,
         branchName:   (order as any).branches?.name ?? null,
+      });
+      await sendOrderReadyPush(supabaseAdmin, {
+        orderId:     order.id,
+        dailyNumber: order.daily_number,
       });
     } else if (status === "ENTREGUE") {
       const { error: itemsErr } = await supabaseAdmin

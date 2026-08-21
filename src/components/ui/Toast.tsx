@@ -31,11 +31,12 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
     <div
       className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-sm transition-all duration-300 ${
         isExiting ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
-      } ${
-        toast.type === "success"
-          ? "bg-green-50/95 border-green-200 text-green-800"
-          : "bg-red-50/95 border-red-200 text-red-800"
       }`}
+      style={{
+        backgroundColor: toast.type === "success" ? "var(--status-success-bg)" : "var(--status-danger-bg)",
+        borderColor: toast.type === "success" ? "var(--status-success)" : "var(--status-danger)",
+        color: toast.type === "success" ? "var(--status-success)" : "var(--status-danger)",
+      }}
     >
       <Icon className="w-5 h-5 flex-shrink-0" />
       <p className="text-sm font-medium flex-1">{toast.text}</p>
