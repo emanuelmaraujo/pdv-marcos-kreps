@@ -1,16 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ElementType } from "react";
+import Link from "next/link";
 import { useBranch } from "@/contexts/BranchContext";
 import {
   AlertTriangle,
-  Check,
   Clock,
   Fingerprint,
   Info,
   Loader2,
   MessageCircle,
-  Package,
   Printer,
   RefreshCw,
   RotateCcw,
@@ -23,7 +22,12 @@ import { BiometricManager } from "@/components/auth/BiometricManager";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { Field } from "@/components/ui/Field";
+import { ToggleGroup, ToggleRow } from "@/components/ui/ToggleRow";
+import { StatPill } from "@/components/ui/StatPill";
+import { SettingsPanel, type SettingsPanelAccent } from "@/components/ui/SettingsPanel";
 import { settingsApi } from "@/lib/api/settings-api";
+import { branchesAdminApi } from "@/lib/api/branches-admin-api";
 
 type SettingsState = {
   printing_enabled: string;
@@ -46,7 +50,7 @@ type SettingsState = {
   apply_packaging_fee_for_takeout: string;
 };
 
-type SectionId = "pedido" | "embalagem" | "impressao" | "whatsapp" | "biometria";
+type SectionId = "pedido" | "impressao" | "whatsapp" | "biometria";
 
 type PrintWorkerStatus = {
   online: boolean;
@@ -97,166 +101,22 @@ const SECTIONS: Array<{
   description: string;
   icon: ElementType;
 }> = [
-  { id: "pedido", title: "Pedido pelo site", description: "Horario e disponibilidade", icon: Store },
-  { id: "embalagem", title: "Embalagem", description: "Taxa para viagem", icon: Package },
-  { id: "impressao", title: "Impressao", description: "Vias e impressora", icon: Printer },
-  { id: "whatsapp", title: "WhatsApp", description: "Templates e testes", icon: MessageCircle },
+  { id: "pedido", title: "Pedido pelo site", description: "Horario, disponibilidade e embalagem", icon: Store },
+  { id: "impressao", title: "Impressão", description: "Padrão da rede — filiais podem sobrescrever", icon: Printer },
+  { id: "whatsapp", title: "WhatsApp", description: "Padrão da rede — filiais podem sobrescrever", icon: MessageCircle },
   { id: "biometria", title: "Biometria", description: "Login rapido", icon: Fingerprint },
 ];
-
-function ToggleRow({
-  checked,
-  onChange,
-  label,
-  description,
-}: {
-  checked: boolean;
-  onChange: (value: boolean) => void;
-  label: string;
-  description?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className="group flex w-full items-start justify-between gap-5 py-4 text-left"
-    >
-      <span className="min-w-0">
-        <span className="block text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--text-secondary)] transition-colors">{label}</span>
-        {description && (
-          <span className="mt-1 block text-xs leading-relaxed text-[var(--text-muted)]">{description}</span>
-        )}
-      </span>
-      <span
-        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-all duration-300 ${
-          checked ? "bg-brand-red shadow-md shadow-brand-red/25" : "bg-[var(--border-strong)]"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-300 ${
-            checked ? "translate-x-5 shadow-md" : "translate-x-0.5"
-          }`}
-        />
-      </span>
-    </button>
-  );
-}
-
-function ToggleGroup({ children }: { children: ReactNode }) {
-  return (
-    <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)]/60 px-4">
-      {children}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: ReactNode;
-  hint?: string;
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-[11px] font-black uppercase tracking-widest text-[var(--text-muted)]">{label}</span>
-      {children}
-      {hint && <span className="block text-[11px] leading-relaxed text-[var(--text-muted)]">{hint}</span>}
-    </label>
-  );
-}
 
 // Accent colors for section icons (cleaner than gradient headers)
 const SECTION_ACCENT: Record<string, { iconBg: string; iconColor: string; navActive: string }> = {
   pedido:    { iconBg: "bg-blue-100",    iconColor: "text-blue-600",    navActive: "bg-blue-500/20 text-blue-200 border-l-2 border-blue-400" },
-  embalagem: { iconBg: "bg-amber-100",   iconColor: "text-amber-600",   navActive: "bg-amber-500/20 text-amber-200 border-l-2 border-amber-400" },
   impressao: { iconBg: "bg-violet-100",  iconColor: "text-violet-600",  navActive: "bg-violet-500/20 text-violet-200 border-l-2 border-violet-400" },
   whatsapp:  { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", navActive: "bg-emerald-500/20 text-emerald-200 border-l-2 border-emerald-400" },
   biometria: { iconBg: "bg-zinc-100",    iconColor: "text-zinc-600",    navActive: "bg-white/10 text-white border-l-2 border-zinc-400" },
 };
 
-// Keep SECTION_COLORS as alias for nav mobile pills (uses bg gradient)
-const SECTION_COLORS = SECTION_ACCENT;
-
-function SettingsPanel({
-  id,
-  icon: Icon,
-  title,
-  description,
-  className = "",
-  children,
-}: {
-  id: SectionId;
-  icon: ElementType;
-  title: string;
-  description: string;
-  className?: string;
-  children: ReactNode;
-}) {
-  const accent = SECTION_ACCENT[id] ?? SECTION_ACCENT.pedido;
-  return (
-    <section
-      id={id}
-      className={`scroll-mt-6 overflow-hidden rounded-3xl bg-[var(--bg-surface)] shadow-sm ring-1 ring-[var(--border)] ${className}`}
-    >
-      <header className="flex items-center gap-4 px-6 py-5">
-        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm ${accent.iconBg} ring-1 ring-black/5`}>
-          <Icon className={`h-5 w-5 ${accent.iconColor}`} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <h2 className="text-sm font-black text-[var(--text-primary)]">{title}</h2>
-          <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{description}</p>
-        </span>
-      </header>
-      <div className="border-t border-[var(--border)] px-6 py-5">{children}</div>
-    </section>
-  );
-}
-
-function StatPill({
-  label,
-  value,
-  tone = "neutral",
-  light = false,
-}: {
-  label: string;
-  value: string | number;
-  tone?: "neutral" | "green" | "red";
-  light?: boolean;
-}) {
-  if (light) {
-    // Light variant for use inside white content panels
-    const styles = {
-      neutral: { card: "border-[var(--border)] bg-[var(--bg-subtle)]", value: "text-[var(--text-secondary)]", dot: "bg-[var(--text-muted)]", label: "text-[var(--text-muted)]" },
-      green:   { card: "border-[var(--status-success)]/25 bg-[var(--status-success-bg)]", value: "text-[var(--status-success)]", dot: "bg-[var(--status-success)]", label: "text-[var(--status-success)]" },
-      red:     { card: "border-[var(--status-danger)]/25 bg-[var(--status-danger-bg)]", value: "text-[var(--status-danger)]", dot: "bg-[var(--status-danger)]", label: "text-[var(--status-danger)]" },
-    }[tone];
-    return (
-      <div className={`rounded-xl border px-3 py-2.5 ${styles.card}`}>
-        <div className="flex items-center gap-1.5">
-          <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
-          <p className={`text-sm font-black leading-none ${styles.value}`}>{value}</p>
-        </div>
-        <p className={`mt-1 text-[10px] font-medium truncate ${styles.label}`}>{label}</p>
-      </div>
-    );
-  }
-
-  // Dark sidebar variant
-  const dot = { neutral: "bg-zinc-500", green: "bg-emerald-400", red: "bg-red-400" }[tone];
-  const valueColor = { neutral: "text-zinc-200", green: "text-emerald-300", red: "text-red-300" }[tone];
-
-  return (
-    <div className="rounded-xl bg-white/8 px-3 py-2.5 border border-white/10">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-        <p className={`text-xs font-black leading-none ${valueColor}`}>{value}</p>
-      </div>
-      <p className="mt-1 text-[10px] font-medium text-zinc-500 truncate">{label}</p>
-    </div>
-  );
+function accentFor(id: SectionId): SettingsPanelAccent {
+  return SECTION_ACCENT[id] ?? SECTION_ACCENT.pedido;
 }
 
 function formatLastSeen(iso?: string) {
@@ -311,6 +171,7 @@ export default function ConfiguracoesSistema() {
     read_24h: 0,
     token_expired: false,
   });
+  const [branchOverrides, setBranchOverrides] = useState({ printer: 0, whatsapp: 0, total: 0 });
   const { toasts, addToast, removeToast } = useToast();
   const { currentBranch } = useBranch();
 
@@ -378,6 +239,13 @@ export default function ConfiguracoesSistema() {
 
       const stats = await settingsApi.getWhatsAppStats();
       setWhatsappStats(stats);
+
+      const branches = await branchesAdminApi.listAll();
+      setBranchOverrides({
+        printer: branches.filter((b) => b.printer_config && Object.keys(b.printer_config).length > 0).length,
+        whatsapp: branches.filter((b) => b.whatsapp_templates && Object.keys(b.whatsapp_templates).length > 0).length,
+        total: branches.length,
+      });
     } catch {
       if (!silent) addToast("error", "Erro ao carregar configuracoes");
     } finally {
@@ -526,12 +394,12 @@ export default function ConfiguracoesSistema() {
                 <p className="text-[10px] text-zinc-500">Configurações globais</p>
               </div>
             </div>
-            <a
+            <Link
               href="/app/configuracoes/filiais"
               className="flex items-center justify-center border-t border-white/6 px-4 py-2.5 text-[11px] font-bold text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
             >
               Editar filial →
-            </a>
+            </Link>
           </div>
         )}
 
@@ -623,9 +491,9 @@ export default function ConfiguracoesSistema() {
               </span>
               <p className="text-[11px] font-bold text-zinc-300">{currentBranch.name}</p>
             </div>
-            <a href="/app/configuracoes/filiais" className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300">
+            <Link href="/app/configuracoes/filiais" className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300">
               Editar →
-            </a>
+            </Link>
           </div>
         )}
 
@@ -662,6 +530,7 @@ export default function ConfiguracoesSistema() {
         <div className="space-y-4">
           <SettingsPanel
             id="pedido"
+            accent={accentFor("pedido")}
             icon={Store}
             title="Pedido pelo site"
             description="Controle quando clientes podem criar pedidos pelo cardapio publico."
@@ -722,41 +591,25 @@ export default function ConfiguracoesSistema() {
           </SettingsPanel>
 
           <SettingsPanel
-            id="embalagem"
-            icon={Package}
-            title="Embalagem"
-            description="Defina como a taxa de viagem entra no pedido."
-            className={activeSection === "embalagem" ? "block" : "hidden md:block"}
-          >
-            <div className="space-y-5">
-              <ToggleGroup>
-                <ToggleRow
-                  checked={settings.apply_packaging_fee_for_takeout === "true"}
-                  onChange={() => toggle("apply_packaging_fee_for_takeout")}
-                  label="Cobrar em pedidos para viagem"
-                  description="Mantem o calculo centralizado no backend e no caixa."
-                />
-              </ToggleGroup>
-              <Field label="Valor da taxa (R$)">
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="Ex: 1.00"
-                  value={settings.packaging_fee}
-                  onChange={(event) => set("packaging_fee", event.target.value)}
-                />
-              </Field>
-            </div>
-          </SettingsPanel>
-
-          <SettingsPanel
             id="impressao"
+            accent={accentFor("impressao")}
             icon={Printer}
-            title="Impressao"
+            title="Impressão"
             description="Configure vias, rede e teste da impressora termica."
             className={activeSection === "impressao" ? "block" : "hidden md:block"}
           >
             <div className="space-y-5">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--bg-subtle)] px-4 py-3">
+                <p className="text-xs font-semibold text-[var(--text-secondary)]">
+                  Isto é o <strong className="text-[var(--text-primary)]">padrão da rede</strong>, usado por filiais que não customizaram.
+                  {branchOverrides.printer > 0
+                    ? ` ${branchOverrides.printer} de ${branchOverrides.total} filial(is) têm impressora customizada.`
+                    : " Nenhuma filial customizou até agora."}
+                </p>
+                <Link href="/app/configuracoes/filiais" className="shrink-0 text-xs font-bold text-brand-red hover:underline">
+                  Ver filiais →
+                </Link>
+              </div>
               <div className={`rounded-xl border p-4 ${
                 printWorkerStatus.online
                   ? "border-[var(--status-success)]/25 bg-[var(--status-success-bg)]"
@@ -878,12 +731,24 @@ export default function ConfiguracoesSistema() {
 
           <SettingsPanel
             id="whatsapp"
+            accent={accentFor("whatsapp")}
             icon={MessageCircle}
             title="WhatsApp"
             description="Templates transacionais, testes e fila de envio."
             className={activeSection === "whatsapp" ? "block" : "hidden md:block"}
           >
             <div className="space-y-5">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--bg-subtle)] px-4 py-3">
+                <p className="text-xs font-semibold text-[var(--text-secondary)]">
+                  Isto é o <strong className="text-[var(--text-primary)]">padrão da rede</strong>, usado por filiais que não customizaram.
+                  {branchOverrides.whatsapp > 0
+                    ? ` ${branchOverrides.whatsapp} de ${branchOverrides.total} filial(is) têm templates customizados.`
+                    : " Nenhuma filial customizou até agora."}
+                </p>
+                <Link href="/app/configuracoes/filiais" className="shrink-0 text-xs font-bold text-brand-red hover:underline">
+                  Ver filiais →
+                </Link>
+              </div>
               {whatsappStats.token_expired && (
                 <div className="flex gap-3 rounded-xl border p-4" style={{ borderColor: "var(--status-danger)", backgroundColor: "var(--status-danger-bg)", color: "var(--status-danger)" }}>
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
@@ -990,6 +855,7 @@ export default function ConfiguracoesSistema() {
 
           <SettingsPanel
             id="biometria"
+            accent={accentFor("biometria")}
             icon={Fingerprint}
             title="Biometria"
             description="Controle digitais salvas para login rapido neste dispositivo."

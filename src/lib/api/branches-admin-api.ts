@@ -34,6 +34,13 @@ export const branchesAdminApi = {
     return (data ?? []) as Branch[];
   },
 
+  getById: async (id: string): Promise<Branch> => {
+    const supabase = createClient();
+    const { data, error } = await supabase.from('branches').select('*').eq('id', id).single();
+    if (error) throw new Error(`Erro ao carregar filial: ${error.message}`);
+    return data as Branch;
+  },
+
   create: async (input: BranchInput): Promise<Branch> => {
     const supabase = createClient();
     const { data, error } = await supabase

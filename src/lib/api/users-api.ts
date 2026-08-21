@@ -22,6 +22,8 @@ export type UserProfile = {
   active: boolean;
   last_sign_in_at?: string;
   created_at: string;
+  /** Filiais vinculadas — retornado por list_users desde a extensão da Fase 2 (filtro por filial). */
+  branch_ids?: string[];
 };
 
 export interface CreateUserData {
