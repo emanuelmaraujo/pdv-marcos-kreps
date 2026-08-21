@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
+  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -1262,12 +1263,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <p className="mt-2 text-sm leading-relaxed text-white/65 md:text-[15px]">
                   Escolha o recheio, ajuste a composição e pague com segurança quando estiver tudo certo.
                 </p>
-                {/* Social proof — só mostra se houver dado */}
-                {publicStats.ordersToday > 0 && (
-                  <p className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--accent)]">
-                    🔥 {publicStats.ordersToday} {publicStats.ordersToday === 1 ? "pedido feito" : "pedidos feitos"} hoje
-                  </p>
-                )}
               </div>
 
               {/* Carrinho compacto no canto direito (desktop) */}
@@ -2228,74 +2223,96 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         title={editingCartItemId ? "Editar item" : "Personalizar item"}
       >
         {selectedProduct && (
-          <div className="p-5 pb-32">
-            {/* Header do produto */}
-            <div>
-              {selectedProduct.image_url && (
-                <div className="-mx-5 -mt-5 mb-4 aspect-[16/10] w-[calc(100%+2.5rem)] overflow-hidden bg-[var(--bg-subtle)]">
-                  <Image
-                    src={selectedProduct.image_url}
-                    alt=""
-                    width={480}
-                    height={300}
-                    sizes="(max-width: 448px) 100vw, 448px"
-                    className="h-full w-full object-cover"
-                    priority
-                  />
-                </div>
-              )}
-              <div className="mb-2 flex flex-wrap gap-1.5">
-                {getProductTags(selectedProduct, selectedProductCategory?.name, menuIndexes)
-                  .filter((t) => t !== "Outros")
-                  .map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-light)] px-2 py-0.5 text-caption font-semibold text-brand-red"
+          <div className="pb-32">
+            {/* Hero — foto (ou gradiente com ícone da categoria) com tags e preço flutuando por cima */}
+            {(() => {
+              const categoryKind = getCategoryKind(selectedProductCategory?.name);
+              const HeroIcon = categoryKind === "SAVORY" ? Flame
+                : categoryKind === "SWEET" ? Sparkles
+                : categoryKind === "DRINK" ? Package
+                : Utensils;
+              const tags = getProductTags(selectedProduct, selectedProductCategory?.name, menuIndexes).filter((t) => t !== "Outros");
+              return (
+                <div className="relative aspect-[4/3] w-full overflow-hidden bg-[var(--bg-inverse)]">
+                  {selectedProduct.image_url ? (
+                    <Image
+                      src={selectedProduct.image_url}
+                      alt=""
+                      width={480}
+                      height={360}
+                      sizes="(max-width: 448px) 100vw, 448px"
+                      className="h-full w-full object-cover"
+                      priority
+                    />
+                  ) : (
+                    <div
+                      className="flex h-full w-full items-center justify-center"
+                      style={{ background: "linear-gradient(135deg, var(--bg-inverse), var(--brand-red-dark))" }}
                     >
-                      {tag === "Vegetariano" ? <Leaf className="h-3 w-3" strokeWidth={1.75} /> : <Flame className="h-3 w-3" strokeWidth={1.75} />}
-                      {tag}
-                    </span>
-                  ))}
+                      <HeroIcon className="h-16 w-16 text-white/20" strokeWidth={1.25} />
+                    </div>
+                  )}
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
+                  {tags.length > 0 && (
+                    <div className="absolute left-4 top-4 flex flex-wrap gap-1.5">
+                      {tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-micro font-bold uppercase tracking-wide text-brand-red shadow-sm backdrop-blur-sm"
+                        >
+                          {tag === "Vegetariano" ? <Leaf className="h-3 w-3" strokeWidth={2} /> : <Flame className="h-3 w-3" strokeWidth={2} />}
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="absolute bottom-3 left-4 right-4 text-lg font-bold leading-tight text-white drop-shadow-sm">
+                    {splitProductName(selectedProduct.name).title}
+                  </p>
+                </div>
+              );
+            })()}
+
+            <div className="px-5 pt-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="flex-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+                  {getProductSummary(selectedProduct, selectedProductCategory?.name, menuIndexes)}
+                </p>
+                <p className="shrink-0 rounded-xl bg-[var(--brand-light)] px-3 py-1.5 text-lg font-bold text-brand-red tabular-nums">
+                  <span className="text-xs mr-0.5 font-semibold opacity-70">R$</span>
+                  {selectedProduct.price.toFixed(2).replace(".", ",")}
+                </p>
               </div>
-              <h2 className="text-lg font-bold text-[var(--text-primary)] leading-tight">{splitProductName(selectedProduct.name).title}</h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-[var(--text-secondary)]">
-                {getProductSummary(selectedProduct, selectedProductCategory?.name, menuIndexes)}
-              </p>
-              <p className="mt-2 text-xl font-bold text-brand-red tabular-nums">
-                <span className="text-sm mr-0.5 font-medium opacity-70">R$</span>
-                {selectedProduct.price.toFixed(2).replace(".", ",")}
-              </p>
             </div>
 
-            {/* Ingredientes */}
+            {/* Ingredientes — chips tocáveis, risca quando removido */}
             {productDefaultIngredients.length > 0 && (
-              <section className="mt-6 space-y-2">
-                <p className="text-xs font-semibold text-[var(--text-muted)]">Ingredientes</p>
-                <div className="rounded-xl bg-[var(--bg-subtle)] divide-y divide-[var(--border)]">
+              <section className="mt-6 space-y-2 px-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Ingredientes</p>
+                <div className="flex flex-wrap gap-2">
                   {productDefaultIngredients.map((ingredient) => {
                     const isIncluded = !removedIngredientIds.has(ingredient.id);
                     return (
-                      <label
+                      <button
                         key={ingredient.id}
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-[var(--border)]/30"
+                        type="button"
+                        onClick={() => {
+                          setRemovedIngredientIds((current) => {
+                            const next = new Set(current);
+                            if (next.has(ingredient.id)) next.delete(ingredient.id);
+                            else next.add(ingredient.id);
+                            return next;
+                          });
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-all active:scale-[0.97] ${
+                          isIncluded
+                            ? "border-[var(--status-success)]/30 bg-[var(--status-success-bg)] text-[var(--status-success)]"
+                            : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-muted)] line-through"
+                        }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isIncluded}
-                          onChange={() => {
-                            setRemovedIngredientIds((current) => {
-                              const next = new Set(current);
-                              if (next.has(ingredient.id)) next.delete(ingredient.id);
-                              else next.add(ingredient.id);
-                              return next;
-                            });
-                          }}
-                          className="h-5 w-5 accent-brand-red"
-                        />
-                        <span className={`text-sm font-medium ${isIncluded ? "text-[var(--text-primary)]" : "text-[var(--text-muted)] line-through"}`}>
-                          {ingredient.name}
-                        </span>
-                      </label>
+                        {isIncluded && <Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                        {ingredient.name}
+                      </button>
                     );
                   })}
                 </div>
@@ -2305,7 +2322,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             {/* Adicionais — card destacado, "Quer deixar ainda melhor?" */}
             {productAddons.length > 0 && (
               <section
-                className="mt-6 rounded-2xl border-2 border-dashed p-3"
+                className="mx-5 mt-6 rounded-2xl border-2 border-dashed p-3"
                 style={{ borderColor: "rgba(231, 51, 53, 0.25)", backgroundColor: "var(--brand-light)" }}
               >
                 <button
@@ -2386,7 +2403,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             )}
 
             {/* Observação */}
-            <section className="mt-6">
+            <section className="mt-6 px-5">
               <FloatingInput
                 label="Observação"
                 value={itemNotes}
@@ -2397,22 +2414,22 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
             {/* Footer sticky com quantidade + CTA */}
             <div
-              className="sticky bottom-0 left-0 right-0 -mx-5 mt-6 px-5 py-3 border-t border-[var(--border)]"
+              className="sticky bottom-0 left-0 right-0 mt-6 px-5 py-3 border-t border-[var(--border)] shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.12)]"
               style={{ backgroundColor: "var(--bg-surface)" }}
             >
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 rounded-xl bg-[var(--bg-subtle)] p-1 h-12">
+                <div className="flex items-center gap-1 rounded-full bg-[var(--bg-subtle)] p-1 h-12">
                   <button
-                    className="rounded-lg bg-[var(--bg-surface)] p-2 text-[var(--text-secondary)] disabled:opacity-40"
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--bg-surface)] text-[var(--text-secondary)] shadow-sm disabled:opacity-40"
                     disabled={quantity <= 1}
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     aria-label="Diminuir"
                   >
                     <Minus className="h-4 w-4" strokeWidth={2} />
                   </button>
-                  <span className="w-6 text-center text-base font-semibold text-[var(--text-primary)] tabular-nums">{quantity}</span>
+                  <span className="w-7 text-center text-base font-bold text-[var(--text-primary)] tabular-nums">{quantity}</span>
                   <button
-                    className="rounded-lg bg-[var(--bg-surface)] p-2 text-brand-red"
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-red text-white shadow-sm"
                     onClick={() => setQuantity(quantity + 1)}
                     aria-label="Aumentar"
                   >
@@ -2422,7 +2439,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
+                  className="flex-1 flex items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-md)] hover:bg-brand-red-dark active:scale-[0.98]"
                   style={{ height: 52 }}
                 >
                   <span>{editingCartItemId ? "Salvar" : "Adicionar"}</span>
