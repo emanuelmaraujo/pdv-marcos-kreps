@@ -605,6 +605,12 @@ export default function FiliaisPage() {
                   onChange={(v) => setField('delivery_enabled', v)}
                 />
 
+                {!editing.delivery_enabled && (
+                  <p className="rounded-lg bg-[var(--status-info-bg)] px-3 py-2 text-[11px] text-[var(--status-info)]">
+                    Ligue a opção acima para definir a taxa padrão e cadastrar os bairros atendidos (com a taxa de cada um).
+                  </p>
+                )}
+
                 {editing.delivery_enabled && (
                   <>
                     <Field
