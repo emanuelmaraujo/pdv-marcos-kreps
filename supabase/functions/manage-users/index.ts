@@ -78,6 +78,18 @@ serve(async (req) => {
 
         if (pErr) throw pErr;
 
+        const { data: profileBranches, error: pbErr } = await supabaseAdmin
+          .from('profile_branches')
+          .select('profile_id, branch_id');
+        if (pbErr) throw pbErr;
+
+        const branchIdsByProfile = new Map<string, string[]>();
+        for (const row of profileBranches ?? []) {
+          const list = branchIdsByProfile.get(row.profile_id) ?? [];
+          list.push(row.branch_id);
+          branchIdsByProfile.set(row.profile_id, list);
+        }
+
         responseData = users.map(u => {
           const profile = profiles.find(p => p.id === u.id);
           return {
@@ -87,7 +99,8 @@ serve(async (req) => {
             created_at: u.created_at,
             name: profile?.name || 'Sem nome',
             role: profile?.role || 'ATTENDANT',
-            active: profile?.active ?? true
+            active: profile?.active ?? true,
+            branch_ids: branchIdsByProfile.get(u.id) ?? [],
           };
         }).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         break;

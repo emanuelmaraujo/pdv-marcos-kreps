@@ -1,212 +1,135 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { Badge } from "@/components/ui/Badge";
-import { BottomSheet } from "@/components/ui/BottomSheet";
-import { usersApi, UserProfile } from "@/lib/api/users-api";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { useToast, ToastContainer } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
 import { branchesAdminApi } from "@/lib/api/branches-admin-api";
-import { enrollPasskey, isWebAuthnSupported, hasEnrolledPasskey } from "@/lib/webauthn-client";
-import {
-  UserPlus,
-  UserCog,
-  UserCheck,
-  Mail,
-  Search,
-  Users,
-  ShieldCheck,
-  UserMinus,
-  Clock,
-  User as UserIcon,
-  Filter,
-  Activity,
-  KeyRound,
-  Fingerprint,
-  CheckCircle2,
-  Trash2,
-  Phone,
-} from "lucide-react";
+import { isWebAuthnSupported, hasEnrolledPasskey } from "@/lib/webauthn-client";
+import { useUsers } from "@/hooks/useUsers";
+import { useClientPagination } from "@/hooks/useClientPagination";
+import { UserProfile } from "@/lib/api/users-api";
+import { UserCard } from "./components/UserCard";
+import { UserFilters, type RoleFilter, type StatusFilter } from "./components/UserFilters";
+import { UserFormSheet, type UserFormData } from "./components/UserFormSheet";
+import { PasswordResetModal } from "./components/PasswordResetModal";
+import { BiometricEnrollModal } from "./components/BiometricEnrollModal";
+import { getInitials, getAvatarColor, formatLastSignIn } from "./utils";
+import { Users, UserCheck, ShieldCheck, Activity, Mail, Clock, KeyRound, Fingerprint, UserMinus, UserCog, Trash2 } from "lucide-react";
 
-function getInitials(name: string) {
-  const parts = name.split(" ").filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + (parts[parts.length - 1][0] || "")).toUpperCase();
-}
-
-function getAvatarColor(name: string) {
-  const colors = [
-    "from-blue-500/20 to-blue-600/20 text-blue-600 border-blue-200/50",
-    "from-emerald-500/20 to-emerald-600/20 text-emerald-600 border-emerald-200/50",
-    "from-violet-500/20 to-violet-600/20 text-violet-600 border-violet-200/50",
-    "from-amber-500/20 to-amber-600/20 text-amber-600 border-amber-200/50",
-    "from-rose-500/20 to-rose-600/20 text-rose-600 border-rose-200/50",
-    "from-indigo-500/20 to-indigo-600/20 text-indigo-600 border-indigo-200/50",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-}
-
-function formatLastSignIn(dateString?: string) {
-  if (!dateString) return "Nunca acessou";
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInMs = now.getTime() - date.getTime();
-  const diffInHours = diffInMs / (1000 * 60 * 60);
-  if (diffInHours < 24) {
-    if (diffInHours < 1) {
-      const diffInMins = diffInMs / (1000 * 60);
-      if (diffInMins < 5) return "Online";
-      return `Há ${Math.floor(diffInMins)} min`;
-    }
-    return `Há ${Math.floor(diffInHours)}h`;
-  }
-  if (diffInHours < 48) return "Ontem";
-  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-}
+const PAGE_SIZE = 10;
 
 export default function GestaoUsuarios() {
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [isBiometricModalOpen, setIsBiometricModalOpen] = useState(false);
+  const { users, loading, createUser, updateUser, toggleStatus, deleteUser, resetPassword } = useUsers();
+  const { branches } = useBranch();
+  const { toasts, addToast, removeToast } = useToast();
+
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("ALL");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [branchFilter, setBranchFilter] = useState("ALL");
+
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-  const [resetUser, setResetUser] = useState<UserProfile | null>(null);
+  const [editingBranchIds, setEditingBranchIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const [resetUser, setResetUser] = useState<UserProfile | null>(null);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+
+  const [isBiometricModalOpen, setIsBiometricModalOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
-  const [biometricSaving, setBiometricSaving] = useState(false);
-  const [biometricDone, setBiometricDone] = useState(false);
-  const { toasts, addToast, removeToast } = useToast();
-  const { branches } = useBranch();
-
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    role: "ATTENDANT" as "ADMIN" | "ATTENDANT" | "COURIER",
-    active: true,
-    branch_ids: [] as string[],
-    phone: "",
-  });
-
-  const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
   const webAuthnSupported = typeof window !== "undefined" ? isWebAuthnSupported() : false;
 
-  const supabase = createClient();
-
   useEffect(() => {
+    const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         setCurrentUserId(user.id);
         setCurrentUserEmail(user.email ?? null);
       }
     });
-  }, [supabase]);
+  }, []);
 
-  const loadUsers = useCallback(async () => {
-    try {
-      const data = await usersApi.listUsers();
-      setUsers(data);
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Erro ao carregar usuários";
-      addToast("error", msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
+  const branchNameById = useMemo(() => new Map(branches.map((b) => [b.id, b])), [branches]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadUsers();
-  }, [loadUsers]);
+  const filteredUsers = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return users.filter((u) => {
+      if (term && !u.name.toLowerCase().includes(term) && !u.email.toLowerCase().includes(term)) return false;
+      if (roleFilter !== "ALL" && u.role !== roleFilter) return false;
+      if (statusFilter === "ACTIVE" && !u.active) return false;
+      if (statusFilter === "INACTIVE" && u.active) return false;
+      if (branchFilter !== "ALL" && !(u.branch_ids ?? []).includes(branchFilter)) return false;
+      return true;
+    });
+  }, [users, search, roleFilter, statusFilter, branchFilter]);
+
+  const { page, setPage, pageItems, total } = useClientPagination(filteredUsers, PAGE_SIZE);
+
+  const stats = {
+    total: users.length,
+    active: users.filter((u) => u.active).length,
+    admins: users.filter((u) => u.role === "ADMIN").length,
+  };
 
   function handleAdd() {
     setEditingUser(null);
-    setFormData({ name: "", email: "", password: "", role: "ATTENDANT", active: true, branch_ids: [], phone: "" });
-    setIsModalOpen(true);
+    setEditingBranchIds([]);
+    setIsFormOpen(true);
   }
 
   async function handleEdit(user: UserProfile) {
     setEditingUser(user);
-    // Pré-carrega as filiais que o usuário já está vinculado.
     let branch_ids: string[] = [];
     try {
       branch_ids = await branchesAdminApi.listProfileBranches(user.id);
     } catch { /* não bloqueia abertura do form */ }
-    setFormData({ name: user.name, email: user.email, password: "", role: user.role, active: user.active, branch_ids, phone: "" });
-    setIsModalOpen(true);
+    setEditingBranchIds(branch_ids);
+    setIsFormOpen(true);
   }
 
-  function handleOpenPasswordReset(user: UserProfile) {
-    setResetUser(user);
-    setPasswordForm({ password: "", confirm: "" });
-    setIsPasswordModalOpen(true);
-  }
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editingUser && formData.role === "COURIER" && formData.branch_ids.length !== 1) {
-      addToast("error", "Selecione exatamente uma filial para o motoboy.");
-      return;
-    }
+  async function handleFormSubmit(data: UserFormData) {
     setSaving(true);
     try {
       if (editingUser) {
-        await usersApi.updateUser({
+        await updateUser({
           id: editingUser.id,
-          name: formData.name,
-          role: formData.role,
-          branch_ids: formData.branch_ids,
-          home_branch_id: formData.branch_ids[0] ?? null,
+          name: data.name,
+          role: data.role,
+          branch_ids: data.branch_ids,
+          home_branch_id: data.branch_ids[0] ?? null,
         });
         addToast("success", "Usuário atualizado com sucesso!");
       } else {
-        await usersApi.createUser({
-          ...formData,
-          branch_ids: formData.branch_ids,
-          home_branch_id: formData.branch_ids[0] ?? null,
+        await createUser({
+          ...data,
+          branch_ids: data.branch_ids,
+          home_branch_id: data.branch_ids[0] ?? null,
         });
         addToast("success", "Usuário criado com sucesso!");
       }
-      setIsModalOpen(false);
-      loadUsers();
+      setIsFormOpen(false);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Erro ao salvar usuário";
-      addToast("error", msg);
+      addToast("error", error instanceof Error ? error.message : "Erro ao salvar usuário");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handlePasswordReset(e: React.FormEvent) {
-    e.preventDefault();
+  async function handlePasswordReset(password: string) {
     if (!resetUser) return;
-    if (passwordForm.password.length < 6) {
-      addToast("error", "A senha deve ter pelo menos 6 caracteres.");
-      return;
-    }
-    if (passwordForm.password !== passwordForm.confirm) {
-      addToast("error", "As senhas não coincidem.");
-      return;
-    }
     setSaving(true);
     try {
-      await usersApi.resetPassword(resetUser.id, passwordForm.password);
+      await resetPassword(resetUser.id, password);
       addToast("success", `Senha de ${resetUser.name} redefinida com sucesso!`);
       setIsPasswordModalOpen(false);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Erro ao redefinir senha";
-      addToast("error", msg);
+      addToast("error", error instanceof Error ? error.message : "Erro ao redefinir senha");
     } finally {
       setSaving(false);
     }
@@ -215,69 +138,116 @@ export default function GestaoUsuarios() {
   async function handleDelete(user: UserProfile) {
     if (!window.confirm(`Excluir permanentemente "${user.name}"? Esta ação não pode ser desfeita.`)) return;
     try {
-      await usersApi.deleteUser(user.id);
+      await deleteUser(user.id);
       addToast("success", `Usuário ${user.name} excluído.`);
-      loadUsers();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Erro ao excluir usuário";
-      addToast("error", msg);
+      addToast("error", error instanceof Error ? error.message : "Erro ao excluir usuário");
     }
   }
 
   async function handleToggleStatus(user: UserProfile) {
     try {
-      await usersApi.toggleStatus(user.id, !user.active);
+      await toggleStatus(user.id, !user.active);
       addToast("success", `Usuário ${!user.active ? "ativado" : "desativado"} com sucesso!`);
-      loadUsers();
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Erro ao alterar status";
-      addToast("error", msg);
+      addToast("error", error instanceof Error ? error.message : "Erro ao alterar status");
     }
   }
 
-  async function handleBiometricSetup() {
-    if (!currentUserId || !currentUserEmail) return;
-    setBiometricSaving(true);
-    setBiometricDone(false);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Sessão expirada. Faça login novamente.");
-      await enrollPasskey(currentUserId, currentUserEmail, session.access_token);
-      setBiometricDone(true);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro ao vincular digital.";
-      addToast("error", msg);
-    } finally {
-      setBiometricSaving(false);
-    }
-  }
-
-  const filteredUsers = users.filter(
-    (u) =>
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const stats = {
-    total: users.length,
-    active: users.filter((u) => u.active).length,
-    admins: users.filter((u) => u.role === "ADMIN").length,
-  };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 animate-pulse">
-        <div className="w-12 h-12 rounded-full border-4 border-zinc-200 border-t-brand-red animate-spin" />
-        <span className="text-zinc-500 font-medium">Carregando usuários...</span>
-      </div>
-    );
-  }
+  const columns: DataTableColumn<UserProfile>[] = [
+    {
+      key: "user",
+      header: "Usuário",
+      render: (user) => (
+        <div className="flex items-center gap-3">
+          <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 font-black text-xs shadow-inner bg-gradient-to-br ${getAvatarColor(user.name)}`}>
+            {getInitials(user.name)}
+            <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${user.active ? "bg-emerald-500" : "bg-zinc-300"}`} />
+          </div>
+          <div className="min-w-0">
+            <p className={`truncate text-sm font-black ${user.active ? "text-zinc-900" : "text-zinc-500"}`}>{user.name}</p>
+            <p className="flex items-center gap-1 truncate text-xs font-medium text-zinc-500">
+              <Mail size={11} className="shrink-0 text-zinc-400" />
+              {user.email}
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "role",
+      header: "Papel",
+      render: (user) => (
+        <Badge
+          variant={user.role === "ADMIN" ? "brand" : user.role === "COURIER" ? "info" : "secondary"}
+          className="text-[10px] py-0.5 px-2 font-black uppercase tracking-wider rounded-lg"
+        >
+          {user.role === "ADMIN" ? "Admin" : user.role === "COURIER" ? "Motoboy" : "Equipe"}
+        </Badge>
+      ),
+    },
+    {
+      key: "branches",
+      header: "Filiais",
+      render: (user) => {
+        const ids = user.branch_ids ?? [];
+        if (ids.length === 0) return <span className="text-xs text-zinc-400">—</span>;
+        return (
+          <div className="flex flex-wrap gap-1">
+            {ids.map((id) => (
+              <span key={id} className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-black text-zinc-600" title={branchNameById.get(id)?.name}>
+                {branchNameById.get(id)?.code ?? "?"}
+              </span>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
+      key: "seen",
+      header: "Visto por último",
+      render: (user) => (
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
+          <Clock size={12} className="text-zinc-400" />
+          {formatLastSignIn(user.last_sign_in_at)}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Ações",
+      className: "text-right",
+      render: (user) => (
+        <div className="flex items-center justify-end gap-1">
+          {user.id === currentUserId && webAuthnSupported && (
+            <IconAction
+              title={hasEnrolledPasskey() ? "Digital vinculada ✓" : "Vincular digital / Face ID"}
+              onClick={() => setIsBiometricModalOpen(true)}
+              icon={Fingerprint}
+              className="text-indigo-600 hover:bg-indigo-50"
+            />
+          )}
+          <IconAction title="Redefinir senha" onClick={() => { setResetUser(user); setIsPasswordModalOpen(true); }} icon={KeyRound} className="text-zinc-600 hover:bg-zinc-100" />
+          <IconAction
+            title={user.active ? "Desativar" : "Ativar"}
+            onClick={() => handleToggleStatus(user)}
+            icon={user.active ? UserMinus : UserCheck}
+            className={user.active ? "text-zinc-600 hover:bg-zinc-100" : "text-brand-amber hover:bg-brand-amber/10"}
+          />
+          <IconAction title="Editar" onClick={() => handleEdit(user)} icon={UserCog} className="text-brand-charcoal hover:bg-zinc-100" />
+          {user.id !== currentUserId && (
+            <IconAction title="Excluir usuário" onClick={() => handleDelete(user)} icon={Trash2} className="text-red-500 hover:bg-red-50" />
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-zinc-50/50">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <div className="p-6 space-y-8 flex-1 overflow-y-auto pb-32">
+      <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-32">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
           <Card className="bg-white/80 backdrop-blur-md border-zinc-100 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
@@ -320,434 +290,104 @@ export default function GestaoUsuarios() {
           </Card>
         </div>
 
-        {/* Search + Add */}
-        <div className="flex gap-3 sticky top-0 z-10 bg-zinc-50/80 backdrop-blur-sm py-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
-            <Input
-              placeholder="Pesquisar por nome ou e-mail..."
-              className="pl-12 h-14 bg-white border-zinc-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red/50 transition-all text-base"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <Button
-            onClick={handleAdd}
-            className="h-14 px-6 bg-brand-charcoal hover:bg-zinc-800 text-white rounded-2xl shadow-lg shadow-zinc-200 active:scale-95 flex items-center gap-2 group transition-all"
-          >
-            <UserPlus size={22} className="group-hover:scale-110 transition-transform" />
-            <span className="font-bold hidden sm:inline">Adicionar</span>
-          </Button>
-        </div>
+        <UserFilters
+          search={search}
+          onSearchChange={setSearch}
+          role={roleFilter}
+          onRoleChange={setRoleFilter}
+          status={statusFilter}
+          onStatusChange={setStatusFilter}
+          branchId={branchFilter}
+          onBranchChange={setBranchFilter}
+          branches={branches}
+          onAdd={handleAdd}
+        />
 
-        {/* User List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between px-2">
             <h3 className="text-sm font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
               <Activity size={14} />
               Lista de Equipe
             </h3>
-            <span className="text-xs text-zinc-400 font-medium">Exibindo {filteredUsers.length} resultados</span>
+            <span className="text-xs text-zinc-400 font-medium">Exibindo {total} resultado{total === 1 ? "" : "s"}</span>
           </div>
 
-          <div className="grid gap-4">
-            {filteredUsers.map((user) => (
-              <Card
-                key={user.id}
-                className={`group relative overflow-hidden bg-white border-zinc-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 rounded-3xl ${!user.active ? "opacity-80" : ""}`}
-              >
-                {!user.active && <div className="absolute inset-0 bg-zinc-50/40 pointer-events-none" />}
-
-                <CardContent className="p-4 flex flex-col gap-3">
-                  {/* Top row: avatar + info */}
-                  <div className="flex items-center gap-4">
-                    <div className="relative shrink-0">
-                      <div className={`w-14 h-14 rounded-[20px] flex items-center justify-center font-black text-lg border-2 shadow-inner transition-transform group-hover:rotate-3 bg-gradient-to-br ${getAvatarColor(user.name)}`}>
-                        {getInitials(user.name)}
-                      </div>
-                      {user.active ? (
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-[3px] border-white rounded-full shadow-sm" />
-                      ) : (
-                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-zinc-300 border-[3px] border-white rounded-full shadow-sm" />
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className={`font-black text-zinc-900 text-base tracking-tight leading-tight ${!user.active ? "text-zinc-500" : ""}`}>
-                          {user.name}
-                        </span>
-                        <Badge
-                          variant={user.role === "ADMIN" ? "brand" : user.role === "COURIER" ? "info" : "secondary"}
-                          className="text-[10px] py-0.5 px-2 font-black uppercase tracking-wider rounded-lg"
-                        >
-                          {user.role === "ADMIN" ? "Admin" : user.role === "COURIER" ? "Motoboy" : "Equipe"}
-                        </Badge>
-                        {user.role === "ADMIN" && <ShieldCheck size={14} className="text-amber-500" strokeWidth={3} />}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-sm text-zinc-500 font-medium mb-0.5">
-                        <Mail size={12} className="text-zinc-400 shrink-0" />
-                        <span className="truncate">{user.email}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-400 uppercase tracking-tight">
-                        <Clock size={11} className="text-zinc-300 shrink-0" />
-                        <span>Visto: {formatLastSignIn(user.last_sign_in_at)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottom row: actions */}
-                  <div className="flex items-center gap-2 pt-1 border-t border-zinc-100">
-                    {user.id === currentUserId && webAuthnSupported && (
-                      <button
-                        onClick={() => { setBiometricDone(false); setIsBiometricModalOpen(true); }}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 active:scale-95 transition-all"
-                        title={hasEnrolledPasskey() ? "Digital vinculada ✓" : "Vincular digital / Face ID"}
-                      >
-                        <Fingerprint className="w-4 h-4" />
-                        <span className="text-[11px] font-bold">Digital</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleOpenPasswordReset(user)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-100 text-zinc-600 active:scale-95 transition-all"
-                      title="Redefinir senha"
-                    >
-                      <KeyRound className="w-4 h-4" />
-                      <span className="text-[11px] font-bold">Senha</span>
-                    </button>
-                    <button
-                      onClick={() => handleToggleStatus(user)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all border ${
-                        user.active
-                          ? "bg-zinc-50 border-zinc-100 text-zinc-600 active:scale-95"
-                          : "bg-brand-amber/10 border-brand-amber/20 text-brand-amber active:scale-95"
-                      }`}
-                      title={user.active ? "Desativar" : "Ativar"}
-                    >
-                      {user.active ? <UserMinus className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
-                      <span className="text-[11px] font-bold">{user.active ? "Desativar" : "Ativar"}</span>
-                    </button>
-                    <button
-                      onClick={() => handleEdit(user)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-100 text-brand-charcoal active:scale-95 transition-all"
-                      title="Editar"
-                    >
-                      <UserCog className="w-4 h-4" />
-                      <span className="text-[11px] font-bold">Editar</span>
-                    </button>
-                    {user.id !== currentUserId && (
-                      <button
-                        onClick={() => handleDelete(user)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-500 active:scale-95 transition-all"
-                        title="Excluir usuário"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        <span className="text-[11px] font-bold">Excluir</span>
-                      </button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
-            {filteredUsers.length === 0 && (
-              <div className="py-24 text-center space-y-6 bg-white/50 border-2 border-dashed border-zinc-200 rounded-[40px]">
-                <div className="bg-zinc-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto ring-8 ring-zinc-50">
-                  <Search size={40} className="text-zinc-300" />
-                </div>
-                <div className="space-y-2 max-w-xs mx-auto">
-                  <h3 className="font-black text-xl text-zinc-800 tracking-tight">Nenhum resultado</h3>
-                  <p className="text-zinc-500 font-medium">Não encontramos nenhum usuário com os termos &quot;<b>{searchTerm}</b>&quot;.</p>
-                  <Button variant="outline" onClick={() => setSearchTerm("")} className="mt-4 rounded-xl font-bold">
-                    Limpar Busca
-                  </Button>
-                </div>
-              </div>
+          <DataTable
+            columns={columns}
+            data={pageItems}
+            keyField={(user) => user.id}
+            loading={loading}
+            emptyMessage="Nenhum usuário encontrado com os filtros atuais."
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onPageChange={setPage}
+            renderCard={(user) => (
+              <UserCard
+                user={user}
+                currentUserId={currentUserId}
+                webAuthnSupported={webAuthnSupported}
+                hasPasskey={hasEnrolledPasskey()}
+                onOpenBiometric={() => setIsBiometricModalOpen(true)}
+                onOpenPasswordReset={() => { setResetUser(user); setIsPasswordModalOpen(true); }}
+                onToggleStatus={() => handleToggleStatus(user)}
+                onEdit={() => handleEdit(user)}
+                onDelete={() => handleDelete(user)}
+              />
             )}
-          </div>
+          />
         </div>
       </div>
 
-      {/* Create/Edit modal */}
-      <BottomSheet isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingUser ? "Configurações de Acesso" : "Novo Membro da Equipe"}>
-        <form onSubmit={handleSave} className="p-8 space-y-8">
-          <div className="flex items-center gap-4 p-4 bg-zinc-50 rounded-2xl border border-zinc-100">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl bg-gradient-to-br from-zinc-200 to-zinc-300 text-zinc-600 shadow-inner">
-              {formData.name ? getInitials(formData.name) : <UserIcon size={24} />}
-            </div>
-            <div>
-              <p className="text-sm font-black text-zinc-900 leading-tight">{formData.name || "Novo Usuário"}</p>
-              <p className="text-xs text-zinc-400 font-medium">{formData.email || "aguardando e-mail..."}</p>
-            </div>
-          </div>
+      <UserFormSheet
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        editingUser={editingUser}
+        initialBranchIds={editingBranchIds}
+        branches={branches}
+        saving={saving}
+        onSubmit={handleFormSubmit}
+      />
 
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Nome Completo</label>
-              <div className="relative group">
-                <Users size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
-                <Input
-                  required
-                  placeholder="Ex: Marcos Kreps"
-                  className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-            </div>
+      <PasswordResetModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+        user={resetUser}
+        saving={saving}
+        onSubmit={handlePasswordReset}
+      />
 
-            {!editingUser && (
-              <>
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">E-mail de Acesso</label>
-                  <div className="relative group">
-                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
-                    <Input
-                      required
-                      type="email"
-                      placeholder="exemplo@pdvmarcos.com"
-                      className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Senha de Acesso</label>
-                  <div className="relative group">
-                    <ShieldCheck size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
-                    <Input
-                      required
-                      type="password"
-                      placeholder="Mínimo 6 caracteres"
-                      className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="space-y-2">
-              <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Nível de Acesso</label>
-              <div className="relative group">
-                <Filter size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors z-10" />
-                <Select
-                  value={formData.role}
-                  className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-bold appearance-none"
-                  onChange={(e) => {
-                    const role = e.target.value as "ADMIN" | "ATTENDANT" | "COURIER";
-                    const branch_ids = role === "COURIER" ? formData.branch_ids.slice(0, 1) : formData.branch_ids;
-                    setFormData({ ...formData, role, branch_ids });
-                  }}
-                >
-                  <option value="ATTENDANT">Atendente (PDV & Balcão)</option>
-                  <option value="ADMIN">Administrador (Controle Total)</option>
-                  <option value="COURIER">Motoboy (Entregas)</option>
-                </Select>
-              </div>
-              <p className="text-[10px] text-zinc-400 italic px-2">
-                {formData.role === "COURIER"
-                  ? "Motoboy vê só os próprios pedidos de entrega e confirma a entrega pelo celular."
-                  : "Administradores podem gerenciar estoque, financeiro e outros usuários."}
-              </p>
-            </div>
-
-            {!editingUser && formData.role === "COURIER" && (
-              <div className="space-y-2">
-                <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Telefone do Motoboy</label>
-                <div className="relative group">
-                  <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
-                  <Input
-                    type="tel"
-                    placeholder="(61) 99999-9999"
-                    className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Filiais autorizadas */}
-            {branches.length > 0 && (
-              <div className="space-y-2">
-                <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">
-                  {formData.role === "COURIER" ? "Filial do Motoboy" : "Filiais Autorizadas"}
-                </label>
-                <p className="text-[10px] text-zinc-400 italic px-2">
-                  {formData.role === "COURIER"
-                    ? "Motoboy opera em uma única filial — selecione qual."
-                    : "Selecione em quais filiais este usuário pode operar. ADMIN tem acesso a todas independente da seleção."}
-                </p>
-                <div className="space-y-1.5">
-                  {branches.map((b) => {
-                    const checked = formData.branch_ids.includes(b.id);
-                    return (
-                      <label
-                        key={b.id}
-                        className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all ${
-                          checked ? "border-brand-red bg-red-50" : "border-zinc-200 bg-white hover:bg-zinc-50"
-                        }`}
-                      >
-                        <input
-                          type={formData.role === "COURIER" ? "radio" : "checkbox"}
-                          name="branch_ids"
-                          checked={checked}
-                          onChange={(e) => {
-                            if (formData.role === "COURIER") {
-                              setFormData({ ...formData, branch_ids: [b.id] });
-                              return;
-                            }
-                            const next = e.target.checked
-                              ? [...formData.branch_ids, b.id]
-                              : formData.branch_ids.filter((x) => x !== b.id);
-                            setFormData({ ...formData, branch_ids: next });
-                          }}
-                          className="h-4 w-4 accent-brand-red"
-                        />
-                        <span className="rounded-md bg-brand-charcoal px-2 py-0.5 text-[10px] font-black text-white">
-                          {b.code}
-                        </span>
-                        <span className="flex-1 text-sm font-bold text-zinc-800">{b.name}</span>
-                        {!b.active && (
-                          <span className="text-[10px] font-bold text-red-500">Inativa</span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-                {formData.branch_ids.length > 0 && formData.role !== "COURIER" && (
-                  <p className="text-[10px] font-bold text-zinc-500 px-2">
-                    Filial padrão (home): <span className="text-brand-red">
-                      {branches.find((b) => b.id === formData.branch_ids[0])?.name ?? "—"}
-                    </span>
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="pt-6">
-            <Button type="submit" loading={saving} className="w-full h-16 text-lg font-black bg-brand-charcoal hover:bg-zinc-800 text-white shadow-xl shadow-zinc-200 active:scale-[0.98] transition-all flex items-center justify-center gap-3 rounded-[24px]">
-              {editingUser ? (
-                <><UserCheck size={24} />Salvar Alterações</>
-              ) : (
-                <><UserPlus size={24} />Criar Usuário Agora</>
-              )}
-            </Button>
-            <div className="mt-8 flex flex-col items-center gap-2">
-              <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                <ShieldCheck size={12} className="text-brand-amber" />
-                Ação Segura e Auditada
-              </div>
-              <div className="w-12 h-1 rounded-full bg-zinc-100" />
-            </div>
-          </div>
-        </form>
-      </BottomSheet>
-
-      {/* Password Reset modal */}
-      <BottomSheet isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} title={`Redefinir senha — ${resetUser?.name}`}>
-        <form onSubmit={handlePasswordReset} className="p-8 space-y-6">
-          <p className="text-sm text-zinc-500">
-            Defina uma nova senha para <span className="font-bold text-zinc-800">{resetUser?.name}</span>. O usuário deverá usar essa senha no próximo login.
-          </p>
-          <div className="space-y-2">
-            <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Nova Senha</label>
-            <div className="relative group">
-              <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
-              <Input
-                required
-                type="password"
-                placeholder="Mínimo 6 caracteres"
-                className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
-                value={passwordForm.password}
-                onChange={(e) => setPasswordForm({ ...passwordForm, password: e.target.value })}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Confirmar Senha</label>
-            <div className="relative group">
-              <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
-              <Input
-                required
-                type="password"
-                placeholder="Repita a nova senha"
-                className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
-                value={passwordForm.confirm}
-                onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
-              />
-            </div>
-          </div>
-          <Button type="submit" loading={saving} className="w-full h-14 font-black bg-brand-red hover:bg-red-700 text-white rounded-2xl">
-            <KeyRound size={20} className="mr-2" />
-            Redefinir Senha
-          </Button>
-        </form>
-      </BottomSheet>
-
-      {/* Biometric modal */}
-      <BottomSheet
+      <BiometricEnrollModal
         isOpen={isBiometricModalOpen}
         onClose={() => setIsBiometricModalOpen(false)}
-        title="Vincular Digital / Face ID"
-      >
-        <div className="p-8 space-y-6">
-          {biometricDone ? (
-            <div className="flex flex-col items-center gap-4 py-4 text-center">
-              <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center">
-                <CheckCircle2 size={40} className="text-emerald-500" />
-              </div>
-              <div>
-                <p className="font-bold text-zinc-800">Digital vinculada!</p>
-                <p className="text-sm text-zinc-500 mt-1">
-                  Na próxima vez que acessar, toque no botão de digital na tela de login.
-                </p>
-              </div>
-              <Button
-                onClick={() => setIsBiometricModalOpen(false)}
-                className="w-full h-14 font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl"
-              >
-                Concluído
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-col items-center gap-3 py-2">
-                <div className="w-20 h-20 rounded-full bg-indigo-50 flex items-center justify-center">
-                  <Fingerprint size={40} className="text-indigo-500" />
-                </div>
-                <div className="text-center space-y-1">
-                  <p className="font-bold text-zinc-800">Vincular digital / Face ID</p>
-                  <p className="text-sm text-zinc-500 leading-relaxed">
-                    Ao clicar no botão abaixo, o navegador pedirá confirmação com sua biometria
-                    (Touch ID, Face ID ou Windows Hello). Nenhuma senha é necessária.
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-indigo-50 rounded-2xl p-4 text-sm text-indigo-700 space-y-1">
-                <p className="font-bold text-xs uppercase tracking-wider text-indigo-500">Como funciona</p>
-                <p>A chave biométrica fica salva <strong>neste dispositivo</strong>. Você precisará repetir em cada aparelho que quiser usar biometria.</p>
-              </div>
-
-              <Button
-                onClick={handleBiometricSetup}
-                loading={biometricSaving}
-                className="w-full h-14 font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl"
-              >
-                <Fingerprint size={20} className="mr-2" />
-                {biometricSaving ? "Aguardando biometria..." : "Vincular agora"}
-              </Button>
-            </>
-          )}
-        </div>
-      </BottomSheet>
+        currentUserId={currentUserId}
+        currentUserEmail={currentUserEmail}
+        onError={(message) => addToast("error", message)}
+      />
     </div>
+  );
+}
+
+function IconAction({
+  title,
+  icon: Icon,
+  onClick,
+  className = "",
+}: {
+  title: string;
+  icon: React.ElementType;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${className}`}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
   );
 }
