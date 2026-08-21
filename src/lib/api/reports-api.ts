@@ -131,6 +131,7 @@ export interface OrderRecord {
   status: string;
   payment_status: string;
   payment_method: string;
+  source: string;
   total_amount: number;
   discount_amount: number | null;
   packing_fee: number | null;
@@ -169,7 +170,7 @@ export const reportsApi = {
   async getOrdersForDateRange(startISO: string, endISO: string, branchId?: string | null): Promise<OrderRecord[]> {
     let query = supabase
       .from("orders")
-      .select("id, daily_number, status, payment_status, payment_method, total_amount, discount_amount, packing_fee, created_at, confirmed_at, paid_at")
+      .select("id, daily_number, status, payment_status, payment_method, source, total_amount, discount_amount, packing_fee, created_at, confirmed_at, paid_at")
       .or([
         `and(paid_at.not.is.null,paid_at.gte.${startISO},paid_at.lte.${endISO})`,
         `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${startISO},confirmed_at.lte.${endISO})`,
