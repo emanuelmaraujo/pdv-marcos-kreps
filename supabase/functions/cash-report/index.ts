@@ -68,6 +68,23 @@ function hourRange(hour: number): string {
   return `${start}h–${end}h`;
 }
 
+// PostgREST manda .in() como querystring (order_id=in.(id1,id2,...)) — com
+// muitos pedidos (períodos longos, ex. Intervalo > 30 dias numa loja
+// movimentada) a URL passa do limite aceito pelo proxy e a função falha.
+// Quebra em lotes e roda em paralelo pra nunca montar uma URL gigante.
+const IN_CHUNK_SIZE = 150;
+
+async function fetchInChunks<T>(
+  ids: string[],
+  fetchChunk: (chunk: string[]) => Promise<T[]>,
+): Promise<T[]> {
+  if (ids.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) chunks.push(ids.slice(i, i + IN_CHUNK_SIZE));
+  const results = await Promise.all(chunks.map(fetchChunk));
+  return results.flat();
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: getCorsHeaders(req) });
@@ -156,15 +173,15 @@ serve(async (req) => {
 
     // 4.1 Query Payments — usada para breakdown correto por método (split-bill pode ter métodos mistos)
     const allOrderIds = (orders || []).map((o: any) => o.id);
-    let paymentsData: any[] = [];
-    if (allOrderIds.length > 0) {
-      const { data: rawPayments } = await supabaseAdmin
+    const paymentsData: any[] = await fetchInChunks(allOrderIds, async (chunk) => {
+      const { data, error } = await supabaseAdmin
         .from('payments')
         .select('order_id, payment_method, amount, payment_status')
-        .in('order_id', allOrderIds)
+        .in('order_id', chunk)
         .in('payment_status', ['PAID', 'COURTESY']);
-      paymentsData = rawPayments ?? [];
-    }
+      if (error) throw error;
+      return data ?? [];
+    });
 
     // Se filtro por método, mantém só pedidos que têm ao menos 1 pagamento nesse método
     const filteredOrders = (payment_method && payment_method !== 'ALL')
@@ -176,27 +193,28 @@ serve(async (req) => {
     const cancellations = filteredOrders.filter((o: any) => o.status === 'CANCELADO').length;
 
     // 5. Query Order Items
-    let itemsQuery = supabaseAdmin
-      .from('order_items')
-      .select(`
-        product_id,
-        product_name_snapshot,
-        product_price_snapshot,
-        cost_price_snapshot,
-        quantity,
-        total_price,
-        order_id,
-        products (
-          category_id,
-          categories (
-            name
+    const items: any[] = await fetchInChunks(filteredOrders.map((o: any) => o.id), async (chunk) => {
+      const { data, error } = await supabaseAdmin
+        .from('order_items')
+        .select(`
+          product_id,
+          product_name_snapshot,
+          product_price_snapshot,
+          cost_price_snapshot,
+          quantity,
+          total_price,
+          order_id,
+          products (
+            category_id,
+            categories (
+              name
+            )
           )
-        )
-      `)
-      .in('order_id', filteredOrders.map((o: any) => o.id));
-
-    const { data: items, error: itemsError } = await itemsQuery;
-    if (itemsError) throw itemsError;
+        `)
+        .in('order_id', chunk);
+      if (error) throw error;
+      return data ?? [];
+    });
 
     // 6. Fetch all active products for low-selling analysis
     const { data: activeProducts, error: activeProductsError } = await supabaseAdmin
