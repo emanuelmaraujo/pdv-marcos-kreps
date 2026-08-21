@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -51,6 +50,7 @@ import {
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { LoadingState } from "@/components/feedback/LoadingState";
 import { Card, CardContent } from "@/components/ui/Card";
+import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBranch } from "@/contexts/BranchContext";
 import { SectionCompare } from "./compare";
 import {
@@ -456,53 +456,14 @@ function ControlPanel({
   const rangeLabel = rangeStart && rangeEnd
     ? `${reportDateLabelFmt.format(labelToDate(rangeStart))} → ${reportDateLabelFmt.format(labelToDate(rangeEnd))}`
     : "Intervalo";
-  const [showRangePopover, setShowRangePopover] = useState(false);
-  const [popoverPos, setPopoverPos] = useState<{ top: number; right: number } | null>(null);
-  const rangePopoverRef = useRef<HTMLDivElement>(null);
-  const rangeButtonRef = useRef<HTMLButtonElement>(null);
-
-  // A linha de pills (período) tem overflow-x-auto pra rolar em telas
-  // pequenas — mas por spec de CSS, isso força overflow-y a virar "auto"
-  // também, e um popover posicionado absoluto dentro dela fica cortado no
-  // limite da linha (invisível/inclicável, mesmo com o estado "aberto"
-  // correto). Renderiza via portal em document.body, com posição calculada
-  // a partir do botão, pra escapar desse clipping.
-  const toggleRangePopover = () => {
-    if (!showRangePopover) {
-      const rect = rangeButtonRef.current?.getBoundingClientRect();
-      if (rect) {
-        setPopoverPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
-      }
-    }
-    setShowRangePopover((v) => !v);
-  };
-
-  // Fecha o popover ao clicar fora — sem isso, a única saída era o botão
-  // "Aplicar" (desabilitado até escolher as duas datas), dando a impressão
-  // de que o intervalo "não resolve".
-  useEffect(() => {
-    if (!showRangePopover) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      // Cliques dentro do popover ou no próprio botão de alternar não fecham
-      // por aqui — o botão já cuida de abrir/fechar via toggleRangePopover,
-      // e deixar os dois handlers competirem no mesmo clique reabre o
-      // popover que acabou de fechar (mousedown fecha, click seguinte reabre).
-      if (rangePopoverRef.current?.contains(target)) return;
-      if (rangeButtonRef.current?.contains(target)) return;
-      setShowRangePopover(false);
-    };
-    const reposition = () => {
-      const rect = rangeButtonRef.current?.getBoundingClientRect();
-      if (rect) setPopoverPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
-    };
-    document.addEventListener("mousedown", handler);
-    window.addEventListener("resize", reposition);
-    return () => {
-      document.removeEventListener("mousedown", handler);
-      window.removeEventListener("resize", reposition);
-    };
-  }, [showRangePopover]);
+  // Usa o BottomSheet compartilhado do app (mesmo padrão de usuarios/pedidos/
+  // novo-pedido) em vez de um popover próprio — além de seguir o padrão
+  // mobile já estabelecido, um <div position:fixed> não fica sujeito ao
+  // clipping da linha de pills (que tem overflow-x-auto e, por spec de CSS,
+  // isso força overflow-y a virar "auto" também — um popover absoluto
+  // dentro dela ficava cortado no limite da linha, invisível/inclicável
+  // mesmo com o estado "aberto" correto).
+  const [showRangeSheet, setShowRangeSheet] = useState(false);
 
   const hasActiveFilters =
     (filters.category_id && filters.category_id !== "ALL") ||
@@ -559,71 +520,63 @@ function ControlPanel({
             />
           </label>
 
-          {/* Pill "Intervalo" — abre popover com dois date inputs (renderizado via portal, ver comentário acima) */}
-          <div className="relative shrink-0">
-            <button
-              ref={rangeButtonRef}
-              onClick={toggleRangePopover}
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                period === "range"
-                  ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
-              title="Escolher intervalo de datas"
-            >
-              <CalendarDays className="h-3 w-3" strokeWidth={1.75} />
-              <span className="max-w-[180px] truncate">{period === "range" && rangeStart && rangeEnd ? rangeLabel : "Intervalo"}</span>
-            </button>
-            {showRangePopover && popoverPos && typeof document !== "undefined" && createPortal(
-              <div
-                ref={rangePopoverRef}
-                className="fixed z-50 w-72 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-lg)]"
-                style={{ top: popoverPos.top, right: popoverPos.right }}
-              >
-                <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-[var(--text-muted)]">Intervalo (dias comerciais)</p>
-                <div className="space-y-2">
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">De</label>
-                    <input
-                      type="date"
-                      max={todayKey}
-                      value={rangeStart}
-                      onChange={(e) => onRangeChange(e.target.value, rangeEnd && e.target.value > rangeEnd ? e.target.value : rangeEnd)}
-                      className="mt-0.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-1.5 text-sm font-medium text-[var(--text-primary)] focus:border-brand-red focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Até</label>
-                    <input
-                      type="date"
-                      max={todayKey}
-                      min={rangeStart || undefined}
-                      value={rangeEnd}
-                      onChange={(e) => onRangeChange(rangeStart, e.target.value)}
-                      className="mt-0.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-1.5 text-sm font-medium text-[var(--text-primary)] focus:border-brand-red focus:outline-none"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3 flex justify-end gap-2">
-                  <button
-                    onClick={() => { onRangeChange("", ""); setShowRangePopover(false); }}
-                    className="rounded-lg px-2 py-1 text-[11px] font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]"
-                  >
-                    Limpar
-                  </button>
-                  <button
-                    onClick={() => setShowRangePopover(false)}
-                    disabled={!rangeStart || !rangeEnd}
-                    className="rounded-lg bg-brand-red px-3 py-1 text-[11px] font-black text-white disabled:opacity-40"
-                  >
-                    Aplicar
-                  </button>
-                </div>
-              </div>,
-              document.body,
-            )}
-          </div>
+          {/* Pill "Intervalo" — abre um BottomSheet (mesmo padrão mobile do resto do app) */}
+          <button
+            onClick={() => setShowRangeSheet(true)}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              period === "range"
+                ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            }`}
+            title="Escolher intervalo de datas"
+          >
+            <CalendarDays className="h-3 w-3" strokeWidth={1.75} />
+            <span className="max-w-[180px] truncate">{period === "range" && rangeStart && rangeEnd ? rangeLabel : "Intervalo"}</span>
+          </button>
         </div>
+
+        <BottomSheet isOpen={showRangeSheet} onClose={() => setShowRangeSheet(false)} title="Intervalo (dias comerciais)">
+          <div className="space-y-4 p-6">
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">De</label>
+                <input
+                  type="date"
+                  max={todayKey}
+                  value={rangeStart}
+                  onChange={(e) => onRangeChange(e.target.value, rangeEnd && e.target.value > rangeEnd ? e.target.value : rangeEnd)}
+                  className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-sm font-medium text-[var(--text-primary)] focus:border-brand-red focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Até</label>
+                <input
+                  type="date"
+                  max={todayKey}
+                  min={rangeStart || undefined}
+                  value={rangeEnd}
+                  onChange={(e) => onRangeChange(rangeStart, e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-sm font-medium text-[var(--text-primary)] focus:border-brand-red focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { onRangeChange("", ""); setShowRangeSheet(false); }}
+                className="rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]"
+              >
+                Limpar
+              </button>
+              <button
+                onClick={() => setShowRangeSheet(false)}
+                disabled={!rangeStart || !rangeEnd}
+                className="rounded-lg bg-brand-red px-4 py-2 text-xs font-black text-white disabled:opacity-40"
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </BottomSheet>
 
         <button
           onClick={onRefresh}
