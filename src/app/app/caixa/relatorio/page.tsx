@@ -79,7 +79,7 @@ const reportTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
 
 type Section = "overview" | "financial" | "sales" | "patterns" | "orders" | "compare";
 type Period = "today" | "yesterday" | "last7" | "last30" | "thisMonth" | "custom" | "range";
-type OrderFilter = "TODOS" | "PAGOS" | "PENDENTES" | "CANCELADOS";
+type OrderFilter = "TODOS" | "PAGOS" | "PENDENTES" | "CANCELADOS" | "DESISTENCIAS";
 
 interface AbcProduct extends ProductStat {
   cls: "A" | "B" | "C";
@@ -2069,8 +2069,9 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
   const filtered = useMemo(() => {
     let result = orders;
     if (filter === "PAGOS")      result = result.filter((o) => o.payment_status === "PAID");
-    else if (filter === "PENDENTES") result = result.filter((o) => o.payment_status === "PENDING" && o.status !== "CANCELADO");
+    else if (filter === "PENDENTES") result = result.filter((o) => o.payment_status === "PENDING" && o.status !== "CANCELADO" && o.status !== "EXPIRADO");
     else if (filter === "CANCELADOS") result = result.filter((o) => o.status === "CANCELADO");
+    else if (filter === "DESISTENCIAS") result = result.filter((o) => o.status === "EXPIRADO");
     if (search.trim()) {
       const q = search.trim();
       result = result.filter((o) => String(o.daily_number).padStart(3, "0").includes(q));
@@ -2083,11 +2084,19 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
   const chips: { key: OrderFilter; label: string; count: number }[] = [
     { key: "TODOS",     label: "Todos",      count: orders.length },
     { key: "PAGOS",     label: "Pagos",      count: orders.filter((o) => o.payment_status === "PAID").length },
-    { key: "PENDENTES", label: "Pendentes",  count: orders.filter((o) => o.payment_status === "PENDING" && o.status !== "CANCELADO").length },
+    { key: "PENDENTES", label: "Pendentes",  count: orders.filter((o) => o.payment_status === "PENDING" && o.status !== "CANCELADO" && o.status !== "EXPIRADO").length },
     { key: "CANCELADOS",label: "Cancelados", count: orders.filter((o) => o.status === "CANCELADO").length },
+    { key: "DESISTENCIAS", label: "Desistências", count: orders.filter((o) => o.status === "EXPIRADO").length },
   ];
 
   const totalReceived = filtered.filter((o) => o.payment_status === "PAID").reduce((s, o) => s + o.total_amount, 0);
+  // Desistência: pedido público criado (daily_number consumido) mas nunca pago —
+  // expirado por expire-pending-public-orders após ficar tempo demais em
+  // AGUARDANDO_PAGAMENTO. Taxa calculada sobre o total de pedidos de origem
+  // pública (source=APP), já que só esses passam por esse fluxo de expiração.
+  const publicOrdersCount = orders.filter((o) => o.source === "APP").length;
+  const abandonedCount = orders.filter((o) => o.status === "EXPIRADO").length;
+  const abandonmentRate = publicOrdersCount > 0 ? (abandonedCount / publicOrdersCount) * 100 : 0;
 
   const exportCSV = () => {
     const header = "Número,Status,Pagamento,Valor,Desconto,Data,Hora\n";
@@ -2115,12 +2124,13 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
   return (
     <div className="space-y-4">
       {/* Summary strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {[
           { label: "Filtrados",   value: String(filtered.length) },
           { label: "Total",       value: String(orders.length) },
           { label: "Recebido",    value: currency.format(totalReceived) },
           { label: "Ticket médio",value: currency.format(filtered.filter((o) => o.payment_status === "PAID").length > 0 ? totalReceived / filtered.filter((o) => o.payment_status === "PAID").length : 0) },
+          { label: "Desistência", value: publicOrdersCount > 0 ? `${abandonmentRate.toFixed(1)}%` : "—" },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-center shadow-[var(--shadow-sm)]">
             <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{s.label}</p>

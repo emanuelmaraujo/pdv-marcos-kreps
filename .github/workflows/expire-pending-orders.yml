@@ -1,0 +1,37 @@
+name: Expire Pending Public Orders
+
+# Chama expire-pending-public-orders periodicamente pra marcar como EXPIRADO
+# quem abriu um pedido público (checkout /pedir) e não pagou dentro do prazo —
+# sem isso, esses pedidos ficam presos em AGUARDANDO_PAGAMENTO pra sempre e não
+# aparecem como desistência em nenhum relatório. Ver FEATURE_DELIVERY.md /
+# investigação de "quero ter controle de quantas pessoas desistiram de pagar".
+#
+# Requer os secrets do repo:
+#   SUPABASE_PROJECT_ID              (já usado em deploy-functions.yml)
+#   PENDING_ORDER_EXPIRATION_SECRET  (mesmo valor setado como secret da function
+#                                      no Supabase: `supabase secrets set`)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  expire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar expire-pending-public-orders
+        run: |
+          PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://${PROJECT_REF}.supabase.co/functions/v1/expire-pending-public-orders" \
+            -H "x-expiration-secret: ${{ secrets.PENDING_ORDER_EXPIRATION_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"minutes": 20}')
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "$BODY"
+          if [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::expire-pending-public-orders retornou status $HTTP_CODE"
+            exit 1
+          fi
