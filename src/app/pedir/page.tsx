@@ -328,6 +328,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [checkoutError, setCheckoutError] = useState("");
   const { toasts, addToast, removeToast } = useToast();
   const lastAutofilledPhoneRef = useRef<string | null>(null);
+  // Depois que a pessoa escolhe a modalidade na mão, o autofill de perfil
+  // salvo (local ou do servidor) nunca mais pode sobrescrever essa escolha —
+  // sem isso, digitar o telefone DEPOIS de escolher "Entrega" silenciosamente
+  // trocava de volta pro último tipo de pedido salvo (ex: "Para levar").
+  const hasManuallySelectedOrderTypeRef = useRef(false);
   // Latest customerName captured for use inside the debounced profile lookup;
   // keeps the autofill effect from re-running on every keystroke in the name field.
   const customerNameRef = useRef(customerName);
@@ -482,7 +487,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setCustomerEmail(saved.email ?? "");
         setMarketingOptIn(saved.marketing_opt_in);
         setRememberCheckoutData(true);
-        setOrderType(saved.order_type);
+        if (!hasManuallySelectedOrderTypeRef.current) setOrderType(saved.order_type);
         lastAutofilledPhoneRef.current = saved.phone_e164;
         setProfileLookupState("found");
         setProfileNotice("Dados salvos neste dispositivo encontrados.");
@@ -511,7 +516,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           setCustomerInfo(response.profile.name ?? customerNameRef.current, formatWhatsAppInput(normalizedPhone));
           setCustomerEmail(response.profile.email ?? "");
           setMarketingOptIn(response.profile.marketing_opt_in === true);
-          if (response.profile.order_type === "BALCAO" || response.profile.order_type === "VIAGEM") {
+          if (
+            !hasManuallySelectedOrderTypeRef.current &&
+            (response.profile.order_type === "BALCAO" || response.profile.order_type === "VIAGEM")
+          ) {
             setOrderType(response.profile.order_type);
           }
           const addresses = response.addresses ?? [];
@@ -1787,7 +1795,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                         <button
                           key={opt.v}
                           type="button"
-                          onClick={() => setOrderType(opt.v)}
+                          onClick={() => {
+                            hasManuallySelectedOrderTypeRef.current = true;
+                            setOrderType(opt.v);
+                          }}
                           className={`flex-1 h-11 rounded-lg text-sm font-semibold ${
                             isActive ? "text-white shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)]"
                           }`}
