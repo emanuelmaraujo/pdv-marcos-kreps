@@ -8,6 +8,8 @@ import { ordersApi } from "@/lib/api/orders-api";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { createClient } from "@/lib/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
 import { OrderDetailsModal } from "./components/OrderDetailsModal";
@@ -24,6 +26,17 @@ import {
   EyeOff,
   Eye,
 } from "lucide-react";
+
+// Próximo status é determinístico para estas transições (ao contrário de
+// PRONTO_PARCIAL, cujo status final é derivado por trigger no servidor a
+// partir de quais itens ficam prontos — arriscado adivinhar). Só nesses
+// casos vale atualizar a UI antes da resposta da API.
+const OPTIMISTIC_NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
+  AGUARDANDO_CONFIRMACAO: "NA_FILA",
+  NA_FILA: "PRONTO",
+  PRONTO: "ENTREGUE",
+  SAIU_PARA_ENTREGA: "ENTREGUE",
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -249,7 +262,7 @@ function AvgWaitBadge({ minutes }: { minutes: number | null }) {
 // ─── Kanban Column ────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  config, orders, now, onCardClick, onQuickAction, searchQuery,
+  config, orders, now, onCardClick, onQuickAction, searchQuery, isLoading,
 }: {
   config: KanbanColumnConfig;
   orders: Order[];
@@ -257,6 +270,7 @@ function KanbanColumn({
   onCardClick: (order: Order) => void;
   onQuickAction: (order: Order) => Promise<void>;
   searchQuery: string;
+  isLoading?: boolean;
 }) {
   const filtered = orders
     .filter((o) => {
@@ -287,7 +301,13 @@ function KanbanColumn({
 
       {/* Cards */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5 scrollbar-thin scrollbar-thumb-zinc-300 scrollbar-track-transparent">
-        {filtered.length === 0 ? (
+        {isLoading && filtered.length === 0 ? (
+          <div className="space-y-2.5">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <div className="mb-2 rounded-full bg-[var(--bg-subtle)] p-3">
               <ShoppingBag className="h-4 w-4 text-[var(--text-muted)]" strokeWidth={1.75} />
@@ -324,6 +344,7 @@ export default function PedidosPage() {
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const isMdPlus = useSyncExternalStore(subscribeMdPlus, getMdPlusSnapshot, () => false);
   const { currentBranch } = useBranch();
+  const { toasts, addToast, removeToast } = useToast();
 
   const selectedOrderRef = useRef<Order | null>(null);
 
@@ -354,7 +375,7 @@ export default function PedidosPage() {
         if (updated) setSelectedOrder(updated);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar pedidos");
+      setError(getFriendlyErrorMessage(err, "Não conseguimos carregar os pedidos agora. Tente novamente."));
     } finally {
       setIsLoading(false);
     }
@@ -415,29 +436,45 @@ export default function PedidosPage() {
 
   // Quick action handler (for card buttons — no modal)
   const handleQuickAction = useCallback(async (order: Order): Promise<void> => {
-    if (order.status === "AGUARDANDO_CONFIRMACAO") {
-      await pdvApi.confirmOrder(order.id);
-    } else if (order.status === "NA_FILA") {
-      await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" });
-    } else if (order.status === "PRONTO_PARCIAL") {
-      // Entrega só os itens prontos. O trigger derivará o status do pedido.
-      const readyItemIds = (order.items ?? [])
-        .filter((i) => i.status === "READY")
-        .map((i) => i.id);
-      if (readyItemIds.length === 0) {
-        window.alert("Nenhum item pronto pra entregar ainda.");
-        return;
-      }
-      for (const id of readyItemIds) {
-        await pdvApi.updateOrderItemStatus({ orderItemId: id, newStatus: "DELIVERED" });
-      }
-    } else if (order.status === "PRONTO" && order.type !== "ENTREGA") {
-      await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
-    } else if (order.status === "SAIU_PARA_ENTREGA") {
-      await pdvApi.confirmDelivery({ orderId: order.id });
+    const optimisticStatus = order.status === "PRONTO" && order.type === "ENTREGA"
+      ? undefined
+      : OPTIMISTIC_NEXT_STATUS[order.status];
+
+    if (optimisticStatus) {
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: optimisticStatus } : o)));
     }
-    await fetchOrders(false);
-  }, [fetchOrders]);
+
+    try {
+      if (order.status === "AGUARDANDO_CONFIRMACAO") {
+        await pdvApi.confirmOrder(order.id);
+      } else if (order.status === "NA_FILA") {
+        await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" });
+      } else if (order.status === "PRONTO_PARCIAL") {
+        // Entrega só os itens prontos. O trigger derivará o status do pedido.
+        const readyItemIds = (order.items ?? [])
+          .filter((i) => i.status === "READY")
+          .map((i) => i.id);
+        if (readyItemIds.length === 0) {
+          window.alert("Nenhum item pronto pra entregar ainda.");
+          return;
+        }
+        for (const id of readyItemIds) {
+          await pdvApi.updateOrderItemStatus({ orderItemId: id, newStatus: "DELIVERED" });
+        }
+      } else if (order.status === "PRONTO" && order.type !== "ENTREGA") {
+        await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
+      } else if (order.status === "SAIU_PARA_ENTREGA") {
+        await pdvApi.confirmDelivery({ orderId: order.id });
+      }
+      await fetchOrders(false);
+    } catch (err) {
+      if (optimisticStatus) {
+        // Reverte a atualização otimista — o servidor não confirmou a mudança.
+        setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: order.status } : o)));
+      }
+      addToast("error", getFriendlyErrorMessage(err, "Não conseguimos atualizar o status do pedido. Tente novamente."));
+    }
+  }, [fetchOrders, addToast]);
 
   // Derived counts
   const getCount = (status: OrderStatus) => orders.filter((o) => o.status === status).length;
@@ -517,6 +554,7 @@ export default function PedidosPage() {
 
   return (
     <div className="flex flex-col bg-[var(--bg-base)]">
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* ── Shared header ──────────────────────────────────────── */}
       <section className="z-20 -mx-3 border-b border-[var(--border)] bg-[var(--bg-surface)]/95 px-3 py-3 shadow-[var(--shadow-sm)] backdrop-blur md:sticky md:top-14 md:mx-0 md:rounded-2xl md:border md:px-4 md:py-3">
@@ -594,6 +632,7 @@ export default function PedidosPage() {
             onCardClick={setSelectedOrder}
             onQuickAction={handleQuickAction}
             searchQuery={searchQuery}
+            isLoading={isLoading}
           />
         ))}
       </div>

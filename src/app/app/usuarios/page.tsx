@@ -12,6 +12,7 @@ import { isWebAuthnSupported, hasEnrolledPasskey } from "@/lib/webauthn-client";
 import { useUsers } from "@/hooks/useUsers";
 import { useClientPagination } from "@/hooks/useClientPagination";
 import { UserProfile } from "@/lib/api/users-api";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { UserCard } from "./components/UserCard";
 import { UserFilters, type RoleFilter, type StatusFilter } from "./components/UserFilters";
 import { UserFormSheet, type UserFormData } from "./components/UserFormSheet";
@@ -115,7 +116,7 @@ export default function GestaoUsuarios() {
       }
       setIsFormOpen(false);
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao salvar usuário");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos salvar o usuário. Tente novamente."));
     } finally {
       setSaving(false);
     }
@@ -129,7 +130,7 @@ export default function GestaoUsuarios() {
       addToast("success", `Senha de ${resetUser.name} redefinida com sucesso!`);
       setIsPasswordModalOpen(false);
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao redefinir senha");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos redefinir a senha. Tente novamente."));
     } finally {
       setSaving(false);
     }
@@ -141,7 +142,7 @@ export default function GestaoUsuarios() {
       await deleteUser(user.id);
       addToast("success", `Usuário ${user.name} excluído.`);
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao excluir usuário");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos excluir o usuário. Tente novamente."));
     }
   }
 
@@ -150,7 +151,7 @@ export default function GestaoUsuarios() {
       await toggleStatus(user.id, !user.active);
       addToast("success", `Usuário ${!user.active ? "ativado" : "desativado"} com sucesso!`);
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao alterar status");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos alterar o status do usuário."));
     }
   }
 

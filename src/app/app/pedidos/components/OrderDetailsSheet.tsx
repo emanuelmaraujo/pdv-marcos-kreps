@@ -1,4 +1,5 @@
 import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
@@ -147,7 +148,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
       await onOrderUpdated();
       if (closeAfter) onClose();
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro na ação.");
+      setErrorMsg(getFriendlyErrorMessage(err, "Ocorreu um erro. Tente novamente."));
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +171,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
       await onOrderUpdated();
       setShowDispatchForm(false);
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro ao despachar.");
+      setErrorMsg(getFriendlyErrorMessage(err, "Ocorreu um erro ao despachar a entrega."));
     } finally {
       setIsLoading(false);
     }

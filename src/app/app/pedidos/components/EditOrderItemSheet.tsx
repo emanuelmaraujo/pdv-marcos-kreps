@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { OrderItem } from "@/types/pdv";
 import { createClient } from "@/lib/supabase/client";
 import { pdvApi } from "@/lib/api/pdv-api";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { Minus, Plus, Loader2, ShoppingBag, Utensils } from "lucide-react";
@@ -106,7 +107,7 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
       onSaved();
       onClose();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar alterações.");
+      setError(getFriendlyErrorMessage(e, "Não conseguimos salvar as alterações."));
     } finally {
       setIsLoading(false);
     }

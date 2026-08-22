@@ -37,7 +37,7 @@ import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { PedirLanding } from "./PedirLanding";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
-import { Addon, CustomerAddress, DeliveryZone, Ingredient, Product } from "@/types/pdv";
+import { Addon, CustomerAddress, DeliveryZone, Ingredient, OrderStatus, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
 import { normalizeNeighborhood } from "@/lib/utils/delivery";
 import { MercadoPagoBrick } from "./_components/MercadoPagoBrick";
@@ -49,16 +49,17 @@ import { TimelineStep } from "./_components/TimelineStep";
 import { PAYMENT_METHOD_CODE, isValidEmail } from "./_components/payment-helpers";
 import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
 import { getCurrentPosition } from "@/lib/utils/geolocation";
-
-interface MenuIndexes {
-  ingredientsById: Map<string, Ingredient>;
-  addonsById: Map<string, Addon>;
-  ingredientIdsByProduct: Map<string, string[]>;
-  addonIdsByProduct: Map<string, string[]>;
-}
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import {
+  ALL_FILTER,
+  buildMenuIndexes,
+  getCategoryKind,
+  getProductSummary,
+  getProductTags,
+  splitProductName,
+} from "@/lib/menu/productTags";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const ALL_FILTER = "Todos";
 const DEFAULT_ORDERING_START = "17:00";
 const DEFAULT_ORDERING_END = "23:30";
 const INSTAGRAM_URL = "https://www.instagram.com/marcos_kreps/";
@@ -100,112 +101,6 @@ type SavedPublicOrderSession = {
   customerEmail?: string;
   saved_at?: string;
 };
-
-const SAVORY_PROTEINS = ["presunto", "calabresa", "frango", "atum", "peito de peru", "carne de sol"];
-const SWEET_BASES = ["banana", "morango", "nutella", "chocolate", "doce de leite", "goiabada"];
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-function splitProductName(name: string) {
-  const match = name.match(/^(\d+)\s*-\s*(.+)$/);
-  return {
-    code: match?.[1] ?? "",
-    title: match?.[2] ?? name,
-  };
-}
-
-function getCategoryKind(categoryName?: string) {
-  const normalized = normalizeText(categoryName ?? "");
-  if (normalized.includes("salgado")) return "SAVORY";
-  if (normalized.includes("doce")) return "SWEET";
-  if (normalized.includes("bebida") || normalized.includes("combustive")) return "DRINK";
-  if (normalized.includes("batata")) return "POTATO";
-  return "OTHER";
-}
-
-function getProductIngredients(product: Product, indexes: MenuIndexes | null) {
-  if (!indexes) return [];
-  const ingredientIds = indexes.ingredientIdsByProduct.get(product.id) ?? [];
-  return ingredientIds.map((id) => indexes.ingredientsById.get(id)).filter(Boolean) as Ingredient[];
-}
-
-function titleCase(value: string) {
-  return value
-    .split(" ")
-    .map((part) => (part.length <= 2 ? part : `${part[0]?.toUpperCase()}${part.slice(1)}`))
-    .join(" ");
-}
-
-function getProductTags(product: Product, categoryName: string | undefined, indexes: MenuIndexes | null) {
-  const kind = getCategoryKind(categoryName);
-  const ingredients = getProductIngredients(product, indexes);
-  const ingredientNames = ingredients.map((ingredient) => ingredient.name);
-  const normalizedIngredients = ingredientNames.map(normalizeText);
-  const normalizedName = normalizeText(product.name);
-
-  if (kind === "SAVORY") {
-    if (normalizedName.includes("maverick")) return ["Especial"];
-    const protein = SAVORY_PROTEINS.find((item) => normalizedIngredients.includes(normalizeText(item)));
-    if (protein) return [titleCase(protein)];
-    if (normalizedIngredients.includes("ovo") || normalizedIngredients.includes("queijo")) return ["Vegetariano"];
-    return ["Outros"];
-  }
-
-  if (kind === "SWEET") {
-    const bases = SWEET_BASES.filter((item) => normalizedIngredients.includes(normalizeText(item)));
-    return bases.length > 0 ? bases.map(titleCase) : ["Doces"];
-  }
-
-  if (kind === "DRINK") {
-    if (normalizedName.includes("refrigerante")) return ["Refrigerante", "Geladas"];
-    if (normalizedName.includes("h2o")) return ["H2O", "Geladas"];
-    if (normalizedName.includes("polpa")) return ["Polpas"];
-    if (normalizedName.includes("acai") || normalizedName.includes("creme")) return ["Cremes"];
-    if (normalizedName.includes("soda")) return ["Soda"];
-    if (normalizedName.includes("suco") || normalizedName.includes("laranja")) return ["Sucos"];
-    return ["Bebidas"];
-  }
-
-  return [];
-}
-
-function getProductSummary(product: Product, categoryName: string | undefined, indexes: MenuIndexes | null) {
-  const ingredients = getProductIngredients(product, indexes);
-  if (product.description) return product.description;
-  if (ingredients.length > 0) {
-    return ingredients.map((ingredient) => ingredient.name).join(", ");
-  }
-  if (getCategoryKind(categoryName) === "DRINK") return "Bebida preparada para acompanhar seu pedido.";
-  if (getCategoryKind(categoryName) === "POTATO") return "Porcao para dividir ou acompanhar seu krep.";
-  return "Item do cardapio Marcos Krep's.";
-}
-
-function buildMenuIndexes(menuData: MenuData | null): MenuIndexes | null {
-  if (!menuData) return null;
-  const ingredientsById = new Map(menuData.ingredients.map((ingredient) => [ingredient.id, ingredient]));
-  const addonsById = new Map(menuData.addons.map((addon) => [addon.id, addon]));
-  const ingredientIdsByProduct = new Map<string, string[]>();
-  const addonIdsByProduct = new Map<string, string[]>();
-
-  for (const relation of menuData.productIngredients) {
-    const current = ingredientIdsByProduct.get(relation.product_id);
-    if (current) current.push(relation.ingredient_id);
-    else ingredientIdsByProduct.set(relation.product_id, [relation.ingredient_id]);
-  }
-
-  for (const relation of menuData.productAddons) {
-    const current = addonIdsByProduct.get(relation.product_id);
-    if (current) current.push(relation.addon_id);
-    else addonIdsByProduct.set(relation.product_id, [relation.addon_id]);
-  }
-
-  return { ingredientsById, addonsById, ingredientIdsByProduct, addonIdsByProduct };
-}
 
 function useHorizontalDragScroll() {
   const ref = useRef<HTMLElement | null>(null);
@@ -325,6 +220,22 @@ function isRecentPendingOrder(createdAt: string | undefined) {
   if (!createdAt) return false;
   const createdAtTime = new Date(createdAt).getTime();
   return Number.isFinite(createdAtTime) && Date.now() - createdAtTime <= PENDING_ORDER_RESTORE_MS;
+}
+
+/** Estágio (1-3) do TimelineStep na tela de confirmação, a partir do status
+ * real do pedido — `null` (ainda não buscado) cai no mesmo estágio inicial
+ * que a tela sempre mostrou, então não há regressão visual antes do primeiro fetch. */
+function getOrderProgressStage(status: OrderStatus | null): 1 | 2 | 3 {
+  switch (status) {
+    case "PRONTO_PARCIAL":
+    case "PRONTO":
+    case "SAIU_PARA_ENTREGA":
+      return 2;
+    case "ENTREGUE":
+      return 3;
+    default:
+      return 1;
+  }
 }
 
 export default function PedirPublicPage() {
@@ -451,7 +362,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setMenuData(data);
         setSelectedCategoryId(data.categories[0]?.id ?? null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Erro ao carregar cardapio.");
+        setError(getFriendlyErrorMessage(err, "Não conseguimos carregar o cardápio. Tente novamente."));
       } finally {
         setLoading(false);
       }
@@ -539,6 +450,20 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       cancelled = true;
     };
   }, [branchSlug, clearCart]);
+
+  // Checkout expresso: se este dispositivo já tem um perfil salvo (90 dias)
+  // de um pedido anterior, pré-popula o telefone assim que a página carrega
+  // — não espera o cliente chegar em "Dados" e digitar de novo. O efeito
+  // abaixo (que já existia) reconhece esse telefone e completa o resto
+  // (nome/e-mail/modalidade) sozinho.
+  useEffect(() => {
+    if (customerPhone.trim()) return;
+    const saved = readSavedPublicProfile();
+    if (saved?.phone_e164) {
+      setCustomerInfo(saved.name, formatWhatsAppInput(saved.phone_e164));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
@@ -660,7 +585,49 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     return () => window.clearInterval(interval);
   }, [clearCart, orderData, step]);
 
+  // Status real do pedido na tela de confirmação (PAID) — antes o TimelineStep
+  // sempre mostrava "Em preparo" fixo, sem refletir o que de fato acontece na
+  // cozinha. Frequência mais baixa que o polling de pagamento (pré-pagamento):
+  // aqui é só a confirmação visual, o acompanhamento completo vive em
+  // /pedido/[publicToken].
+  const [liveOrderStatus, setLiveOrderStatus] = useState<OrderStatus | null>(null);
+  useEffect(() => {
+    if (step !== "PAID" || !orderData) return;
+
+    let cancelled = false;
+    const fetchStatus = async () => {
+      try {
+        const result = await pdvApi.getPublicOrderStatus({ public_token: orderData.public_token });
+        if (!cancelled) setLiveOrderStatus(result.order.status);
+      } catch {
+        // Best-effort: a tela de confirmação cai de volta pro estado genérico se a checagem falhar.
+      }
+    };
+
+    void fetchStatus();
+    const interval = window.setInterval(fetchStatus, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [step, orderData]);
+
   const menuIndexes = useMemo(() => buildMenuIndexes(menuData), [menuData]);
+
+  // Upsell na REVIEW: sugere o produto mais pedido de categorias que ainda
+  // não estão no carrinho (ex: carrinho só tem salgado → sugere bebida/doce).
+  // Usa publicStats.topByCategory, que já era buscado e antes só alimentava
+  // a badge "Mais pedido" — reaproveitado aqui em vez de virar dado morto.
+  const upsellSuggestions = useMemo(() => {
+    if (!menuData) return [];
+    const cartCategoryIds = new Set(items.map((item) => item.product.category_id));
+    const productById = new Map(menuData.products.map((product) => [product.id, product]));
+    return Object.entries(publicStats.topByCategory)
+      .filter(([categoryId]) => !cartCategoryIds.has(categoryId))
+      .map(([, productId]) => productById.get(productId))
+      .filter((product): product is Product => !!product && product.active !== false)
+      .slice(0, 4);
+  }, [menuData, items, publicStats.topByCategory]);
 
 
   // Mapa { categoryId → produtos } na ordem das categorias
@@ -801,6 +768,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const estimatedTotal = estimatedSubtotal + estimatedPackagingFee + estimatedDeliveryFee;
   const checkoutPhone = useMemo(() => normalizeBrazilPhone(customerPhone), [customerPhone]);
   const isProfileChecking = !!checkoutPhone && profileLookupState === "checking";
+
+  // Elegível a pular a tela de Dados: já reconhecemos o cliente (perfil
+  // encontrado) e a modalidade não precisa de endereço — ENTREGA sempre
+  // passa por Dados pra confirmar/escolher o endereço, o perfil salvo neste
+  // dispositivo não guarda isso.
+  const canExpressCheckout = profileLookupState === "found"
+    && (orderType === "BALCAO" || orderType === "VIAGEM")
+    && !!customerName.trim()
+    && !!checkoutPhone;
   const selectedAddonCount = useMemo(() => {
     let count = 0;
     selectedAddons.forEach((qty) => {
@@ -930,7 +906,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setLocationStatus("resolved");
     } catch (err) {
       setLocationStatus("error");
-      setLocationError(err instanceof Error ? err.message : "Não foi possível obter sua localização agora.");
+      setLocationError(getFriendlyErrorMessage(err, "Não foi possível obter sua localização agora."));
     }
   }, []);
 
@@ -958,7 +934,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         return;
       }
     } catch (err) {
-      setCheckoutError(err instanceof Error ? err.message : "Nao foi possivel validar o horario de atendimento.");
+      setCheckoutError(getFriendlyErrorMessage(err, "Não foi possível validar o horário de atendimento."));
       return;
     }
     if (items.length === 0) {
@@ -1060,7 +1036,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setOrderingClosedReason(err.message);
         clearCart();
       } else {
-        setCheckoutError(err instanceof Error ? err.message : "Erro ao criar pedido.");
+        setCheckoutError(getFriendlyErrorMessage(err, "Não conseguimos criar o pedido. Tente novamente."));
       }
     } finally {
       setIsSubmittingOrder(false);
@@ -1220,7 +1196,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </button>
             )}
             {step !== "MENU" && (
-              <Button variant="ghost" size="sm" className="gap-1" onClick={() => setStep("MENU")}>
+              <Button variant="ghost" size="sm" className="min-h-11 gap-1" onClick={() => setStep("MENU")}>
                 <ChevronLeft className="h-4 w-4" />
                 Cardapio
               </Button>
@@ -1263,6 +1239,13 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <p className="mt-2 text-sm leading-relaxed text-white/65 md:text-[15px]">
                   Escolha o recheio, ajuste a composição e pague com segurança quando estiver tudo certo.
                 </p>
+                {publicStats.ordersToday > 0 && (
+                  <p className="mt-2 text-xs font-medium text-white/55">
+                    {publicStats.ordersToday === 1
+                      ? "1 pedido feito hoje"
+                      : `${publicStats.ordersToday} pedidos feitos hoje`}
+                  </p>
+                )}
               </div>
 
               {/* Carrinho compacto no canto direito (desktop) */}
@@ -1641,7 +1624,65 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             )}
           </section>
 
-          {items.length > 0 && (
+          {items.length > 0 && upsellSuggestions.length > 0 && (
+            <section>
+              <h3 className="mb-2 px-1 text-sm font-semibold text-[var(--text-primary)]">Complete seu pedido</h3>
+              <div className="flex gap-2.5 overflow-x-auto pb-1 hide-scrollbar">
+                {upsellSuggestions.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => openCustomization(product)}
+                    className="flex w-36 shrink-0 flex-col gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-left shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] active:scale-[0.98]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent)]/15 px-1.5 py-0.5 text-micro font-semibold text-[var(--accent)]">
+                        🔥 Popular
+                      </span>
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-red text-white">
+                        <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                      </span>
+                    </div>
+                    <p className="line-clamp-2 text-xs font-semibold leading-tight text-[var(--text-primary)]">
+                      {splitProductName(product.name).title}
+                    </p>
+                    <p className="text-sm font-bold text-brand-red tabular-nums">{currency.format(product.price)}</p>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {items.length > 0 && checkoutError && (
+            <div className="rounded-2xl bg-[var(--status-danger-bg)] p-3 text-sm font-medium text-[var(--status-danger)]">
+              {checkoutError}
+            </div>
+          )}
+
+          {items.length > 0 && canExpressCheckout ? (
+            <div className="space-y-2">
+              <div className="rounded-xl bg-[var(--status-success-bg)] px-3 py-2 text-xs font-semibold text-[var(--status-success)]">
+                Reconhecemos você, {customerName.trim().split(" ")[0]} — pode confirmar direto.
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateOrder}
+                disabled={isSubmittingOrder}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98] disabled:opacity-45 disabled:cursor-not-allowed"
+                style={{ height: 52 }}
+              >
+                {isSubmittingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" strokeWidth={1.75} />}
+                Confirmar e pagar
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep("INFO")}
+                className="flex w-full items-center justify-center gap-1 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                Revisar meus dados antes de continuar
+              </button>
+            </div>
+          ) : items.length > 0 ? (
             <button
               type="button"
               onClick={() => setStep("INFO")}
@@ -1651,7 +1692,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               Continuar
               <ChevronRight className="h-5 w-5" strokeWidth={2} />
             </button>
-          )}
+          ) : null}
         </main>
       )}
 
@@ -1888,9 +1929,18 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     )}
 
                     {deliveryBlocked ? (
-                      <p className="text-xs font-semibold text-[var(--status-danger)]">
-                        Não realizamos entregas nesse bairro no momento.
-                      </p>
+                      <div className="rounded-xl border p-3" style={{ borderColor: "var(--status-danger)", backgroundColor: "var(--status-danger-bg)" }}>
+                        <p className="text-xs font-semibold text-[var(--status-danger)]">
+                          Não realizamos entregas nesse bairro no momento.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setOrderType("VIAGEM")}
+                          className="focus-ring mt-2 flex h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--bg-surface)] text-xs font-bold text-[var(--status-danger)] ring-1 ring-inset ring-[var(--status-danger)]/30 transition-colors hover:bg-[var(--status-danger-bg)]"
+                        >
+                          Retirar no balcão em vez disso
+                        </button>
+                      </div>
                     ) : effectiveNeighborhood.trim() ? (
                       <p className="text-xs font-semibold text-[var(--text-secondary)]">
                         Taxa de entrega estimada: {currency.format(estimatedDeliveryFee)}
@@ -2139,10 +2189,25 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
               <p className="text-xs font-semibold text-[var(--text-muted)] mb-3">Status do pedido</p>
               <ol className="space-y-3">
-                <TimelineStep done label="Pedido recebido" />
-                <TimelineStep active label="Em preparo" />
-                <TimelineStep label={orderType === "VIAGEM" ? "Pronto para retirada" : "Pronto para servir"} />
-                <TimelineStep label={orderType === "VIAGEM" ? "Entregue" : "Servido"} isLast />
+                {(() => {
+                  const stage = getOrderProgressStage(liveOrderStatus);
+                  return (
+                    <>
+                      <TimelineStep done label="Pedido recebido" />
+                      <TimelineStep done={stage > 1} active={stage === 1} label="Em preparo" />
+                      <TimelineStep
+                        done={stage > 2}
+                        active={stage === 2}
+                        label={orderType === "VIAGEM" ? "Pronto para retirada" : "Pronto para servir"}
+                      />
+                      <TimelineStep
+                        done={stage === 3}
+                        label={orderType === "VIAGEM" ? "Entregue" : "Servido"}
+                        isLast
+                      />
+                    </>
+                  );
+                })()}
               </ol>
             </section>
 

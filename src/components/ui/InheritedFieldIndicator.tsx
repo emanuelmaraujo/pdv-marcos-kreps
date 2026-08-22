@@ -26,7 +26,7 @@ export function InheritedFieldIndicator({
         <button
           type="button"
           onClick={onReset}
-          className="ml-0.5 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[var(--status-warning)] transition-colors hover:bg-[var(--status-warning)]/15"
+          className="focus-ring relative ml-0.5 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[var(--status-warning)] transition-colors hover:bg-[var(--status-warning)]/15 after:absolute after:inset-[-10px] after:content-['']"
           title="Voltar a usar o padrão global"
         >
           <RotateCcw className="h-3 w-3" />

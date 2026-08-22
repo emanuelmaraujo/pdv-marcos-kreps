@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Order, OrderItem, PaymentMethod, PaymentStatus } from '@/types/pdv';
 import { pdvApi } from '@/lib/api/pdv-api';
+import { Sheet } from '@/components/ui/Sheet';
+import { getFriendlyErrorMessage } from '@/lib/errors/messages';
 import {
   X,
   Loader2,
@@ -186,7 +188,7 @@ export function PayItemsModal({
       setIfoodAmountStr('');
       onPaymentRegistered?.();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Erro ao registrar pagamento.');
+      setError(getFriendlyErrorMessage(e, 'Não conseguimos registrar o pagamento.'));
     } finally {
       setLoading(false);
     }
@@ -195,8 +197,12 @@ export function PayItemsModal({
   const completed = unpaidItems.length === 0;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center">
-      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-2xl sm:rounded-3xl">
+    <Sheet
+      isOpen
+      onClose={onClose}
+      maxWidth="xl"
+      bodyClassName="contents"
+      header={
         <div className="shrink-0 border-b border-[var(--border)] px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -221,6 +227,8 @@ export function PayItemsModal({
             <SummaryCell label="Valor pendente" value={currency.format(pendingAfterSelection)} />
           </div>
         </div>
+      }
+    >
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {completed ? (
@@ -422,8 +430,7 @@ export function PayItemsModal({
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </Sheet>
   );
 }
 

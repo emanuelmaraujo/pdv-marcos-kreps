@@ -14,6 +14,7 @@ import {
 import { Card, CardContent } from "@/components/ui/Card";
 import { CashReportResponse, reportsApi } from "@/lib/api/reports-api";
 import { getBusinessDayRange } from "@/lib/utils/business-day";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dateLabelFmt = new Intl.DateTimeFormat("pt-BR", {
@@ -121,7 +122,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
       setCurrReport(curr);
       setCompareReport(cmp);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar comparação");
+      setError(getFriendlyErrorMessage(err, "Não conseguimos carregar a comparação."));
     } finally {
       setIsLoading(false);
     }

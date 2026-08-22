@@ -15,7 +15,7 @@ export function ToggleRow({
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className="group flex w-full items-start justify-between gap-5 py-4 text-left"
+      className="focus-ring group flex w-full items-start justify-between gap-5 rounded-lg py-4 text-left"
     >
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-[var(--text-primary)] group-hover:text-[var(--text-secondary)] transition-colors">{label}</span>

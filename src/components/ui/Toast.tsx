@@ -45,7 +45,8 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
           setIsExiting(true);
           setTimeout(() => onRemove(toast.id), 300);
         }}
-        className="p-1 rounded-full hover:bg-black/5 transition-colors"
+        aria-label="Fechar aviso"
+        className="focus-ring relative p-1 rounded-full hover:bg-black/5 transition-colors after:absolute after:inset-[-14px] after:content-['']"
       >
         <X className="w-4 h-4" />
       </button>

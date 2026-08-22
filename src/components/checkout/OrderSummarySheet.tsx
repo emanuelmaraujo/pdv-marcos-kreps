@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { useCart, CartItem } from "@/features/cart/useCart";
@@ -8,6 +8,9 @@ import { pdvApi } from "@/lib/api/pdv-api";
 import { useCurrentBranchId } from "@/contexts/BranchContext";
 import { settingsApi } from "@/lib/api/settings-api";
 import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import type { MenuData } from "@/lib/api/menu-api";
+import type { Product } from "@/types/pdv";
 import {
   CheckCircle2,
   Trash2,
@@ -117,9 +120,13 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onEditItem?: (item: CartItem) => void;
+  /** Catálogo já carregado pela tela de novo pedido — reaproveitado aqui só
+   * pra sugerir complementos, não faz fetch próprio. */
+  menuData?: MenuData | null;
+  onAddSuggested?: (product: Product) => void;
 }
 
-export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
+export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAddSuggested }: Props) {
   const {
     items, customerName, customerPhone, orderType,
     setCustomerInfo, setOrderType, orderNotes, setOrderNotes,
@@ -295,6 +302,25 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
   const estimatedTotal = estimatedSubtotal + packagingTotal + deliveryFeeEstimate - discountAmount;
   const ifoodAmount = parseFloat(ifoodAmountStr.replace(",", ".")) || 0;
 
+  // Upsell no balcão: sugere 1 produto de cada categoria que ainda não está
+  // no pedido (ex: só tem salgado → sugere bebida) — mesma ideia do upsell
+  // de /pedir, mas sem ranking de popularidade (não há stats carregadas
+  // aqui, só o catálogo já buscado pela tela de novo pedido).
+  const upsellSuggestions = useMemo(() => {
+    if (!menuData) return [];
+    const cartCategoryIds = new Set(items.map((item) => item.product.category_id));
+    const suggestions: Product[] = [];
+    for (const category of menuData.categories) {
+      if (cartCategoryIds.has(category.id)) continue;
+      const firstActive = menuData.products.find(
+        (product) => product.category_id === category.id && product.active !== false,
+      );
+      if (firstActive) suggestions.push(firstActive);
+      if (suggestions.length >= 3) break;
+    }
+    return suggestions;
+  }, [menuData, items]);
+
   // CEP é a fonte de verdade pra rua/bairro/cidade/UF — mesma regra do
   // checkout público. Número/complemento/referência continuam livres. O
   // servidor sempre revalida o CEP de novo.
@@ -463,7 +489,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
         throw new Error("Resposta inválida do servidor.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao finalizar pedido.");
+      setError(getFriendlyErrorMessage(err, "Não conseguimos finalizar o pedido. Tente novamente."));
     } finally {
       setIsSubmitting(false);
     }
@@ -628,6 +654,27 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem }: Props) {
                 <span className="text-xl font-black text-brand-red">{currency.format(estimatedSubtotal)}</span>
               </div>
             </div>
+
+            {upsellSuggestions.length > 0 && onAddSuggested && (
+              <div>
+                <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
+                  Sugerir ao cliente
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
+                  {upsellSuggestions.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => onAddSuggested(product)}
+                      className="flex shrink-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 text-left hover:border-brand-red/40 active:scale-[0.98]"
+                    >
+                      <span className="text-xs font-bold text-[var(--text-primary)]">{product.name}</span>
+                      <span className="text-xs font-black text-brand-red tabular-nums">{currency.format(product.price)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <Button
               className="w-full h-13 font-black text-base"

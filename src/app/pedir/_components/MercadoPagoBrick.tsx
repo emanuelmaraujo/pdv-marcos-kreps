@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
 import { PAYMENT_METHOD_CODE, loadMercadoPagoScript } from "./payment-helpers";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 
 export function MercadoPagoBrick({
   order,
@@ -67,7 +68,7 @@ export function MercadoPagoBrick({
                     resolve();
                   })
                   .catch((err) => {
-                    setError(err instanceof Error ? err.message : "Erro ao processar pagamento.");
+                    setError(getFriendlyErrorMessage(err, "Não conseguimos processar o pagamento."));
                     reject();
                   });
               });
@@ -79,7 +80,7 @@ export function MercadoPagoBrick({
           },
         });
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Erro ao iniciar Mercado Pago.");
+        setError(getFriendlyErrorMessage(err, "Não conseguimos iniciar o Mercado Pago."));
       }
     }
 
