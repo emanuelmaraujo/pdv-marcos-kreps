@@ -20,7 +20,7 @@ export function ErrorState({
         <p className="text-sm text-destructive/80">{message}</p>
       </div>
       {onRetry && (
-        <Button onClick={onRetry} variant="destructive" size="sm" className="mt-2">
+        <Button onClick={onRetry} variant="destructive" size="sm" className="mt-2 min-h-11">
           Tentar novamente
         </Button>
       )}

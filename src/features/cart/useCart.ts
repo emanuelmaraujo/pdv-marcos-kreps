@@ -1,6 +1,40 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { Product, OrderType, OrderSource } from '@/types/pdv';
+
+// Carrinho sobrevive a fechar/reabrir a aba (ex: cliente troca pro app do
+// banco pra pagar o Pix e volta) — sessionStorage não sobrevive a isso.
+// TTL curto (24h, não os 90 dias do perfil salvo) porque aqui o risco é
+// diferente: preço e disponibilidade de produto podem mudar, um carrinho de
+// dias atrás reaparecendo seria mais confuso que útil.
+const CART_TTL_MS = 24 * 60 * 60 * 1000;
+
+const cartStorage: StateStorage = {
+  getItem: (name) => {
+    const raw = localStorage.getItem(name);
+    if (!raw) return null;
+    try {
+      const envelope = JSON.parse(raw) as { __savedAt?: number };
+      if (envelope.__savedAt && Date.now() - envelope.__savedAt > CART_TTL_MS) {
+        localStorage.removeItem(name);
+        return null;
+      }
+    } catch {
+      // Formato inesperado — deixa o zustand tentar parsear e lidar com o erro.
+    }
+    return raw;
+  },
+  setItem: (name, value) => {
+    try {
+      const envelope = JSON.parse(value) as Record<string, unknown>;
+      envelope.__savedAt = Date.now();
+      localStorage.setItem(name, JSON.stringify(envelope));
+    } catch {
+      localStorage.setItem(name, value);
+    }
+  },
+  removeItem: (name) => localStorage.removeItem(name),
+};
 
 export interface CartItem {
   id: string;
@@ -97,7 +131,7 @@ export const useCart = create<CartState>()(
     }),
     {
       name: 'pdv-cart',
-      storage: createJSONStorage(() => sessionStorage), // session-scoped: cleared on tab close
+      storage: createJSONStorage(() => cartStorage), // localStorage + TTL de 24h, ver cartStorage acima
       // Only persist the data fields, not the action functions
       partialize: (state) => ({
         items:         state.items,

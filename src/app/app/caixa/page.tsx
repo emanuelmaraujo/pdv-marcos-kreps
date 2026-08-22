@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
   CaixaData,
@@ -229,7 +230,7 @@ export default function CaixaPage() {
       const date = dayLabel !== todayLabel() ? labelToDate(dayLabel) : undefined;
       setData(await cashApi.getDaySummary(currentBranchId, date));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar caixa");
+      setError(getFriendlyErrorMessage(err, "Não conseguimos carregar o caixa agora."));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

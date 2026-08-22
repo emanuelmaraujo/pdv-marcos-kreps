@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
 import { PIX_PAYMENT_METHOD_CODE, cpfDigits, formatCpfInput, isValidCpf, isValidEmail } from "./payment-helpers";
 import { PixResult } from "./PixResult";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 
 export function PixCheckout({
   order,
@@ -81,7 +82,7 @@ export function PixCheckout({
         onPaid();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao gerar Pix.");
+      setError(getFriendlyErrorMessage(err, "Não conseguimos gerar o Pix agora. Tente novamente."));
     } finally {
       setIsGenerating(false);
     }

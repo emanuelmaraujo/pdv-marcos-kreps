@@ -14,91 +14,12 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { Minus, Plus, Utensils, ShoppingCart, AlertCircle, Sandwich, Cake, GlassWater, Coffee, Flame, Star, IceCream, Beef, Hamburger, ChevronRight, BookOpen, type LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-
-interface MenuIndexes {
-  ingredientsById: Map<string, Ingredient>;
-  addonsById: Map<string, Addon>;
-  ingredientIdsByProduct: Map<string, string[]>;
-  addonIdsByProduct: Map<string, string[]>;
-}
-
-/* ── Tags por produto (proteína em salgados, base em doces, etc) ──
-   Mesma lógica do /pedir para manter o filtro consistente entre
-   atendente e cliente. */
-const ALL_FILTER = "Todos";
-const SAVORY_PROTEINS = ["presunto", "calabresa", "frango", "atum", "peito de peru", "carne de sol"];
-const SWEET_BASES = ["banana", "morango", "nutella", "chocolate", "doce de leite", "goiabada"];
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-}
-
-function titleCase(value: string) {
-  return value
-    .split(" ")
-    .map((part) => (part.length <= 2 ? part : `${part[0]?.toUpperCase()}${part.slice(1)}`))
-    .join(" ");
-}
-
-function getCategoryKind(categoryName?: string) {
-  const n = normalizeText(categoryName ?? "");
-  if (n.includes("salgado")) return "SAVORY";
-  if (n.includes("doce")) return "SWEET";
-  if (n.includes("bebida") || n.includes("combustive")) return "DRINK";
-  if (n.includes("batata")) return "POTATO";
-  return "OTHER";
-}
-
-function getProductIngredients(product: Product, indexes: MenuIndexes | null) {
-  if (!indexes) return [];
-  const ids = indexes.ingredientIdsByProduct.get(product.id) ?? [];
-  return ids.map((id) => indexes.ingredientsById.get(id)).filter(Boolean) as Ingredient[];
-}
-
-function getProductTags(product: Product, categoryName: string | undefined, indexes: MenuIndexes | null): string[] {
-  const kind = getCategoryKind(categoryName);
-  const ingredients = getProductIngredients(product, indexes).map((i) => normalizeText(i.name));
-  const normalizedName = normalizeText(product.name);
-
-  if (kind === "SAVORY") {
-    if (normalizedName.includes("maverick")) return ["Especial"];
-    const protein = SAVORY_PROTEINS.find((p) => ingredients.includes(normalizeText(p)));
-    if (protein) return [titleCase(protein)];
-    if (ingredients.includes("ovo") || ingredients.includes("queijo")) return ["Vegetariano"];
-    return ["Outros"];
-  }
-  if (kind === "SWEET") {
-    const bases = SWEET_BASES.filter((b) => ingredients.includes(normalizeText(b)));
-    return bases.length > 0 ? bases.map(titleCase) : ["Doces"];
-  }
-  return [];
-}
-
-function buildMenuIndexes(menuData: MenuData | null): MenuIndexes | null {
-  if (!menuData) return null;
-
-  const ingredientsById = new Map(menuData.ingredients.map((ingredient) => [ingredient.id, ingredient]));
-  const addonsById = new Map(menuData.addons.map((addon) => [addon.id, addon]));
-  const ingredientIdsByProduct = new Map<string, string[]>();
-  const addonIdsByProduct = new Map<string, string[]>();
-
-  for (const relation of menuData.productIngredients) {
-    const current = ingredientIdsByProduct.get(relation.product_id);
-    if (current) current.push(relation.ingredient_id);
-    else ingredientIdsByProduct.set(relation.product_id, [relation.ingredient_id]);
-  }
-
-  for (const relation of menuData.productAddons) {
-    const current = addonIdsByProduct.get(relation.product_id);
-    if (current) current.push(relation.addon_id);
-    else addonIdsByProduct.set(relation.product_id, [relation.addon_id]);
-  }
-
-  return { ingredientsById, addonsById, ingredientIdsByProduct, addonIdsByProduct };
-}
+import {
+  ALL_FILTER,
+  buildMenuIndexes,
+  getProductSummary,
+  getProductTags,
+} from "@/lib/menu/productTags";
 
 export default function NovoPedidoPage() {
   const searchParams = useSearchParams();
@@ -430,6 +351,11 @@ export default function NovoPedidoPage() {
             setIsCheckoutOpen(false);
             openCustomization(item.product, item);
           }}
+          menuData={menuData}
+          onAddSuggested={(product: Product) => {
+            setIsCheckoutOpen(false);
+            openCustomization(product);
+          }}
         />
 
       {/* ── Mobile/tablet: tabs fixed colado abaixo do TopBar (lg-) ──
@@ -594,6 +520,8 @@ export default function NovoPedidoPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                       {visibleProducts.map((product) => {
                         const available = product.active !== false;
+                        const { icon: ProductIcon, iconBg, iconColor } = getCategoryMeta(category.name);
+                        const summary = getProductSummary(product, category.name, menuIndexes);
                         return (
                           <div
                             key={product.id}
@@ -602,8 +530,8 @@ export default function NovoPedidoPage() {
                               available ? "cursor-pointer hover:shadow-[var(--shadow-md)] active:scale-[0.98]" : "opacity-60"
                             }`}
                           >
-                            <div className="w-14 h-14 bg-[var(--bg-subtle)] rounded-xl flex items-center justify-center shrink-0 text-[var(--text-muted)]">
-                              <Utensils className="w-6 h-6" strokeWidth={1.75} />
+                            <div className={`w-14 h-14 ${iconBg} rounded-xl flex items-center justify-center shrink-0 ${iconColor}`}>
+                              <ProductIcon className="w-6 h-6" strokeWidth={1.75} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between items-start gap-2">
@@ -613,9 +541,7 @@ export default function NovoPedidoPage() {
                                   {product.price.toFixed(2).replace('.', ',')}
                                 </p>
                               </div>
-                              {product.description && (
-                                <p className="text-[var(--text-muted)] text-xs mt-1 line-clamp-1">{product.description}</p>
-                              )}
+                              <p className="text-[var(--text-muted)] text-xs mt-1 line-clamp-1">{summary}</p>
                               {!available && (
                                 <span className="inline-block mt-2 bg-[var(--status-danger-bg)] text-[var(--status-danger)] text-[10px] font-semibold px-2 py-0.5 rounded-full">
                                   Indisponível

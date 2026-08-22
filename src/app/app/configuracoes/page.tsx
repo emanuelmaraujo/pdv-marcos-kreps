@@ -27,6 +27,7 @@ import { ToggleGroup, ToggleRow } from "@/components/ui/ToggleRow";
 import { StatPill } from "@/components/ui/StatPill";
 import { SettingsPanel, type SettingsPanelAccent } from "@/components/ui/SettingsPanel";
 import { settingsApi } from "@/lib/api/settings-api";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { branchesAdminApi } from "@/lib/api/branches-admin-api";
 
 type SettingsState = {
@@ -87,7 +88,7 @@ const DEFAULT_SETTINGS: SettingsState = {
 const DEFAULT_WORKER_STATUS: PrintWorkerStatus = {
   online: false,
   value: "Offline",
-  label: "Sem sinal do Raspberry",
+  label: "Sem conexão com a impressora",
   tone: "red",
   lastSeen: "Nunca recebido",
   raspberryIp: "-",
@@ -144,7 +145,7 @@ function resolvePrintWorkerStatus(data: Record<string, string>): PrintWorkerStat
   return {
     online,
     value: online ? "Online" : "Offline",
-    label: online ? "Raspberry ativo" : "Sem heartbeat recente",
+    label: online ? "Impressora conectada" : "Sem conexão com a impressora",
     tone: online ? "green" : "red",
     lastSeen: formatLastSeen(lastSeenAt),
     raspberryIp: data.print_worker_ip || "-",
@@ -274,7 +275,7 @@ export default function ConfiguracoesSistema() {
       addToast("success", "Configuracoes salvas com sucesso");
       void loadSettings(true);
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao salvar configuracoes");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos salvar as configurações. Tente novamente."));
     } finally {
       setSaving(false);
     }
@@ -286,7 +287,7 @@ export default function ConfiguracoesSistema() {
       await settingsApi.testPrinter();
       addToast("success", "Teste de impressao enviado para a fila");
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao disparar teste");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos disparar o teste de impressão."));
     } finally {
       setTesting(false);
     }
@@ -319,7 +320,7 @@ export default function ConfiguracoesSistema() {
       );
       setWhatsappStats(await settingsApi.getWhatsAppStats());
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao enviar teste");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos enviar a mensagem de teste."));
     } finally {
       setTestingEvent(null);
     }
@@ -335,7 +336,7 @@ export default function ConfiguracoesSistema() {
       );
       setWhatsappStats(await settingsApi.getWhatsAppStats());
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao processar fila");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos processar a fila agora."));
     } finally {
       setProcessingQueue(false);
     }
@@ -352,7 +353,7 @@ export default function ConfiguracoesSistema() {
       }
       setWhatsappStats(await settingsApi.getWhatsAppStats());
     } catch (error: unknown) {
-      addToast("error", error instanceof Error ? error.message : "Erro ao reprocessar falhas");
+      addToast("error", getFriendlyErrorMessage(error, "Não conseguimos reprocessar as falhas agora."));
     } finally {
       setReprocessing(false);
     }
@@ -444,7 +445,7 @@ export default function ConfiguracoesSistema() {
           <p className="border-b border-white/6 px-4 py-2.5 text-[9px] font-black uppercase tracking-widest text-zinc-600">Status do sistema</p>
           <div className="grid grid-cols-2 gap-px bg-white/6">
             <StatPill label={`${settings.public_ordering_start_time}–${settings.public_ordering_end_time}`} value={publicOrderStatus} tone={settings.public_ordering_enabled === "true" ? "green" : "red"} />
-            <StatPill label={printWorkerStatus.lastSeen} value={`Pi ${printWorkerStatus.value}`} tone={printWorkerStatus.tone} />
+            <StatPill label={printWorkerStatus.lastSeen} value={`Impressora ${printWorkerStatus.value}`} tone={printWorkerStatus.tone} />
             <StatPill label={`${settings.printer_host}:${settings.printer_port}`} value={printingStatus} tone={settings.printing_enabled === "true" ? "green" : "red"} />
             <StatPill label={`${whatsappStats.pending} pendentes`} value={whatsappStatus} tone={settings.whatsapp_enabled === "true" ? "green" : "neutral"} />
           </div>
@@ -623,7 +624,7 @@ export default function ConfiguracoesSistema() {
                       {printWorkerStatus.online ? <Wifi className="h-5 w-5" /> : <WifiOff className="h-5 w-5" />}
                     </span>
                     <span>
-                      <p className="text-sm font-black text-[var(--text-primary)]">Raspberry Pi</p>
+                      <p className="text-sm font-black text-[var(--text-primary)]">Impressora térmica</p>
                       <p className="text-xs font-semibold text-[var(--text-secondary)]">{printWorkerStatus.label} - {printWorkerStatus.lastSeen}</p>
                     </span>
                   </div>
@@ -634,11 +635,11 @@ export default function ConfiguracoesSistema() {
                 </div>
                 <div className="mt-4 grid gap-3 text-xs font-semibold text-[var(--text-secondary)] md:grid-cols-3">
                   <div className="rounded-lg bg-[var(--bg-surface)]/80 p-3">
-                    <p className="font-black uppercase tracking-wide text-[var(--text-muted)]">IP do Raspberry</p>
+                    <p className="font-black uppercase tracking-wide text-[var(--text-muted)]">IP do dispositivo</p>
                     <p className="mt-1 text-sm font-black text-[var(--text-primary)]">{printWorkerStatus.raspberryIp}</p>
                   </div>
                   <div className="rounded-lg bg-[var(--bg-surface)]/80 p-3">
-                    <p className="font-black uppercase tracking-wide text-[var(--text-muted)]">IP lido pelo worker</p>
+                    <p className="font-black uppercase tracking-wide text-[var(--text-muted)]">IP confirmado pela impressora</p>
                     <p className="mt-1 text-sm font-black text-[var(--text-primary)]">
                       {printWorkerStatus.printerHost}:{printWorkerStatus.printerPort}
                     </p>
@@ -686,7 +687,7 @@ export default function ConfiguracoesSistema() {
                     aria-describedby="printer-host-hint"
                   />
                   <span id="printer-host-hint" className="block text-xs font-medium leading-relaxed text-[var(--text-muted)]">
-                    Salve para o Raspberry assumir o novo IP; o worker atualiza sozinho em poucos segundos.
+                    Salve para o dispositivo assumir o novo IP; a atualização acontece sozinha em poucos segundos.
                   </span>
                 </Field>
                 <Field label="Porta">
@@ -824,24 +825,38 @@ export default function ConfiguracoesSistema() {
                 >
                   Testar &quot;pedido pronto&quot;
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleProcessQueue}
-                  loading={processingQueue}
-                  className="gap-2"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Processar fila agora
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleReprocessFailures}
-                  loading={reprocessing}
-                  className="gap-2"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Reprocessar falhas recuperaveis
-                </Button>
+                <div className="space-y-1.5">
+                  <Button
+                    variant="outline"
+                    onClick={handleProcessQueue}
+                    loading={processingQueue}
+                    className="w-full gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Processar fila agora
+                  </Button>
+                  <p className="text-[11px] font-medium text-[var(--text-muted)]">
+                    {whatsappStats.pending > 0
+                      ? `Envia as ${whatsappStats.pending} mensagens que estão esperando na fila.`
+                      : "Nenhuma mensagem esperando no momento."}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Button
+                    variant="outline"
+                    onClick={handleReprocessFailures}
+                    loading={reprocessing}
+                    className="w-full gap-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reprocessar falhas recuperaveis
+                  </Button>
+                  <p className="text-[11px] font-medium text-[var(--text-muted)]">
+                    {whatsappStats.failed_24h > 0
+                      ? `Tenta reenviar as falhas recuperáveis das últimas 24h (até ${whatsappStats.failed_24h} mensagens).`
+                      : "Nenhuma falha recuperável nas últimas 24h."}
+                  </p>
+                </div>
               </div>
 
               <div className="flex gap-3 rounded-xl border p-4" style={{ borderColor: "var(--status-warning)", backgroundColor: "var(--status-warning-bg)", color: "var(--status-warning)" }}>

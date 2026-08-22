@@ -24,6 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { pdvApi, PublicOrderStatusResponse } from "@/lib/api/pdv-api";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { OrderStatus } from "@/types/pdv";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -197,7 +198,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
       const response = await pdvApi.getPublicOrderStatus({ public_token: publicToken });
       setStatusData(response);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível carregar o pedido.");
+      setError(getFriendlyErrorMessage(err, "Não foi possível carregar o pedido."));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

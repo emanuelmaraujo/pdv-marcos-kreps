@@ -48,6 +48,7 @@ import {
   reportsApi,
 } from "@/lib/api/reports-api";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { LoadingState } from "@/components/feedback/LoadingState";
 import { Card, CardContent } from "@/components/ui/Card";
 import { BottomSheet } from "@/components/ui/BottomSheet";
@@ -304,7 +305,7 @@ export default function RelatorioPage() {
 
       if (closed) writeReportCache(cacheKey, { report: cur, prevReport: prev, orders: ord });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Erro ao carregar relatório");
+      setError(getFriendlyErrorMessage(err, "Não conseguimos carregar o relatório."));
     } finally {
       setIsLoading(false);
     }

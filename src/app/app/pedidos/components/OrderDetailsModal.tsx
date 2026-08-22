@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
 import { Button } from "@/components/ui/Button";
+import { Sheet } from "@/components/ui/Sheet";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
 import { PayItemsModal } from "./PayItemsModal";
@@ -150,7 +152,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
       await onOrderUpdated();
       if (closeAfter) onClose();
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro na ação.");
+      setErrorMsg(getFriendlyErrorMessage(err, "Ocorreu um erro. Tente novamente."));
     } finally {
       setIsLoading(false);
     }
@@ -175,7 +177,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
       await onOrderUpdated();
       setShowDispatchForm(false);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Ocorreu um erro ao despachar.");
+      setErrorMsg(getFriendlyErrorMessage(err, "Ocorreu um erro ao despachar a entrega."));
     } finally {
       setIsLoading(false);
     }
@@ -253,21 +255,12 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
-        onClick={onClose}
-      />
-
-      {/* Dialog panel */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg lg:max-w-3xl -translate-x-1/2 -translate-y-1/2 rounded-3xl bg-white shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200"
-        style={{ maxHeight: "90vh" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* ── Header ─────────────────────────────────────────── */}
+      <Sheet
+        isOpen={isOpen}
+        onClose={onClose}
+        maxWidth="3xl"
+        bodyClassName="contents"
+        header={
         <div className="relative overflow-hidden bg-gradient-to-br from-brand-charcoal to-zinc-800 px-5 py-4 text-white shrink-0">
           <div className="absolute right-16 top-0 bottom-0 flex items-center opacity-[0.06]">
             {order.type === "BALCAO" ? <Utensils size={96} /> : isDelivery ? <Bike size={96} /> : <ShoppingBag size={96} />}
@@ -378,6 +371,8 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
             )}
           </div>
         </div>
+        }
+      >
 
         {/* ── Body: 2 panels on lg, 1 col on md ──────────────── */}
         <div className="flex flex-1 overflow-hidden min-h-0 flex-col lg:flex-row">
@@ -791,7 +786,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
             )}
           </div>
         </div>
-      </div>
+      </Sheet>
       {showPayItems && (
         <PayItemsModal
           order={order}

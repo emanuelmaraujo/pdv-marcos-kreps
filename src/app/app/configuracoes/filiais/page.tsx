@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { Loader2, Plus } from 'lucide-react';
 import { BranchListItem } from './components/BranchListItem';
+import { getFriendlyErrorMessage } from '@/lib/errors/messages';
 
 export default function FiliaisPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -21,7 +22,7 @@ export default function FiliaisPage() {
     try {
       setBranches(await branchesAdminApi.listAll());
     } catch (e: unknown) {
-      addToast('error', e instanceof Error ? e.message : 'Erro ao carregar filiais.');
+      addToast('error', getFriendlyErrorMessage(e, 'Não conseguimos carregar as filiais. Tente novamente.'));
     } finally {
       setLoading(false);
     }
@@ -38,7 +39,7 @@ export default function FiliaisPage() {
       addToast('success', b.active ? 'Filial desativada.' : 'Filial reativada!');
       await Promise.all([load(), refreshCtx()]);
     } catch (e: unknown) {
-      addToast('error', e instanceof Error ? e.message : 'Erro ao alterar status.');
+      addToast('error', getFriendlyErrorMessage(e, 'Não conseguimos alterar o status da filial.'));
     }
   }
 

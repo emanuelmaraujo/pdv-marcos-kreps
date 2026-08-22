@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Order, OrderItem, OrderItemStatus } from '@/types/pdv';
 import { pdvApi } from '@/lib/api/pdv-api';
+import { getFriendlyErrorMessage } from '@/lib/errors/messages';
 import { Clock, ChefHat, CheckCircle2, Package, X, Loader2, Wallet, Pencil, ShoppingBag, Utensils } from 'lucide-react';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -65,7 +66,7 @@ export function OrderItemsControl({
       await pdvApi.updateOrderItemStatus({ orderItemId: item.id, newStatus: target });
       onMutated?.();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Erro ao atualizar item.');
+      setError(getFriendlyErrorMessage(e, 'Não conseguimos atualizar o item.'));
     } finally {
       setBusyId(null);
     }
@@ -82,7 +83,7 @@ export function OrderItemsControl({
       });
       onMutated?.();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Erro ao cancelar item.');
+      setError(getFriendlyErrorMessage(e, 'Não conseguimos cancelar o item.'));
     } finally {
       setBusyId(null);
     }
@@ -95,7 +96,7 @@ export function OrderItemsControl({
       try {
         await pdvApi.updateOrderItemStatus({ orderItemId: item.id, newStatus: 'DELIVERED' });
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Erro ao entregar item.');
+        setError(getFriendlyErrorMessage(e, 'Não conseguimos marcar o item como entregue.'));
       }
     }
     setBusyId(null);

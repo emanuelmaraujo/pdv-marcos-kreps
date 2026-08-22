@@ -12,6 +12,7 @@ import { HorariosTab } from "./components/tabs/HorariosTab";
 import { EntregaTab } from "./components/tabs/EntregaTab";
 import { ImpressaoTab } from "./components/tabs/ImpressaoTab";
 import { WhatsAppTab } from "./components/tabs/WhatsAppTab";
+import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 
 const TAB_ORDER = ["dados", "horarios", "entrega", "impressao", "whatsapp"];
 
@@ -44,7 +45,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
       try {
         await editor.ensureCreated();
       } catch (e: unknown) {
-        addToast("error", e instanceof Error ? e.message : "Preencha os dados básicos antes de continuar.");
+        addToast("error", getFriendlyErrorMessage(e, "Preencha os dados básicos antes de continuar."));
         return;
       }
     }
@@ -57,7 +58,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
       addToast("success", branchId ? "Filial salva!" : "Filial criada!");
       router.push("/app/configuracoes/filiais");
     } catch (e: unknown) {
-      addToast("error", e instanceof Error ? e.message : "Erro ao salvar filial.");
+      addToast("error", getFriendlyErrorMessage(e, "Não conseguimos salvar a filial."));
     }
   }
 
@@ -116,17 +117,17 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
               newZone={editor.newZone}
               setNewZone={editor.setNewZone}
               savingZone={editor.savingZone}
-              onAddZone={() => void editor.addZone().catch((e: unknown) => addToast("error", e instanceof Error ? e.message : "Erro ao adicionar bairro."))}
-              onToggleZone={(zone) => void editor.toggleZoneActive(zone).catch((e: unknown) => addToast("error", e instanceof Error ? e.message : "Erro ao atualizar bairro."))}
-              onRemoveZone={(zone) => void editor.removeZone(zone).catch((e: unknown) => addToast("error", e instanceof Error ? e.message : "Erro ao remover bairro."))}
+              onAddZone={() => void editor.addZone().catch((e: unknown) => addToast("error", getFriendlyErrorMessage(e, "Não conseguimos adicionar o bairro.")))}
+              onToggleZone={(zone) => void editor.toggleZoneActive(zone).catch((e: unknown) => addToast("error", getFriendlyErrorMessage(e, "Não conseguimos atualizar o bairro.")))}
+              onRemoveZone={(zone) => void editor.removeZone(zone).catch((e: unknown) => addToast("error", getFriendlyErrorMessage(e, "Não conseguimos remover o bairro.")))}
               couriers={editor.couriers}
               couriersLoading={editor.couriersLoading}
               newCourier={editor.newCourier}
               setNewCourier={editor.setNewCourier}
               savingCourier={editor.savingCourier}
-              onAddCourier={() => void editor.addCourier().catch((e: unknown) => addToast("error", e instanceof Error ? e.message : "Erro ao adicionar entregador."))}
-              onToggleCourier={(courier) => void editor.toggleCourierActive(courier).catch((e: unknown) => addToast("error", e instanceof Error ? e.message : "Erro ao atualizar entregador."))}
-              onRemoveCourier={(courier) => void editor.removeCourier(courier).catch((e: unknown) => addToast("error", e instanceof Error ? e.message : "Erro ao remover entregador."))}
+              onAddCourier={() => void editor.addCourier().catch((e: unknown) => addToast("error", getFriendlyErrorMessage(e, "Não conseguimos adicionar o entregador.")))}
+              onToggleCourier={(courier) => void editor.toggleCourierActive(courier).catch((e: unknown) => addToast("error", getFriendlyErrorMessage(e, "Não conseguimos atualizar o entregador.")))}
+              onRemoveCourier={(courier) => void editor.removeCourier(courier).catch((e: unknown) => addToast("error", getFriendlyErrorMessage(e, "Não conseguimos remover o entregador.")))}
             />
           )}
           {activeTab === "impressao" && (

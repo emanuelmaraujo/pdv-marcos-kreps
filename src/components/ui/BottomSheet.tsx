@@ -37,7 +37,7 @@ export function BottomSheet({ isOpen, onClose, title, children }: DialogProps) {
           <button
             onClick={onClose}
             aria-label="Fechar"
-            className="-mr-2 rounded-full p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+            className="focus-ring relative -mr-2 rounded-full p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] after:absolute after:inset-[-8px] after:content-['']"
           >
             <X size={20} />
           </button>
