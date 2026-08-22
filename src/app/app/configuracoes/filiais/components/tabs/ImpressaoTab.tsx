@@ -14,7 +14,7 @@ export function ImpressaoTab({
   globalSettings: Record<string, string>;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
       {PRINTER_SECTORS.map((s) => {
         const effective = resolveEffectivePrinterSector(globalSettings, { printer_config: printerCfg }, s.key as SectorKey);
         const enabled = printerCfg[s.key]?.enabled !== false;

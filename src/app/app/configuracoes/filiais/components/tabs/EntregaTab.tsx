@@ -76,6 +76,7 @@ export function EntregaTab({
             />
           </Field>
 
+          <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
           <FieldGroup>
             <div className="flex items-center gap-2">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
@@ -257,6 +258,7 @@ export function EntregaTab({
               </>
             )}
           </FieldGroup>
+          </div>
         </>
       )}
     </div>

@@ -11,7 +11,7 @@ export function HorariosTab({
   setField: <K extends keyof BranchInput>(k: K, v: BranchInput[K]) => void;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:max-w-md">
       <FieldGroup>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Abre às">

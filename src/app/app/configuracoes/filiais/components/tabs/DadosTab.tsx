@@ -16,7 +16,7 @@ export function DadosTab({
   const slugValid = validateBranchSlug(editing.slug);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
       <FieldGroup>
         <Field label="Nome da filial" required>
           <input
@@ -94,65 +94,67 @@ export function DadosTab({
         </div>
       </FieldGroup>
 
-      <FieldGroup title="Contato e taxas">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Telefone">
+      <div className="space-y-4">
+        <FieldGroup title="Contato e taxas">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Telefone">
+              <input
+                type="tel"
+                value={editing.phone ?? ''}
+                onChange={(e) => setField('phone', e.target.value)}
+                className={INPUT_CLS}
+                placeholder="(61) 99999-9999"
+              />
+            </Field>
+            <Field label="Taxa de embalagem (R$)">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={editing.packing_fee ?? 0}
+                onChange={(e) => setField('packing_fee', Number(e.target.value))}
+                className={INPUT_CLS}
+              />
+            </Field>
+          </div>
+
+          <Field label="Endereço">
             <input
-              type="tel"
-              value={editing.phone ?? ''}
-              onChange={(e) => setField('phone', e.target.value)}
+              type="text"
+              value={editing.address ?? ''}
+              onChange={(e) => setField('address', e.target.value)}
               className={INPUT_CLS}
-              placeholder="(61) 99999-9999"
+              placeholder="Rua X, nº Y — Asa Norte"
             />
           </Field>
-          <Field label="Taxa de embalagem (R$)">
+
+          <Field label="Meta mensal de faturamento (R$)">
             <input
               type="number"
               step="0.01"
               min="0"
-              value={editing.packing_fee ?? 0}
-              onChange={(e) => setField('packing_fee', Number(e.target.value))}
+              value={editing.monthly_revenue_goal ?? ''}
+              onChange={(e) => setField('monthly_revenue_goal', e.target.value === '' ? null : Number(e.target.value))}
               className={INPUT_CLS}
+              placeholder="Deixe em branco pra não acompanhar meta"
             />
           </Field>
+        </FieldGroup>
+
+        <div className="flex flex-col gap-2">
+          <Toggle
+            label="Aceitar pedidos online"
+            desc="Clientes podem abrir /pedir/slug e montar o pedido"
+            checked={editing.ordering_enabled !== false}
+            onChange={(v) => setField('ordering_enabled', v)}
+          />
+          <Toggle
+            label="Ativa"
+            desc="Filial inativa some do seletor de filiais e do checkout público"
+            checked={editing.active !== false}
+            onChange={(v) => setField('active', v)}
+          />
         </div>
-
-        <Field label="Endereço">
-          <input
-            type="text"
-            value={editing.address ?? ''}
-            onChange={(e) => setField('address', e.target.value)}
-            className={INPUT_CLS}
-            placeholder="Rua X, nº Y — Asa Norte"
-          />
-        </Field>
-
-        <Field label="Meta mensal de faturamento (R$)">
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={editing.monthly_revenue_goal ?? ''}
-            onChange={(e) => setField('monthly_revenue_goal', e.target.value === '' ? null : Number(e.target.value))}
-            className={INPUT_CLS}
-            placeholder="Deixe em branco pra não acompanhar meta"
-          />
-        </Field>
-      </FieldGroup>
-
-      <div className="flex flex-col gap-2">
-        <Toggle
-          label="Aceitar pedidos online"
-          desc="Clientes podem abrir /pedir/slug e montar o pedido"
-          checked={editing.ordering_enabled !== false}
-          onChange={(v) => setField('ordering_enabled', v)}
-        />
-        <Toggle
-          label="Ativa"
-          desc="Filial inativa some do seletor de filiais e do checkout público"
-          checked={editing.active !== false}
-          onChange={(v) => setField('active', v)}
-        />
       </div>
     </div>
   );

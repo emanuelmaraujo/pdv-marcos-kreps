@@ -100,7 +100,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-3.5rem)] max-w-3xl flex-col">
+    <div className="mx-auto flex h-[calc(100vh-3.5rem)] max-w-3xl flex-col lg:max-w-5xl">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <header className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3 sm:px-6">

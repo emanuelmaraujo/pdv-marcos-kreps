@@ -32,6 +32,7 @@ export function WhatsAppTab({
           <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">
             Deixe o nome do template em branco para usar o template global padrão. O template deve estar aprovado na Meta.
           </p>
+          <div className="space-y-3 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0">
           {WA_EVENTS.map((ev) => {
             const effective = resolveEffectiveWhatsAppTemplate(
               globalSettings,
@@ -100,6 +101,7 @@ export function WhatsAppTab({
               </FieldGroup>
             );
           })}
+          </div>
         </div>
       )}
     </div>
