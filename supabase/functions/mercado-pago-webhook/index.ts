@@ -250,6 +250,23 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
       .eq("id", order.id);
 
     if (updateErr) throw new Error("Erro ao atualizar pedido pago.");
+
+    // orders.payment_status é recalculado a partir de order_items.payment_status
+    // por trigger (recompute_order_payment_status_from_items, disparado em
+    // qualquer mudança de status/payment_status de item — inclusive quando o
+    // item vira READY/DELIVERED no fluxo de cozinha/entrega). Sem marcar os
+    // itens como pagos aqui, a primeira mudança de status de item depois do
+    // pagamento online reseta orders.payment_status de volta pra PENDING —
+    // era exatamente esse o bug: pedido pago e entregue, mas com "pendente
+    // de pagamento" na tela. O fluxo do atendente (pay_order_items_transactional)
+    // já marca por item; aqui replicamos o mesmo padrão pro pagamento online.
+    const { error: itemsUpdateErr } = await supabaseAdmin
+      .from("order_items")
+      .update({ payment_status: "PAID", paid_at: nowIso })
+      .eq("order_id", order.id)
+      .not("payment_status", "in", "(PAID,COURTESY)");
+
+    if (itemsUpdateErr) throw new Error("Erro ao atualizar itens do pedido pago.");
   }
 
   const { data: existingPayment } = await supabaseAdmin

@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bike, CheckCircle2, MapPin, Navigation, Phone, RefreshCw } from "lucide-react";
+import { Bike, CheckCircle2, MapPin, MessageCircle, Navigation, Phone, RefreshCw } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 import { createClient } from "@/lib/supabase/client";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { Order } from "@/types/pdv";
 import { mapsUrlForAddress, mapsUrlForCoordinates } from "@/lib/utils/geolocation";
+import { whatsappUrlForPhone } from "@/lib/utils/whatsapp";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -183,10 +184,24 @@ export default function MotoboyPage() {
                       )}
 
                       {order.customer_phone && (
-                        <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                          <Phone className="h-4 w-4 shrink-0" />
-                          <a href={`tel:${order.customer_phone}`} className="underline">
-                            {order.customer_phone}
+                        <div className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
+                          <span className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 shrink-0" />
+                            <a href={`tel:${order.customer_phone}`} className="underline">
+                              {order.customer_phone}
+                            </a>
+                          </span>
+                          <a
+                            href={whatsappUrlForPhone(
+                              order.customer_phone,
+                              `Olá! Aqui é o motoboy do pedido #${order.daily_number} da Marcos Krep's.`,
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 font-medium text-emerald-600 underline underline-offset-2"
+                          >
+                            <MessageCircle className="h-4 w-4 shrink-0" />
+                            WhatsApp
                           </a>
                         </div>
                       )}
