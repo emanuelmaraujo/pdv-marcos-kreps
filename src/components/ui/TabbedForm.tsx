@@ -26,6 +26,19 @@ const DEFAULT_ACCENT: TabbedFormAccent = { iconBg: "bg-zinc-100", iconColor: "te
 // — usado tanto dentro de um BottomSheet (Usuários) quanto numa página
 // própria (Filiais). Não é dono do conteúdo: o caller renderiza o painel da
 // aba ativa em `children` (normalmente via `activeTab === tab.id && <X/>`).
+//
+// `variant="sheet"` (padrão) assume que o pai já é uma caixa de altura
+// fixa com scroll próprio (ex: BottomSheet) — usa flex h-full + overflow-y
+// interno pra manter a barra de abas e o rodapé colados nas bordas dessa
+// caixa.
+// `variant="page"` é pra quando o TabbedForm vive solto numa página comum,
+// cujo scroll é o da própria viewport (sem container de altura travada) —
+// aí barra de abas e rodapé usam `position: sticky` relativo à viewport em
+// vez de depender de uma altura calculada a mão (essa conta manual é frágil
+// e quebra fácil: barra de baixo suportava atrás do menu inferior mobile ou
+// sumia da tela junto com as abas ao rolar). `topOffset`/`bottomOffset`
+// ajustam onde cada barra gruda (default: abaixo do TopBar de 3.5rem em
+// cima, acima do BottomNav mobile de 5rem embaixo — 0 em telas md+).
 export function TabbedForm({
   tabs,
   activeTab,
@@ -34,6 +47,8 @@ export function TabbedForm({
   submitLabel = "Salvar",
   submitting = false,
   children,
+  variant = "sheet",
+  header,
 }: {
   tabs: TabbedFormTab[];
   activeTab: string;
@@ -42,6 +57,9 @@ export function TabbedForm({
   submitLabel?: string;
   submitting?: boolean;
   children: ReactNode;
+  variant?: "sheet" | "page";
+  /** Conteúdo extra fixado acima da barra de abas (ex: título + botão fechar). Só faz sentido com variant="page". */
+  header?: ReactNode;
 }) {
   const [error, setError] = useState<string | null>(null);
   const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.id === activeTab));
@@ -86,9 +104,11 @@ export function TabbedForm({
     goTo(activeIndex + 1);
   }
 
-  return (
-    <div className="flex h-full flex-col">
-      {/* Barra de abas */}
+  const isPage = variant === "page";
+
+  const tabBar = (
+    <>
+      {header}
       <div className="flex gap-1 overflow-x-auto px-3 pt-3 sm:px-5">
         {tabs.map((tab, index) => {
           const active = tab.id === activeTab;
@@ -115,63 +135,90 @@ export function TabbedForm({
         })}
       </div>
       <div className="mx-3 mt-3 border-b border-[var(--border)] sm:mx-5" />
+    </>
+  );
 
-      {/* Conteúdo da aba ativa */}
-      <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-        {(CurrentIcon || current?.description) && (
-          <div className="mb-5 flex items-center gap-3">
-            {CurrentIcon && (
-              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-1 ring-black/5 ${accent.iconBg}`}>
-                <CurrentIcon className={`h-4.5 w-4.5 ${accent.iconColor}`} />
-              </span>
+  const content = (
+    <div
+      key={activeTab}
+      className={`animate-fade-in ${isPage ? "px-4 py-5 sm:px-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}`}
+    >
+      {(CurrentIcon || current?.description) && (
+        <div className="mb-5 flex items-center gap-3">
+          {CurrentIcon && (
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-1 ring-black/5 ${accent.iconBg}`}>
+              <CurrentIcon className={`h-4.5 w-4.5 ${accent.iconColor}`} />
+            </span>
+          )}
+          <div className="min-w-0">
+            <h2 className="text-sm font-black text-[var(--text-primary)]">{current?.label}</h2>
+            {current?.description && (
+              <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{current.description}</p>
             )}
-            <div className="min-w-0">
-              <h2 className="text-sm font-black text-[var(--text-primary)]">{current?.label}</h2>
-              {current?.description && (
-                <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{current.description}</p>
-              )}
-            </div>
           </div>
-        )}
-        {children}
-        {error && (
-          <p className="mt-4 rounded-lg bg-[var(--status-danger-bg)] px-3 py-2 text-xs font-semibold text-[var(--status-danger)]">
-            {error}
-          </p>
-        )}
-      </div>
-
-      {/* Navegação */}
-      <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3 sm:px-6">
-        <button
-          type="button"
-          onClick={() => goTo(activeIndex - 1)}
-          disabled={activeIndex === 0}
-          className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] disabled:opacity-0"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Voltar
-        </button>
-        <div className="hidden items-center gap-1 sm:flex">
-          {tabs.map((tab, index) => (
-            <span
-              key={tab.id}
-              className={`h-1.5 rounded-full transition-all ${
-                index === activeIndex ? "w-5 bg-brand-red" : index < activeIndex ? "w-1.5 bg-brand-red/40" : "w-1.5 bg-[var(--border-strong)]"
-              }`}
-            />
-          ))}
         </div>
-        <button
-          type="button"
-          onClick={handleNext}
-          disabled={submitting}
-          className="flex items-center gap-1.5 rounded-xl bg-brand-red px-5 py-2.5 text-sm font-black text-white shadow-md shadow-brand-red/25 transition-all hover:bg-brand-red/90 active:scale-[0.98] disabled:opacity-60"
-        >
-          {isLast ? submitLabel : "Próximo"}
-          {!isLast && <ChevronRight className="h-4 w-4" />}
-        </button>
+      )}
+      {children}
+      {error && (
+        <p className="mt-4 rounded-lg bg-[var(--status-danger-bg)] px-3 py-2 text-xs font-semibold text-[var(--status-danger)]">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+
+  const nav = (
+    <div
+      className={`flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--bg-base)] px-4 py-3 sm:px-6 ${
+        isPage ? "sticky bottom-20 z-10 md:bottom-0" : ""
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => goTo(activeIndex - 1)}
+        disabled={activeIndex === 0}
+        className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] disabled:opacity-0"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Voltar
+      </button>
+      <div className="hidden items-center gap-1 sm:flex">
+        {tabs.map((tab, index) => (
+          <span
+            key={tab.id}
+            className={`h-1.5 rounded-full transition-all ${
+              index === activeIndex ? "w-5 bg-brand-red" : index < activeIndex ? "w-1.5 bg-brand-red/40" : "w-1.5 bg-[var(--border-strong)]"
+            }`}
+          />
+        ))}
       </div>
+      <button
+        type="button"
+        onClick={handleNext}
+        disabled={submitting}
+        className="flex items-center gap-1.5 rounded-xl bg-brand-red px-5 py-2.5 text-sm font-black text-white shadow-md shadow-brand-red/25 transition-all hover:bg-brand-red/90 active:scale-[0.98] disabled:opacity-60"
+      >
+        {isLast ? submitLabel : "Próximo"}
+        {!isLast && <ChevronRight className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+
+  if (isPage) {
+    return (
+      <div>
+        <div className="sticky top-14 z-10 bg-[var(--bg-base)]">{tabBar}</div>
+        {content}
+        {nav}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      {tabBar}
+      {content}
+      {nav}
     </div>
   );
 }
