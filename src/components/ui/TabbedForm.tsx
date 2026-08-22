@@ -139,7 +139,10 @@ export function TabbedForm({
   );
 
   const content = (
-    <div className={isPage ? "px-4 py-5 sm:px-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}>
+    <div
+      key={activeTab}
+      className={`animate-fade-in ${isPage ? "px-4 py-5 sm:px-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}`}
+    >
       {(CurrentIcon || current?.description) && (
         <div className="mb-5 flex items-center gap-3">
           {CurrentIcon && (

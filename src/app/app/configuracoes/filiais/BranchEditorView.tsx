@@ -3,7 +3,7 @@
 import { useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Bike, Building2, Clock, Loader2, MessageSquare, Printer, X } from "lucide-react";
+import { Bike, Building2, Clock, Loader2, MessageSquare, Printer, ShoppingBag, X } from "lucide-react";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { TabbedForm, type TabbedFormTab } from "@/components/ui/TabbedForm";
 import { useBranchEditor } from "@/hooks/useBranchEditor";
@@ -99,19 +99,56 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
     );
   }
 
+  const statusPills: { label: string; tone: "success" | "warning" | "info" | "neutral"; icon: typeof Building2 }[] = [
+    editor.editing.active !== false
+      ? { label: "Ativa", tone: "success", icon: Building2 }
+      : { label: "Inativa", tone: "neutral", icon: Building2 },
+    editor.editing.ordering_enabled !== false
+      ? { label: "Pedidos online", tone: "success", icon: ShoppingBag }
+      : { label: "Pedidos offline", tone: "warning", icon: ShoppingBag },
+    editor.editing.delivery_enabled
+      ? { label: "Entrega ligada", tone: "info", icon: Bike }
+      : { label: "Sem entrega", tone: "neutral", icon: Bike },
+    editor.editing.whatsapp_enabled !== false
+      ? { label: "WhatsApp ligado", tone: "success", icon: MessageSquare }
+      : { label: "WhatsApp desligado", tone: "neutral", icon: MessageSquare },
+  ];
+
+  const PILL_TONE_CLS: Record<string, string> = {
+    success: "bg-[var(--status-success-bg)] text-[var(--status-success)]",
+    warning: "bg-[var(--status-warning-bg)] text-[var(--status-warning)]",
+    info: "bg-[var(--status-info-bg)] text-[var(--status-info)]",
+    neutral: "bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]",
+  };
+
   const header = (
-    <header className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3 sm:px-6">
-      <Building2 className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
-      <h1 className="min-w-0 flex-1 truncate text-sm font-black text-[var(--text-primary)]">
-        {branchId ? `Editar — ${editor.editing.name || "filial"}` : "Nova filial"}
-      </h1>
-      <Link
-        href="/app/configuracoes/filiais"
-        className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
-        aria-label="Voltar para a lista de filiais"
-      >
-        <X className="h-4 w-4" />
-      </Link>
+    <header className="border-b border-[var(--border)] px-4 py-3 sm:px-6">
+      <div className="flex items-center gap-2">
+        <Building2 className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
+        <h1 className="min-w-0 flex-1 truncate text-sm font-black text-[var(--text-primary)]">
+          {branchId ? `Editar — ${editor.editing.name || "filial"}` : "Nova filial"}
+        </h1>
+        <Link
+          href="/app/configuracoes/filiais"
+          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+          aria-label="Voltar para a lista de filiais"
+        >
+          <X className="h-4 w-4" />
+        </Link>
+      </div>
+      {branchId && (
+        <div className="mt-2.5 flex gap-1.5 overflow-x-auto">
+          {statusPills.map((pill) => (
+            <span
+              key={pill.label}
+              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold ${PILL_TONE_CLS[pill.tone]}`}
+            >
+              <pill.icon className="h-3 w-3" strokeWidth={2} />
+              {pill.label}
+            </span>
+          ))}
+        </div>
+      )}
     </header>
   );
 
