@@ -466,7 +466,7 @@ export default function ConfiguracoesSistema() {
       </aside>
 
       {/* ── Mobile header (sticky, dark) ─────────────────────────────── */}
-      <header className="sticky top-0 z-10 border-b border-zinc-800 bg-[#1C1C1E] md:hidden">
+      <header className="sticky top-14 z-10 border-b border-zinc-800 bg-[#1C1C1E] md:hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div>
             <p className="text-[9px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>

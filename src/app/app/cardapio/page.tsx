@@ -335,7 +335,7 @@ export default function CardapioPage() {
 
   // ─── Render ──────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-base)] overflow-hidden">
+    <div className="flex flex-col bg-[var(--bg-base)]">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* Role Banner */}
