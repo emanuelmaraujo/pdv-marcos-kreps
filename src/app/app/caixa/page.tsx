@@ -59,7 +59,9 @@ function todayLabel() {
 }
 
 function previousDayDate(fromDate?: Date) {
-  const ref = fromDate ?? new Date();
+  // new Date(existingDate) clona em vez de mutar o objeto recebido —
+  // fromDate pode ser reutilizado pelo chamador depois desta chamada.
+  const ref = fromDate ? new Date(fromDate) : new Date();
   ref.setDate(ref.getDate() - 1);
   return ref;
 }
@@ -496,13 +498,19 @@ function DayHero({ data, prevData }: { data: CaixaData; prevData: CaixaData | nu
   const paidPct = summary.totalPedidos > 0
     ? Math.round((summary.pedidosPagos / summary.totalPedidos) * 100)
     : 0;
+  // O card mostrava "hoje" mesmo navegando pra um dia passado (ex: "Dia
+  // anterior") — parecia que o valor de ontem tinha "virado" o de hoje.
+  // Usa o dia real dos dados (businessDayLabel), não o relógio do navegador.
+  const heroLabel = data.businessDayLabel === todayLabel()
+    ? "Líquido recebido hoje"
+    : `Líquido recebido em ${formatBusinessDate(data.businessDayLabel)}`;
 
   return (
     <div className="relative overflow-hidden rounded-3xl bg-[var(--bg-inverse)] shadow-[var(--shadow-lg)]">
       <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-red/15 blur-3xl" />
 
       <div className="relative px-6 py-7 md:px-8 md:py-9">
-        <p className="text-[11px] font-semibold text-zinc-400">Líquido recebido hoje</p>
+        <p className="text-[11px] font-semibold text-zinc-400">{heroLabel}</p>
 
         <div className="mt-2 flex items-end gap-3 flex-wrap">
           <p className="text-5xl font-semibold tracking-tight text-white md:text-6xl tabular-nums">
