@@ -78,7 +78,17 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
 
   // "Até a mesma hora": cap end nos dois ranges no momento atual (SP).
   // Só faz sentido se end > now.
-  const now = new Date();
+  //
+  // `now` só precisa ser recalculado quando o range ou o toggle "mesma hora"
+  // mudam de verdade — não a cada render (ex: isLoading alternando). Se
+  // fosse `new Date()` direto no corpo do componente, cappedCurrent/cappedCompare
+  // (que alimentam o useCallback `load` abaixo, disparado por um useEffect)
+  // ganhariam uma referência nova a cada render e o effect entraria em loop
+  // de fetch — por isso `now` fica memoizado, não recalculado sempre.
+  // Deps abaixo são a chave de invalidação intencional (recalcula "now"
+  // quando o range ou o toggle mudam), não valores lidos dentro do callback.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const now = useMemo(() => new Date(), [currentRange, sameHourCap]);
   const isOngoing = currentRange.end.getTime() > now.getTime();
   const showHourCap = isOngoing;
   const applyHourCap = showHourCap && sameHourCap;
@@ -86,7 +96,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
   const cappedCurrent = useMemo(() => {
     if (!applyHourCap) return currentRange;
     return { ...currentRange, end: clampEnd(currentRange.end, now) };
-  }, [applyHourCap, currentRange]);
+  }, [applyHourCap, currentRange, now]);
 
   const cappedCompare = useMemo(() => {
     if (!applyHourCap) return compareRange;
@@ -94,7 +104,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
     const elapsedMs = now.getTime() - currentRange.start.getTime();
     const cappedEnd = new Date(compareRange.start.getTime() + elapsedMs);
     return { ...compareRange, end: cappedEnd };
-  }, [applyHourCap, compareRange, currentRange]);
+  }, [applyHourCap, compareRange, currentRange, now]);
 
   const load = useCallback(async () => {
     setIsLoading(true);

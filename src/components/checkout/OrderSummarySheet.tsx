@@ -19,7 +19,6 @@ import {
   Loader2,
   User,
   ShoppingBag,
-  Utensils,
   QrCode,
   Banknote,
   CreditCard,
