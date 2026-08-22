@@ -69,10 +69,10 @@ export function BranchSelector({ compact = false }: { compact?: boolean }) {
 
       {open && (
         <div
-          className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg ring-1 ring-black/5"
+          className="absolute right-0 z-50 mt-1 w-64 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg ring-1 ring-black/5"
           role="listbox"
         >
-          <div className="border-b border-zinc-100 bg-zinc-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+          <div className="border-b border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
             Trocar de filial
           </div>
           <ul className="max-h-72 overflow-y-auto py-1">
@@ -83,8 +83,8 @@ export function BranchSelector({ compact = false }: { compact?: boolean }) {
                   <button
                     type="button"
                     onClick={() => { setCurrentBranch(b.id); setOpen(false); }}
-                    className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-all hover:bg-zinc-50 ${
-                      selected ? 'bg-red-50' : ''
+                    className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-all hover:bg-[var(--bg-subtle)] ${
+                      selected ? 'bg-brand-red/10' : ''
                     }`}
                     role="option"
                     aria-selected={selected}
@@ -94,11 +94,11 @@ export function BranchSelector({ compact = false }: { compact?: boolean }) {
                         {b.code}
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-xs font-bold text-zinc-800">{b.name}</p>
-                        <p className="flex items-center gap-1 text-[10px] text-zinc-500">
+                        <p className="truncate text-xs font-bold text-[var(--text-primary)]">{b.name}</p>
+                        <p className="flex items-center gap-1 text-[10px] text-[var(--text-muted)]">
                           <MapPin className="h-2.5 w-2.5" />
                           {TYPE_LABEL[b.type] ?? b.type}
-                          {!b.active && <span className="ml-1 text-red-500">· inativa</span>}
+                          {!b.active && <span className="ml-1 text-[var(--status-danger)]">· inativa</span>}
                         </p>
                       </div>
                     </div>

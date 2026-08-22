@@ -53,25 +53,25 @@ export function ProductModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300">
+      <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300">
         <div className="flex justify-between items-center mb-6 gap-2">
-          <h2 className="text-xl font-bold text-brand-charcoal">
+          <h2 className="text-xl font-bold text-[var(--text-primary)]">
             {product ? "Editar Produto" : "Novo Produto"}
           </h2>
           <div className="flex items-center gap-1.5">
             {product?.id && <DuplicateProductButton productId={product.id} compact />}
             <button
               onClick={onClose}
-              className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
+              className="p-2 hover:bg-[var(--bg-subtle)] rounded-full transition-colors"
             >
-              <X className="w-6 h-6 text-zinc-400" />
+              <X className="w-6 h-6 text-[var(--text-muted)]" />
             </button>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1 ml-1">
               Nome do Produto
             </label>
             <input
@@ -79,17 +79,17 @@ export function ProductModal({
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
+              className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
               placeholder="Ex: Krep Especial"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1 ml-1">
               Foto do produto (URL)
             </label>
             <div className="flex items-center gap-3">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 text-zinc-300">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--bg-subtle)] text-[var(--text-muted)]">
                 {formData.image_url?.trim() && !imageError ? (
                   <Image
                     key={formData.image_url}
@@ -112,18 +112,18 @@ export function ProductModal({
                   setImageError(false);
                   setFormData({ ...formData, image_url: e.target.value });
                 }}
-                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
+                className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
                 placeholder="https://... (opcional)"
               />
             </div>
-            <p className="mt-1 ml-1 text-[11px] text-zinc-400">
+            <p className="mt-1 ml-1 text-[11px] text-[var(--text-muted)]">
               Sem foto, o produto aparece com um ícone no cardápio público.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+              <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1 ml-1">
                 Preço (R$)
               </label>
               <input
@@ -132,11 +132,11 @@ export function ProductModal({
                 required
                 value={formData.price}
                 onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
-                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
+                className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+              <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1 ml-1">
                 Custo (R$)
               </label>
               <input
@@ -145,21 +145,21 @@ export function ProductModal({
                 min="0"
                 value={formData.cost_price ?? 0}
                 onChange={(e) => setFormData({ ...formData, cost_price: parseFloat(e.target.value) || 0 })}
-                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
+                className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
                 title="Custo unitário — usado para calcular margem nos relatórios"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1 ml-1">
               Categoria
             </label>
             <select
               required
               value={formData.category_id}
               onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all appearance-none"
+              className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all appearance-none"
             >
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
@@ -170,7 +170,7 @@ export function ProductModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1 ml-1">
               Setor de Produção
             </label>
             <div className="flex gap-2">
@@ -182,7 +182,7 @@ export function ProductModal({
                   className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all ${
                     formData.sector === s
                       ? "bg-brand-charcoal text-white border-brand-charcoal shadow-md"
-                      : "bg-white text-zinc-500 border-zinc-200"
+                      : "bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border)]"
                   }`}
                 >
                   {s === "KITCHEN" ? "Kreps" : s === "JUICE_POTATO" ? "Cozinha" : "Nenhum"}

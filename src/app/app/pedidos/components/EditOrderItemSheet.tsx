@@ -118,12 +118,12 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
       <div className="p-5 space-y-5 pb-10">
 
         {/* Cabeçalho do item */}
-        <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-4 py-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Editando</p>
-          <p className="text-base font-black text-zinc-900 mt-0.5">
+        <div className="rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] px-4 py-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Editando</p>
+          <p className="text-base font-black text-[var(--text-primary)] mt-0.5">
             {item.quantity}× {item.product_name_snapshot}
           </p>
-          <p className="text-sm font-semibold text-zinc-500 mt-0.5">
+          <p className="text-sm font-semibold text-[var(--text-secondary)] mt-0.5">
             Base: {currency.format(Number(item.product_price_snapshot) * item.quantity)}
           </p>
         </div>
@@ -131,11 +131,11 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
         {/* Adicionais */}
         {isFetchingAddons ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+            <Loader2 className="h-5 w-5 animate-spin text-[var(--text-muted)]" />
           </div>
         ) : availableAddons.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] px-1">
               Adicionais
             </p>
             <div className="grid grid-cols-2 gap-2">
@@ -147,15 +147,15 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
                     key={addon.id}
                     className={`rounded-2xl border p-3 space-y-2 transition-colors ${
                       isSelected
-                        ? "border-emerald-300 bg-emerald-50"
-                        : "border-zinc-200 bg-white"
+                        ? "border-[var(--status-success)]/30 bg-[var(--status-success-bg)]"
+                        : "border-[var(--border)] bg-[var(--bg-surface)]"
                     }`}
                   >
                     <div>
-                      <p className={`text-xs font-bold leading-tight ${isSelected ? "text-emerald-800" : "text-zinc-800"}`}>
+                      <p className={`text-xs font-bold leading-tight ${isSelected ? "text-[var(--status-success)]" : "text-[var(--text-primary)]"}`}>
                         {addon.name}
                       </p>
-                      <p className={`text-[11px] font-bold mt-0.5 ${isSelected ? "text-emerald-600" : "text-brand-red"}`}>
+                      <p className={`text-[11px] font-bold mt-0.5 ${isSelected ? "text-[var(--status-success)]" : "text-brand-red"}`}>
                         +{currency.format(addon.price)}
                       </p>
                     </div>
@@ -163,16 +163,16 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
                       <button
                         onClick={() => updateAddonQty(addon.id, -1)}
                         disabled={qty === 0}
-                        className="w-7 h-7 rounded-lg border border-zinc-200 bg-white flex items-center justify-center disabled:opacity-30 active:scale-90 transition-transform"
+                        className="w-7 h-7 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] flex items-center justify-center disabled:opacity-30 active:scale-90 transition-transform text-[var(--text-primary)]"
                       >
                         <Minus size={12} strokeWidth={2.5} />
                       </button>
-                      <span className="w-5 text-center text-sm font-black tabular-nums text-zinc-900">
+                      <span className="w-5 text-center text-sm font-black tabular-nums text-[var(--text-primary)]">
                         {qty}
                       </span>
                       <button
                         onClick={() => updateAddonQty(addon.id, 1)}
-                        className="w-7 h-7 rounded-lg border border-zinc-200 bg-white flex items-center justify-center active:scale-90 transition-transform"
+                        className="w-7 h-7 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] flex items-center justify-center active:scale-90 transition-transform text-[var(--text-primary)]"
                       >
                         <Plus size={12} strokeWidth={2.5} />
                       </button>
@@ -186,7 +186,7 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
 
         {/* Destino do item */}
         <div className="space-y-2">
-          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">
+          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] px-1">
             Destino
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -196,7 +196,7 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
               className={`flex items-center justify-center gap-2 rounded-xl border-2 p-3 text-sm font-bold transition-all active:scale-[0.97] ${
                 !isTakeout
                   ? "border-brand-charcoal bg-brand-charcoal text-white"
-                  : "border-zinc-200 bg-white text-zinc-500"
+                  : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
               }`}
             >
               <Utensils size={15} strokeWidth={1.75} />
@@ -208,7 +208,7 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
               className={`flex items-center justify-center gap-2 rounded-xl border-2 p-3 text-sm font-bold transition-all active:scale-[0.97] ${
                 isTakeout
                   ? "border-brand-charcoal bg-brand-charcoal text-white"
-                  : "border-zinc-200 bg-white text-zinc-500"
+                  : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
               }`}
             >
               <ShoppingBag size={15} strokeWidth={1.75} />
@@ -219,15 +219,15 @@ export function EditOrderItemSheet({ item, isOpen, onClose, onSaved }: Props) {
 
         {/* Erro */}
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+          <div className="rounded-xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] px-4 py-3 text-sm font-bold text-[var(--status-danger)]">
             ⚠️ {error}
           </div>
         )}
 
         {/* Rodapé fixo */}
-        <div className="sticky bottom-0 bg-white border-t border-zinc-100 pt-4 pb-2 space-y-3 -mx-5 px-5">
+        <div className="sticky bottom-0 bg-[var(--bg-surface)] border-t border-[var(--border)] pt-4 pb-2 space-y-3 -mx-5 px-5">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
               Total do item
             </span>
             <span className="text-xl font-black text-brand-red">

@@ -62,19 +62,19 @@ export function IngredientLinkingModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] flex flex-col">
+      <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-brand-charcoal">
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">
               Gerenciar Ingredientes
             </h2>
-            <p className="text-sm text-zinc-500 font-medium">{product.name}</p>
+            <p className="text-sm text-[var(--text-secondary)] font-medium">{product.name}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
+            className="p-2 hover:bg-[var(--bg-subtle)] rounded-full transition-colors"
           >
-            <X className="w-6 h-6 text-zinc-400" />
+            <X className="w-6 h-6 text-[var(--text-muted)]" />
           </button>
         </div>
 
@@ -85,7 +85,7 @@ export function IngredientLinkingModal({
             value={newIngName}
             onChange={(e) => setNewIngName(e.target.value)}
             placeholder="Novo ingrediente..."
-            className="flex-1 px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:outline-none focus:border-brand-red transition-all"
+            className="flex-1 px-4 py-2 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-brand-red transition-all"
           />
           <button
             onClick={handleCreateIngredient}
@@ -105,15 +105,15 @@ export function IngredientLinkingModal({
                 onClick={() => toggleIngredient(ing.id)}
                 className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${
                   isSelected
-                    ? "bg-zinc-100 border-zinc-300"
-                    : "bg-white border-zinc-100 hover:border-zinc-200"
+                    ? "bg-[var(--bg-subtle)] border-[var(--border-strong)]"
+                    : "bg-[var(--bg-subtle)] border-[var(--border)] hover:border-[var(--border-strong)]"
                 }`}
               >
-                <span className={`font-bold text-sm ${isSelected ? "text-brand-charcoal" : "text-zinc-500"}`}>
+                <span className={`font-bold text-sm ${isSelected ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}`}>
                   {ing.name}
                 </span>
                 <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-                  isSelected ? "bg-zinc-800 border-zinc-800 text-white" : "bg-white border-zinc-200"
+                  isSelected ? "bg-[var(--bg-inverse)] border-[var(--bg-inverse)] text-white" : "bg-[var(--bg-surface)] border-[var(--border)]"
                 }`}>
                   {isSelected && <Check className="w-3 h-3" />}
                 </div>

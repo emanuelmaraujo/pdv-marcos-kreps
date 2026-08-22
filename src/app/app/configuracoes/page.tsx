@@ -110,10 +110,10 @@ const SECTIONS: Array<{
 
 // Accent colors for section icons (cleaner than gradient headers)
 const SECTION_ACCENT: Record<string, { iconBg: string; iconColor: string; navActive: string }> = {
-  pedido:    { iconBg: "bg-blue-100",    iconColor: "text-blue-600",    navActive: "bg-blue-500/20 text-blue-200 border-l-2 border-blue-400" },
-  impressao: { iconBg: "bg-violet-100",  iconColor: "text-violet-600",  navActive: "bg-violet-500/20 text-violet-200 border-l-2 border-violet-400" },
-  whatsapp:  { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", navActive: "bg-emerald-500/20 text-emerald-200 border-l-2 border-emerald-400" },
-  biometria: { iconBg: "bg-zinc-100",    iconColor: "text-zinc-600",    navActive: "bg-white/10 text-white border-l-2 border-zinc-400" },
+  pedido:    { iconBg: "bg-blue-500/10",    iconColor: "text-blue-600",    navActive: "bg-blue-500/20 text-blue-200 border-l-2 border-blue-400" },
+  impressao: { iconBg: "bg-violet-500/10",  iconColor: "text-violet-600",  navActive: "bg-violet-500/20 text-violet-200 border-l-2 border-violet-400" },
+  whatsapp:  { iconBg: "bg-emerald-500/10", iconColor: "text-emerald-600", navActive: "bg-emerald-500/20 text-emerald-200 border-l-2 border-emerald-400" },
+  biometria: { iconBg: "bg-[var(--bg-subtle)]",    iconColor: "text-[var(--text-secondary)]",    navActive: "bg-white/10 text-white border-l-2 border-zinc-400" },
 };
 
 function accentFor(id: SectionId): SettingsPanelAccent {

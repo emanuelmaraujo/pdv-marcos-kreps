@@ -6,12 +6,12 @@ export function getInitials(name: string) {
 }
 
 const AVATAR_COLORS = [
-  "from-blue-500/20 to-blue-600/20 text-blue-600 border-blue-200/50",
-  "from-emerald-500/20 to-emerald-600/20 text-emerald-600 border-emerald-200/50",
-  "from-violet-500/20 to-violet-600/20 text-violet-600 border-violet-200/50",
-  "from-amber-500/20 to-amber-600/20 text-amber-600 border-amber-200/50",
-  "from-rose-500/20 to-rose-600/20 text-rose-600 border-rose-200/50",
-  "from-indigo-500/20 to-indigo-600/20 text-indigo-600 border-indigo-200/50",
+  "from-blue-500/20 to-blue-600/20 text-blue-600 border-blue-500/30",
+  "from-emerald-500/20 to-emerald-600/20 text-emerald-600 border-emerald-500/30",
+  "from-violet-500/20 to-violet-600/20 text-violet-600 border-violet-500/30",
+  "from-amber-500/20 to-amber-600/20 text-amber-600 border-amber-500/30",
+  "from-rose-500/20 to-rose-600/20 text-rose-600 border-rose-500/30",
+  "from-indigo-500/20 to-indigo-600/20 text-indigo-600 border-indigo-500/30",
 ];
 
 export function getAvatarColor(name: string) {

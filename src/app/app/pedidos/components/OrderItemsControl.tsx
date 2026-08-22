@@ -9,11 +9,11 @@ import { Clock, ChefHat, CheckCircle2, Package, X, Loader2, Wallet, Pencil, Shop
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const STATUS_META: Record<OrderItemStatus, { label: string; dot: string; pill: string; text: string }> = {
-  PENDING:        { label: 'Pendente',    dot: 'bg-zinc-300',     pill: 'bg-zinc-100 text-zinc-600',   text: 'text-zinc-600' },
-  IN_PREPARATION: { label: 'Em preparo',  dot: 'bg-amber-400',    pill: 'bg-amber-50 text-amber-700',  text: 'text-amber-700' },
-  READY:          { label: 'Pronto',      dot: 'bg-emerald-500',  pill: 'bg-emerald-50 text-emerald-700', text: 'text-emerald-700' },
-  DELIVERED:      { label: 'Entregue',    dot: 'bg-emerald-700',  pill: 'bg-emerald-100 text-emerald-800', text: 'text-emerald-800' },
-  CANCELLED:      { label: 'Cancelado',   dot: 'bg-zinc-200',     pill: 'bg-zinc-100 text-zinc-400',   text: 'text-zinc-400 line-through' },
+  PENDING:        { label: 'Pendente',    dot: 'bg-[var(--status-neutral)]', pill: 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]', text: 'text-[var(--status-neutral)]' },
+  IN_PREPARATION: { label: 'Em preparo',  dot: 'bg-[var(--status-warning)]', pill: 'bg-[var(--status-warning-bg)] text-[var(--status-warning)]', text: 'text-[var(--status-warning)]' },
+  READY:          { label: 'Pronto',      dot: 'bg-[var(--status-success)]', pill: 'bg-[var(--status-success-bg)] text-[var(--status-success)]', text: 'text-[var(--status-success)]' },
+  DELIVERED:      { label: 'Entregue',    dot: 'bg-[var(--status-success)]', pill: 'bg-[var(--status-success-bg)] text-[var(--status-success)]', text: 'text-[var(--status-success)]' },
+  CANCELLED:      { label: 'Cancelado',   dot: 'bg-[var(--border-strong)]',  pill: 'bg-[var(--bg-subtle)] text-[var(--text-muted)]', text: 'text-[var(--text-muted)] line-through' },
 };
 
 const NEXT_QUICK: Record<OrderItemStatus, OrderItemStatus | null> = {
@@ -118,7 +118,7 @@ export function OrderItemsControl({
       )}
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">
+        <div className="rounded-xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] px-3 py-2 text-xs font-bold text-[var(--status-danger)]">
           {error}
         </div>
       )}
@@ -132,29 +132,29 @@ export function OrderItemsControl({
           return (
             <li
               key={item.id}
-              className="rounded-xl border border-zinc-200 bg-white p-3"
+              className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${meta.dot}`} />
-                    <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] font-black text-white">
+                    <span className="rounded-md bg-brand-charcoal px-1.5 py-0.5 text-[10px] font-black text-white">
                       {itemLabel(order, item)}
                     </span>
                     <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black uppercase ${meta.pill}`}>
                       {meta.label}
                     </span>
                     {item.payment_status === 'PAID' && (
-                      <span className="flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">
+                      <span className="flex items-center gap-1 rounded-md bg-[var(--status-success-bg)] px-1.5 py-0.5 text-[10px] font-black text-[var(--status-success)]">
                         <Wallet className="h-2.5 w-2.5" /> Pago
                       </span>
                     )}
                     {item.is_takeout ? (
-                      <span className="flex items-center gap-1 rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-black text-sky-700">
+                      <span className="flex items-center gap-1 rounded-md bg-[var(--status-info-bg)] px-1.5 py-0.5 text-[10px] font-black text-[var(--status-info)]">
                         <ShoppingBag className="h-2.5 w-2.5" /> Levar
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-black text-zinc-500">
+                      <span className="flex items-center gap-1 rounded-md bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[10px] font-black text-[var(--text-secondary)]">
                         <Utensils className="h-2.5 w-2.5" /> Aqui
                       </span>
                     )}
@@ -163,20 +163,20 @@ export function OrderItemsControl({
                     <p className={`truncate text-sm font-bold ${meta.text}`}>
                       {item.quantity}× {item.product_name_snapshot}
                     </p>
-                    <span className="shrink-0 text-xs font-black text-zinc-700">
+                    <span className="shrink-0 text-xs font-black text-[var(--text-secondary)]">
                       {currency.format(Number(item.total_price))}
                     </span>
                   </div>
 
                   {/* Adicionais */}
                   {(item.addons ?? []).length > 0 && (
-                    <div className="mt-1 space-y-0.5 pl-1 border-l-2 border-emerald-200">
+                    <div className="mt-1 space-y-0.5 pl-1 border-l-2 border-[var(--status-success)]/30">
                       {item.addons!.map((a) => (
-                        <p key={a.id ?? a.addon_id} className="text-[11px] text-zinc-500">
+                        <p key={a.id ?? a.addon_id} className="text-[11px] text-[var(--text-secondary)]">
                           + {a.addon_name_snapshot}
                           {(a.quantity > 1) && <span className="font-bold"> ×{a.quantity}</span>}
                           {Number(a.addon_price_snapshot) > 0 && (
-                            <span className="ml-1 text-zinc-400">
+                            <span className="ml-1 text-[var(--text-muted)]">
                               ({currency.format(Number(a.addon_price_snapshot) * a.quantity)})
                             </span>
                           )}
@@ -187,7 +187,7 @@ export function OrderItemsControl({
 
                   {/* Ingredientes removidos */}
                   {(item.removed_ingredients ?? []).length > 0 && (
-                    <p className="mt-0.5 text-[11px] italic text-red-400 pl-1">
+                    <p className="mt-0.5 text-[11px] italic text-[var(--status-danger)] pl-1">
                       Sem: {item.removed_ingredients!.map((r) => r.ingredient_name_snapshot).join(', ')}
                     </p>
                   )}
@@ -195,7 +195,7 @@ export function OrderItemsControl({
                   {item.observation && (() => {
                     const obs = item.observation.replace(/^\[VIAGEM\]\s*/, '').trim();
                     return obs ? (
-                      <p className="mt-0.5 text-[11px] italic text-zinc-400">&ldquo;{obs}&rdquo;</p>
+                      <p className="mt-0.5 text-[11px] italic text-[var(--text-muted)]">&ldquo;{obs}&rdquo;</p>
                     ) : null;
                   })()}
                 </div>
@@ -220,12 +220,12 @@ export function OrderItemsControl({
               </div>
 
               {item.status !== 'DELIVERED' && item.status !== 'CANCELLED' && (
-                <div className="mt-2 flex items-center justify-end gap-2 border-t border-zinc-100 pt-2 text-[10px] font-bold text-zinc-400">
+                <div className="mt-2 flex items-center justify-end gap-2 border-t border-[var(--border)] pt-2 text-[10px] font-bold text-[var(--text-muted)]">
                   {item.status === 'PENDING' && (
                     <button
                       type="button"
                       onClick={() => pdvApi.updateOrderItemStatus({ orderItemId: item.id, newStatus: 'IN_PREPARATION' }).then(() => onMutated?.())}
-                      className="flex items-center gap-1 rounded px-2 py-1 hover:bg-zinc-50"
+                      className="flex items-center gap-1 rounded px-2 py-1 hover:bg-[var(--bg-subtle)]"
                     >
                       <Clock className="h-2.5 w-2.5" /> Iniciar preparo
                     </button>
@@ -235,7 +235,7 @@ export function OrderItemsControl({
                       type="button"
                       onClick={() => onEditItem(item)}
                       disabled={isBusy}
-                      className="flex items-center gap-1 rounded px-2 py-1 text-blue-600 hover:bg-blue-50"
+                      className="flex items-center gap-1 rounded px-2 py-1 text-[var(--status-info)] hover:bg-[var(--status-info-bg)]"
                     >
                       <Pencil className="h-2.5 w-2.5" /> Editar
                     </button>
@@ -244,7 +244,7 @@ export function OrderItemsControl({
                     type="button"
                     onClick={() => handleCancelItem(item)}
                     disabled={isBusy}
-                    className="flex items-center gap-1 rounded px-2 py-1 text-red-500 hover:bg-red-50"
+                    className="flex items-center gap-1 rounded px-2 py-1 text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)]"
                   >
                     <X className="h-2.5 w-2.5" /> Cancelar item
                   </button>

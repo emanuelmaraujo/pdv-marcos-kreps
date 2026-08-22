@@ -65,20 +65,20 @@ function TimelineConnector({ done }: { done: boolean }) {
 
 function TimeMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2">
-      <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">{label}</p>
-      <p className="mt-0.5 text-sm font-black text-zinc-800">{value}</p>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2">
+      <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{label}</p>
+      <p className="mt-0.5 text-sm font-black text-[var(--text-primary)]">{value}</p>
     </div>
   );
 }
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; Icon: React.ElementType; color: string }[] = [
-  { value: "PIX",         label: "PIX",      Icon: QrCode,      color: "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100" },
-  { value: "CASH",        label: "Dinheiro", Icon: Banknote,    color: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
-  { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard,  color: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" },
-  { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard,  color: "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" },
-  { value: "IFOOD",       label: "iFood",    Icon: Smartphone,  color: "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100" },
-  { value: "COURTESY",    label: "Cortesia", Icon: Gift,        color: "border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100" },
+  { value: "PIX",         label: "PIX",      Icon: QrCode,      color: "border-teal-500/30 bg-teal-500/10 text-teal-600 hover:bg-teal-500/20" },
+  { value: "CASH",        label: "Dinheiro", Icon: Banknote,    color: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20" },
+  { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard,  color: "border-blue-500/30 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20" },
+  { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard,  color: "border-violet-500/30 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20" },
+  { value: "IFOOD",       label: "iFood",    Icon: Smartphone,  color: "border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20" },
+  { value: "COURTESY",    label: "Cortesia", Icon: Gift,        color: "border-pink-500/30 bg-pink-500/10 text-pink-600 hover:bg-pink-500/20" },
 ];
 
 const PAYMENT_LABEL: Record<string, string> = {
@@ -378,32 +378,32 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
         <div className="flex flex-1 overflow-hidden min-h-0 flex-col lg:flex-row">
 
           {/* LEFT — items + financial + history */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4 lg:border-r border-zinc-100">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 lg:border-r border-[var(--border)]">
 
             {/* Items + controles por item */}
             <div className="space-y-3">
-              <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+              <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
                 Itens do Pedido
               </p>
               <OrderItemsControl order={order} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
 
               {/* Financial summary */}
-              <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-                <div className="bg-zinc-50/80 px-4 py-3 space-y-1.5">
+              <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
+                <div className="bg-[var(--bg-subtle)]/80 px-4 py-3 space-y-1.5">
                   {(hasDiscount || hasPacking || hasDeliveryFee) && (
-                    <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                    <div className="flex justify-between text-xs font-semibold text-[var(--text-muted)]">
                       <span>Subtotal</span>
                       <span>{currency.format(subtotal)}</span>
                     </div>
                   )}
                   {hasPacking && (
-                    <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                    <div className="flex justify-between text-xs font-semibold text-[var(--text-muted)]">
                       <span>Embalagem</span>
                       <span>{currency.format(order.packing_fee)}</span>
                     </div>
                   )}
                   {hasDeliveryFee && (
-                    <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                    <div className="flex justify-between text-xs font-semibold text-[var(--text-muted)]">
                       <span>Entrega</span>
                       <span>{currency.format(order.delivery_fee)}</span>
                     </div>
@@ -416,13 +416,13 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                       <span>− {currency.format(order.discount_amount)}</span>
                     </div>
                   )}
-                  <div className="flex items-center justify-between border-t border-zinc-200 pt-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                  <div className="flex items-center justify-between border-t border-[var(--border)] pt-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
                       Total Geral
                     </span>
                     <span className={`text-2xl font-black ${
                       order.payment_status === "PAID"     ? "text-emerald-600"
-                      : order.payment_status === "COURTESY" ? "text-zinc-600"
+                      : order.payment_status === "COURTESY" ? "text-[var(--text-secondary)]"
                       : "text-brand-red"
                     }`}>
                       {currency.format(order.total_amount)}
@@ -449,11 +449,11 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
 
             {/* Notes */}
             {order.notes && (
-              <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3">
-                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3">
+                <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
                   Observações
                 </p>
-                <p className="text-sm italic text-zinc-500">&ldquo;{order.notes}&rdquo;</p>
+                <p className="text-sm italic text-[var(--text-muted)]">&ldquo;{order.notes}&rdquo;</p>
               </div>
             )}
 
@@ -462,7 +462,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
               <button
                 type="button"
                 onClick={() => setShowHistory((v) => !v)}
-                className="flex w-full items-center justify-between px-1 text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-2"
+                className="flex w-full items-center justify-between px-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-2"
               >
                 <span className="flex items-center gap-1.5">
                   <History size={11} /> Histórico de Status
@@ -470,11 +470,11 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 {showHistory ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
               </button>
               {showHistory && (
-                <div className="overflow-hidden rounded-xl border border-zinc-100 bg-zinc-50 divide-y divide-zinc-100 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] divide-y divide-[var(--border)] animate-in fade-in slide-in-from-top-2 duration-150">
                   {historyEvents.map((e) => (
                     <div key={e.label} className="flex items-center justify-between px-4 py-2.5">
-                      <span className="text-xs font-bold text-zinc-500">{e.label}</span>
-                      <span className="text-xs font-black text-zinc-700">{fmt(e.time!)}</span>
+                      <span className="text-xs font-bold text-[var(--text-muted)]">{e.label}</span>
+                      <span className="text-xs font-black text-[var(--text-secondary)]">{fmt(e.time!)}</span>
                     </div>
                   ))}
                 </div>
@@ -483,13 +483,13 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
           </div>
 
           {/* RIGHT — actions */}
-          <div className="shrink-0 overflow-y-auto bg-zinc-50/80 p-5 space-y-3 lg:w-72 lg:border-t-0 border-t border-zinc-100">
+          <div className="shrink-0 overflow-y-auto bg-[var(--bg-subtle)]/80 p-5 space-y-3 lg:w-72 lg:border-t-0 border-t border-[var(--border)]">
 
             {/* Error */}
             {errorMsg && (
-              <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3">
-                <AlertTriangle className="mt-0.5 shrink-0 text-red-500" size={14} />
-                <p className="text-xs font-bold text-red-700">{errorMsg}</p>
+              <div className="flex items-start gap-2 rounded-xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] p-3">
+                <AlertTriangle className="mt-0.5 shrink-0 text-[var(--status-danger)]" size={14} />
+                <p className="text-xs font-bold text-[var(--status-danger)]">{errorMsg}</p>
               </div>
             )}
 
@@ -526,7 +526,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                     </Button>
                     <Button
                       variant="outline"
-                      className="h-14 rounded-2xl border-2 border-zinc-300 text-xs font-black text-zinc-500 hover:bg-zinc-100 gap-1 px-3"
+                      className="h-14 rounded-2xl border-2 border-[var(--border-strong)] text-xs font-black text-[var(--text-muted)] hover:bg-[var(--border)] gap-1 px-3"
                       onClick={onRevertToQueue}
                       disabled={isLoading}
                       title="Voltar para Na Fila"
@@ -546,7 +546,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                     </Button>
                     <Button
                       variant="outline"
-                      className="h-14 rounded-2xl border-2 border-zinc-300 text-xs font-black text-zinc-500 hover:bg-zinc-100 gap-1 px-3"
+                      className="h-14 rounded-2xl border-2 border-[var(--border-strong)] text-xs font-black text-[var(--text-muted)] hover:bg-[var(--border)] gap-1 px-3"
                       onClick={onRevertToQueue}
                       disabled={isLoading}
                       title="Voltar para Na Fila"
@@ -556,14 +556,14 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </div>
                 )}
                 {order.status === "PRONTO" && isDelivery && showDispatchForm && (
-                  <div className="space-y-3 rounded-2xl border-2 border-blue-100 bg-blue-50 p-4 animate-in fade-in zoom-in-95">
-                    <div className="flex items-center gap-2 text-blue-700">
+                  <div className="space-y-3 rounded-2xl border-2 border-blue-500/20 bg-blue-500/10 p-4 animate-in fade-in zoom-in-95">
+                    <div className="flex items-center gap-2 text-blue-600">
                       <Bike size={16} />
                       <h4 className="text-xs font-black uppercase tracking-widest">Despachar Entrega</h4>
                     </div>
                     {registeredCouriers.length > 0 && (
                       <select
-                        className="w-full rounded-xl border border-blue-100 bg-white p-2.5 text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-2.5 text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-300"
                         value={courierIdInput}
                         onChange={(e) => setCourierIdInput(e.target.value)}
                       >
@@ -577,14 +577,14 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                       <>
                         <input
                           type="text"
-                          className="w-full rounded-xl border border-blue-100 bg-white p-2.5 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-2.5 text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-300"
                           placeholder="Nome do entregador"
                           value={courierNameInput}
                           onChange={(e) => setCourierNameInput(e.target.value)}
                         />
                         <input
                           type="text"
-                          className="w-full rounded-xl border border-blue-100 bg-white p-2.5 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                          className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-2.5 text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-300"
                           placeholder="Telefone do entregador (opcional)"
                           value={courierPhoneInput}
                           onChange={(e) => setCourierPhoneInput(e.target.value)}
@@ -643,7 +643,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 {canAddItems && (
                   <Button
                     variant="outline"
-                    className="h-11 w-full rounded-2xl border-2 border-zinc-900 text-sm font-black gap-2"
+                    className="h-11 w-full rounded-2xl border-2 border-[var(--border-strong)] text-sm font-black gap-2"
                     onClick={() => router.push(`/app/novo-pedido?add_to=${order.id}`)}
                     disabled={isLoading}
                   >
@@ -651,13 +651,13 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </Button>
                 )}
 
-                <hr className="border-zinc-200" />
+                <hr className="border-[var(--border)]" />
 
                 {/* Alterar forma de pagamento */}
                 {isPaid && !isCANCELADO && (
                   <Button
                     variant="outline"
-                    className="h-11 w-full rounded-2xl border-2 text-xs font-black text-zinc-600 gap-2"
+                    className="h-11 w-full rounded-2xl border-2 text-xs font-black text-[var(--text-secondary)] gap-2"
                     onClick={() => setShowChangeMethod(true)}
                     disabled={isLoading}
                   >
@@ -669,7 +669,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 {["NA_FILA", "PRONTO", "SAIU_PARA_ENTREGA", "ENTREGUE"].includes(order.status) && (
                   <Button
                     variant="outline"
-                    className="h-11 w-full rounded-2xl border-2 text-xs font-black text-zinc-600 gap-2"
+                    className="h-11 w-full rounded-2xl border-2 text-xs font-black text-[var(--text-secondary)] gap-2"
                     onClick={onReprint}
                     disabled={isLoading}
                   >
@@ -679,7 +679,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 {["AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "NA_FILA", "PRONTO"].includes(order.status) && (
                   <Button
                     variant="outline"
-                    className="h-11 w-full rounded-2xl border-2 border-red-100 text-xs font-black text-red-500 hover:bg-red-50 gap-2"
+                    className="h-11 w-full rounded-2xl border-2 border-[var(--status-danger)]/20 text-xs font-black text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)] gap-2"
                     onClick={() => setShowCancelReason(true)}
                     disabled={isLoading}
                   >
@@ -689,7 +689,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
 
                 {["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(order.status) &&
                   !(isENTREGUE && (order.payment_status === "PENDING" || order.payment_status === "PARTIAL")) && (
-                  <p className="py-4 text-center text-xs font-bold text-zinc-400">
+                  <p className="py-4 text-center text-xs font-bold text-[var(--text-muted)]">
                     Pedido finalizado
                   </p>
                 )}
@@ -702,11 +702,11 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowChangeMethod(false)}
-                    className="rounded-xl p-1.5 text-zinc-400 hover:bg-zinc-200 transition-colors"
+                    className="rounded-xl p-1.5 text-[var(--text-muted)] hover:bg-[var(--border)] transition-colors"
                   >
                     <ArrowLeft size={16} />
                   </button>
-                  <h4 className="text-xs font-black uppercase tracking-widest text-zinc-700">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
                     Alterar Forma de Pagamento
                   </h4>
                 </div>
@@ -731,11 +731,11 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowPaymentSelection(false)}
-                    className="rounded-xl p-1.5 text-zinc-400 hover:bg-zinc-200 transition-colors"
+                    className="rounded-xl p-1.5 text-[var(--text-muted)] hover:bg-[var(--border)] transition-colors"
                   >
                     <ArrowLeft size={16} />
                   </button>
-                  <h4 className="text-xs font-black uppercase tracking-widest text-zinc-700">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
                     Forma de Pagamento
                   </h4>
                 </div>
@@ -760,7 +760,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { setShowCancelReason(false); setErrorMsg(""); }}
-                    className="rounded-xl p-1.5 text-zinc-400 hover:bg-zinc-200 transition-colors"
+                    className="rounded-xl p-1.5 text-[var(--text-muted)] hover:bg-[var(--border)] transition-colors"
                   >
                     <ArrowLeft size={16} />
                   </button>
@@ -769,7 +769,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </h4>
                 </div>
                 <textarea
-                  className="h-24 w-full resize-none rounded-xl border border-red-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-300"
+                  className="h-24 w-full resize-none rounded-xl border border-[var(--status-danger)]/30 bg-[var(--bg-surface)] p-3 text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-red-300"
                   placeholder="Descreva o motivo do cancelamento..."
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}

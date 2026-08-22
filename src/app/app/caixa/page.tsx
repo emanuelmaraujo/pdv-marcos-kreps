@@ -73,13 +73,13 @@ const PAYMENT_META: Record<PaymentMethod, {
   iconCls: string; barCls: string; cardBg: string;
   textCls: string; subtextCls: string; trackCls: string;
 }> = {
-  PIX:         { icon: QrCode,      label: "PIX",      iconCls: "bg-teal-100 text-teal-600",     barCls: "bg-teal-500",    cardBg: "bg-teal-50",    textCls: "text-teal-900",    subtextCls: "text-teal-600",    trackCls: "bg-teal-100" },
-  CASH:        { icon: Banknote,    label: "Dinheiro", iconCls: "bg-emerald-100 text-emerald-600", barCls: "bg-emerald-500", cardBg: "bg-emerald-50", textCls: "text-emerald-900", subtextCls: "text-emerald-600", trackCls: "bg-emerald-100" },
-  DEBIT_CARD:  { icon: CreditCard,  label: "Débito",   iconCls: "bg-blue-100 text-blue-600",     barCls: "bg-blue-500",    cardBg: "bg-blue-50",    textCls: "text-blue-900",    subtextCls: "text-blue-600",    trackCls: "bg-blue-100" },
-  CREDIT_CARD: { icon: CreditCard,  label: "Crédito",  iconCls: "bg-violet-100 text-violet-600", barCls: "bg-violet-500",  cardBg: "bg-violet-50",  textCls: "text-violet-900",  subtextCls: "text-violet-600",  trackCls: "bg-violet-100" },
-  IFOOD:       { icon: Smartphone,  label: "iFood",    iconCls: "bg-orange-100 text-orange-600", barCls: "bg-orange-500",  cardBg: "bg-orange-50",  textCls: "text-orange-900",  subtextCls: "text-orange-600",  trackCls: "bg-orange-100" },
-  COURTESY:    { icon: Gift,        label: "Cortesia", iconCls: "bg-pink-100 text-pink-600",     barCls: "bg-pink-400",    cardBg: "bg-pink-50",    textCls: "text-pink-900",    subtextCls: "text-pink-600",    trackCls: "bg-pink-100" },
-  PENDING:     { icon: Clock,       label: "Pendente", iconCls: "bg-amber-100 text-amber-600",   barCls: "bg-amber-400",   cardBg: "bg-amber-50",   textCls: "text-amber-900",   subtextCls: "text-amber-600",   trackCls: "bg-amber-100" },
+  PIX:         { icon: QrCode,      label: "PIX",      iconCls: "bg-teal-500/15 text-teal-600",     barCls: "bg-teal-500",    cardBg: "bg-teal-500/10",    textCls: "text-teal-600",    subtextCls: "text-teal-600",    trackCls: "bg-teal-500/15" },
+  CASH:        { icon: Banknote,    label: "Dinheiro", iconCls: "bg-emerald-500/15 text-emerald-600", barCls: "bg-emerald-500", cardBg: "bg-emerald-500/10", textCls: "text-emerald-600", subtextCls: "text-emerald-600", trackCls: "bg-emerald-500/15" },
+  DEBIT_CARD:  { icon: CreditCard,  label: "Débito",   iconCls: "bg-blue-500/15 text-blue-600",     barCls: "bg-blue-500",    cardBg: "bg-blue-500/10",    textCls: "text-blue-600",    subtextCls: "text-blue-600",    trackCls: "bg-blue-500/15" },
+  CREDIT_CARD: { icon: CreditCard,  label: "Crédito",  iconCls: "bg-violet-500/15 text-violet-600", barCls: "bg-violet-500",  cardBg: "bg-violet-500/10",  textCls: "text-violet-600",  subtextCls: "text-violet-600",  trackCls: "bg-violet-500/15" },
+  IFOOD:       { icon: Smartphone,  label: "iFood",    iconCls: "bg-orange-500/15 text-orange-600", barCls: "bg-orange-500",  cardBg: "bg-orange-500/10",  textCls: "text-orange-600",  subtextCls: "text-orange-600",  trackCls: "bg-orange-500/15" },
+  COURTESY:    { icon: Gift,        label: "Cortesia", iconCls: "bg-pink-500/15 text-pink-600",     barCls: "bg-pink-400",    cardBg: "bg-pink-500/10",    textCls: "text-pink-600",    subtextCls: "text-pink-600",    trackCls: "bg-pink-500/15" },
+  PENDING:     { icon: Clock,       label: "Pendente", iconCls: "bg-amber-500/15 text-amber-600",   barCls: "bg-amber-400",   cardBg: "bg-amber-500/10",   textCls: "text-amber-600",   subtextCls: "text-amber-600",   trackCls: "bg-amber-500/15" },
 };
 
 // ── Delta helpers ─────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ function DeltaBadge({ current, previous, invertColor }: { current: number; previ
   const positive = invertColor ? pct < 0 : pct > 0;
   const Icon = pct > 0 ? TrendingUp : TrendingDown;
   const cls = pct === 0
-    ? "text-zinc-400"
+    ? "text-[var(--text-muted)]"
     : positive
     ? "text-emerald-400"
     : "text-red-400";
@@ -339,7 +339,7 @@ export default function CaixaPage() {
                 </span>
               )}
               {!isToday && (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                <span className="rounded-full bg-[var(--status-warning-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--status-warning)]">
                   Histórico
                 </span>
               )}
