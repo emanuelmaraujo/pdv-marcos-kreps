@@ -3,7 +3,7 @@
 import { useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Building2, Loader2, X } from "lucide-react";
+import { Bike, Building2, Clock, Loader2, MessageSquare, Printer, X } from "lucide-react";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { TabbedForm, type TabbedFormTab } from "@/components/ui/TabbedForm";
 import { useBranchEditor } from "@/hooks/useBranchEditor";
@@ -62,11 +62,32 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
   }
 
   const tabs: TabbedFormTab[] = [
-    { id: "dados", label: "Dados", validate: () => editor.validateDados() },
-    { id: "horarios", label: "Horários" },
-    { id: "entrega", label: "Entrega" },
-    { id: "impressao", label: "Impressão" },
-    { id: "whatsapp", label: "WhatsApp" },
+    {
+      id: "dados", label: "Dados", icon: Building2,
+      description: "Nome, identificação e disponibilidade da filial.",
+      accent: { iconBg: "bg-blue-100", iconColor: "text-blue-600" },
+      validate: () => editor.validateDados(),
+    },
+    {
+      id: "horarios", label: "Horários", icon: Clock,
+      description: "Janela de atendimento — deixe em branco para usar o horário global.",
+      accent: { iconBg: "bg-amber-100", iconColor: "text-amber-600" },
+    },
+    {
+      id: "entrega", label: "Entrega", icon: Bike,
+      description: "Zonas de entrega, taxas por bairro e entregadores cadastrados.",
+      accent: { iconBg: "bg-emerald-100", iconColor: "text-emerald-600" },
+    },
+    {
+      id: "impressao", label: "Impressão", icon: Printer,
+      description: "IP e porta por setor — sem customização, usa o padrão da rede.",
+      accent: { iconBg: "bg-violet-100", iconColor: "text-violet-600" },
+    },
+    {
+      id: "whatsapp", label: "WhatsApp", icon: MessageSquare,
+      description: "Templates transacionais por evento — sem customização, usa o padrão da rede.",
+      accent: { iconBg: "bg-teal-100", iconColor: "text-teal-600" },
+    },
   ];
 
   if (editor.loading) {

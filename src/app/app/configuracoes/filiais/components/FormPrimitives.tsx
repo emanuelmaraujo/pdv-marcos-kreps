@@ -7,9 +7,9 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 flex items-baseline gap-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
+      <span className="mb-1.5 flex items-baseline gap-1 text-[10.5px] font-black uppercase tracking-wider text-[var(--text-secondary)]">
         {label}
-        {required && <span className="text-[var(--status-danger)]">*</span>}
+        {required && <span className="text-brand-red">*</span>}
         {hint && <span className="text-[10px] font-medium normal-case text-[var(--text-muted)]">— {hint}</span>}
       </span>
       {children}
@@ -25,15 +25,15 @@ export function Toggle({
 }) {
   return (
     <label
-      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition-colors ${
+      className={`flex cursor-pointer items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-sm transition-all ${
         checked
-          ? 'border-[var(--status-success)]/30 bg-[var(--status-success-bg)]'
-          : 'border-[var(--border)] bg-[var(--bg-subtle)]'
+          ? 'border-[var(--status-success)]/25 bg-[var(--status-success-bg)]'
+          : 'border-[var(--border)] bg-[var(--bg-subtle)] hover:border-[var(--border-strong)]'
       } ${small ? '' : 'w-full'}`}
     >
       <div className="min-w-0">
         <p className={`font-bold text-[var(--text-primary)] ${small ? 'text-[11px]' : 'text-xs'}`}>{label}</p>
-        {desc && <p className="text-[10px] leading-tight text-[var(--text-secondary)]">{desc}</p>}
+        {desc && <p className="mt-0.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)]">{desc}</p>}
       </div>
       <SwitchKnob checked={checked} onChange={onChange} />
     </label>
@@ -56,10 +56,20 @@ export function SwitchKnob({ checked, onChange }: { checked: boolean; onChange: 
       }`}
     >
       <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${
           checked ? 'translate-x-[22px]' : 'translate-x-0.5'
         }`}
       />
     </button>
+  );
+}
+
+/** Card com título discreto — agrupa um cluster de campos relacionados dentro de uma aba. */
+export function FieldGroup({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
+      {title && <p className="text-[10.5px] font-black uppercase tracking-wider text-[var(--text-muted)]">{title}</p>}
+      {children}
+    </div>
   );
 }
