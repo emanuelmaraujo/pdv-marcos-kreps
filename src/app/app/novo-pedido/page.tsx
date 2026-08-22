@@ -32,7 +32,6 @@ export default function NovoPedidoPage() {
     addItem,
     updateItem,
     setTargetOrderId,
-    targetOrderId,
     clearCart
   } = useCart();
   
