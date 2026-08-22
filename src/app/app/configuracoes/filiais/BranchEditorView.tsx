@@ -99,34 +99,37 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
     );
   }
 
+  const header = (
+    <header className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3 sm:px-6">
+      <Building2 className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
+      <h1 className="min-w-0 flex-1 truncate text-sm font-black text-[var(--text-primary)]">
+        {branchId ? `Editar — ${editor.editing.name || "filial"}` : "Nova filial"}
+      </h1>
+      <Link
+        href="/app/configuracoes/filiais"
+        className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+        aria-label="Voltar para a lista de filiais"
+      >
+        <X className="h-4 w-4" />
+      </Link>
+    </header>
+  );
+
   return (
-    <div className="mx-auto flex h-[calc(100vh-3.5rem)] max-w-3xl flex-col lg:max-w-5xl">
+    <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <header className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3 sm:px-6">
-        <Building2 className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
-        <h1 className="min-w-0 flex-1 truncate text-sm font-black text-[var(--text-primary)]">
-          {branchId ? `Editar — ${editor.editing.name || "filial"}` : "Nova filial"}
-        </h1>
-        <Link
-          href="/app/configuracoes/filiais"
-          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
-          aria-label="Voltar para a lista de filiais"
-        >
-          <X className="h-4 w-4" />
-        </Link>
-      </header>
-
-      <div className="flex-1 overflow-hidden">
-        <TabbedForm
-          tabs={tabs}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          onSubmit={handleSubmit}
-          submitting={editor.saving || editor.creatingDraft}
-          submitLabel={branchId ? "Salvar filial" : "Criar filial"}
-        >
-          {activeTab === "dados" && <DadosTab editing={editor.editing} setField={editor.setField} />}
+      <TabbedForm
+        variant="page"
+        header={header}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        onSubmit={handleSubmit}
+        submitting={editor.saving || editor.creatingDraft}
+        submitLabel={branchId ? "Salvar filial" : "Criar filial"}
+      >
+        {activeTab === "dados" && <DadosTab editing={editor.editing} setField={editor.setField} />}
           {activeTab === "horarios" && <HorariosTab editing={editor.editing} setField={editor.setField} />}
           {activeTab === "entrega" && (
             <EntregaTab
@@ -163,8 +166,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
               globalSettings={editor.globalSettings}
             />
           )}
-        </TabbedForm>
-      </div>
+      </TabbedForm>
     </div>
   );
 }
