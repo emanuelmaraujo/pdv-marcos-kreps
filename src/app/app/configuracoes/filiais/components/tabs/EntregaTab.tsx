@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { Bike, Loader2, Plus, Trash2 } from "lucide-react";
+import { Bike, Loader2, MapPin, Plus, Trash2, User } from "lucide-react";
 import { BranchInput } from "@/lib/api/branches-admin-api";
 import { Courier, DeliveryZone } from "@/types/pdv";
 import { Select } from "@/components/ui/Select";
-import { Field, Toggle } from "../FormPrimitives";
+import { Field, FieldGroup, Toggle } from "../FormPrimitives";
 import { BRASILIA_NEIGHBORHOODS } from "@/lib/constants/brasilia-neighborhoods";
 import { INPUT_CLS } from "../../utils";
 
@@ -49,7 +49,7 @@ export function EntregaTab({
   onRemoveCourier: (courier: Courier) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <Toggle
         label="Aceitar pedidos de entrega"
         desc="Habilita a opção Entrega no atendente e no checkout público desta filial"
@@ -58,7 +58,7 @@ export function EntregaTab({
       />
 
       {!editing.delivery_enabled && (
-        <p className="rounded-lg bg-[var(--status-info-bg)] px-3 py-2 text-[11px] text-[var(--status-info)]">
+        <p className="rounded-xl bg-[var(--status-info-bg)] px-3.5 py-3 text-xs leading-relaxed text-[var(--status-info)]">
           Ligue a opção acima para definir a taxa padrão e cadastrar os bairros atendidos (com a taxa de cada um).
         </p>
       )}
@@ -76,8 +76,15 @@ export function EntregaTab({
             />
           </Field>
 
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3 space-y-2">
-            <p className="text-[11px] text-[var(--text-secondary)]">
+          <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
+          <FieldGroup>
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
+                <MapPin className="h-4 w-4 text-emerald-600" />
+              </span>
+              <p className="text-xs font-black text-[var(--text-primary)]">Bairros atendidos</p>
+            </div>
+            <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
               {zones.length > 0
                 ? 'Assim que há bairros cadastrados, entregas fora da lista são bloqueadas — o cliente vê que não atendemos aquele endereço.'
                 : 'Nenhum bairro cadastrado ainda: toda entrega usa a taxa padrão acima.'}
@@ -96,26 +103,29 @@ export function EntregaTab({
                 ) : zones.length > 0 ? (
                   <div className="space-y-1.5">
                     {zones.map((zone) => (
-                      <div key={zone.id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1.5">
-                        <button
-                          type="button"
-                          onClick={() => onToggleZone(zone)}
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            zone.active
-                              ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]'
-                              : 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]'
-                          }`}
-                        >
-                          {zone.active ? 'Ativo' : 'Inativo'}
-                        </button>
-                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--text-primary)]">{zone.neighborhood}</span>
-                        <span className="shrink-0 text-xs font-bold text-[var(--text-secondary)]">
+                      <div key={zone.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 shadow-sm transition-shadow hover:shadow-md">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-subtle)]">
+                          <MapPin className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-bold text-[var(--text-primary)]">{zone.neighborhood}</p>
+                          <button
+                            type="button"
+                            onClick={() => onToggleZone(zone)}
+                            className={`text-[10px] font-bold ${
+                              zone.active ? 'text-[var(--status-success)]' : 'text-[var(--status-neutral)]'
+                            }`}
+                          >
+                            {zone.active ? '● Ativo' : '○ Inativo'}
+                          </button>
+                        </div>
+                        <span className="shrink-0 text-xs font-black text-[var(--text-secondary)]">
                           R$ {Number(zone.fee).toFixed(2).replace('.', ',')}
                         </span>
                         <button
                           type="button"
                           onClick={() => onRemoveZone(zone)}
-                          className="shrink-0 rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
+                          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
                           aria-label={`Remover ${zone.neighborhood}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -125,47 +135,55 @@ export function EntregaTab({
                   </div>
                 ) : null}
 
-                <div className="flex gap-2 pt-1">
+                <div className="space-y-2 border-t border-[var(--border)] pt-3">
                   <Select
                     value={newZone.neighborhood}
                     onChange={(e) => setNewZone({ ...newZone, neighborhood: e.target.value })}
-                    className={`${INPUT_CLS} flex-1`}
+                    className={`${INPUT_CLS} w-full`}
                   >
                     <option value="">Selecione o bairro...</option>
                     {BRASILIA_NEIGHBORHOODS
                       .filter((name) => !zones.some((z) => z.neighborhood === name))
                       .map((name) => <option key={name} value={name}>{name}</option>)}
                   </Select>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={newZone.fee}
-                    onChange={(e) => setNewZone({ ...newZone, fee: e.target.value })}
-                    placeholder="Taxa"
-                    className={`${INPUT_CLS} w-24`}
-                  />
-                  <button
-                    type="button"
-                    onClick={onAddZone}
-                    disabled={savingZone || !newZone.neighborhood.trim()}
-                    className="flex shrink-0 items-center justify-center rounded-xl bg-brand-red px-3 text-white disabled:opacity-40"
-                    aria-label="Adicionar bairro"
-                  >
-                    {savingZone ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  </button>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={newZone.fee}
+                      onChange={(e) => setNewZone({ ...newZone, fee: e.target.value })}
+                      placeholder="Taxa (R$)"
+                      className={`${INPUT_CLS} min-w-0 flex-1`}
+                    />
+                    <button
+                      type="button"
+                      onClick={onAddZone}
+                      disabled={savingZone || !newZone.neighborhood.trim()}
+                      className="flex shrink-0 items-center justify-center rounded-xl bg-brand-red px-4 text-white shadow-sm shadow-brand-red/20 transition-transform active:scale-95 disabled:opacity-40"
+                      aria-label="Adicionar bairro"
+                    >
+                      {savingZone ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               </>
             )}
-          </div>
+          </FieldGroup>
 
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3 space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">Entregadores cadastrados</p>
-            <p className="text-[11px] text-[var(--text-secondary)]">Opcional — o despacho sempre permite digitar um entregador avulso também.</p>
-            <Link href="/app/relatorios/entregadores" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-brand-red hover:underline">
-              <Bike className="h-3.5 w-3.5" />
-              Ver métricas de entrega por motoboy
-            </Link>
+          <FieldGroup>
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
+                <Bike className="h-4 w-4 text-indigo-600" />
+              </span>
+              <p className="text-xs font-black text-[var(--text-primary)]">Entregadores cadastrados</p>
+            </div>
+            <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
+              Opcional — o despacho sempre permite digitar um entregador avulso também.{" "}
+              <Link href="/app/relatorios/entregadores" className="font-semibold text-brand-red hover:underline">
+                Ver métricas por motoboy →
+              </Link>
+            </p>
 
             {!branchReady ? (
               <div className="flex items-center gap-2 py-2 text-xs text-[var(--text-secondary)]">
@@ -180,24 +198,27 @@ export function EntregaTab({
                 ) : couriers.length > 0 ? (
                   <div className="space-y-1.5">
                     {couriers.map((courier) => (
-                      <div key={courier.id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1.5">
-                        <button
-                          type="button"
-                          onClick={() => onToggleCourier(courier)}
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            courier.active
-                              ? 'bg-[var(--status-success-bg)] text-[var(--status-success)]'
-                              : 'bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]'
-                          }`}
-                        >
-                          {courier.active ? 'Ativo' : 'Inativo'}
-                        </button>
-                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--text-primary)]">{courier.name}</span>
-                        {courier.phone && <span className="shrink-0 text-[11px] text-[var(--text-muted)]">{courier.phone}</span>}
+                      <div key={courier.id} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2 shadow-sm transition-shadow hover:shadow-md">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-subtle)]">
+                          <User className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-bold text-[var(--text-primary)]">{courier.name}</p>
+                          <button
+                            type="button"
+                            onClick={() => onToggleCourier(courier)}
+                            className={`text-[10px] font-bold ${
+                              courier.active ? 'text-[var(--status-success)]' : 'text-[var(--status-neutral)]'
+                            }`}
+                          >
+                            {courier.active ? '● Ativo' : '○ Inativo'}
+                          </button>
+                        </div>
+                        {courier.phone && <span className="shrink-0 text-[11px] font-semibold text-[var(--text-muted)]">{courier.phone}</span>}
                         <button
                           type="button"
                           onClick={() => onRemoveCourier(courier)}
-                          className="shrink-0 rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
+                          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
                           aria-label={`Remover ${courier.name}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -207,33 +228,36 @@ export function EntregaTab({
                   </div>
                 ) : null}
 
-                <div className="flex gap-2 pt-1">
+                <div className="space-y-2 border-t border-[var(--border)] pt-3">
                   <input
                     type="text"
                     value={newCourier.name}
                     onChange={(e) => setNewCourier({ ...newCourier, name: e.target.value })}
                     placeholder="Nome do entregador"
-                    className={`${INPUT_CLS} flex-1`}
+                    className={`${INPUT_CLS} w-full`}
                   />
-                  <input
-                    type="text"
-                    value={newCourier.phone}
-                    onChange={(e) => setNewCourier({ ...newCourier, phone: e.target.value })}
-                    placeholder="Telefone"
-                    className={`${INPUT_CLS} w-32`}
-                  />
-                  <button
-                    type="button"
-                    onClick={onAddCourier}
-                    disabled={savingCourier || !newCourier.name.trim()}
-                    className="flex shrink-0 items-center justify-center rounded-xl bg-brand-red px-3 text-white disabled:opacity-40"
-                    aria-label="Adicionar entregador"
-                  >
-                    {savingCourier ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  </button>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCourier.phone}
+                      onChange={(e) => setNewCourier({ ...newCourier, phone: e.target.value })}
+                      placeholder="Telefone"
+                      className={`${INPUT_CLS} min-w-0 flex-1`}
+                    />
+                    <button
+                      type="button"
+                      onClick={onAddCourier}
+                      disabled={savingCourier || !newCourier.name.trim()}
+                      className="flex shrink-0 items-center justify-center rounded-xl bg-brand-red px-4 text-white shadow-sm shadow-brand-red/20 transition-transform active:scale-95 disabled:opacity-40"
+                      aria-label="Adicionar entregador"
+                    >
+                      {savingCourier ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
               </>
             )}
+          </FieldGroup>
           </div>
         </>
       )}
