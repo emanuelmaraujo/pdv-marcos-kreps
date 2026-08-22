@@ -54,7 +54,7 @@ export function DuplicateProductButton({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-zinc-600 hover:bg-zinc-50 ${
+        className={`inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] ${
           compact ? '' : 'shadow-sm'
         }`}
       >
@@ -63,10 +63,10 @@ export function DuplicateProductButton({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-60 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-lg">
-          <div className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">
+        <div className="absolute right-0 z-30 mt-1 w-60 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg">
+          <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
             Duplicar para
-            <button onClick={() => setOpen(false)} aria-label="Fechar" className="rounded p-0.5 hover:bg-zinc-200">
+            <button onClick={() => setOpen(false)} aria-label="Fechar" className="rounded p-0.5 hover:bg-[var(--border)]">
               <X className="h-3 w-3" />
             </button>
           </div>
@@ -80,13 +80,13 @@ export function DuplicateProductButton({
                     type="button"
                     onClick={() => handleClone(b.id)}
                     disabled={isBusy}
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-bold text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
+                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] disabled:opacity-60"
                   >
                     <span className="flex items-center gap-2">
                       <span className="rounded-md bg-brand-charcoal px-1.5 py-0.5 text-[10px] font-black text-white">{b.code}</span>
                       {b.name}
                     </span>
-                    {isBusy ? <Loader2 className="h-3 w-3 animate-spin text-zinc-500" />
+                    {isBusy ? <Loader2 className="h-3 w-3 animate-spin text-[var(--text-muted)]" />
                       : isDone ? <Check className="h-3 w-3 text-emerald-600" />
                       : null}
                   </button>
@@ -95,7 +95,7 @@ export function DuplicateProductButton({
             })}
           </ul>
           {error && (
-            <p className="border-t border-red-100 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-700">{error}</p>
+            <p className="border-t border-[var(--status-danger)]/20 bg-[var(--status-danger-bg)] px-3 py-2 text-[10px] font-bold text-[var(--status-danger)]">{error}</p>
           )}
         </div>
       )}

@@ -23,7 +23,7 @@ const variants: Record<BadgeVariant, string> = {
   // Erro / cancelamento
   destructive: "border-transparent bg-[var(--status-danger-bg)] text-[var(--status-danger)]",
   // Outline limpo (cinza)
-  outline:     "border-[var(--border)] bg-white text-[var(--text-secondary)]",
+  outline:     "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)]",
   // Status semânticos
   success:     "border-transparent bg-[var(--status-success-bg)] text-[var(--status-success)]",
   warning:     "border-transparent bg-[var(--status-warning-bg)] text-[var(--status-warning)]",

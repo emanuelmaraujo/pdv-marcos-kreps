@@ -163,12 +163,12 @@ export default function GestaoUsuarios() {
         <div className="flex items-center gap-3">
           <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-2 font-black text-xs shadow-inner bg-gradient-to-br ${getAvatarColor(user.name)}`}>
             {getInitials(user.name)}
-            <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${user.active ? "bg-emerald-500" : "bg-zinc-300"}`} />
+            <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--bg-surface)] ${user.active ? "bg-emerald-500" : "bg-[var(--border-strong)]"}`} />
           </div>
           <div className="min-w-0">
-            <p className={`truncate text-sm font-black ${user.active ? "text-zinc-900" : "text-zinc-500"}`}>{user.name}</p>
-            <p className="flex items-center gap-1 truncate text-xs font-medium text-zinc-500">
-              <Mail size={11} className="shrink-0 text-zinc-400" />
+            <p className={`truncate text-sm font-black ${user.active ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}>{user.name}</p>
+            <p className="flex items-center gap-1 truncate text-xs font-medium text-[var(--text-muted)]">
+              <Mail size={11} className="shrink-0 text-[var(--text-muted)]" />
               {user.email}
             </p>
           </div>
@@ -192,11 +192,11 @@ export default function GestaoUsuarios() {
       header: "Filiais",
       render: (user) => {
         const ids = user.branch_ids ?? [];
-        if (ids.length === 0) return <span className="text-xs text-zinc-400">—</span>;
+        if (ids.length === 0) return <span className="text-xs text-[var(--text-muted)]">—</span>;
         return (
           <div className="flex flex-wrap gap-1">
             {ids.map((id) => (
-              <span key={id} className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-black text-zinc-600" title={branchNameById.get(id)?.name}>
+              <span key={id} className="rounded-md bg-[var(--bg-subtle)] px-1.5 py-0.5 text-[10px] font-black text-[var(--text-secondary)]" title={branchNameById.get(id)?.name}>
                 {branchNameById.get(id)?.code ?? "?"}
               </span>
             ))}
@@ -208,8 +208,8 @@ export default function GestaoUsuarios() {
       key: "seen",
       header: "Visto por último",
       render: (user) => (
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
-          <Clock size={12} className="text-zinc-400" />
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-muted)]">
+          <Clock size={12} className="text-[var(--text-muted)]" />
           {formatLastSignIn(user.last_sign_in_at)}
         </span>
       ),
@@ -225,19 +225,19 @@ export default function GestaoUsuarios() {
               title={hasEnrolledPasskey() ? "Digital vinculada ✓" : "Vincular digital / Face ID"}
               onClick={() => setIsBiometricModalOpen(true)}
               icon={Fingerprint}
-              className="text-indigo-600 hover:bg-indigo-50"
+              className="text-indigo-600 hover:bg-indigo-500/10"
             />
           )}
-          <IconAction title="Redefinir senha" onClick={() => { setResetUser(user); setIsPasswordModalOpen(true); }} icon={KeyRound} className="text-zinc-600 hover:bg-zinc-100" />
+          <IconAction title="Redefinir senha" onClick={() => { setResetUser(user); setIsPasswordModalOpen(true); }} icon={KeyRound} className="text-[var(--text-secondary)] hover:bg-[var(--border)]" />
           <IconAction
             title={user.active ? "Desativar" : "Ativar"}
             onClick={() => handleToggleStatus(user)}
             icon={user.active ? UserMinus : UserCheck}
-            className={user.active ? "text-zinc-600 hover:bg-zinc-100" : "text-brand-amber hover:bg-brand-amber/10"}
+            className={user.active ? "text-[var(--text-secondary)] hover:bg-[var(--border)]" : "text-brand-amber hover:bg-brand-amber/10"}
           />
-          <IconAction title="Editar" onClick={() => handleEdit(user)} icon={UserCog} className="text-brand-charcoal hover:bg-zinc-100" />
+          <IconAction title="Editar" onClick={() => handleEdit(user)} icon={UserCog} className="text-brand-charcoal hover:bg-[var(--border)]" />
           {user.id !== currentUserId && (
-            <IconAction title="Excluir usuário" onClick={() => handleDelete(user)} icon={Trash2} className="text-red-500 hover:bg-red-50" />
+            <IconAction title="Excluir usuário" onClick={() => handleDelete(user)} icon={Trash2} className="text-red-500 hover:bg-[var(--status-danger-bg)]" />
           )}
         </div>
       ),
@@ -245,48 +245,48 @@ export default function GestaoUsuarios() {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-zinc-50/50">
+    <div className="flex flex-col h-full bg-[var(--bg-subtle)]/50">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-32">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4">
-          <Card className="bg-white/80 backdrop-blur-md border-zinc-100 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+          <Card className="bg-[var(--bg-surface)]/80 backdrop-blur-md border-[var(--border)] shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
             <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
               <Users size={48} />
             </div>
             <CardContent className="p-4 flex flex-col items-start">
-              <div className="w-10 h-10 rounded-xl bg-zinc-100 flex items-center justify-center mb-3">
-                <Users size={20} className="text-zinc-600" />
+              <div className="w-10 h-10 rounded-xl bg-[var(--bg-subtle)] flex items-center justify-center mb-3">
+                <Users size={20} className="text-[var(--text-secondary)]" />
               </div>
-              <span className="text-2xl font-black text-zinc-900 leading-tight">{stats.total}</span>
-              <span className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Total</span>
+              <span className="text-2xl font-black text-[var(--text-primary)] leading-tight">{stats.total}</span>
+              <span className="text-xs text-[var(--text-muted)] font-bold uppercase tracking-wider">Total</span>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-md border-zinc-100 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+          <Card className="bg-[var(--bg-surface)]/80 backdrop-blur-md border-[var(--border)] shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
             <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
               <UserCheck size={48} className="text-emerald-500" />
             </div>
             <CardContent className="p-4 flex flex-col items-start">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mb-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-3">
                 <UserCheck size={20} className="text-emerald-600" />
               </div>
               <span className="text-2xl font-black text-emerald-600 leading-tight">{stats.active}</span>
-              <span className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Ativos</span>
+              <span className="text-xs text-[var(--text-muted)] font-bold uppercase tracking-wider">Ativos</span>
             </CardContent>
           </Card>
 
-          <Card className="bg-white/80 backdrop-blur-md border-zinc-100 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+          <Card className="bg-[var(--bg-surface)]/80 backdrop-blur-md border-[var(--border)] shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
             <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
               <ShieldCheck size={48} className="text-amber-500" />
             </div>
             <CardContent className="p-4 flex flex-col items-start">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center mb-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center mb-3">
                 <ShieldCheck size={20} className="text-amber-600" />
               </div>
               <span className="text-2xl font-black text-amber-600 leading-tight">{stats.admins}</span>
-              <span className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Admins</span>
+              <span className="text-xs text-[var(--text-muted)] font-bold uppercase tracking-wider">Admins</span>
             </CardContent>
           </Card>
         </div>
@@ -306,11 +306,11 @@ export default function GestaoUsuarios() {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between px-2">
-            <h3 className="text-sm font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+            <h3 className="text-sm font-black text-[var(--text-muted)] uppercase tracking-widest flex items-center gap-2">
               <Activity size={14} />
               Lista de Equipe
             </h3>
-            <span className="text-xs text-zinc-400 font-medium">Exibindo {total} resultado{total === 1 ? "" : "s"}</span>
+            <span className="text-xs text-[var(--text-muted)] font-medium">Exibindo {total} resultado{total === 1 ? "" : "s"}</span>
           </div>
 
           <DataTable

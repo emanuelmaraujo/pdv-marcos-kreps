@@ -26,13 +26,13 @@ const METHODS: {
   Icon: React.FC<{ className?: string }>;
   colors: string;
 }[] = [
-  { value: 'PIX', label: 'PIX', Icon: Smartphone, colors: 'border-teal-200 bg-teal-50 text-teal-700' },
-  { value: 'CASH', label: 'Dinheiro', Icon: Banknote, colors: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
-  { value: 'DEBIT_CARD', label: 'Debito', Icon: CreditCard, colors: 'border-blue-200 bg-blue-50 text-blue-700' },
-  { value: 'CREDIT_CARD', label: 'Credito', Icon: Wallet, colors: 'border-violet-200 bg-violet-50 text-violet-700' },
-  { value: 'COURTESY', label: 'Cortesia', Icon: Gift, colors: 'border-pink-200 bg-pink-50 text-pink-700' },
-  { value: 'IFOOD', label: 'iFood', Icon: Smartphone, colors: 'border-red-200 bg-red-50 text-red-700' },
-  { value: 'PENDING', label: 'Pendente', Icon: Clock, colors: 'border-amber-200 bg-amber-50 text-amber-700' },
+  { value: 'PIX', label: 'PIX', Icon: Smartphone, colors: 'border-teal-500/30 bg-teal-500/10 text-teal-600' },
+  { value: 'CASH', label: 'Dinheiro', Icon: Banknote, colors: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' },
+  { value: 'DEBIT_CARD', label: 'Debito', Icon: CreditCard, colors: 'border-blue-500/30 bg-blue-500/10 text-blue-600' },
+  { value: 'CREDIT_CARD', label: 'Credito', Icon: Wallet, colors: 'border-violet-500/30 bg-violet-500/10 text-violet-600' },
+  { value: 'COURTESY', label: 'Cortesia', Icon: Gift, colors: 'border-pink-500/30 bg-pink-500/10 text-pink-600' },
+  { value: 'IFOOD', label: 'iFood', Icon: Smartphone, colors: 'border-red-500/30 bg-red-500/10 text-red-600' },
+  { value: 'PENDING', label: 'Pendente', Icon: Clock, colors: 'border-amber-500/30 bg-amber-500/10 text-amber-600' },
 ];
 
 const PAYMENT_LABEL: Record<PaymentMethod, string> = {

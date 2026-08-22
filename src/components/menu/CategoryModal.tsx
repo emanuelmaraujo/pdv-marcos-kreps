@@ -41,22 +41,22 @@ export function CategoryModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300">
+      <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-brand-charcoal">
+          <h2 className="text-xl font-bold text-[var(--text-primary)]">
             {category ? "Editar Categoria" : "Nova Categoria"}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
+            className="p-2 hover:bg-[var(--bg-subtle)] rounded-full transition-colors"
           >
-            <X className="w-6 h-6 text-zinc-400" />
+            <X className="w-6 h-6 text-[var(--text-muted)]" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1 ml-1">
               Nome da Categoria
             </label>
             <input
@@ -64,13 +64,13 @@ export function CategoryModal({
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-400/20 focus:border-zinc-400 transition-all"
+              className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-400/20 focus:border-zinc-400 transition-all"
               placeholder="Ex: Bebidas"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-zinc-400 uppercase mb-1 ml-1">
+            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1 ml-1">
               Ordem de Exibição
             </label>
             <input
@@ -78,14 +78,14 @@ export function CategoryModal({
               required
               value={formData.sort_order}
               onChange={(e) => setFormData({ ...formData, sort_order: parseInt(e.target.value) })}
-              className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-400/20 focus:border-zinc-400 transition-all"
+              className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-400/20 focus:border-zinc-400 transition-all"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-zinc-800 text-white py-4 rounded-2xl font-bold shadow-lg shadow-zinc-800/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
+            className="w-full bg-[var(--bg-inverse)] text-white py-4 rounded-2xl font-bold shadow-lg shadow-black/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />

@@ -114,7 +114,7 @@ const KANBAN_COLUMNS: KanbanColumnConfig[] = [
     status: "SAIU_PARA_ENTREGA",
     label: "Saiu p/ Entrega",
     topColor: "bg-blue-500",
-    headerBg: "bg-blue-50 border-transparent",
+    headerBg: "bg-blue-500/10 border-transparent",
     emptyText: "Nenhuma entrega em rota",
     showAvgWait: true,
   },

@@ -180,7 +180,7 @@ export function BiometricManager() {
               key={cred.id}
               className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10">
                 <Fingerprint className="h-4 w-4 text-violet-600" />
               </div>
               <div className="min-w-0 flex-1">

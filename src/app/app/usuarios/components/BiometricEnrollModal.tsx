@@ -49,12 +49,12 @@ export function BiometricEnrollModal({
       <div className="p-8 space-y-6">
         {done ? (
           <div className="flex flex-col items-center gap-4 py-4 text-center">
-            <div className="w-20 h-20 rounded-full bg-emerald-50 flex items-center justify-center">
+            <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center">
               <CheckCircle2 size={40} className="text-emerald-500" />
             </div>
             <div>
-              <p className="font-bold text-zinc-800">Digital vinculada!</p>
-              <p className="text-sm text-zinc-500 mt-1">
+              <p className="font-bold text-[var(--text-primary)]">Digital vinculada!</p>
+              <p className="text-sm text-[var(--text-muted)] mt-1">
                 Na próxima vez que acessar, toque no botão de digital na tela de login.
               </p>
             </div>
@@ -68,19 +68,19 @@ export function BiometricEnrollModal({
         ) : (
           <>
             <div className="flex flex-col items-center gap-3 py-2">
-              <div className="w-20 h-20 rounded-full bg-indigo-50 flex items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-indigo-500/10 flex items-center justify-center">
                 <Fingerprint size={40} className="text-indigo-500" />
               </div>
               <div className="text-center space-y-1">
-                <p className="font-bold text-zinc-800">Vincular digital / Face ID</p>
-                <p className="text-sm text-zinc-500 leading-relaxed">
+                <p className="font-bold text-[var(--text-primary)]">Vincular digital / Face ID</p>
+                <p className="text-sm text-[var(--text-muted)] leading-relaxed">
                   Ao clicar no botão abaixo, o navegador pedirá confirmação com sua biometria
                   (Touch ID, Face ID ou Windows Hello). Nenhuma senha é necessária.
                 </p>
               </div>
             </div>
 
-            <div className="bg-indigo-50 rounded-2xl p-4 text-sm text-indigo-700 space-y-1">
+            <div className="bg-indigo-500/10 rounded-2xl p-4 text-sm text-indigo-700 space-y-1">
               <p className="font-bold text-xs uppercase tracking-wider text-indigo-500">Como funciona</p>
               <p>A chave biométrica fica salva <strong>neste dispositivo</strong>. Você precisará repetir em cada aparelho que quiser usar biometria.</p>
             </div>

@@ -115,13 +115,13 @@ function UserFormSheetContent({
 
   return (
     <div className="flex h-[75vh] flex-col">
-      <div className="flex items-center gap-4 mx-6 mt-6 p-4 bg-zinc-50 rounded-2xl border border-zinc-100 shrink-0">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl bg-gradient-to-br from-zinc-200 to-zinc-300 text-zinc-600 shadow-inner">
+      <div className="flex items-center gap-4 mx-6 mt-6 p-4 bg-[var(--bg-subtle)] rounded-2xl border border-[var(--border)] shrink-0">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl bg-gradient-to-br from-[var(--bg-subtle)] to-[var(--border-strong)] text-[var(--text-secondary)] shadow-inner">
           {formData.name ? getInitials(formData.name) : <UserIcon size={24} />}
         </div>
         <div>
-          <p className="text-sm font-black text-zinc-900 leading-tight">{formData.name || "Novo Usuário"}</p>
-          <p className="text-xs text-zinc-400 font-medium">{formData.email || "aguardando e-mail..."}</p>
+          <p className="text-sm font-black text-[var(--text-primary)] leading-tight">{formData.name || "Novo Usuário"}</p>
+          <p className="text-xs text-[var(--text-muted)] font-medium">{formData.email || "aguardando e-mail..."}</p>
         </div>
       </div>
 
@@ -140,7 +140,7 @@ function UserFormSheetContent({
               <Input
                 required
                 placeholder="Ex: Marcos Kreps"
-                className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
+                className="h-14 pl-12 bg-[var(--bg-subtle)] border-[var(--border)] rounded-2xl focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
                 value={formData.name}
                 onChange={(e) => set("name", e.target.value)}
               />
@@ -153,7 +153,7 @@ function UserFormSheetContent({
                   required
                   type="email"
                   placeholder="exemplo@pdvmarcos.com"
-                  className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
+                  className="h-14 pl-12 bg-[var(--bg-subtle)] border-[var(--border)] rounded-2xl focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
                   value={formData.email}
                   onChange={(e) => set("email", e.target.value)}
                 />
@@ -171,7 +171,7 @@ function UserFormSheetContent({
                   required
                   type="password"
                   placeholder="Mínimo 6 caracteres"
-                  className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
+                  className="h-14 pl-12 bg-[var(--bg-subtle)] border-[var(--border)] rounded-2xl focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
                   value={formData.password}
                   onChange={(e) => set("password", e.target.value)}
                 />
@@ -179,12 +179,12 @@ function UserFormSheetContent({
             )}
 
             <div className="space-y-2">
-              <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Nível de Acesso</label>
+              <label className="text-xs font-black text-[var(--text-muted)] uppercase tracking-widest px-1">Nível de Acesso</label>
               <div className="relative group">
-                <Filter size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors z-10" />
+                <Filter size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-brand-red transition-colors z-10" />
                 <Select
                   value={formData.role}
-                  className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-bold appearance-none"
+                  className="h-14 pl-12 bg-[var(--bg-subtle)] border-[var(--border)] rounded-2xl focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-bold appearance-none"
                   onChange={(e) => {
                     const role = e.target.value as UserFormData["role"];
                     const branch_ids = role === "COURIER" ? formData.branch_ids.slice(0, 1) : formData.branch_ids;
@@ -196,7 +196,7 @@ function UserFormSheetContent({
                   <option value="COURIER">Motoboy (Entregas)</option>
                 </Select>
               </div>
-              <p className="text-[10px] text-zinc-400 italic px-2">
+              <p className="text-[10px] text-[var(--text-muted)] italic px-2">
                 {formData.role === "COURIER"
                   ? "Motoboy vê só os próprios pedidos de entrega e confirma a entrega pelo celular."
                   : "Administradores podem gerenciar estoque, financeiro e outros usuários."}
@@ -209,7 +209,7 @@ function UserFormSheetContent({
                 <Input
                   type="tel"
                   placeholder="(61) 99999-9999"
-                  className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
+                  className="h-14 pl-12 bg-[var(--bg-subtle)] border-[var(--border)] rounded-2xl focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
                   value={formData.phone}
                   onChange={(e) => set("phone", e.target.value)}
                 />
@@ -220,10 +220,10 @@ function UserFormSheetContent({
 
         {activeTab === "permissoes" && branches.length > 0 && (
           <div className="space-y-2">
-            <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">
+            <label className="text-xs font-black text-[var(--text-muted)] uppercase tracking-widest px-1">
               {formData.role === "COURIER" ? "Filial do Motoboy" : "Filiais Autorizadas"}
             </label>
-            <p className="text-[10px] text-zinc-400 italic px-2">
+            <p className="text-[10px] text-[var(--text-muted)] italic px-2">
               {formData.role === "COURIER"
                 ? "Motoboy opera em uma única filial — selecione qual."
                 : "Selecione em quais filiais este usuário pode operar. ADMIN tem acesso a todas independente da seleção."}
@@ -235,7 +235,7 @@ function UserFormSheetContent({
                   <label
                     key={b.id}
                     className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all ${
-                      checked ? "border-brand-red bg-red-50" : "border-zinc-200 bg-white hover:bg-zinc-50"
+                      checked ? "border-brand-red bg-brand-red/10" : "border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
                     }`}
                   >
                     <input
@@ -257,14 +257,14 @@ function UserFormSheetContent({
                     <span className="rounded-md bg-brand-charcoal px-2 py-0.5 text-[10px] font-black text-white">
                       {b.code}
                     </span>
-                    <span className="flex-1 text-sm font-bold text-zinc-800">{b.name}</span>
+                    <span className="flex-1 text-sm font-bold text-[var(--text-primary)]">{b.name}</span>
                     {!b.active && <span className="text-[10px] font-bold text-red-500">Inativa</span>}
                   </label>
                 );
               })}
             </div>
             {formData.branch_ids.length > 0 && formData.role !== "COURIER" && (
-              <p className="text-[10px] font-bold text-zinc-500 px-2">
+              <p className="text-[10px] font-bold text-[var(--text-muted)] px-2">
                 Filial padrão (home): <span className="text-brand-red">
                   {branches.find((b) => b.id === formData.branch_ids[0])?.name ?? "—"}
                 </span>
@@ -280,12 +280,12 @@ function UserFormSheetContent({
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">{label}</label>
+      <label className="text-xs font-black text-[var(--text-muted)] uppercase tracking-widest px-1">{label}</label>
       <div className="relative group">{children}</div>
     </div>
   );
 }
 
 function FieldIcon({ icon: Icon }: { icon: React.ElementType }) {
-  return <Icon size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />;
+  return <Icon size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-brand-red transition-colors" />;
 }

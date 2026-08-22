@@ -56,32 +56,32 @@ function PasswordResetForm({
 
   return (
     <form onSubmit={handleSubmit} className="p-8 space-y-6">
-      <p className="text-sm text-zinc-500">
-        Defina uma nova senha para <span className="font-bold text-zinc-800">{userName}</span>. O usuário deverá usar essa senha no próximo login.
+      <p className="text-sm text-[var(--text-muted)]">
+        Defina uma nova senha para <span className="font-bold text-[var(--text-primary)]">{userName}</span>. O usuário deverá usar essa senha no próximo login.
       </p>
       <div className="space-y-2">
-        <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Nova Senha</label>
+        <label className="text-xs font-black text-[var(--text-muted)] uppercase tracking-widest px-1">Nova Senha</label>
         <div className="relative group">
-          <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
+          <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-brand-red transition-colors" />
           <Input
             required
             type="password"
             placeholder="Mínimo 6 caracteres"
-            className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
+            className="h-14 pl-12 bg-[var(--bg-subtle)] border-[var(--border)] rounded-2xl focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
         </div>
       </div>
       <div className="space-y-2">
-        <label className="text-xs font-black text-zinc-400 uppercase tracking-widest px-1">Confirmar Senha</label>
+        <label className="text-xs font-black text-[var(--text-muted)] uppercase tracking-widest px-1">Confirmar Senha</label>
         <div className="relative group">
-          <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-brand-red transition-colors" />
+          <KeyRound size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-brand-red transition-colors" />
           <Input
             required
             type="password"
             placeholder="Repita a nova senha"
-            className="h-14 pl-12 bg-zinc-50 border-zinc-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
+            className="h-14 pl-12 bg-[var(--bg-subtle)] border-[var(--border)] rounded-2xl focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />

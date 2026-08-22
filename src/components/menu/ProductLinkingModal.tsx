@@ -63,20 +63,20 @@ export function ProductLinkingModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] flex flex-col">
+      <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <div className="min-w-0">
-            <h2 className="text-xl font-bold text-brand-charcoal">Vincular Produtos</h2>
-            <p className="text-sm text-zinc-500 font-medium truncate">
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">Vincular Produtos</h2>
+            <p className="text-sm text-[var(--text-secondary)] font-medium truncate">
               {addon.name} — em quais itens este adicional aparece?
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-zinc-100 rounded-full transition-colors flex-shrink-0"
+            className="p-2 hover:bg-[var(--bg-subtle)] rounded-full transition-colors flex-shrink-0"
             aria-label="Fechar"
           >
-            <X className="w-6 h-6 text-zinc-400" />
+            <X className="w-6 h-6 text-[var(--text-muted)]" />
           </button>
         </div>
 
@@ -87,9 +87,9 @@ export function ProductLinkingModal({
             return (
               <div key={category.id}>
                 <div className="flex items-center justify-between mb-2 px-1">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
                     {category.name}{" "}
-                    <span className="text-zinc-400 font-bold normal-case">
+                    <span className="text-[var(--text-muted)] font-bold normal-case">
                       ({selectedCount}/{products.length})
                     </span>
                   </h3>
@@ -113,18 +113,18 @@ export function ProductLinkingModal({
                         className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all ${
                           isSelected
                             ? "bg-brand-red/5 border-brand-red/30 shadow-sm"
-                            : "bg-zinc-50 border-zinc-100 hover:border-zinc-200"
+                            : "bg-[var(--bg-subtle)] border-[var(--border)] hover:border-[var(--border-strong)]"
                         }`}
                       >
                         <div className="flex flex-col items-start min-w-0">
                           <span
                             className={`font-bold text-sm truncate ${
-                              isSelected ? "text-brand-red" : "text-brand-charcoal"
+                              isSelected ? "text-brand-red" : "text-[var(--text-primary)]"
                             }`}
                           >
                             {product.name}
                           </span>
-                          <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
+                          <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">
                             R$ {product.price.toFixed(2)}
                             {!product.active && " · inativo"}
                           </span>
@@ -133,7 +133,7 @@ export function ProductLinkingModal({
                           className={`w-6 h-6 rounded-full border flex items-center justify-center flex-shrink-0 transition-all ${
                             isSelected
                               ? "bg-brand-red border-brand-red text-white"
-                              : "bg-white border-zinc-200"
+                              : "bg-[var(--bg-surface)] border-[var(--border)]"
                           }`}
                         >
                           {isSelected && <Check className="w-4 h-4" />}
@@ -146,7 +146,7 @@ export function ProductLinkingModal({
             );
           })}
           {grouped.length === 0 && (
-            <p className="text-sm text-zinc-400 text-center py-10">
+            <p className="text-sm text-[var(--text-muted)] text-center py-10">
               Nenhum produto cadastrado nesta filial ainda.
             </p>
           )}

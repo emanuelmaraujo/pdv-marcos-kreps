@@ -27,9 +27,9 @@ export function UserCard({
 }) {
   return (
     <Card
-      className={`group relative overflow-hidden bg-white border-zinc-100 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 rounded-3xl ${!user.active ? "opacity-80" : ""}`}
+      className={`group relative overflow-hidden bg-[var(--bg-surface)] border-[var(--border)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 rounded-3xl ${!user.active ? "opacity-80" : ""}`}
     >
-      {!user.active && <div className="absolute inset-0 bg-zinc-50/40 pointer-events-none" />}
+      {!user.active && <div className="absolute inset-0 bg-[var(--bg-subtle)]/40 pointer-events-none" />}
 
       <CardContent className="p-4 flex flex-col gap-3">
         <div className="flex items-center gap-4">
@@ -38,15 +38,15 @@ export function UserCard({
               {getInitials(user.name)}
             </div>
             {user.active ? (
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-[3px] border-white rounded-full shadow-sm" />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-[3px] border-[var(--bg-surface)] rounded-full shadow-sm" />
             ) : (
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-zinc-300 border-[3px] border-white rounded-full shadow-sm" />
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[var(--border-strong)] border-[3px] border-[var(--bg-surface)] rounded-full shadow-sm" />
             )}
           </div>
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className={`font-black text-zinc-900 text-base tracking-tight leading-tight ${!user.active ? "text-zinc-500" : ""}`}>
+              <span className={`font-black text-[var(--text-primary)] text-base tracking-tight leading-tight ${!user.active ? "text-[var(--text-muted)]" : ""}`}>
                 {user.name}
               </span>
               <Badge
@@ -57,22 +57,22 @@ export function UserCard({
               </Badge>
               {user.role === "ADMIN" && <ShieldCheck size={14} className="text-amber-500" strokeWidth={3} />}
             </div>
-            <div className="flex items-center gap-1.5 text-sm text-zinc-500 font-medium mb-0.5">
-              <Mail size={12} className="text-zinc-400 shrink-0" />
+            <div className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] font-medium mb-0.5">
+              <Mail size={12} className="text-[var(--text-muted)] shrink-0" />
               <span className="truncate">{user.email}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-400 uppercase tracking-tight">
-              <Clock size={11} className="text-zinc-300 shrink-0" />
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-tight">
+              <Clock size={11} className="text-[var(--text-muted)] shrink-0" />
               <span>Visto: {formatLastSignIn(user.last_sign_in_at)}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-1 border-t border-zinc-100">
+        <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
           {user.id === currentUserId && webAuthnSupported && (
             <button
               onClick={onOpenBiometric}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 active:scale-95 transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 active:scale-95 transition-all"
               title={hasPasskey ? "Digital vinculada ✓" : "Vincular digital / Face ID"}
             >
               <Fingerprint className="w-4 h-4" />
@@ -81,7 +81,7 @@ export function UserCard({
           )}
           <button
             onClick={onOpenPasswordReset}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-100 text-zinc-600 active:scale-95 transition-all"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-secondary)] active:scale-95 transition-all"
             title="Redefinir senha"
           >
             <KeyRound className="w-4 h-4" />
@@ -91,7 +91,7 @@ export function UserCard({
             onClick={onToggleStatus}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all border ${
               user.active
-                ? "bg-zinc-50 border-zinc-100 text-zinc-600 active:scale-95"
+                ? "bg-[var(--bg-subtle)] border-[var(--border)] text-[var(--text-secondary)] active:scale-95"
                 : "bg-brand-amber/10 border-brand-amber/20 text-brand-amber active:scale-95"
             }`}
             title={user.active ? "Desativar" : "Ativar"}
@@ -101,7 +101,7 @@ export function UserCard({
           </button>
           <button
             onClick={onEdit}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-100 text-brand-charcoal active:scale-95 transition-all"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-primary)] active:scale-95 transition-all"
             title="Editar"
           >
             <UserCog className="w-4 h-4" />
@@ -110,7 +110,7 @@ export function UserCard({
           {user.id !== currentUserId && (
             <button
               onClick={onDelete}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-50 border border-red-100 text-red-500 active:scale-95 transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--status-danger-bg)] border border-[var(--status-danger)]/20 text-[var(--status-danger)] active:scale-95 transition-all"
               title="Excluir usuário"
             >
               <Trash2 className="w-4 h-4" />

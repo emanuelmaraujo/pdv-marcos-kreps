@@ -5,7 +5,7 @@ export interface SettingsPanelAccent {
   iconColor: string;
 }
 
-const DEFAULT_ACCENT: SettingsPanelAccent = { iconBg: "bg-zinc-100", iconColor: "text-zinc-600" };
+const DEFAULT_ACCENT: SettingsPanelAccent = { iconBg: "bg-[var(--bg-subtle)]", iconColor: "text-[var(--text-secondary)]" };
 
 export function SettingsPanel({
   id,

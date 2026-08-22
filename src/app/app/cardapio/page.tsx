@@ -698,7 +698,7 @@ function ProductList({
 }: ProductListProps) {
   if (products.length === 0) {
     return (
-      <div className="text-center text-zinc-400 py-16">
+      <div className="text-center text-[var(--text-muted)] py-16">
         <PackageX className="w-10 h-10 mx-auto mb-3 opacity-50" />
         <p className="font-medium">Nenhum produto nesta categoria.</p>
       </div>
@@ -917,7 +917,7 @@ function AddonList({
 }: AddonListProps) {
   if (addons.length === 0) {
     return (
-      <div className="text-center text-zinc-400 py-16">
+      <div className="text-center text-[var(--text-muted)] py-16">
         <PackageX className="w-10 h-10 mx-auto mb-3 opacity-50" />
         <p className="font-medium">Nenhum adicional cadastrado.</p>
       </div>
@@ -936,10 +936,10 @@ function AddonList({
         return (
           <div
             key={addon.id}
-            className={`bg-white border rounded-2xl p-4 transition-all ${
+            className={`bg-[var(--bg-surface)] border rounded-2xl p-4 transition-all ${
               isInactive
-                ? "border-red-200 bg-red-50/60"
-                : "border-zinc-200 hover:border-zinc-300"
+                ? "border-[var(--status-danger)]/20 bg-[var(--status-danger)]/5"
+                : "border-[var(--border)] hover:border-[var(--border-strong)]"
             } ${isSaving ? "opacity-70 pointer-events-none" : ""}`}
           >
           <div className="flex items-center justify-between gap-3">
@@ -947,8 +947,8 @@ function AddonList({
               <h3
                 className={`font-bold text-sm ${
                   isInactive
-                    ? "text-zinc-400 line-through decoration-zinc-300"
-                    : "text-brand-charcoal"
+                    ? "text-[var(--text-muted)] line-through decoration-[var(--border-strong)]"
+                    : "text-[var(--text-primary)]"
                 }`}
               >
                 {addon.name}
@@ -977,7 +977,7 @@ function AddonList({
                       onClick={() =>
                         onStartEdit(addon.id, addon.price.toFixed(2))
                       }
-                      className="p-1 rounded-md text-zinc-300 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
+                      className="p-1 rounded-md text-[var(--text-muted)] hover:text-amber-600 hover:bg-amber-500/10 opacity-0 group-hover:opacity-100 transition-all"
                       title="Editar preço"
                     >
                       <Pencil className="w-3.5 h-3.5" />
@@ -987,7 +987,7 @@ function AddonList({
               )}
 
               {isInactive && (
-                <span className="text-[11px] mt-2 inline-flex px-2 py-0.5 bg-red-100 text-red-700 rounded-md font-bold items-center gap-1">
+                <span className="text-[11px] mt-2 inline-flex px-2 py-0.5 bg-[var(--status-danger-bg)] text-[var(--status-danger)] rounded-md font-bold items-center gap-1">
                   <PackageX className="w-3 h-3" />
                   Indisponível
                 </span>
@@ -999,7 +999,7 @@ function AddonList({
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => onEditAddon(addon)}
-                    className="p-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 active:scale-90 transition-all"
+                    className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-90 transition-all"
                     title="Editar detalhes"
                   >
                     <Settings2 className="w-5 h-5" />
@@ -1011,8 +1011,8 @@ function AddonList({
                       isSaving ? "opacity-50 cursor-not-allowed" : ""
                     } ${
                       addon.active
-                        ? "bg-white border-zinc-200 text-red-500 hover:bg-red-50 hover:border-red-200"
-                        : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                        ? "bg-[var(--bg-surface)] border-[var(--border)] text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)] hover:border-[var(--status-danger)]/30"
+                        : "bg-[var(--status-success-bg)] border-[var(--status-success)]/30 text-[var(--status-success)] hover:bg-[var(--status-success)]/20"
                     }`}
                   >
                     {isSaving ? (
@@ -1092,7 +1092,7 @@ function InlineInput({
   return (
     <div className="flex items-center gap-2">
       {prefix && (
-        <span className="text-sm font-medium text-zinc-500">{prefix}</span>
+        <span className="text-sm font-medium text-[var(--text-secondary)]">{prefix}</span>
       )}
       <input
         ref={ref}
@@ -1149,24 +1149,24 @@ function CategoryList({
       {categories.map((cat) => (
         <div
           key={cat.id}
-          className={`bg-white p-4 rounded-2xl border transition-all ${
-            cat.active ? "border-zinc-100" : "border-zinc-200 bg-zinc-50/50"
+          className={`bg-[var(--bg-surface)] p-4 rounded-2xl border transition-all ${
+            cat.active ? "border-[var(--border)]" : "border-[var(--border)] bg-[var(--bg-subtle)]/50"
           }`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg ${
-                  cat.active ? "bg-brand-red/10 text-brand-red" : "bg-zinc-200 text-zinc-400"
+                  cat.active ? "bg-brand-red/10 text-brand-red" : "bg-[var(--bg-subtle)] text-[var(--text-muted)]"
                 }`}
               >
                 {cat.name.charAt(0)}
               </div>
               <div>
-                <h3 className={`font-bold ${cat.active ? "text-brand-charcoal" : "text-zinc-400"}`}>
+                <h3 className={`font-bold ${cat.active ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}>
                   {cat.name}
                 </h3>
-                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
+                <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">
                   Ordem: {cat.sort_order}
                 </span>
               </div>
@@ -1176,7 +1176,7 @@ function CategoryList({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onEditCategory(cat)}
-                  className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-400"
+                  className="p-2 hover:bg-[var(--bg-subtle)] rounded-full transition-colors text-[var(--text-muted)]"
                 >
                   <Pencil className="w-5 h-5" />
                 </button>
@@ -1185,8 +1185,8 @@ function CategoryList({
                   disabled={savingId === cat.id}
                   className={`p-2 rounded-full transition-colors ${
                     cat.active
-                      ? "text-green-500 hover:bg-green-50"
-                      : "text-zinc-300 hover:bg-zinc-100"
+                      ? "text-[var(--status-success)] hover:bg-[var(--status-success-bg)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]"
                   }`}
                 >
                   {savingId === cat.id ? (

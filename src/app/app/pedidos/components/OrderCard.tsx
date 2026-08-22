@@ -63,7 +63,7 @@ function OrderTypeBadge({ type }: { type: Order["type"] }) {
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
         isEntrega
-          ? "bg-blue-100 text-blue-700 ring-1 ring-blue-300/50"
+          ? "bg-blue-500/10 text-blue-600 ring-1 ring-blue-500/30"
           : isViagem
           ? "bg-[var(--status-warning-bg)] text-[var(--status-warning)] ring-1 ring-[var(--status-warning)]/30"
           : "bg-[var(--bg-subtle)] text-[var(--text-secondary)] ring-1 ring-[var(--border)]"
@@ -196,7 +196,7 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
           <div className="flex items-center gap-2.5">
             <div className="flex h-10 min-w-[2.5rem] shrink-0 flex-col items-center justify-center rounded-xl bg-brand-charcoal px-1 text-white shadow-[var(--shadow-sm)]">
               {order.branch?.code && (
-                <span className="text-[8px] font-semibold leading-none text-zinc-400">{order.branch.code}</span>
+                <span className="text-[8px] font-semibold leading-none text-[var(--text-muted)]">{order.branch.code}</span>
               )}
               <span className={`font-bold leading-none ${String(order.daily_number).length > 2 ? "text-sm" : "text-base"}`}>
                 {String(order.daily_number).padStart(2, "0")}

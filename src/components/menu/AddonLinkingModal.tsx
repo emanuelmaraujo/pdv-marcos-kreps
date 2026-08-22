@@ -44,19 +44,19 @@ export function AddonLinkingModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] flex flex-col">
+      <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300 max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-brand-charcoal">
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">
               Vincular Adicionais
             </h2>
-            <p className="text-sm text-zinc-500 font-medium">{product.name}</p>
+            <p className="text-sm text-[var(--text-secondary)] font-medium">{product.name}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
+            className="p-2 hover:bg-[var(--bg-subtle)] rounded-full transition-colors"
           >
-            <X className="w-6 h-6 text-zinc-400" />
+            <X className="w-6 h-6 text-[var(--text-muted)]" />
           </button>
         </div>
 
@@ -70,19 +70,19 @@ export function AddonLinkingModal({
                 className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all ${
                   isSelected
                     ? "bg-brand-red/5 border-brand-red/30 shadow-sm"
-                    : "bg-zinc-50 border-zinc-100 hover:border-zinc-200"
+                    : "bg-[var(--bg-subtle)] border-[var(--border)] hover:border-[var(--border-strong)]"
                 }`}
               >
                 <div className="flex flex-col items-start">
-                  <span className={`font-bold text-sm ${isSelected ? "text-brand-red" : "text-brand-charcoal"}`}>
+                  <span className={`font-bold text-sm ${isSelected ? "text-brand-red" : "text-[var(--text-primary)]"}`}>
                     {addon.name}
                   </span>
-                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
+                  <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">
                     + R$ {addon.price.toFixed(2)}
                   </span>
                 </div>
                 <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all ${
-                  isSelected ? "bg-brand-red border-brand-red text-white" : "bg-white border-zinc-200"
+                  isSelected ? "bg-brand-red border-brand-red text-white" : "bg-[var(--bg-surface)] border-[var(--border)]"
                 }`}>
                   {isSelected && <Check className="w-4 h-4" />}
                 </div>

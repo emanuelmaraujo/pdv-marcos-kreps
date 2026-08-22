@@ -74,28 +74,28 @@ function TimelineStep({
             ? "border-emerald-500 bg-emerald-500"
             : active
             ? "border-brand-red bg-brand-red ring-4 ring-brand-red/20"
-            : "border-zinc-300 bg-white"
+            : "border-[var(--border-strong)] bg-white"
         }`}
       />
-      <p className="text-[9px] font-black uppercase tracking-wide text-zinc-500 text-center leading-tight whitespace-nowrap">
+      <p className="text-[9px] font-black uppercase tracking-wide text-[var(--text-muted)] text-center leading-tight whitespace-nowrap">
         {label}
       </p>
-      {time && <p className="text-[9px] font-bold text-zinc-400">{time}</p>}
+      {time && <p className="text-[9px] font-bold text-[var(--text-muted)]">{time}</p>}
     </div>
   );
 }
 
 function TimelineConnector({ done }: { done: boolean }) {
   return (
-    <div className={`flex-1 h-0.5 rounded-full transition-colors ${done ? "bg-emerald-300" : "bg-zinc-200"}`} />
+    <div className={`flex-1 h-0.5 rounded-full transition-colors ${done ? "bg-emerald-300" : "bg-white/15"}`} />
   );
 }
 
 function TimeMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2">
-      <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">{label}</p>
-      <p className="mt-0.5 text-sm font-black text-zinc-800">{value}</p>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2">
+      <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{label}</p>
+      <p className="mt-0.5 text-sm font-black text-[var(--text-primary)]">{value}</p>
     </div>
   );
 }
@@ -104,13 +104,13 @@ const PAYMENT_METHOD_CONFIG: Record<
   PaymentMethod,
   { label: string; Icon: React.ElementType; colors: string }
 > = {
-  PIX:         { label: "PIX",          Icon: QrCode,      colors: "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100" },
-  CASH:        { label: "Dinheiro",     Icon: Banknote,    colors: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
-  DEBIT_CARD:  { label: "Débito",       Icon: CreditCard,  colors: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" },
-  CREDIT_CARD: { label: "Crédito",      Icon: CreditCard,  colors: "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100" },
-  IFOOD:       { label: "iFood",        Icon: Smartphone,  colors: "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100" },
-  COURTESY:    { label: "Cortesia",     Icon: Gift,        colors: "border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100" },
-  PENDING:     { label: "Pendente",     Icon: Clock,       colors: "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100" },
+  PIX:         { label: "PIX",          Icon: QrCode,      colors: "border-teal-500/30 bg-teal-500/10 text-teal-600 hover:bg-teal-500/20" },
+  CASH:        { label: "Dinheiro",     Icon: Banknote,    colors: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20" },
+  DEBIT_CARD:  { label: "Débito",       Icon: CreditCard,  colors: "border-blue-500/30 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20" },
+  CREDIT_CARD: { label: "Crédito",      Icon: CreditCard,  colors: "border-violet-500/30 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20" },
+  IFOOD:       { label: "iFood",        Icon: Smartphone,  colors: "border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20" },
+  COURTESY:    { label: "Cortesia",     Icon: Gift,        colors: "border-pink-500/30 bg-pink-500/10 text-pink-600 hover:bg-pink-500/20" },
+  PENDING:     { label: "Pendente",     Icon: Clock,       colors: "border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20" },
 };
 
 function getOutstandingAmount(order: Order) {
@@ -250,9 +250,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
 
         {/* Error */}
         {errorMsg && (
-          <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
-            <AlertTriangle className="shrink-0 text-red-500" size={18} />
-            <p className="text-sm font-bold text-red-700">{errorMsg}</p>
+          <div className="flex items-center gap-3 rounded-2xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] p-4">
+            <AlertTriangle className="shrink-0 text-[var(--status-danger)]" size={18} />
+            <p className="text-sm font-bold text-[var(--status-danger)]">{errorMsg}</p>
           </div>
         )}
 
@@ -270,7 +270,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
           <div className="relative space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)]">
                   {order.type === "BALCAO" ? "Balcão" : isDelivery ? "Entrega" : "Para Viagem"} · {order.source === "APP" ? "App" : order.source}
                 </p>
                 <h2 className="mt-0.5 text-2xl font-black leading-tight">
@@ -370,26 +370,26 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
 
         {/* Items com controles por item */}
         <div className="space-y-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-1">Itens do Pedido</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] px-1">Itens do Pedido</p>
           <OrderItemsControl order={order} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
 
           {/* Financial summary */}
-          <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-            <div className="bg-zinc-50/80 p-4 space-y-2">
+          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
+            <div className="bg-[var(--bg-subtle)]/80 p-4 space-y-2">
               {(hasDiscount || hasPacking || hasDeliveryFee) && (
-                <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                <div className="flex justify-between text-xs font-semibold text-[var(--text-muted)]">
                   <span>Subtotal</span>
                   <span>{currency.format(subtotal)}</span>
                 </div>
               )}
               {hasPacking && (
-                <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                <div className="flex justify-between text-xs font-semibold text-[var(--text-muted)]">
                   <span>Embalagem</span>
                   <span>{currency.format(order.packing_fee)}</span>
                 </div>
               )}
               {hasDeliveryFee && (
-                <div className="flex justify-between text-xs font-semibold text-zinc-500">
+                <div className="flex justify-between text-xs font-semibold text-[var(--text-muted)]">
                   <span>Entrega</span>
                   <span>{currency.format(order.delivery_fee)}</span>
                 </div>
@@ -400,8 +400,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                   <span>- {currency.format(order.discount_amount)}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between border-t border-zinc-200 pt-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Geral</span>
+              <div className="flex items-center justify-between border-t border-[var(--border)] pt-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Total Geral</span>
                 <span className={`text-2xl font-black ${order.payment_status === "PAID" ? "text-emerald-600" : "text-brand-red"}`}>
                   {currency.format(order.total_amount)}
                 </span>
@@ -444,7 +444,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-14 rounded-2xl border-2 border-zinc-300 text-xs font-black text-zinc-500 hover:bg-zinc-100 gap-1 px-3"
+                    className="h-14 rounded-2xl border-2 border-[var(--border-strong)] text-xs font-black text-[var(--text-muted)] hover:bg-[var(--border)] gap-1 px-3"
                     onClick={onRevertToQueue}
                     disabled={isLoading}
                     title="Voltar para Na Fila"
@@ -464,7 +464,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-14 rounded-2xl border-2 border-zinc-300 text-xs font-black text-zinc-500 hover:bg-zinc-100 gap-1 px-3"
+                    className="h-14 rounded-2xl border-2 border-[var(--border-strong)] text-xs font-black text-[var(--text-muted)] hover:bg-[var(--border)] gap-1 px-3"
                     onClick={onRevertToQueue}
                     disabled={isLoading}
                     title="Voltar para Na Fila"
@@ -474,14 +474,14 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </div>
               )}
               {order.status === "PRONTO" && isDelivery && showDispatchForm && (
-                <div className="space-y-3 rounded-2xl border-2 border-blue-100 bg-blue-50 p-4 animate-in fade-in zoom-in-95">
-                  <div className="flex items-center gap-2 text-blue-700">
+                <div className="space-y-3 rounded-2xl border-2 border-blue-500/20 bg-blue-500/10 p-4 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center gap-2 text-blue-600">
                     <Bike size={18} />
                     <h4 className="text-sm font-black uppercase tracking-widest">Despachar Entrega</h4>
                   </div>
                   {registeredCouriers.length > 0 && (
                     <select
-                      className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                      className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-3 text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-300"
                       value={courierIdInput}
                       onChange={(e) => setCourierIdInput(e.target.value)}
                     >
@@ -495,14 +495,14 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                     <>
                       <input
                         type="text"
-                        className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-3 text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-300"
                         placeholder="Nome do entregador"
                         value={courierNameInput}
                         onChange={(e) => setCourierNameInput(e.target.value)}
                       />
                       <input
                         type="text"
-                        className="w-full rounded-xl border border-blue-100 bg-white p-3 text-sm font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                        className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-3 text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-300"
                         placeholder="Telefone do entregador (opcional)"
                         value={courierPhoneInput}
                         onChange={(e) => setCourierPhoneInput(e.target.value)}
@@ -561,7 +561,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               {canAddItems && (
                 <Button
                   variant="outline"
-                  className="h-12 w-full rounded-2xl border-2 border-zinc-900 font-black gap-2"
+                  className="h-12 w-full rounded-2xl border-2 border-[var(--border-strong)] font-black gap-2"
                   onClick={() => router.push(`/app/novo-pedido?add_to=${order.id}`)}
                   disabled={isLoading}
                 >
@@ -573,7 +573,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               {isPaid && !isCANCELADO && (
                 <Button
                   variant="outline"
-                  className="h-12 w-full rounded-2xl border-2 font-black text-xs text-zinc-600 gap-2"
+                  className="h-12 w-full rounded-2xl border-2 font-black text-xs text-[var(--text-secondary)] gap-2"
                   onClick={() => setShowChangeMethod(true)}
                   disabled={isLoading}
                 >
@@ -586,7 +586,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 {["NA_FILA", "PRONTO", "SAIU_PARA_ENTREGA", "ENTREGUE"].includes(order.status) && (
                   <Button
                     variant="outline"
-                    className="h-12 rounded-2xl border-2 font-black text-xs text-zinc-600 gap-2"
+                    className="h-12 rounded-2xl border-2 font-black text-xs text-[var(--text-secondary)] gap-2"
                     onClick={onReprint}
                     disabled={isLoading}
                   >
@@ -596,7 +596,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 {["AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "NA_FILA", "PRONTO"].includes(order.status) && (
                   <Button
                     variant="outline"
-                    className="h-12 rounded-2xl border-2 border-red-100 font-black text-xs text-red-500 hover:bg-red-50 gap-2"
+                    className="h-12 rounded-2xl border-2 border-[var(--status-danger)]/20 font-black text-xs text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)] gap-2"
                     onClick={() => setShowCancelReason(true)}
                     disabled={isLoading}
                   >
@@ -611,10 +611,10 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
           {showChangeMethod && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowChangeMethod(false)} className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100">
+                <button onClick={() => setShowChangeMethod(false)} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-[var(--border)]">
                   <ArrowLeft size={18} />
                 </button>
-                <h4 className="text-sm font-black uppercase tracking-widest text-zinc-900">Alterar Pagamento</h4>
+                <h4 className="text-sm font-black uppercase tracking-widest text-[var(--text-primary)]">Alterar Pagamento</h4>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {(["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD"] as PaymentMethod[]).map((method) => {
@@ -639,10 +639,10 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
           {showPaymentSelection && (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
               <div className="flex items-center gap-2">
-                <button onClick={() => setShowPaymentSelection(false)} className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100">
+                <button onClick={() => setShowPaymentSelection(false)} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-[var(--border)]">
                   <ArrowLeft size={18} />
                 </button>
-                <h4 className="text-sm font-black uppercase tracking-widest text-zinc-900">Forma de Pagamento</h4>
+                <h4 className="text-sm font-black uppercase tracking-widest text-[var(--text-primary)]">Forma de Pagamento</h4>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {(["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD", "COURTESY"] as PaymentMethod[]).map((method) => {
@@ -664,14 +664,14 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
 
           {/* Cancel reason */}
           {showCancelReason && (
-            <div className="space-y-4 rounded-2xl border-2 border-red-100 bg-red-50 p-5 animate-in fade-in zoom-in-95">
+            <div className="space-y-4 rounded-2xl border-2 border-[var(--status-danger)]/20 bg-[var(--status-danger-bg)] p-5 animate-in fade-in zoom-in-95">
               <div className="flex items-center gap-2 text-red-600">
                 <XCircle size={18} />
                 <h4 className="text-sm font-black uppercase tracking-widest">Cancelar Pedido</h4>
               </div>
               <input
                 type="text"
-                className="w-full rounded-xl border border-red-100 bg-white p-4 font-bold text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-300"
+                className="w-full rounded-xl border border-[var(--status-danger)]/30 bg-[var(--bg-surface)] p-4 font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-red-300"
                 placeholder="Qual o motivo?"
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}

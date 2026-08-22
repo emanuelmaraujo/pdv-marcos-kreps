@@ -86,13 +86,13 @@ function saveRecentName(name: string) {
 // ─── Payment Methods ──────────────────────────────────────────────────────────
 
 const PAYMENT_METHODS = [
-  { value: "PIX",         label: "PIX",      Icon: QrCode,     color: "border-teal-200 bg-teal-50 text-teal-700 ring-teal-200" },
-  { value: "CASH",        label: "Dinheiro", Icon: Banknote,   color: "border-emerald-200 bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard, color: "border-blue-200 bg-blue-50 text-blue-700 ring-blue-200" },
-  { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard, color: "border-violet-200 bg-violet-50 text-violet-700 ring-violet-200" },
-  { value: "IFOOD",       label: "iFood",    Icon: Smartphone, color: "border-red-200 bg-red-50 text-red-700 ring-red-200" },
-  { value: "PENDING",     label: "Pendente", Icon: Clock,      color: "border-amber-200 bg-amber-50 text-amber-700 ring-amber-200" },
-  { value: "COURTESY",   label: "Cortesia", Icon: Gift,       color: "border-pink-200 bg-pink-50 text-pink-700 ring-pink-200" },
+  { value: "PIX",         label: "PIX",      Icon: QrCode,     color: "border-teal-500/30 bg-teal-500/10 text-teal-600 ring-teal-500/20" },
+  { value: "CASH",        label: "Dinheiro", Icon: Banknote,   color: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 ring-emerald-500/20" },
+  { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard, color: "border-blue-500/30 bg-blue-500/10 text-blue-600 ring-blue-500/20" },
+  { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard, color: "border-violet-500/30 bg-violet-500/10 text-violet-600 ring-violet-500/20" },
+  { value: "IFOOD",       label: "iFood",    Icon: Smartphone, color: "border-red-500/30 bg-red-500/10 text-red-600 ring-red-500/20" },
+  { value: "PENDING",     label: "Pendente", Icon: Clock,      color: "border-amber-500/30 bg-amber-500/10 text-amber-600 ring-amber-500/20" },
+  { value: "COURTESY",   label: "Cortesia", Icon: Gift,       color: "border-pink-500/30 bg-pink-500/10 text-pink-600 ring-pink-500/20" },
 ] as const;
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -507,7 +507,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
     return (
       <BottomSheet isOpen={isOpen} onClose={handleClose} title="Pedido Finalizado!">
         <div className="flex flex-col items-center justify-center gap-5 p-6 text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/10">
             <CheckCircle2 className="h-10 w-10 text-emerald-500" />
           </div>
           <div>
@@ -522,19 +522,19 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
               </span>
             )}
             {successData.order_type === "ENTREGA" && (
-              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-black uppercase tracking-wider text-blue-700 ring-1 ring-blue-200">
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-blue-600 ring-1 ring-blue-500/30">
                 <Bike className="h-3.5 w-3.5" strokeWidth={2.25} />
                 Entrega
               </span>
             )}
           </div>
-          <div className="w-full rounded-2xl bg-emerald-50 border border-emerald-100 p-5">
+          <div className="w-full rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-5">
             <p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Total Oficial</p>
-            <p className="mt-1 text-3xl font-black text-emerald-700">
+            <p className="mt-1 text-3xl font-black text-emerald-600">
               {currency.format(successData.total_amount)}
             </p>
             {successData.ifood_charged_amount !== null && successData.ifood_charged_amount !== undefined && (
-              <p className="mt-2 text-xs font-bold text-emerald-700">
+              <p className="mt-2 text-xs font-bold text-emerald-600">
                 iFood cobrado: {currency.format(successData.ifood_charged_amount)}
               </p>
             )}
@@ -567,7 +567,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
               ))}
             </div>
           </div>
-          {error && <p className="text-sm font-bold text-red-600 rounded-xl bg-red-50 p-3">⚠️ {error}</p>}
+          {error && <p className="text-sm font-bold text-[var(--status-danger)] rounded-xl bg-[var(--status-danger-bg)] p-3">⚠️ {error}</p>}
           <Button
             className="w-full h-14 text-lg font-black"
             onClick={handleCheckout}
@@ -611,7 +611,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                             {item.quantity}× {item.product.name}
                           </p>
                           {item.is_takeout && (
-                            <span className="flex items-center gap-1 bg-amber-50 border border-amber-100 text-amber-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide">
+                            <span className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 text-amber-600 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide">
                               <ShoppingBag size={10} />
                               Para Levar
                             </span>
@@ -640,7 +640,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                         </button>
                         <button
                           onClick={() => removeItem(item.id)}
-                          className="p-2.5 bg-red-50 rounded-xl text-red-400 hover:bg-red-100"
+                          className="p-2.5 bg-[var(--status-danger-bg)] rounded-xl text-[var(--status-danger)] hover:bg-[var(--status-danger)]/20"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -700,7 +700,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
               }}
               className={`flex w-full items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition-all ${
                 isDeliveryOrder
-                  ? "border-blue-400 bg-blue-50 ring-2 ring-blue-100"
+                  ? "border-blue-400 bg-blue-500/10 ring-2 ring-blue-500/20"
                   : "border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]"
               }`}
             >
@@ -708,22 +708,22 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                 <Bike className="h-4.5 w-4.5" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className={`block text-sm font-black ${isDeliveryOrder ? "text-blue-700" : "text-[var(--text-primary)]"}`}>
+                <span className={`block text-sm font-black ${isDeliveryOrder ? "text-blue-600" : "text-[var(--text-primary)]"}`}>
                   Pedido para entrega
                 </span>
                 <span className="block text-[11px] text-[var(--text-secondary)]">
                   Cobra taxa de entrega e exige endereço do cliente
                 </span>
               </span>
-              <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${isDeliveryOrder ? "bg-blue-500" : "bg-zinc-300"}`}>
+              <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${isDeliveryOrder ? "bg-blue-500" : "bg-[var(--border-strong)]"}`}>
                 <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${isDeliveryOrder ? "translate-x-4" : "translate-x-0.5"}`} />
               </span>
             </button>
 
             {/* Delivery address form */}
             {isDeliveryOrder && (
-              <div className="space-y-3 rounded-2xl border border-blue-100 bg-blue-50/40 p-4 animate-in fade-in slide-in-from-top-2">
-                <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-blue-700">
+              <div className="space-y-3 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 animate-in fade-in slide-in-from-top-2">
+                <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-blue-600">
                   <MapPin className="h-3.5 w-3.5" /> Endereço de Entrega
                 </p>
                 <input
@@ -736,13 +736,13 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
                 />
                 {cepStatus === "loading" && (
-                  <p className="text-[11px] font-bold text-blue-700">Buscando endereço…</p>
+                  <p className="text-[11px] font-bold text-blue-600">Buscando endereço…</p>
                 )}
                 {cepStatus === "error" && (
-                  <p className="text-[11px] font-bold text-red-600">{cepError || "CEP não encontrado."}</p>
+                  <p className="text-[11px] font-bold text-[var(--status-danger)]">{cepError || "CEP não encontrado."}</p>
                 )}
                 {cepStatus === "resolved" && (
-                  <p className="text-[11px] font-bold text-blue-700">
+                  <p className="text-[11px] font-bold text-blue-600">
                     {deliveryStreet}, {deliveryNeighborhood} — {deliveryCity}/{deliveryState}
                   </p>
                 )}
@@ -773,12 +773,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                   className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-2.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
                 />
                 {deliveryEnabled && deliveryFeeEstimate > 0 && (
-                  <p className="text-[11px] font-bold text-blue-700">
+                  <p className="text-[11px] font-bold text-blue-600">
                     Taxa de entrega estimada: {currency.format(deliveryFeeEstimate)}
                   </p>
                 )}
                 {!deliveryEnabled && (
-                  <p className="text-[11px] font-bold text-amber-700">
+                  <p className="text-[11px] font-bold text-amber-600">
                     ⚠ Entrega não está habilitada nas configurações. O pedido será rejeitado pelo servidor.
                   </p>
                 )}
@@ -787,9 +787,9 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
 
             {/* Packaging fee notice (per-item takeout) */}
             {showPackagingFee && (
-              <div className="flex items-center gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2">
+              <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
                 <Tag className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                <p className="text-xs font-bold text-amber-700">
+                <p className="text-xs font-bold text-amber-600">
                   {takeoutQuantity} item{takeoutQuantity !== 1 ? "s" : ""} para levar —{" "}
                   taxa de embalagem: <strong>{currency.format(packagingTotal)}</strong>
                 </p>
@@ -869,19 +869,19 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                   onClick={() => setRememberCustomerData((v) => !v)}
                   className={`mt-2 flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                     rememberCustomerData
-                      ? "border-emerald-200 bg-emerald-50"
+                      ? "border-emerald-500/30 bg-emerald-500/10"
                       : "border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)]"
                   }`}
                 >
                   <span className="min-w-0">
-                    <span className={`block text-xs font-black ${rememberCustomerData ? "text-emerald-800" : "text-[var(--text-primary)]"}`}>
+                    <span className={`block text-xs font-black ${rememberCustomerData ? "text-emerald-600" : "text-[var(--text-primary)]"}`}>
                       Salvar dados deste cliente
                     </span>
                     <span className={`mt-0.5 block text-[10px] font-medium leading-relaxed ${rememberCustomerData ? "text-emerald-600" : "text-[var(--text-muted)]"}`}>
                       Da próxima vez que ele digitar o WhatsApp, o nome aparece sozinho.
                     </span>
                   </span>
-                  <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${rememberCustomerData ? "bg-emerald-500" : "bg-zinc-300"}`}>
+                  <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${rememberCustomerData ? "bg-emerald-500" : "bg-[var(--border-strong)]"}`}>
                     <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${rememberCustomerData ? "translate-x-4" : "translate-x-0.5"}`} />
                   </span>
                 </button>
@@ -936,7 +936,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                     Cada um paga o próprio krepe com o método que quiser
                   </span>
                 </span>
-                <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${splitBill ? "bg-brand-red" : "bg-zinc-200"}`}>
+                <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${splitBill ? "bg-brand-red" : "bg-[var(--border-strong)]"}`}>
                   <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${splitBill ? "translate-x-4" : "translate-x-0.5"}`} />
                 </span>
               </button>
@@ -995,15 +995,15 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                         )}
                       </div>
                       {change !== null && change >= 0 && (
-                        <div className="rounded-xl bg-emerald-50 px-3 py-2 flex items-center justify-between">
-                          <span className="text-xs font-bold text-emerald-700">Troco</span>
-                          <span className="text-base font-black text-emerald-700">
+                        <div className="rounded-xl bg-emerald-500/10 px-3 py-2 flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-600">Troco</span>
+                          <span className="text-base font-black text-emerald-600">
                             {currency.format(change)}
                           </span>
                         </div>
                       )}
                       {isPartial && (
-                        <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                        <div className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-600">
                           ⚠ Valor menor que o total — pedido ficará com pagamento parcial
                         </div>
                       )}
@@ -1165,7 +1165,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                 </div>
               )}
               {selectedPaymentMethod === "PENDING" && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-600">
                   Pedido ficará com pagamento pendente. O desconto informado acima será enviado ao servidor.
                 </div>
               )}
@@ -1175,7 +1175,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
             </div>
 
             {error && (
-              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+              <p className="rounded-xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] px-4 py-3 text-sm font-bold text-[var(--status-danger)]">
                 ⚠️ {error}
               </p>
             )}
