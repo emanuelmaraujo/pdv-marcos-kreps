@@ -255,6 +255,15 @@ body[data-context="public"] {
   --text-micro: 10px;
 }
 
+/* <html> não tinha cor de fundo própria — em overscroll elástico e no gesto
+   nativo de "voltar" por arraste lateral (comum em navegadores mobile), a
+   área além do <body> pintado mostra o fundo do <html>, que ficava
+   transparente e revelava a tela preta padrão do navegador por trás.
+   Espelhar o mesmo token do body aqui fecha esse vão. */
+html {
+  background: var(--background);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
