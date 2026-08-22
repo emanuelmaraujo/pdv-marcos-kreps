@@ -202,7 +202,7 @@ export default function CaixaPage() {
   const [selectedDayLabel, setSelectedDayLabel] = useState<string>(todayLabel);
   const [showComparison, setShowComparison] = useState(false);
   const [isCompLoading, setIsCompLoading] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [, setShowDatePicker] = useState(false);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { currentBranchId, currentBranch } = useBranch();
@@ -281,7 +281,11 @@ export default function CaixaPage() {
       setIsLive(false);
     };
     const onVisibility = () => {
-      document.visibilityState === "visible" ? startInterval() : stopInterval();
+      if (document.visibilityState === "visible") {
+        startInterval();
+      } else {
+        stopInterval();
+      }
     };
     if (isToday) {
       startInterval();

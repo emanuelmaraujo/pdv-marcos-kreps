@@ -48,6 +48,7 @@ jobs:
             dispatch-delivery \
             edit-order-item \
             get-customer-profile \
+            loyalty-redeem \
             manage-users \
             mark-payment \
             reprint-order \
@@ -66,10 +67,15 @@ jobs:
             get-public-branch-stats \
             get-public-checkout-config \
             get-public-customer-profile \
+            get-public-loyalty \
             get-public-order-status \
             list-public-branches \
             lookup-cep \
             lookup-orders-by-phone \
+            loyalty-accrue \
+            loyalty-expire \
+            loyalty-reconcile \
+            loyalty-revoke \
             mercado-pago-webhook \
             subscribe-order-push \
             webauthn \

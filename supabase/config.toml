@@ -439,3 +439,32 @@ verify_jwt = false
 # the function enforces auth internally before doing anything.
 [functions.send-whatsapp]
 verify_jwt = false
+
+# Fidelidade — loyalty-accrue só aceita x-internal-secret (sem fallback de Bearer
+# JWT): é chamada fire-and-forget por mark-payment, que não envia Authorization.
+# Com verify_jwt=true (o default), o gateway rejeitaria essa chamada com 401 antes
+# mesmo de chegar no código da function.
+[functions.loyalty-accrue]
+verify_jwt = false
+
+# loyalty-revoke: mesmo caso de dual auth do send-whatsapp — x-internal-secret
+# (chamada por mark-payment em estorno) OU Bearer ADMIN (botão manual).
+[functions.loyalty-revoke]
+verify_jwt = false
+
+# loyalty-reconcile / loyalty-expire: cron via x-cron-secret OU Bearer ADMIN
+# (botão manual no dashboard) — mesmo padrão de send-whatsapp.
+[functions.loyalty-reconcile]
+verify_jwt = false
+
+[functions.loyalty-expire]
+verify_jwt = false
+
+# get-public-loyalty: portal público do cliente, autenticado por token opaco
+# no corpo da requisição (loyalty_portal_token) — sem JWT de usuário, mesmo
+# padrão de get-public-order-status/get-public-checkout-config.
+[functions.get-public-loyalty]
+verify_jwt = false
+
+# loyalty-redeem fica com o default (verify_jwt=true): usa Bearer JWT de
+# atendente/admin normal, igual mark-payment/confirm-order.

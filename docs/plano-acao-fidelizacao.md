@@ -1,115 +1,294 @@
-# Plano de Ação — Programa de Fidelidade e Retenção de Clientes
+# Plano de Ação — Programa de Fidelidade (PDV Marcos Krep's)
 
-> Documento vivo — atualizar a cada fase executada, seguindo o mesmo padrão de `docs/plano-acao-correcao-pdv.md`.
+> Este documento foi reconstruído em 2026-08-19 a partir de verificação direta em produção
+> (projeto Supabase `feotsdzkwbikmcnzgsnh`). Uma versão anterior deste mesmo doc (investigação
+> inicial, sem decisões nem código) foi mergeada em `main` via PR #124 por uma sessão paralela —
+> este arquivo reconcilia as duas: mantém a investigação e a estratégia de retenção de lá,
+> e adiciona as decisões de negócio confirmadas, o trabalho de Fase 0 já feito, e os achados
+> técnicos adicionais (verify_jwt, order_id nullable) descobertos nesta sessão. Tudo marcado
+> como "confirmado" foi checado ao vivo (schema dump, `functions list`, `functions download`,
+> leitura de código local). O que não foi verificado por mim está marcado explicitamente.
 
-## Resumo executivo
+## Estado real confirmado
 
-Investiguei o "programa de fidelidade fantasma" encontrado em produção (6 Edge Functions + 4 tabelas, sem rastro no git) e baixei o código-fonte real de cada função direto do projeto Supabase (`supabase functions download`) para entender exatamente o que existe. Conclusão: **não é um esqueleto abandonado — é um backend de cartão-fidelidade quase completo e bem construído** (idempotente, auditado, com RLS correta, cron de reconciliação e expiração já rodando em produção). Ele nunca "decolou" por uma combinação de 3 causas concretas, todas identificadas com evidência direta do banco:
+### Existe em produção, fora do git
 
-1. **Ninguém liga a torneira principal.** `mark-payment`/`confirm-order` (as funções que processam pagamento) nunca chamam `loyalty-accrue`. O único caminho que credita selos é o cron `loyalty-reconcile` (roda de hora em hora), que varre pedidos pagos com `customer_id` preenchido — e ele está rodando desde 2026-06-02.
-2. **O gargalo real é ainda mais básico: quase ninguém informa telefone no balcão.** De 2580 pedidos pagos no total, só 99 (3,8%) têm `customer_id` — e **zero** nas últimas 48h. O campo de WhatsApp no checkout do atendente é opcional e raramente preenchido. Mesmo com o backend 100% funcional, sem telefone não há como identificar o cliente pra dar o selo.
-3. **A notificação por WhatsApp está silenciosamente quebrada.** A constraint `chk_whatsapp_messages_event_type` no banco de produção não inclui os 3 tipos de evento que o código de fidelidade tenta gravar (`loyalty_stamp_earned`, `loyalty_reward_ready`, `loyalty_reward_expiring`) — todo INSERT falharia. O código foi escrito pra nunca lançar exceção (fidelidade é melhoria, não pode travar o caixa), então essa falha nunca apareceu como erro visível — só como silêncio.
+- **4 tabelas** + colunas em `customers`, todas confirmadas via `supabase db dump --linked`:
+  - `loyalty_programs` (`id text`, `stamps_required` 3–30, padrão 10, `reward_label` padrão
+    `'1 Krep tradicional grátis'`, `min_order_brl` padrão 0, `stamp_ttl_days` padrão 90,
+    `reward_ttl_days` padrão 30, `branch_scope uuid[]`)
+  - `loyalty_accounts` (`customer_id`, `program_id`, `current_stamps`, `lifetime_stamps`,
+    unique `(customer_id, program_id)`)
+  - `loyalty_rewards` (`status` enum `loyalty_reward_status`: AVAILABLE/REDEEMED/EXPIRED/REVOKED,
+    `code` unique, `expires_at`, rastreio de resgate por pedido/usuário/filial)
+  - `loyalty_transactions` (`kind` enum `loyalty_tx_kind`: EARN/REDEEM/EXPIRE/ADJUST/REVOKE,
+    `delta`, `balance_after`, unique parcial por `(account_id, order_id)` quando `kind='EARN'`
+    e `order_id` não nulo — evita crédito duplicado por pedido)
+  - `customers.loyalty_portal_token` (unique) + `loyalty_portal_token_issued_at`
+  - RLS habilitada nas 4 tabelas; policies restringem escrita/leitura a `ADMIN`/`ATTENDANT`.
+  - **Nenhuma migration correspondente existia em `supabase/migrations/`** até a Fase 0
+    desta sessão (ver "Status de execução" abaixo).
 
-Nenhum desses três problemas é difícil de resolver. O trabalho pesado (schema, lógica de acúmulo/resgate/expiração, segurança) já está feito. O que falta é: (a) trazer o código pra dentro do git com governança normal, (b) ligar os 3 fios soltos acima, e (c) resolver o problema de produto real — dar ao atendente um motivo forte e rápido pra pedir o WhatsApp do cliente.
+- **6 Edge Functions ativas** (`functions list --project-ref feotsdzkwbikmcnzgsnh`),
+  nenhuma com pasta local em `supabase/functions/` até a Fase 0 desta sessão:
+  - `loyalty-accrue`, `loyalty-redeem`, `loyalty-revoke`, `loyalty-reconcile`,
+    `loyalty-expire`, `get-public-loyalty`
+  - Código baixado e lido via `supabase functions download <nome> --workdir <pasta>`
+    (extrai do bundle ESZip deployado).
 
-## O que existe hoje em produção (investigado via `supabase db query --linked` e `supabase functions download`)
+- **`settings`**: `loyalty_enabled = 'true'`, `loyalty_public_base_url = '""'` (vazio).
+  Confirmado via `supabase db dump --linked --data-only --schema public`.
 
-### Banco de dados
-| Tabela | Papel |
-|---|---|
-| `loyalty_programs` | Config do programa. Hoje: 1 programa (`default`) — "Cartão Fidelidade Krep's", 10 selos → 1 Krep tradicional grátis, sem pedido mínimo, selo expira em 90 dias, recompensa expira em 30 dias, todas as filiais. |
-| `loyalty_accounts` | 1 conta por cliente (`customer_id` = telefone E.164) por programa. `current_stamps`/`lifetime_stamps`. |
-| `loyalty_rewards` | Recompensas emitidas (`code` tipo `KRP-XXXX-XXXX`, status `AVAILABLE`/`REDEEMED`/`EXPIRED`/`REVOKED`). |
-| `loyalty_transactions` | Ledger de auditoria (`EARN`/`REDEEM`/`ADJUST`/`REVOKE`/`EXPIRE`, delta, saldo após). |
+- **`_shared/whatsapp-enqueue.ts` divergiu entre prod e git.** A versão deployada
+  (extraída do bundle de `loyalty-accrue`) tem `enqueueLoyaltyWhatsAppMessage(...)` e os
+  3 tipos de evento de fidelidade em `SETTING_TEMPLATE`/`DEFAULT_TEMPLATE`
+  (`loyalty_stamp_earned`, `loyalty_reward_ready`, `loyalty_reward_expiring`). A versão em
+  `supabase/functions/_shared/whatsapp-enqueue.ts` no git não tinha nenhum dos dois —
+  só cobria `order_received`, `order_ready`, `order_partial_ready`, `order_out_for_delivery`.
+  **Qualquer redeploy de uma function que importe esse shared file a partir do git, sem
+  reconciliar antes, quebraria silenciosamente o que já está rodando em prod** — resolvido
+  na Fase 0 desta sessão (união dos dois, ver abaixo).
 
-RLS correta e consistente com o resto do app: leitura só ADMIN/ATTENDANT autenticados, escrita só via Edge Function com Service Role (nenhuma policy pública de escrita). `customers.loyalty_portal_token`/`loyalty_portal_token_issued_at` já existem pra dar acesso a um portal público sem login.
+- **2 jobs `pg_cron`** (`loyalty-reconcile-hourly` de hora em hora, `loyalty-expire-daily`
+  diário) — mencionados na investigação original (PR #124), **não reverificados
+  independentemente por mim nesta sessão**: `cron.job` é uma tabela de config de extensão
+  que `pg_dump`/`db dump` ignora por padrão, e não persegui uma query direta alternativa.
+  Tratar como não confirmado por esta sessão até checar via SQL direto.
 
-**Dado real:** 0 contas, 0 recompensas, 0 transações. `settings.loyalty_enabled = true` (o flag está ligado!), mas `settings.loyalty_public_base_url` está vazio (então nenhum link de portal pode ser montado ainda).
+- **Segredo em texto claro** (achado da investigação original, PR #124, não reverificado
+  por mim): o `command` do job `loyalty-reconcile-hourly` guardaria o `x-cron-secret` em
+  texto plano na tabela `cron.job` — visível a quem tem acesso privilegiado ao banco. Baixo
+  risco prático, mas vale corrigir (mover pra `vault` do Postgres ou rotacionar) quando os
+  jobs pg_cron forem trazidos pro git formalmente.
 
-### Edge Functions (código real, lido via `supabase functions download`)
-| Função | O que faz | Qualidade observada |
-|---|---|---|
-| `loyalty-accrue` | +1 selo por pedido pago (chamada interna, `x-internal-secret`). Idempotente (unique `account_id+order_id`). Ao bater `stamps_required`, emite recompensa com código curto e debita os selos. Enfileira WhatsApp. | Bem feita, resiliente (nunca derruba o caixa). |
-| `loyalty-redeem` | Atendente resgata `reward_code` no balcão (JWT ADMIN/ATTENDANT). Update com guarda de status evita resgate duplo em corrida. | Bem feita. |
-| `loyalty-revoke` | Estorno de pedido → revoga selo/recompensa. Bloqueia e exige `force=true` de ADMIN se a recompensa já foi resgatada. | Bem feita, cuidadosa com o caso difícil. |
-| `loyalty-reconcile` | **Cron horário já ativo** (`pg_cron`, `12 * * * *`). Varre pedidos pagos das últimas 48h sem `EARN` e credita — é o mecanismo de auto-recuperação de falhas do fire-and-forget. | Único caminho de crédito hoje — e por isso mesmo nunca creditou nada (ver causa raiz #2). |
-| `loyalty-expire` | **Cron diário já ativo** (`0 6 * * *`). Expira recompensas/selos vencidos, avisa por WhatsApp 5 dias antes de vencer. | Bem feita. |
-| `get-public-loyalty` | Portal público via token opaco (não por telefone/OTP) — devolve saldo, recompensas, últimas 10 transações. Também serve de toggle de opt-in de marketing (LGPD). | Bem feita, telefone mascarado na resposta. |
+- **Dado real**: 0 contas, 0 recompensas, 0 transações de fidelidade (achado da investigação
+  original) — schema e código podiam ser mexidos sem risco de quebrar uso real. Volume atual
+  não reverificado por mim nesta sessão.
 
-### O que falta (confirmado, não suposição)
-- **Wiring**: `mark-payment`/`confirm-order` (as versões no git, que batem com produção) não chamam `loyalty-accrue`/`loyalty-revoke`.
-- **Constraint do banco**: `chk_whatsapp_messages_event_type` falta os 3 valores de evento de fidelidade.
-- **`loyalty_public_base_url`**: setting vazio, portal não é linkável ainda.
-- **Frontend**: zero referências a "loyalty" em todo `src/` — não existe página de portal (`/fidelidade/[token]`), não existe campo de resgate (`reward_code`) no checkout do atendente, não existe indicador de progresso em lugar nenhum (nem `/pedir`, nem WhatsApp de confirmação de pedido).
-- **Governança**: nada disso está no git. Todo o schema e as 6 functions foram criados direto no projeto Supabase (SQL editor / CLI local), fora do fluxo normal de migration + PR que o resto do repo segue rigorosamente. Isso significa: sem code review, sem CI, sem rollback via git, e risco real de alguém sobrescrever sem querer (ex.: `git diff` do arquivo compartilhado `_shared/whatsapp-enqueue.ts` mostra que a versão em produção já divergiu da versão no git — a de produção tem as funções de fidelidade, a do git não).
-- **Segredo em texto claro**: o `pg_cron` job `loyalty-reconcile-hourly` guarda `x-cron-secret` em texto plano no `command` da tabela `cron.job` (visível a quem tem acesso ao banco). Não é exploração ativa, mas é uma prática de higiene de segredo a corrigir (usar `vault` do Postgres ou rotacionar + mover pra fora do SQL).
+### As causas raiz confirmadas
+
+1. **`mark-payment` e `confirm-order` nunca chamam `loyalty-accrue`.** Confirmado por
+   grep direto nos dois arquivos locais — zero referência a `loyalty-accrue` ou
+   `loyalty_accrue`. O "fio" que credita o selo simplesmente não existe no código atual.
+   O único caminho de crédito hoje é o cron `loyalty-reconcile`, que varre pedidos pagos
+   com `customer_id` preenchido — e por isso mesmo nunca creditou nada de fato (ver causa #2).
+2. **Captura de telefone no checkout é o gargalo real.** Da investigação original (PR #124):
+   de 2580 pedidos pagos, só 99 (3,8%) tinham `customer_id`, e 0% nas últimas 48h medidas
+   então — não reverificado por mim nesta sessão, tratado como hipótese herdada até
+   reconfirmar. O campo é opcional no checkout do atendente e raramente preenchido.
+3. **`chk_whatsapp_messages_event_type` não inclui os 3 eventos de fidelidade.** Confirmado
+   no schema dump: a constraint só permitia `order_received`, `order_ready`,
+   `order_partial_ready`, `order_out_for_delivery`. Qualquer notificação de fidelidade
+   falharia ao tentar inserir em `whatsapp_messages` — mesmo com o helper de prod já
+   preparado para esses eventos. **Corrigido na Fase 0 desta sessão.**
+4. **Achado adicional desta sessão**: `whatsapp_messages.order_id` era `NOT NULL`, mas
+   `loyalty-expire` dispara `loyalty_reward_expiring` sem `order_id` (aviso de recompensa
+   vencendo nasce de um cron, não de um pedido específico) — o insert falharia mesmo depois
+   de corrigir a constraint de evento. **Corrigido na Fase 0 desta sessão** (coluna virou
+   nullable).
 
 ## Estratégia de retenção — por que este modelo já é a escolha certa
 
-O modelo escolhido (cartão de selos — "compre 10, ganhe 1") é, segundo as melhores práticas de retenção pra food service de bairro, a escolha certa — não precisa trocar de estratégia, só executar o que já foi desenhado:
+O modelo escolhido (cartão de selos — "compre 10, ganhe 1") é, segundo as melhores práticas
+de retenção pra food service de bairro, a escolha certa — não precisa trocar de estratégia,
+só executar o que já foi desenhado:
 
-- **Simplicidade bate sofisticação.** Programas de pontos com conversão complexa (R$1 = X pontos, resgates parciais) têm adesão pior em negócios pequenos — o cliente não entende o valor. Cartão de selos é intuitivo, visual, e cria "quase lá" (a psicologia do "faltam 2 selos" é o motor de recompra mais forte que existe nesse formato).
-- **Sem app, via WhatsApp.** A tendência atual (2025-2026) é abandonar apps próprios de fidelidade — taxa de instalação e retenção de apps de fidelidade é baixíssima. WhatsApp (que este PDV já usa pra tudo — confirmação, pronto, saiu pra entrega) é o canal certo: zero fricção, o cliente já está lá. O backend já está desenhado exatamente assim (`loyalty_stamp_earned`, `loyalty_reward_ready`, `loyalty_reward_expiring` como mensagens de WhatsApp).
-- **Identificação no ponto de venda é o gargalo #1 de qualquer programa físico.** Isso é confirmado pelos próprios dados (3,8% de captura). A prática recomendada pra varejo presencial é nunca deixar a captura de contato como campo opcional silencioso — precisa virar parte do script do atendente, com motivo claro ("é pra você entrar no cartão fidelidade e não perder os selos"), não uma pergunta "burocrática" de checkout.
-- **Redução de fricção no resgate.** Código curto falável (`KRP-XXXX-XXXX`) já está certo — dá pra ditar por telefone/balcão sem erro (alfabeto sem 0/O/1/I já pensado nisso).
-- **Portal sem login (token na URL) é a abordagem certa pra baixo compromisso** — cliente vê o saldo sem precisar criar conta/senha.
+- **Simplicidade bate sofisticação.** Programas de pontos com conversão complexa (R$1 = X
+  pontos, resgates parciais) têm adesão pior em negócios pequenos. Cartão de selos é
+  intuitivo, visual, e cria "quase lá" (a psicologia do "faltam 2 selos" é o motor de
+  recompra mais forte que existe nesse formato).
+- **Sem app, via WhatsApp.** Apps próprios de fidelidade têm taxa de instalação/retenção
+  baixíssima. WhatsApp (que este PDV já usa pra tudo) é o canal certo: zero fricção. O
+  backend já está desenhado assim (`loyalty_stamp_earned`, `loyalty_reward_ready`,
+  `loyalty_reward_expiring` como mensagens de WhatsApp).
+- **Identificação no ponto de venda é o gargalo #1 de qualquer programa físico** — confirmado
+  pelos próprios dados (3,8% de captura). Não pode ficar como campo opcional silencioso;
+  precisa virar parte do script do atendente, com motivo claro.
+- **Redução de fricção no resgate.** Código curto falável (`KRP-XXXX-XXXX`, alfabeto sem
+  0/O/1/I) já está certo.
+- **Portal sem login (token na URL)** é a abordagem certa pra baixo compromisso.
 
-## Plano de execução por fases
+## Decisões de negócio — confirmadas em 2026-08-19/20
 
-### Fase 0 — Governança (pré-requisito pra tudo abaixo)
-Trazer o que já existe em produção pra dentro do git, sem mudar comportamento:
-- Criar migrations retratando o schema atual (`loyalty_programs`, `loyalty_accounts`, `loyalty_rewards`, `loyalty_transactions`, colunas em `customers`, os 2 `pg_cron` jobs).
-- Adicionar as 6 functions + `_shared/loyalty-accrue-fire.ts` + a versão estendida de `_shared/whatsapp-enqueue.ts` (com `enqueueLoyaltyWhatsAppMessage`) ao repo — reconciliando com a versão atual do git (que não tem os tipos de evento de fidelidade).
-- Resolver a constraint faltante: `ALTER TABLE whatsapp_messages` incluindo `loyalty_stamp_earned`/`loyalty_reward_ready`/`loyalty_reward_expiring`.
-- Mover o `x-cron-secret` do `pg_cron` pra fora de texto plano (ou documentar como risco aceito, se a decisão for essa).
-- Testar tudo localmente (Docker) antes de qualquer deploy — mesma disciplina usada no módulo de delivery.
+1. **Validade do selo: 90 → 180 dias.** `loyalty_programs.stamp_ttl_days` passa de 90
+   para 180. Mantém 10 selos → 1 Krep tradicional grátis, sem pedido mínimo, recompensa
+   expira em 30 dias (inalterado).
 
-### Fase 1 — Ligar os fios soltos (sem UI nova ainda)
-- `create-attendant-order`/`create-public-order` ou `mark-payment`: decidir onde entra a chamada a `loyalty-accrue` (o comentário do código original sugere `mark-payment`/`confirm-order` — provavelmente o ponto certo é assim que o pedido vira `PAID`). Ligar de forma fire-and-forget (não bloqueia o caixa, igual ao padrão já usado em `dispatch-delivery` pro WhatsApp).
-- Ligar `loyalty-revoke` no fluxo de estorno de pagamento.
-- Configurar `settings.loyalty_public_base_url` com a URL real de produção.
-- Configurar os templates de WhatsApp (`whatsapp_template_stamp_earned`, `whatsapp_template_reward_ready`, `whatsapp_template_reward_expiring`) na Meta/Evolution API, do mesmo jeito que os templates de pedido já existem.
-- Validar ponta a ponta num pedido de teste local: pagar → selo aparece → WhatsApp enfileirado → (repetir até 10) → recompensa emitida → resgate.
+2. **Selo por unidade de crepe, não por pedido — mudança de desenho, não só de config.**
+   A implementação já deployada em `loyalty-accrue` credita **+1 selo fixo por pedido
+   pago inteiro** (`delta: 1`, idempotência via `UNIQUE(account_id, order_id)`). Isso não
+   serve mais: um pedido com 3 crepes agora precisa dar 3 selos, creditados quando *aquele
+   crepe* é pago — não quando o pedido inteiro fecha.
 
-### Fase 2 — Resolver o gargalo real: captura de telefone no balcão
-Este é o item que decide se o programa funciona ou não — sem isso, a Fase 1 sozinha não muda nada na prática:
-- Tornar a pergunta do WhatsApp parte do script padrão do atendente, com o motivo do fidelidade explícito na tela (não só "WhatsApp (opcional)" genérico).
-- Considerar tornar `remember_checkout_data` marcado por padrão (opt-out em vez de opt-in) quando o cliente informa o telefone — hoje é uma ação extra que o atendente provavelmente pula na correria.
-- Mostrar o progresso do cliente na hora (ex.: "faltam 3 selos") assim que o telefone é digitado no checkout do atendente, puxando de `get-public-loyalty`-like — dá ao atendente um motivo imediato de mostrar valor ao cliente ali na hora, reforçando o hábito.
-- Meta mensurável: sair de ~4% pra pelo menos 40-50% de captura em pedidos presenciais antes de investir mais nas fases seguintes — sem isso, qualquer coisa depois é cosmético.
+   Categorias que contam: **flag configurável**, não lista fixa nem regex de nome — decisão
+   revista em 2026-08-20, já implementada na Fase 0. `categories.counts_for_loyalty BOOLEAN`
+   (migration
+   [20260822213600_categories_loyalty_flag.sql](../supabase/migrations/20260822213600_categories_loyalty_flag.sql)),
+   editável direto na tela `/app/cardapio` → aba Categorias (checkbox "Conta para o selo de
+   fidelidade" no `CategoryModal`, badge visível na listagem). Backfill aplicado para as 6
+   categorias de Krep/Crepe já identificadas em produção em 2026-08-19 (`Kreps Salgados`/
+   `Kreps Doces` na filial `0b194416-...`, `Crepes Salgados`/`Crepes Doces` nas filiais
+   `2127cc6c-...` e `3a8774e8-...`). Resolve o risco de nome de categoria não padronizado
+   entre filiais — quem abre filial nova marca a categoria certa no cadastro, sem migration
+   nem código novo.
 
-### Fase 3 — Frontend faltante
-- Página pública `/fidelidade/[token]` (consumindo `get-public-loyalty`): saldo de selos, recompensas disponíveis com código, toggle de opt-in de marketing.
-- Campo de resgate de `reward_code` no checkout do atendente (`OrderSummarySheet.tsx`), chamando `loyalty-redeem`.
-- Indicador de progresso simples em `/pedir` (checkout público) pro cliente logado por telefone — mesma lógica de "endereço salvo" já usada lá.
-- Painel ADMIN mínimo em `/app/configuracoes`: ver quantos clientes cadastrados, recompensas emitidas/resgatadas, editar `stamps_required`/`reward_label`/`min_order_brl` sem precisar mexer no banco direto.
+   Consequência técnica pra Fase 1:
+   - Gatilho muda de "pedido virou PAID" para "estes itens de pedido viraram PAID nesta
+     chamada de `mark-payment`" (`mark-payment` já suporta pagamento por `order_item_ids`,
+     granularidade por item já existe em `order_items.payment_status`/`quantity`).
+   - `delta` do `EARN` passa a ser a soma de `quantity` dos itens de categoria Krep/Crepe
+     que acabaram de ficar `PAID` naquela chamada — pode ser >1 numa chamada só.
+   - A trava `UNIQUE(account_id, order_id) WHERE kind='EARN'` bloqueia hoje um segundo
+     crédito no mesmo pedido — incompatível com pagamento parcelado por item. Precisa migrar
+     para trava por item pago pra não perder nem duplicar selo em pagamento fracionado.
 
-### Fase 4 — Comunicação e reforço de hábito
-- Confirmar que as 3 mensagens de WhatsApp (`selo ganho`, `recompensa liberada`, `recompensa vencendo`) estão realmente chegando — o rate-limit de 48h pra "selo ganho" já existe no código (evita spam a cada compra).
-- Adicionar o link do portal de fidelidade na mensagem de confirmação de pedido normal (`order_received`), não só nas mensagens de fidelidade — aumenta a visibilidade sem pedir permissão nova.
+3. **`mark-payment` é o ponto de disparo, não `confirm-order`.** Único evento comum aos
+   dois canais que garante "o cliente pagou de verdade" — presencial confirma o pedido
+   antes de pagar; público (`/pedir`) só libera `confirm-order` depois de já estar `PAID`.
+   `loyalty-accrue` passa a olhar `order_items` recém-pagos na chamada de `mark-payment`.
 
-### Fase 5 — Extensões de tendência (só depois que Fases 1-4 estiverem rodando de verdade)
-- **Indicação de amigo**: selo bônus pra quem indica + pra quem é indicado no primeiro pedido — mecanismo de aquisição orgânica, baixo custo.
-- **Aniversário/reativação**: campanha simples de WhatsApp pra clientes com `last_activity_at` há mais de 45-60 dias sem pedido (usar o próprio `loyalty_accounts.last_activity_at` como sinal de churn) — "sentimos sua falta, seus selos ainda estão aqui".
-- **Segmentação leve (RFM)**: usar `loyalty_transactions`/`orders` pra separar clientes frequentes de esporádicos e ajustar a régua de mensagens — não precisa de ferramenta nova, dá pra fazer com queries simples no que já existe.
+4. **`remember_checkout_data` vira opt-out** (vem marcado quando o telefone é informado;
+   cliente desmarca se não quiser). Precisa de texto de consentimento visível no checkout
+   (LGPD) mesmo vindo marcado — ataca direto a causa raiz #2.
 
-## Decisões de negócio a confirmar com o usuário antes de codar
+5. **Fase 5 (indicação de amigo / aniversário / RFM) fica pra depois.** Sem dado real de
+   fidelidade rodando ainda, não há histórico pra RFM ou indicação analisarem.
 
-1. Manter a regra atual do programa (10 selos → 1 Krep tradicional grátis, sem pedido mínimo, 90 dias de validade do selo, 30 dias da recompensa) ou ajustar algum parâmetro?
-2. Onde exatamente entra a chamada de `loyalty-accrue` — em `mark-payment` (quando o pedido vira PAID) e/ou em `confirm-order`? Cobre pedido presencial e público (`/pedir`) do mesmo jeito?
-3. `remember_checkout_data` vira padrão marcado (opt-out) quando telefone é informado, ou continua opt-in explícito?
-4. Prioridade da Fase 5 (indicação/aniversário/RFM) — fica pra depois mesmo, ou algum item interessa adiantar?
+## Status de execução
 
-## Riscos e observações de governança
+### Fase 0 — concluída em 2026-08-19/20 (não deployada em produção ainda)
 
-- Segredo em texto claro no `pg_cron.command` — baixo risco prático (exige acesso privilegiado ao banco pra ler), mas vale corrigir na Fase 0.
-- O `_shared/whatsapp-enqueue.ts` de produção já divergiu do git — qualquer redeploy futuro de uma function que importe esse shared file (feito a partir do git, sem reconciliar primeiro) pode quebrar o que já está rodando em produção. Reconciliar é bloqueante pra qualquer outro trabalho nesse arquivo compartilhado.
-- Zero dado de cliente real em risco hoje (0 contas) — a migração pro git e os ajustes de Fase 0/1 podem ser feitos e testados com segurança total antes de tocar produção.
+- Migrations criadas: [20260822213400_loyalty_program_schema.sql](../supabase/migrations/20260822213400_loyalty_program_schema.sql)
+  (schema completo + seed idempotente + `stamp_ttl_days` 90→180),
+  [20260822213500_whatsapp_loyalty_event_types.sql](../supabase/migrations/20260822213500_whatsapp_loyalty_event_types.sql)
+  (constraint de evento + `order_id` nullable), e
+  [20260822213600_categories_loyalty_flag.sql](../supabase/migrations/20260822213600_categories_loyalty_flag.sql)
+  (`categories.counts_for_loyalty` + backfill).
+- As 6 Edge Functions trazidas para `supabase/functions/` com tipagem TS restaurada,
+  comportamento idêntico ao bundle deployado (nada de Fase 1 aplicado ainda):
+  `loyalty-accrue`, `loyalty-redeem`, `loyalty-revoke`, `loyalty-reconcile`,
+  `loyalty-expire`, `get-public-loyalty`.
+- `_shared/whatsapp-enqueue.ts` reconciliado: é uma **união**, não uma substituição —
+  mantém `order_out_for_delivery` (que só existia no git) e adiciona
+  `enqueueLoyaltyWhatsAppMessage` + os 3 tipos de evento de fidelidade (que só existiam em
+  prod). Nenhum dos dois lados perde funcionalidade.
+- Novo shared file trazido: `_shared/loyalty-accrue-fire.ts` (helper fire-and-forget usado
+  por `loyalty-reconcile`; não existia no git).
+- UI: checkbox "Conta para o selo de fidelidade" no `CategoryModal` do cardápio + badge na
+  listagem.
+- `config.toml`: 5 entradas `[functions.loyalty-*]` com `verify_jwt = false` (ver achado
+  abaixo).
+- Validado: `npx tsc --noEmit` limpo, `npx eslint .` sem erro novo, `npx supabase db reset`
+  local aplicou as 3 migrations sem erro, valores confirmados no banco local pós-reset.
+  `npm run build` falha por falta de `.env.local` no worktree — pré-existente, não
+  relacionado.
+- **Nada disso foi aplicado em produção.** Existe só em branch até virar PR revisado e
+  decidido explicitamente com o usuário.
 
-## Como validar cada fase
+### Incidente de deploy em 2026-08-22: migrations com timestamp velho
 
-1. `npx tsc --noEmit && npx eslint . && npm run build` sempre.
-2. Testar contra Supabase local real (Docker + `supabase functions serve`) — nunca só leitura de código, seguindo a disciplina já usada nas Fases 1-3 do delivery.
-3. Fase 1: pedido de teste completo (criar → pagar → conferir `loyalty_accounts`/`loyalty_transactions`/`whatsapp_messages` no banco local).
-4. Fase 2: acompanhar taxa de captura de telefone por 1-2 semanas depois da mudança de script/UI antes de decidir se a Fase 3 vale a pena.
-5. Aplicar em produção só com autorização explícita, migration por migration — mesmo processo já usado pro delivery.
+O PR de Fase 0 (#142) ficou pronto em 2026-08-19/20, mas só foi mergeado em 2026-08-22 —
+nesse meio tempo, outros PRs já tinham mergeado e deployado migrations com timestamp mais
+recente (`20260821000000` até `20260821060000`). As 3 migrations de fidelidade, datadas
+`20260819`/`20260820`, ficaram "no meio" da sequência já aplicada em produção. O workflow
+de deploy rodou `supabase db push` e falhou (com segurança — recusou aplicar, não corrompeu
+nada): *"Found local migration files to be inserted before the last migration on remote
+database"*.
+
+**Correção**: as 3 migrations foram renomeadas para timestamps depois de
+`20260821060000` (a última aplicada), sem alterar o conteúdo — mesma lição já registrada
+antes neste repo sobre não deixar migration com timestamp velho esperando merge. PR de
+correção: ver histórico do branch `fix/loyalty-migration-timestamps`.
+
+**Lição pra próximas fases**: gerar o timestamp da migration só na hora de abrir o PR pra
+merge, não quando o código é escrito — se o PR demorar pra ser revisado/mergeado, o
+timestamp pode ficar velho relativo ao que já foi deployado nesse meio tempo.
+
+### Achado desta sessão: `verify_jwt` das 6 functions
+
+`supabase functions list` mostra as 6 functions de fidelidade com `verify_jwt: true` em
+produção — e não havia entrada `[functions.loyalty-*]` em `supabase/config.toml`. Isso
+importa porque `loyalty-accrue` só aceita `x-internal-secret` (sem fallback de Bearer JWT):
+uma chamada interna fire-and-forget de `mark-payment` não envia `Authorization`, e com
+`verify_jwt=true` o gateway rejeitaria com 401 antes mesmo de chegar no código da function —
+independente do fio existir ou não. Mesmo problema em potencial pra `loyalty-revoke`,
+`loyalty-reconcile`, `loyalty-expire` e `get-public-loyalty`.
+
+**Resolvido na Fase 0**: adicionadas 5 entradas `[functions.loyalty-*]` com
+`verify_jwt = false` em `config.toml` (mesmo padrão já usado pra `send-whatsapp`/`webauthn`/
+`expire-pending-public-orders`). `loyalty-redeem` ficou no default (`verify_jwt=true`), usa
+Bearer JWT de atendente normal. Confirmado via `supabase secrets list` que
+`LOYALTY_INTERNAL_SECRET`/`LOYALTY_CRON_SECRET` já existem em produção — não faltava
+secret, só a config de gateway.
+
+### Achado crítico desta sessão: deploy automático via CI
+
+`.github/workflows/deploy-functions.yml` dispara **automaticamente em todo push pro `main`**
+que toque `supabase/functions/**`, `supabase/config.toml` ou `supabase/migrations/**`. O
+job roda `supabase db push` (aplica migration em produção de verdade) e `supabase functions
+deploy` — mas só para functions explicitamente listadas em dois loops fixos no YAML
+("Deploy authenticated Edge Functions" e "Deploy public Edge Functions (JWT verification
+disabled)"). Essa é a mesma causa raiz do incidente do `lookup-cep` documentado no PR #124.
+
+**Consequência prática**: mergear o PR de Fase 0 em `main` dispara migration real em
+produção automaticamente, e as 6 functions de fidelidade não seriam deployadas por não
+estarem nessa lista — ficariam fantasmas de novo. **Resolvido em 2026-08-20**: adicionadas
+`loyalty-redeem` no grupo "authenticated" e `loyalty-accrue`/`loyalty-revoke`/
+`loyalty-reconcile`/`loyalty-expire`/`get-public-loyalty` no grupo "public (JWT verification
+disabled)" — mesmo padrão de `send-whatsapp` (dual auth interno/cron).
+
+**Importante**: isso significa que, a partir deste PR, **merge em `main` = deploy real em
+produção automaticamente** (migration + as 6 functions), não um passo manual separado.
+Confirmar isso explicitamente com o usuário antes do merge, mesmo que o PR em si já esteja
+revisado e aprovado.
+
+## Sequência recomendada
+
+**Fase 0 — Governança.** Ver "Status de execução" acima — código pronto, falta decidir
+sobre o workflow de CI e então merge/deploy.
+
+**Fase 1 — Ligar os fios + selo por crepe.** Reescrever a lógica de crédito de
+`loyalty-accrue` para operar por item pago, com a trava de idempotência por item. Chamar
+`loyalty-accrue` a partir de `mark-payment`. Ligar `loyalty-revoke` no fluxo de estorno.
+Configurar `settings.loyalty_public_base_url`. Configurar templates de WhatsApp na Meta/
+Evolution API. Trocar `remember_checkout_data` para opt-out no checkout (presencial e
+`/pedir`). Validar ponta a ponta localmente: pagar → selo → WhatsApp → recompensa → resgate.
+
+**Fase 2 — Captura de telefone no balcão.** O item que decide se o programa funciona:
+tornar a pergunta do WhatsApp parte do script do atendente com motivo explícito na tela;
+mostrar progresso do cliente ("faltam 3 selos") assim que o telefone é digitado no checkout.
+Meta mensurável: sair de ~4% pra 40-50% de captura antes de investir nas fases seguintes.
+
+**Fase 3 — Frontend faltante.** Página pública `/fidelidade/[token]` (via
+`get-public-loyalty`); campo de resgate de `reward_code` no checkout do atendente
+(`OrderSummarySheet.tsx`); indicador de progresso em `/pedir`; painel ADMIN mínimo em
+`/app/configuracoes`.
+
+**Fase 4 — Comunicação e reforço de hábito.** Confirmar que as 3 mensagens de WhatsApp
+chegam de verdade; adicionar link do portal na mensagem de confirmação de pedido normal.
+
+**Fase 5 — Indicação, aniversário, RFM.** Adiado — revisitar após dado real de uso.
+
+## Como validar antes de mexer em qualquer coisa
+
+```bash
+git fetch origin main && git log origin/main --oneline -20
+npx tsc --noEmit && npx eslint . && npm run build
+```
+
+Para mudanças de banco: Docker Desktop + `npx supabase start` + `npx supabase db reset`
+localmente — teste de verdade, não só leitura de código.
+
+## Notas operacionais
+
+- Pode haver outra sessão trabalhando em paralelo neste repositório — já aconteceu (PR #124
+  mergeou uma versão anterior deste mesmo doc enquanto esta sessão trabalhava). Sempre
+  `git fetch origin main` e checar `git log origin/main --oneline` antes de assumir que a
+  base está atualizada — e checar `ls supabase/migrations/ | tail -20` antes de criar
+  migration nova.
+- Acesso ao Supabase: `npx supabase projects list` funciona sem `SUPABASE_ACCESS_TOKEN` de
+  ambiente (credencial cacheada no Windows Credential Manager). `npx supabase link
+  --project-ref feotsdzkwbikmcnzgsnh` linka ao projeto real. Aplicar qualquer coisa em
+  produção continua sendo ação de alto risco — confirmar explicitamente com o usuário
+  antes, mesmo com acesso técnico disponível. **Merge em `main` não é mais "sem risco":
+  o workflow de deploy automático roda migration + function deploy reais.**

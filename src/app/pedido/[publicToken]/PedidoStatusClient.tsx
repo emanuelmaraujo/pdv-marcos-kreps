@@ -9,6 +9,7 @@
  * editar uma entrada.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   Bell,
@@ -179,6 +180,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 // ── Componente principal ────────────────────────────────────────────────────
 
 export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
+  const router = useRouter();
   const [statusData, setStatusData] = useState<PublicOrderStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -376,7 +378,6 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                 {STEPS.map((step, idx) => {
                   const isDone = cfg.activeStepIndex > idx;
                   const isActive = cfg.activeStepIndex === idx;
-                  const isFuture = cfg.activeStepIndex < idx;
                   const isLast = idx === STEPS.length - 1;
                   const Icon = step.icon;
 
@@ -580,7 +581,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
             <div className="space-y-2 pt-1">
               <button
                 type="button"
-                onClick={() => window.location.href = "/pedir"}
+                onClick={() => router.push("/pedir")}
                 className="w-full flex items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-white shadow-[var(--shadow-sm)] hover:opacity-90 active:scale-[0.98]"
                 style={{ backgroundColor: "var(--bg-inverse)", height: 50 }}
               >

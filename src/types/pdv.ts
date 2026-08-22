@@ -44,6 +44,7 @@ export interface Category {
   active: boolean;
   sort_order: number;
   created_at?: string;
+  counts_for_loyalty: boolean;
 }
 
 export interface Product {
