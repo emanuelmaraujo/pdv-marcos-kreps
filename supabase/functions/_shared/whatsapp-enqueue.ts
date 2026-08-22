@@ -14,12 +14,22 @@
 //     Global settings.whatsapp_enabled e settings.whatsapp_template_* permanecem
 //     como fallback quando a filial nao tem override ou quando branchId nao foi passado.
 //   * Opt-in aware: snapshots customer.whatsapp_opt_in into the row for audit (LGPD).
+//   * Loyalty events (loyalty_stamp_earned/loyalty_reward_ready/loyalty_reward_expiring)
+//     são transacionais, não passam por opt-in de marketing — mas ainda respeitam
+//     whatsapp_opt_in (LGPD) e usam enqueueLoyaltyWhatsAppMessage, que aceita orderId
+//     nulo (loyalty_reward_expiring nasce de um cron, não de um pedido específico —
+//     ver migration 20260819100100_whatsapp_loyalty_event_types).
 
 export type WhatsAppEventType =
   | "order_received"
   | "order_ready"
   | "order_partial_ready"
   | "order_out_for_delivery";
+
+export type LoyaltyEventType =
+  | "loyalty_stamp_earned"
+  | "loyalty_reward_ready"
+  | "loyalty_reward_expiring";
 
 interface EnqueuePayload {
   orderId: string;
@@ -32,18 +42,34 @@ interface EnqueuePayload {
   branchName?: string | null;       // ex.: "Loja Principal" — pode entrar no template
 }
 
+interface LoyaltyEnqueuePayload {
+  eventType: LoyaltyEventType;
+  orderId?: string | null;          // ausente em loyalty_reward_expiring (não nasce de um pedido)
+  branchId?: string | null;
+  branchName?: string | null;
+  phone: string | null | undefined;
+  customerName: string | null | undefined;
+  payload?: Record<string, unknown>; // mesclado no payload salvo em whatsapp_messages
+}
+
 const SETTING_ENABLED = "whatsapp_enabled";
-const SETTING_TEMPLATE: Record<WhatsAppEventType, string> = {
-  order_received:         "whatsapp_template_received",
-  order_ready:            "whatsapp_template_ready",
-  order_partial_ready:    "whatsapp_template_partial_ready",
-  order_out_for_delivery: "whatsapp_template_out_for_delivery",
+const SETTING_TEMPLATE: Record<WhatsAppEventType | LoyaltyEventType, string> = {
+  order_received:          "whatsapp_template_received",
+  order_ready:              "whatsapp_template_ready",
+  order_partial_ready:      "whatsapp_template_partial_ready",
+  order_out_for_delivery:   "whatsapp_template_out_for_delivery",
+  loyalty_stamp_earned:     "whatsapp_template_stamp_earned",
+  loyalty_reward_ready:     "whatsapp_template_reward_ready",
+  loyalty_reward_expiring:  "whatsapp_template_reward_expiring",
 };
-const DEFAULT_TEMPLATE: Record<WhatsAppEventType, string> = {
-  order_received:         "novo_pedido",
-  order_ready:            "pedido_pronto",
-  order_partial_ready:    "pedido_parcial_pronto",
-  order_out_for_delivery: "pedido_saiu_entrega",
+const DEFAULT_TEMPLATE: Record<WhatsAppEventType | LoyaltyEventType, string> = {
+  order_received:          "novo_pedido",
+  order_ready:              "pedido_pronto",
+  order_partial_ready:      "pedido_parcial_pronto",
+  order_out_for_delivery:   "pedido_saiu_entrega",
+  loyalty_stamp_earned:     "fidelidade_selo",
+  loyalty_reward_ready:     "fidelidade_recompensa_liberada",
+  loyalty_reward_expiring:  "fidelidade_recompensa_vencendo",
 };
 
 function parseBoolSetting(value: unknown, fallback = false): boolean {
@@ -95,7 +121,7 @@ function firstName(name: string | null | undefined): string {
 async function resolveTemplate(
   supabaseAdmin: any,
   branchId: string | null | undefined,
-  eventType: WhatsAppEventType,
+  eventType: WhatsAppEventType | LoyaltyEventType,
 ): Promise<{ enabled: boolean; templateName: string }> {
   // 1) Settings globais — fallback
   const settingKey = SETTING_TEMPLATE[eventType];
@@ -216,6 +242,92 @@ export async function enqueueWhatsAppMessage(
         customer_opt_in: true,
         payload:         messagePayload,
       });
+
+    if (insertErr) {
+      if (insertErr.code === "23505") {
+        console.log(`${tag} SKIP: mensagem ja enfileirada (idempotencia)`);
+        return { enqueued: false, reason: "duplicate" };
+      }
+      console.error(`${tag} ERRO ao enfileirar:`, insertErr.message);
+      return { enqueued: false, reason: "insert_error" };
+    }
+
+    console.log(`${tag} ENFILEIRADO template=${templateName} to=${maskPhone(phone)}`);
+    return { enqueued: true };
+  } catch (e: any) {
+    console.error(`${tag} EXCEPTION:`, e?.message ?? "unknown");
+    return { enqueued: false, reason: "exception" };
+  }
+}
+
+export async function enqueueLoyaltyWhatsAppMessage(
+  supabaseAdmin: any,
+  input: LoyaltyEnqueuePayload,
+): Promise<{ enqueued: boolean; reason?: string }> {
+  const tag = `[whatsapp-enqueue ${input.eventType} order=${input.orderId ?? "-"}]`;
+  try {
+    const phoneRaw = (input.phone ?? "").toString().trim();
+    const phone = phoneRaw ? normalizeBrazilPhoneE164(phoneRaw) : null;
+    if (!phone) {
+      console.log(`${tag} SKIP: telefone ausente ou invalido (${maskPhone(phoneRaw)})`);
+      return { enqueued: false, reason: "invalid_phone" };
+    }
+
+    const { enabled, templateName } = await resolveTemplate(
+      supabaseAdmin,
+      input.branchId ?? null,
+      input.eventType,
+    );
+    if (!enabled) {
+      console.log(`${tag} SKIP: whatsapp desabilitado (global ou na filial)`);
+      return { enqueued: false, reason: "feature_disabled" };
+    }
+
+    // Opt-in transacional (fidelidade é transacional, não marketing).
+    let optIn = true;
+    const { data: customer } = await supabaseAdmin
+      .from("customers")
+      .select("whatsapp_opt_in")
+      .eq("phone_e164", phone)
+      .maybeSingle();
+    if (customer && customer.whatsapp_opt_in === false) optIn = false;
+
+    const messagePayload = {
+      customer_name: firstName(input.customerName),
+      branch_name:   input.branchName ?? null,
+      ...input.payload,
+    };
+
+    const baseRow = {
+      order_id:        input.orderId ?? null,
+      branch_id:       input.branchId ?? null,
+      phone,
+      event_type:      input.eventType,
+      message_type:    input.eventType,
+      template_name:   templateName,
+      customer_opt_in: optIn,
+      payload:         messagePayload,
+    };
+
+    if (!optIn) {
+      const { error: skipErr } = await supabaseAdmin
+        .from("whatsapp_messages")
+        .insert({
+          ...baseRow,
+          status:        "SKIPPED",
+          error_message: "Cliente com whatsapp_opt_in=false",
+        });
+      if (skipErr && skipErr.code !== "23505") {
+        console.error(`${tag} ERRO ao gravar SKIPPED:`, skipErr.message);
+      } else {
+        console.log(`${tag} SKIP: cliente sem opt-in (${maskPhone(phone)})`);
+      }
+      return { enqueued: false, reason: "opt_out" };
+    }
+
+    const { error: insertErr } = await supabaseAdmin
+      .from("whatsapp_messages")
+      .insert({ ...baseRow, status: "PENDING" });
 
     if (insertErr) {
       if (insertErr.code === "23505") {

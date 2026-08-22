@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   PlusCircle,
   ChevronRight,
+  Stamp,
 } from "lucide-react";
 import { Product, Addon, Category } from "@/types/pdv";
 import { createClient } from "@/lib/supabase/client";
@@ -1169,6 +1170,12 @@ function CategoryList({
                 <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">
                   Ordem: {cat.sort_order}
                 </span>
+                {cat.counts_for_loyalty && (
+                  <span className="flex items-center gap-1 mt-1 text-[10px] text-brand-red font-bold uppercase tracking-wider">
+                    <Stamp className="w-3 h-3" />
+                    Conta pro selo
+                  </span>
+                )}
               </div>
             </div>
 
