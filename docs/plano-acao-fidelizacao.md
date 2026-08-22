@@ -211,14 +211,17 @@ deploy` — mas só para functions explicitamente listadas em dois loops fixos n
 ("Deploy authenticated Edge Functions" e "Deploy public Edge Functions (JWT verification
 disabled)"). Essa é a mesma causa raiz do incidente do `lookup-cep` documentado no PR #124.
 
-**Consequência prática**: mergear o PR de Fase 0 em `main` como está dispara migration real
-em produção automaticamente, e as 6 functions de fidelidade não seriam deployadas por não
-estarem nessa lista — ficariam fantasmas de novo. Antes de merge, o workflow precisa ganhar:
-`loyalty-redeem` no grupo "authenticated"; `loyalty-accrue`, `loyalty-revoke`,
-`loyalty-reconcile`, `loyalty-expire`, `get-public-loyalty` no grupo "public (JWT
-verification disabled)" — mesmo padrão de `send-whatsapp` (dual auth interno/cron).
-**Pendente — não fiz essa mudança ainda, aguardando confirmação do usuário**, já que isso
-determina se merge = deploy automático de verdade em produção, não só um PR revisado.
+**Consequência prática**: mergear o PR de Fase 0 em `main` dispara migration real em
+produção automaticamente, e as 6 functions de fidelidade não seriam deployadas por não
+estarem nessa lista — ficariam fantasmas de novo. **Resolvido em 2026-08-20**: adicionadas
+`loyalty-redeem` no grupo "authenticated" e `loyalty-accrue`/`loyalty-revoke`/
+`loyalty-reconcile`/`loyalty-expire`/`get-public-loyalty` no grupo "public (JWT verification
+disabled)" — mesmo padrão de `send-whatsapp` (dual auth interno/cron).
+
+**Importante**: isso significa que, a partir deste PR, **merge em `main` = deploy real em
+produção automaticamente** (migration + as 6 functions), não um passo manual separado.
+Confirmar isso explicitamente com o usuário antes do merge, mesmo que o PR em si já esteja
+revisado e aprovado.
 
 ## Sequência recomendada
 
