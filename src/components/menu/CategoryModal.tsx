@@ -23,6 +23,7 @@ export function CategoryModal({
       name: "",
       sort_order: 0,
       active: true,
+      counts_for_loyalty: false,
     }
   );
 
@@ -81,6 +82,23 @@ export function CategoryModal({
               className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-zinc-400/20 focus:border-zinc-400 transition-all"
             />
           </div>
+
+          <label className="flex items-start gap-3 px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!formData.counts_for_loyalty}
+              onChange={(e) => setFormData({ ...formData, counts_for_loyalty: e.target.checked })}
+              className="mt-0.5 w-5 h-5 rounded border-zinc-300 text-zinc-800 focus:ring-zinc-400/20"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-brand-charcoal">
+                Conta para o selo de fidelidade
+              </span>
+              <span className="block text-xs text-zinc-500 mt-0.5">
+                Cada unidade paga de um item desta categoria dá 1 selo no cartão fidelidade do cliente.
+              </span>
+            </span>
+          </label>
 
           <button
             type="submit"
