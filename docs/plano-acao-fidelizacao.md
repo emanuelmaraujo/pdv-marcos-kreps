@@ -123,7 +123,7 @@ só executar o que já foi desenhado:
    Categorias que contam: **flag configurável**, não lista fixa nem regex de nome — decisão
    revista em 2026-08-20, já implementada na Fase 0. `categories.counts_for_loyalty BOOLEAN`
    (migration
-   [20260820100000_categories_loyalty_flag.sql](../supabase/migrations/20260820100000_categories_loyalty_flag.sql)),
+   [20260822213600_categories_loyalty_flag.sql](../supabase/migrations/20260822213600_categories_loyalty_flag.sql)),
    editável direto na tela `/app/cardapio` → aba Categorias (checkbox "Conta para o selo de
    fidelidade" no `CategoryModal`, badge visível na listagem). Backfill aplicado para as 6
    categorias de Krep/Crepe já identificadas em produção em 2026-08-19 (`Kreps Salgados`/
@@ -158,11 +158,11 @@ só executar o que já foi desenhado:
 
 ### Fase 0 — concluída em 2026-08-19/20 (não deployada em produção ainda)
 
-- Migrations criadas: [20260819100000_loyalty_program_schema.sql](../supabase/migrations/20260819100000_loyalty_program_schema.sql)
+- Migrations criadas: [20260822213400_loyalty_program_schema.sql](../supabase/migrations/20260822213400_loyalty_program_schema.sql)
   (schema completo + seed idempotente + `stamp_ttl_days` 90→180),
-  [20260819100100_whatsapp_loyalty_event_types.sql](../supabase/migrations/20260819100100_whatsapp_loyalty_event_types.sql)
+  [20260822213500_whatsapp_loyalty_event_types.sql](../supabase/migrations/20260822213500_whatsapp_loyalty_event_types.sql)
   (constraint de evento + `order_id` nullable), e
-  [20260820100000_categories_loyalty_flag.sql](../supabase/migrations/20260820100000_categories_loyalty_flag.sql)
+  [20260822213600_categories_loyalty_flag.sql](../supabase/migrations/20260822213600_categories_loyalty_flag.sql)
   (`categories.counts_for_loyalty` + backfill).
 - As 6 Edge Functions trazidas para `supabase/functions/` com tipagem TS restaurada,
   comportamento idêntico ao bundle deployado (nada de Fase 1 aplicado ainda):
@@ -184,6 +184,25 @@ só executar o que já foi desenhado:
   relacionado.
 - **Nada disso foi aplicado em produção.** Existe só em branch até virar PR revisado e
   decidido explicitamente com o usuário.
+
+### Incidente de deploy em 2026-08-22: migrations com timestamp velho
+
+O PR de Fase 0 (#142) ficou pronto em 2026-08-19/20, mas só foi mergeado em 2026-08-22 —
+nesse meio tempo, outros PRs já tinham mergeado e deployado migrations com timestamp mais
+recente (`20260821000000` até `20260821060000`). As 3 migrations de fidelidade, datadas
+`20260819`/`20260820`, ficaram "no meio" da sequência já aplicada em produção. O workflow
+de deploy rodou `supabase db push` e falhou (com segurança — recusou aplicar, não corrompeu
+nada): *"Found local migration files to be inserted before the last migration on remote
+database"*.
+
+**Correção**: as 3 migrations foram renomeadas para timestamps depois de
+`20260821060000` (a última aplicada), sem alterar o conteúdo — mesma lição já registrada
+antes neste repo sobre não deixar migration com timestamp velho esperando merge. PR de
+correção: ver histórico do branch `fix/loyalty-migration-timestamps`.
+
+**Lição pra próximas fases**: gerar o timestamp da migration só na hora de abrir o PR pra
+merge, não quando o código é escrito — se o PR demorar pra ser revisado/mergeado, o
+timestamp pode ficar velho relativo ao que já foi deployado nesse meio tempo.
 
 ### Achado desta sessão: `verify_jwt` das 6 functions
 
