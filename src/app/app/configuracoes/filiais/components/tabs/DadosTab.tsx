@@ -1,4 +1,4 @@
-import { Landmark, Store, Tent } from "lucide-react";
+import { Check, Landmark, Store, Tent } from "lucide-react";
 import { BranchInput } from "@/lib/api/branches-admin-api";
 import { Field, FieldGroup, Toggle } from "../FormPrimitives";
 import { INPUT_CLS, TYPE_OPTIONS, slugify, validateBranchCode, validateBranchSlug } from "../../utils";
@@ -70,7 +70,7 @@ export function DadosTab({
           </p>
         )}
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="flex flex-col gap-2 sm:grid sm:grid-cols-3 sm:gap-3">
           {TYPE_OPTIONS.map((t) => {
             const Icon = TYPE_ICONS[t.value];
             const active = editing.type === t.value;
@@ -79,15 +79,24 @@ export function DadosTab({
                 key={t.value}
                 type="button"
                 onClick={() => setField('type', t.value)}
-                className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all sm:block sm:gap-0 ${
                   active
                     ? 'border-brand-red bg-[var(--status-danger-bg)] text-brand-red shadow-sm'
-                    : 'border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]'
+                    : 'border-[var(--border-strong)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                <Icon className={`h-4 w-4 ${active ? 'text-brand-red' : 'text-[var(--text-muted)]'}`} />
-                <p className="mt-1.5 text-xs font-black">{t.label}</p>
-                <p className="mt-0.5 text-[10px] leading-tight opacity-70">{t.desc}</p>
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    active ? 'bg-red-100' : 'bg-[var(--bg-base)]'
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${active ? 'text-red-600' : 'text-[var(--text-muted)]'}`} />
+                </span>
+                <div className="min-w-0 flex-1 sm:mt-2 sm:flex-none">
+                  <p className="text-xs font-black">{t.label}</p>
+                  <p className="mt-0.5 text-[10.5px] leading-snug opacity-80">{t.desc}</p>
+                </div>
+                {active && <Check className="h-4 w-4 shrink-0 text-brand-red sm:hidden" strokeWidth={2.5} />}
               </button>
             );
           })}

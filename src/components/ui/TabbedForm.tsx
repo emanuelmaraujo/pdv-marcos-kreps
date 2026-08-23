@@ -108,30 +108,34 @@ export function TabbedForm({
 
   const mobilePills = (
     <>
-      <div className="flex gap-1 overflow-x-auto px-3 pt-3 sm:px-5">
-        {tabs.map((tab, index) => {
-          const active = tab.id === activeTab;
-          const done = index < activeIndex;
-          const Icon = tab.icon;
-          const tabAccent = tab.accent ?? DEFAULT_ACCENT;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => goTo(index)}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all ${
-                active
-                  ? `${tabAccent.iconBg} ${tabAccent.iconColor} shadow-sm`
-                  : done
-                    ? "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
-                    : "text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              {done ? <Check className="h-3.5 w-3.5" /> : Icon ? <Icon className="h-3.5 w-3.5" /> : null}
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="relative">
+        <div className="hide-scrollbar flex gap-1 overflow-x-auto px-3 pt-3 sm:px-5">
+          {tabs.map((tab, index) => {
+            const active = tab.id === activeTab;
+            const done = index < activeIndex;
+            const Icon = tab.icon;
+            const tabAccent = tab.accent ?? DEFAULT_ACCENT;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => goTo(index)}
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all ${
+                  active
+                    ? `${tabAccent.iconBg} ${tabAccent.iconColor} shadow-sm`
+                    : done
+                      ? "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                {done ? <Check className="h-3.5 w-3.5" /> : Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+        {/* Sinaliza que há mais abas fora da tela, sem depender da scrollbar nativa do SO/navegador (que em alguns Windows mostra setas feias por cima do conteúdo). */}
+        <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-[var(--bg-base)] to-transparent" />
       </div>
       <div className="mx-3 mt-3 border-b border-[var(--border)] sm:mx-5" />
     </>
@@ -158,7 +162,7 @@ export function TabbedForm({
           >
             <span
               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                active ? "bg-white/70 shadow-sm" : "bg-[var(--bg-subtle)]"
+                active ? "bg-white/70 shadow-sm" : "bg-[var(--bg-base)]"
               }`}
             >
               {done ? (
@@ -213,7 +217,9 @@ export function TabbedForm({
   const nav = (
     <div
       className={`flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--bg-base)] px-4 py-3 sm:px-6 lg:px-7 ${
-        isPage ? "sticky bottom-20 z-10 md:bottom-0" : ""
+        isPage
+          ? "sticky bottom-20 z-10 md:bottom-0 lg:mt-4 lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:shadow-[var(--elevation-2)]"
+          : ""
       }`}
     >
       <button
@@ -250,14 +256,14 @@ export function TabbedForm({
   if (isPage) {
     return (
       <div className="lg:flex lg:items-start lg:gap-6">
-        <div className="sticky top-14 z-10 bg-[var(--bg-base)] lg:w-72 lg:shrink-0 lg:rounded-2xl lg:border lg:border-[var(--border)] lg:bg-[var(--bg-surface)] lg:shadow-sm">
+        <div className="sticky top-14 z-10 bg-[var(--bg-base)] lg:w-72 lg:shrink-0 lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:shadow-[var(--elevation-2)]">
           {header}
           <div className="lg:hidden">{mobilePills}</div>
           {sidebarNav}
         </div>
 
         <div className="lg:min-w-0 lg:flex-1">
-          <div className="lg:overflow-hidden lg:rounded-2xl lg:border lg:border-[var(--border)] lg:bg-[var(--bg-surface)] lg:shadow-sm">
+          <div className="lg:overflow-hidden lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:shadow-[var(--elevation-2)]">
             {content}
           </div>
           {nav}
