@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Bike, Loader2, MapPin, Plus, Trash2, User } from "lucide-react";
 import { BranchInput } from "@/lib/api/branches-admin-api";
 import { Courier, DeliveryZone } from "@/types/pdv";
-import { Select } from "@/components/ui/Select";
+import { Combobox } from "@/components/ui/Combobox";
 import { Field, FieldGroup, Toggle } from "../FormPrimitives";
 import { BRASILIA_NEIGHBORHOODS } from "@/lib/constants/brasilia-neighborhoods";
 import { INPUT_CLS } from "../../utils";
@@ -130,16 +130,14 @@ export function EntregaTab({
                 ) : null}
 
                 <div className="space-y-2 border-t border-[var(--border)] pt-3">
-                  <Select
+                  <Combobox
                     value={newZone.neighborhood}
-                    onChange={(e) => setNewZone({ ...newZone, neighborhood: e.target.value })}
-                    className={`${INPUT_CLS} w-full`}
-                  >
-                    <option value="">Selecione o bairro...</option>
-                    {BRASILIA_NEIGHBORHOODS
-                      .filter((name) => !zones.some((z) => z.neighborhood === name))
-                      .map((name) => <option key={name} value={name}>{name}</option>)}
-                  </Select>
+                    onChange={(v) => setNewZone({ ...newZone, neighborhood: v })}
+                    options={BRASILIA_NEIGHBORHOODS.filter((name) => !zones.some((z) => z.neighborhood === name))}
+                    placeholder="Selecione o bairro..."
+                    searchPlaceholder="Buscar bairro..."
+                    emptyLabel="Nenhum bairro encontrado."
+                  />
                   <div className="flex gap-2">
                     <input
                       type="number"
