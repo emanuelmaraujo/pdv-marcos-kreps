@@ -18,40 +18,27 @@ export function Field({
   );
 }
 
-export function Toggle({
-  label, desc, checked, onChange, small = false,
-}: {
-  label: string; desc?: string; checked: boolean; onChange: (v: boolean) => void; small?: boolean;
-}) {
-  return (
-    <label
-      className={`flex cursor-pointer items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-sm transition-all ${
-        checked
-          ? 'border-[var(--status-success)]/25 bg-[var(--status-success-bg)]'
-          : 'border-[var(--border)] bg-[var(--bg-subtle)] hover:border-[var(--border-strong)]'
-      } ${small ? '' : 'w-full'}`}
-    >
-      <div className="min-w-0">
-        <p className={`font-bold text-[var(--text-primary)] ${small ? 'text-[11px]' : 'text-xs'}`}>{label}</p>
-        {desc && <p className="mt-0.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)]">{desc}</p>}
-      </div>
-      <SwitchKnob checked={checked} onChange={onChange} />
-    </label>
-  );
-}
-
 /** Switch estilizado tipo iOS — substitui o checkbox cru por algo moderno. */
-export function SwitchKnob({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+export function SwitchKnob({
+  checked, onChange, decorative = false,
+}: {
+  checked: boolean; onChange: (v: boolean) => void; decorative?: boolean;
+}) {
   return (
     <button
       type="button"
-      role="switch"
-      aria-checked={checked}
+      role={decorative ? undefined : "switch"}
+      aria-checked={decorative ? undefined : checked}
+      aria-hidden={decorative || undefined}
+      tabIndex={decorative ? -1 : 0}
       onClick={(e) => {
+        if (decorative) return; // clique já tratado pelo wrapper (Toggle) — evita alternar duas vezes.
         e.preventDefault();
         onChange(!checked);
       }}
       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:ring-offset-2 focus:ring-offset-[var(--bg-surface)] ${
+        decorative ? "pointer-events-none" : ""
+      } ${
         checked ? 'bg-[var(--status-success)]' : 'bg-[var(--border-strong)]'
       }`}
     >
@@ -61,6 +48,39 @@ export function SwitchKnob({ checked, onChange }: { checked: boolean; onChange: 
         }`}
       />
     </button>
+  );
+}
+
+export function Toggle({
+  label, desc, checked, onChange, small = false,
+}: {
+  label: string; desc?: string; checked: boolean; onChange: (v: boolean) => void; small?: boolean;
+}) {
+  return (
+    <div
+      role="switch"
+      aria-checked={checked}
+      tabIndex={0}
+      onClick={() => onChange(!checked)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onChange(!checked);
+        }
+      }}
+      className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-brand-red/30 ${
+        checked
+          ? 'border-[var(--status-success)]/25 bg-[var(--status-success-bg)]'
+          : 'border-[var(--border)] bg-[var(--bg-subtle)] hover:border-[var(--border-strong)]'
+      } ${small ? '' : 'w-full'}`}
+    >
+      <div className="min-w-0">
+        <p className={`font-bold text-[var(--text-primary)] ${small ? 'text-[11px]' : 'text-xs'}`}>{label}</p>
+        {desc && <p className="mt-0.5 text-[10.5px] leading-relaxed text-[var(--text-secondary)]">{desc}</p>}
+      </div>
+      {/* Puramente visual aqui — a linha inteira já é o alvo de toque/clique real (ver onClick acima); o switch sozinho tinha só 24px de altura, pequeno demais pra mobile. */}
+      <SwitchKnob checked={checked} onChange={onChange} decorative />
+    </div>
   );
 }
 
