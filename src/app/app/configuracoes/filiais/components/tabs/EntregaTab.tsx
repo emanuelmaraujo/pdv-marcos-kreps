@@ -77,13 +77,7 @@ export function EntregaTab({
           </Field>
 
           <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
-          <FieldGroup>
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
-                <MapPin className="h-4 w-4 text-emerald-600" />
-              </span>
-              <p className="text-xs font-black text-[var(--text-primary)]">Bairros atendidos</p>
-            </div>
+          <FieldGroup title="Bairros atendidos" icon={MapPin} iconBg="bg-emerald-100" iconColor="text-emerald-600">
             <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
               {zones.length > 0
                 ? 'Assim que há bairros cadastrados, entregas fora da lista são bloqueadas — o cliente vê que não atendemos aquele endereço.'
@@ -171,13 +165,7 @@ export function EntregaTab({
             )}
           </FieldGroup>
 
-          <FieldGroup>
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
-                <Bike className="h-4 w-4 text-indigo-600" />
-              </span>
-              <p className="text-xs font-black text-[var(--text-primary)]">Entregadores cadastrados</p>
-            </div>
+          <FieldGroup title="Entregadores cadastrados" icon={Bike} iconBg="bg-indigo-100" iconColor="text-indigo-600">
             <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
               Opcional — o despacho sempre permite digitar um entregador avulso também.{" "}
               <Link href="/app/relatorios/entregadores" className="font-semibold text-brand-red hover:underline">

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ElementType, ReactNode } from "react";
 
 export function Field({
   label, hint, required, error, children,
@@ -7,7 +7,7 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 flex items-baseline gap-1 text-[10.5px] font-black uppercase tracking-wider text-[var(--text-secondary)]">
+      <span className="mb-1.5 flex flex-wrap items-baseline gap-1 text-[10.5px] font-black uppercase tracking-wider text-[var(--text-secondary)]">
         {label}
         {required && <span className="text-brand-red">*</span>}
         {hint && <span className="text-[10px] font-medium normal-case text-[var(--text-muted)]">— {hint}</span>}
@@ -64,11 +64,44 @@ export function SwitchKnob({ checked, onChange }: { checked: boolean; onChange: 
   );
 }
 
-/** Card com título discreto — agrupa um cluster de campos relacionados dentro de uma aba. */
-export function FieldGroup({ title, children }: { title?: string; children: ReactNode }) {
+/**
+ * Card com título discreto — agrupa um cluster de campos relacionados dentro
+ * de uma aba. Com `icon`, o título vira um cabeçalho maior com avatar
+ * colorido (mesmo padrão usado nas zonas/entregadores/setores) em vez do
+ * rótulo minúsculo em caixa alta.
+ */
+export function FieldGroup({
+  title, subtitle, description, icon: Icon, iconBg = "bg-[var(--bg-subtle)]", iconColor = "text-[var(--text-muted)]", action, children,
+}: {
+  title?: string;
+  /** Rótulo curto em caixa alta (ex: nome do setor/código). */
+  subtitle?: string;
+  /** Frase descritiva normal, menor e discreta (ex: "dispara quando..."). */
+  description?: string;
+  icon?: ElementType;
+  iconBg?: string;
+  iconColor?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
-      {title && <p className="text-[10.5px] font-black uppercase tracking-wider text-[var(--text-muted)]">{title}</p>}
+    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm transition-shadow hover:shadow-md">
+      {title && !Icon && <p className="text-[10.5px] font-black uppercase tracking-wider text-[var(--text-muted)]">{title}</p>}
+      {title && Icon && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
+              <Icon className={`h-4 w-4 ${iconColor}`} strokeWidth={2} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-black text-[var(--text-primary)]">{title}</p>
+              {subtitle && <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{subtitle}</p>}
+              {description && <p className="truncate text-[10px] text-[var(--text-muted)]">{description}</p>}
+            </div>
+          </div>
+          {action}
+        </div>
+      )}
       {children}
     </div>
   );
