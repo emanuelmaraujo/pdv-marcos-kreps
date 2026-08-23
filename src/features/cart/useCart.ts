@@ -54,7 +54,11 @@ interface CartState {
   orderNotes: string;
   source: OrderSource;
   targetOrderId: string | null;
-  
+  /** Slug da filial pública (/pedir/[slug]) dona destes itens — `null` fora do
+   * fluxo público (PDV interno). Usado para detectar carrinho "órfão" de uma
+   * filial diferente da que o cliente está navegando agora. */
+  branchSlug: string | null;
+
   addItem: (item: Omit<CartItem, 'id'>) => void;
   updateItem: (id: string, updates: Partial<CartItem>) => void;
   removeItem: (id: string) => void;
@@ -65,7 +69,8 @@ interface CartState {
   clearCart: () => void;
   setSource: (source: OrderSource) => void;
   setTargetOrderId: (id: string | null) => void;
-  
+  setBranchSlug: (slug: string | null) => void;
+
   // Computed (estimation only, backend is authority)
   getEstimatedSubtotal: () => number;
 }
@@ -80,8 +85,10 @@ export const useCart = create<CartState>()(
   orderNotes: '',
   source: 'ATTENDANT',
   targetOrderId: null,
+  branchSlug: null,
 
   setTargetOrderId: (targetOrderId) => set({ targetOrderId }),
+  setBranchSlug: (branchSlug) => set({ branchSlug }),
 
   addItem: (item) => set((state) => ({ 
     items: [...state.items, { ...item, id: crypto.randomUUID() }] 
@@ -107,14 +114,17 @@ export const useCart = create<CartState>()(
   
   setSource: (source) => set({ source }),
 
-  clearCart: () => set({
+  clearCart: () => set((state) => ({
     items: [],
     orderType: 'BALCAO',
     customerName: '',
     customerPhone: '',
     orderNotes: '',
-    targetOrderId: null
-  }),
+    targetOrderId: null,
+    // branchSlug fica de fora do reset: quem chama clearCart() ao trocar de
+    // filial é responsável por chamar setBranchSlug() logo em seguida.
+    branchSlug: state.branchSlug,
+  })),
   
   getEstimatedSubtotal: () => {
     // Estimativa visual simples. O cálculo real de total_amount é feito pelas Edge Functions.
@@ -141,6 +151,7 @@ export const useCart = create<CartState>()(
         orderNotes:    state.orderNotes,
         source:        state.source,
         targetOrderId: state.targetOrderId,
+        branchSlug:    state.branchSlug,
       }),
     },
   ),

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 
 interface DialogProps {
@@ -6,9 +6,50 @@ interface DialogProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  /** Conteúdo fixo fora da área de rolagem (ex: botão "Adicionar ao carrinho").
+   * Fica sempre visível, mesmo com o corpo rolando ou o teclado aberto. */
+  footer?: React.ReactNode;
 }
 
-export function BottomSheet({ isOpen, onClose, title, children }: DialogProps) {
+/** Arrasta pra baixo pra fechar — só no header/handle (não compete com o
+ * scroll do conteúdo). Cancela abaixo do limiar, fecha acima dele. */
+function useDragToClose(onClose: () => void) {
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const startYRef = useRef<number | null>(null);
+  const deltaYRef = useRef(0);
+  const draggingRef = useRef(false);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    startYRef.current = e.touches[0].clientY;
+    draggingRef.current = true;
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!draggingRef.current || startYRef.current === null || !sheetRef.current) return;
+    const delta = e.touches[0].clientY - startYRef.current;
+    if (delta <= 0) return;
+    deltaYRef.current = delta;
+    sheetRef.current.style.transform = `translateY(${delta}px)`;
+  };
+
+  const onTouchEnd = () => {
+    if (!draggingRef.current || !sheetRef.current) return;
+    draggingRef.current = false;
+    const shouldClose = deltaYRef.current > 90;
+    sheetRef.current.style.transition = 'transform 200ms ease-out';
+    sheetRef.current.style.transform = '';
+    window.setTimeout(() => { sheetRef.current?.style.removeProperty('transition'); }, 200);
+    startYRef.current = null;
+    deltaYRef.current = 0;
+    if (shouldClose) onClose();
+  };
+
+  return { sheetRef, onTouchStart, onTouchMove, onTouchEnd };
+}
+
+export function BottomSheet({ isOpen, onClose, title, children, footer }: DialogProps) {
+  const { sheetRef, onTouchStart, onTouchMove, onTouchEnd } = useDragToClose(onClose);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -30,23 +71,42 @@ export function BottomSheet({ isOpen, onClose, title, children }: DialogProps) {
         onClick={onClose}
       />
 
-      {/* Sheet Content */}
-      <div className="relative z-[45] w-full max-w-md rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xl transform-gpu transition-transform will-change-transform animate-in slide-in-from-bottom duration-300 sm:rounded-2xl">
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
-          <button
-            onClick={onClose}
-            aria-label="Fechar"
-            className="focus-ring relative -mr-2 rounded-full p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] after:absolute after:inset-[-8px] after:content-['']"
-          >
-            <X size={20} />
-          </button>
+      {/* Sheet Content — coluna flex: header e footer fixos, só o meio rola.
+         max-height em dvh garante que cabe na viewport real do mobile
+         (barra de endereço / teclado não empurram o footer pra fora). */}
+      <div
+        ref={sheetRef}
+        className="relative z-[45] flex w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xl transform-gpu transition-transform will-change-transform animate-in slide-in-from-bottom duration-300 sm:rounded-2xl"
+        style={{ maxHeight: 'calc(100dvh - 4rem)' }}
+      >
+        <div
+          className="shrink-0 touch-none border-b border-[var(--border)]"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+        >
+          {/* Handle de arraste — só mobile, sinaliza que dá pra arrastar pra fechar */}
+          <div className="flex justify-center pt-2 pb-1 sm:hidden">
+            <span className="h-1 w-10 rounded-full bg-[var(--border-strong)]" />
+          </div>
+          <div className="flex items-center justify-between px-6 py-3">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
+            <button
+              onClick={onClose}
+              aria-label="Fechar"
+              className="focus-ring relative -mr-2 rounded-full p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] after:absolute after:inset-[-8px] after:content-['']"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
-        
-        {/* Scrollable content area */}
-        <div className="max-h-[75vh] overflow-y-auto overscroll-contain">
+
+        {/* Única área com rolagem */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {children}
         </div>
+
+        {footer && <div className="shrink-0">{footer}</div>}
       </div>
     </div>
   );
