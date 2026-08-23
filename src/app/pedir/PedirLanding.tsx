@@ -79,16 +79,29 @@ export function PedirLanding() {
   const [trackingLoading, setTrackingLoading] = useState(false);
   /** Quando lookup por telefone retorna 2+ pedidos, mostramos picker. */
   const [trackingMatches, setTrackingMatches] = useState<PublicOrderLookupItem[] | null>(null);
+  /** Slug da filial que o cliente acabou de tocar — mostra spinner no botão
+   * em vez de deixar a tela "travada" enquanto a rota da filial carrega. */
+  const [navigatingSlug, setNavigatingSlug] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     pdvApi.getPublicBranches().then((res) => {
       if (cancelled) return;
-      setBranches(res.branches ?? []);
+      const loadedBranches = res.branches ?? [];
+      setBranches(loadedBranches);
       setLoading(false);
+      // Prefetch das rotas de filial — ao tocar, a navegação já está pronta.
+      loadedBranches.forEach((branch) => router.prefetch(`/pedir/${branch.slug}`));
     });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleSelectBranch(slug: string) {
+    if (navigatingSlug) return;
+    setNavigatingSlug(slug);
+    router.push(`/pedir/${slug}`);
+  }
 
   async function handleTrack(e: React.FormEvent) {
     e.preventDefault();
@@ -118,7 +131,8 @@ export function PedirLanding() {
           return;
         }
         if (res.orders.length === 1) {
-          router.push(`/pedido/${res.orders[0].public_token}`);
+          const onlyMatch = res.orders[0];
+          router.push(onlyMatch.branch_slug ? `/pedido/${onlyMatch.public_token}?branch=${encodeURIComponent(onlyMatch.branch_slug)}` : `/pedido/${onlyMatch.public_token}`);
           return;
         }
         // 2+ pedidos → mostra picker
@@ -186,7 +200,7 @@ export function PedirLanding() {
                   <li key={order.public_token}>
                     <button
                       type="button"
-                      onClick={() => router.push(`/pedido/${order.public_token}`)}
+                      onClick={() => router.push(order.branch_slug ? `/pedido/${order.public_token}?branch=${encodeURIComponent(order.branch_slug)}` : `/pedido/${order.public_token}`)}
                       className="w-full flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-2.5 text-left hover:bg-[var(--bg-surface)] hover:border-[var(--border-strong)] active:scale-[0.99]"
                     >
                       <span
@@ -284,20 +298,29 @@ export function PedirLanding() {
                 const meta = BRANCH_TYPE_META[branch.type] ?? BRANCH_TYPE_META.STORE;
                 const Icon = meta.icon;
                 const avatarColor = avatarColorFor(branch.id || branch.slug);
+                const isNavigating = navigatingSlug === branch.slug;
                 return (
                   <li key={branch.id}>
                     <button
                       type="button"
-                      onClick={() => router.push(`/pedir/${branch.slug}`)}
-                      className="w-full text-left flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] hover:border-[var(--border-strong)] active:scale-[0.99]"
+                      onClick={() => handleSelectBranch(branch.slug)}
+                      disabled={!!navigatingSlug}
+                      aria-busy={isNavigating}
+                      className="w-full text-left flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)] transition-[box-shadow,opacity] duration-150 hover:shadow-[var(--shadow-md)] hover:border-[var(--border-strong)] active:scale-[0.99] disabled:opacity-60"
                     >
                       {/* Avatar com cor estável por filial */}
                       <div
                         className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl text-white"
                         style={{ backgroundColor: avatarColor }}
                       >
-                        <span className="text-micro font-medium opacity-80">{branch.code}</span>
-                        <Icon className="h-4 w-4 mt-0.5" strokeWidth={1.75} />
+                        {isNavigating ? (
+                          <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.75} />
+                        ) : (
+                          <>
+                            <span className="text-micro font-medium opacity-80">{branch.code}</span>
+                            <Icon className="h-4 w-4 mt-0.5" strokeWidth={1.75} />
+                          </>
+                        )}
                       </div>
 
                       <div className="flex-1 min-w-0">

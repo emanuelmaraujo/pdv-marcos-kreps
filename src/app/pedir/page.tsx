@@ -50,6 +50,7 @@ import { PAYMENT_METHOD_CODE, isValidEmail } from "./_components/payment-helpers
 import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
 import { getCurrentPosition } from "@/lib/utils/geolocation";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { rememberLastBranchSlug } from "@/lib/utils/lastBranch";
 import {
   ALL_FILTER,
   buildMenuIndexes,
@@ -100,6 +101,9 @@ type SavedPublicOrderSession = {
   order?: CreatePublicOrderResponse["order"];
   customerEmail?: string;
   saved_at?: string;
+  /** Filial dona deste pedido salvo — evita restaurar a tela de pagamento/
+   * confirmação de uma filial diferente da que o cliente está navegando agora. */
+  branchSlug?: string;
 };
 
 function useHorizontalDragScroll() {
@@ -201,11 +205,12 @@ function clearSavedPublicOrderSession() {
   sessionStorage.removeItem(PUBLIC_ORDER_STORAGE_KEY);
 }
 
-function savePublicOrderSession(order: CreatePublicOrderResponse["order"], customerEmail: string) {
+function savePublicOrderSession(order: CreatePublicOrderResponse["order"], customerEmail: string, branchSlug: string) {
   sessionStorage.setItem(PUBLIC_ORDER_STORAGE_KEY, JSON.stringify({
     order,
     customerEmail: customerEmail.trim(),
     saved_at: new Date().toISOString(),
+    branchSlug,
   }));
 }
 
@@ -275,6 +280,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     setCustomerInfo,
     orderNotes,
     setOrderNotes,
+    branchSlug: cartBranchSlug,
+    setBranchSlug: setCartBranchSlug,
   } = useCart();
 
   const [menuData, setMenuData] = useState<MenuData | null>(null);
@@ -339,6 +346,49 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   useEffect(() => {
     customerNameRef.current = customerName;
   }, [customerName]);
+
+  /** true quando há um carrinho com itens salvo de OUTRA filial — bloqueia
+   * adicionar itens até o cliente decidir (banner com "Começar novo pedido").
+   * Não depende de nenhum rastreamento próprio de "hidratou ou não": antes de
+   * hidratar, cartBranchSlug vem do estado padrão (null), então `!!cartBranchSlug`
+   * já garante que essa checagem só liga depois que o valor real (se houver)
+   * chegou do localStorage — sem isso, uma janela entre "hidratou" (rastreado
+   * separadamente) e "o valor já propagou pra este componente" deixava o
+   * efeito de adoção abaixo sobrescrever o branchSlug certo pelo errado antes
+   * do mismatch ser detectado. */
+  const branchDraftMismatch = !!cartBranchSlug && cartBranchSlug !== branchSlug && items.length > 0;
+
+  // Adota a filial atual no carrinho — só quando não há nada em risco (carrinho
+  // vazio ou nunca associado a uma filial). Roda uma única vez por filial,
+  // lendo o estado mais fresco possível via getState() no instante exato em
+  // que o zustand termina de hidratar — não pelas props do hook, que podem
+  // levar um render a mais pra refletir o valor hidratado.
+  const branchOwnershipCheckedRef = useRef(false);
+  useEffect(() => {
+    branchOwnershipCheckedRef.current = false;
+    const applyOwnership = () => {
+      if (branchOwnershipCheckedRef.current) return;
+      branchOwnershipCheckedRef.current = true;
+      const state = useCart.getState();
+      if ((state.items.length === 0 || !state.branchSlug) && state.branchSlug !== branchSlug) {
+        state.setBranchSlug(branchSlug);
+      }
+    };
+    if (useCart.persist.hasHydrated()) {
+      applyOwnership();
+      return;
+    }
+    return useCart.persist.onFinishHydration(applyOwnership);
+  }, [branchSlug]);
+
+  const handleStartFreshOrder = useCallback(() => {
+    clearCart();
+    setCartBranchSlug(branchSlug);
+  }, [branchSlug, clearCart, setCartBranchSlug]);
+
+  useEffect(() => {
+    rememberLastBranchSlug(branchSlug);
+  }, [branchSlug]);
 
   useEffect(() => {
     async function loadMenu() {
@@ -412,6 +462,13 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       const parsed = JSON.parse(stored) as SavedPublicOrderSession;
       const savedOrder = parsed.order;
       if (!savedOrder?.order_id || !savedOrder.public_token) {
+        clearSavedPublicOrderSession();
+        return;
+      }
+      // Pedido salvo pertence a outra filial (ex: cliente pediu na Filial A,
+      // depois abriu o link da Filial B na mesma aba) — não trava a tela nova
+      // mostrando pagamento/confirmação de um pedido que não é deste lugar.
+      if (parsed.branchSlug && parsed.branchSlug !== branchSlug) {
         clearSavedPublicOrderSession();
         return;
       }
@@ -794,6 +851,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   }, [selectedAddons]);
 
   const openCustomization = useCallback((product: Product, existingItem?: CartItem) => {
+    if (branchDraftMismatch) {
+      addToast("error", "Resolva o pedido em aberto de outra unidade antes de continuar.");
+      return;
+    }
     setSelectedProduct(product);
     setAddonsExpanded(false);
     if (existingItem) {
@@ -809,11 +870,70 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setQuantity(1);
       setItemNotes("");
     }
+  }, [addToast, branchDraftMismatch]);
+
+  // Histórico do navegador: enquanto o modal de personalização está aberto,
+  // o botão Voltar fecha o modal em vez de sair da página — pusha uma
+  // entrada extra no histórico ao abrir e a consome no popstate.
+  const modalHistoryPushedRef = useRef(false);
+  useEffect(() => {
+    if (selectedProduct && !modalHistoryPushedRef.current) {
+      window.history.pushState({ pedirModal: true }, "");
+      modalHistoryPushedRef.current = true;
+    }
+  }, [selectedProduct]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (modalHistoryPushedRef.current) {
+        modalHistoryPushedRef.current = false;
+        setSelectedProduct(null);
+        setEditingCartItemId(null);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   const closeCustomization = useCallback(() => {
-    setSelectedProduct(null);
-    setEditingCartItemId(null);
+    if (modalHistoryPushedRef.current) {
+      // Consome a entrada extra do histórico — o listener de popstate acima
+      // termina de limpar o estado quando o evento disparar.
+      window.history.back();
+    } else {
+      setSelectedProduct(null);
+      setEditingCartItemId(null);
+    }
+  }, []);
+
+  // Histórico do navegador: sair do cardápio (REVIEW/INFO/PAYMENT/PAID) pusha
+  // UMA entrada (não uma por passo — trocar de passo dentro do checkout não
+  // pusha de novo, só a entrada e saída do fluxo). O botão Voltar do
+  // navegador fecha o checkout inteiro e volta pro cardápio em vez de sair
+  // de /pedir — e sair pelo botão "Cardápio"/"Voltar ao cardápio" da própria
+  // UI consome essa entrada (history.back()), então também não sobra uma
+  // entrada "fantasma" exigindo um Voltar extra depois.
+  const wizardHistoryPushedRef = useRef(false);
+  useEffect(() => {
+    if (step !== "MENU" && !wizardHistoryPushedRef.current) {
+      window.history.pushState({ pedirWizard: true }, "");
+      wizardHistoryPushedRef.current = true;
+    } else if (step === "MENU" && wizardHistoryPushedRef.current) {
+      wizardHistoryPushedRef.current = false;
+      window.history.back();
+    }
+  }, [step]);
+
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      const state = event.state as { pedirWizard?: boolean } | null;
+      if (!state?.pedirWizard && wizardHistoryPushedRef.current) {
+        wizardHistoryPushedRef.current = false;
+        setStep("MENU");
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
   const handleAddToCart = useCallback(() => {
@@ -918,8 +1038,33 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     }
   }, []);
 
+  /** Volta pro cardápio SEM descartar um pedido aguardando pagamento — o
+   * cliente pode continuar navegando/montando outro pedido normalmente, e o
+   * pedido pendente fica disponível pra retomar via o banner em "orderData
+   * && orderAwaitingPayment" logo abaixo (botão "Continuar pagamento"). */
+  const handleBackToMenu = useCallback(() => {
+    setStep("MENU");
+  }, []);
+
+  /** Descarta de vez o pedido aguardando pagamento — usado quando o cliente
+   * escolhe explicitamente "Começar um novo pedido" (banner do cardápio) ou
+   * quando o pedido já foi pago (tela de confirmação não precisa de opção
+   * de retomar, já está concluído). */
+  const handleDiscardPendingOrder = useCallback(() => {
+    setOrderData(null);
+    setPaymentResult(null);
+    clearSavedPublicOrderSession();
+    setStep("MENU");
+  }, []);
+
+  /** true quando existe um pedido criado mas ainda não pago — é o único caso
+   * em que faz sentido oferecer "continuar pagamento" em vez de só permitir
+   * seguir criando um pedido novo. Uma vez pago, o polling em outro efeito já
+   * limpa orderData/cart e leva pra tela PAID sozinho. */
+  const orderAwaitingPayment = !!orderData && orderData.payment_status !== "PAID";
+
   const handleCreateOrder = async () => {
-    if (isSubmittingOrder || orderData) return;
+    if (isSubmittingOrder) return;
     setCheckoutError("");
 
     // Revalida o horario no momento exato do clique para garantir que o cliente
@@ -1038,7 +1183,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       } else {
         localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
       }
-      savePublicOrderSession(response.order, customerEmail);
+      savePublicOrderSession(response.order, customerEmail, branchSlug);
       setPaymentResult(null);
       setPaymentMode("PIX");
       setStep("PAYMENT");
@@ -1200,7 +1345,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             {orderData && step === "MENU" && (
               <button
                 type="button"
-                onClick={() => router.push(`/pedido/${encodeURIComponent(orderData.public_token)}`)}
+                onClick={() => router.push(`/pedido/${encodeURIComponent(orderData.public_token)}?branch=${encodeURIComponent(branchSlug)}`)}
                 className="flex items-center gap-1.5 rounded-full bg-[var(--status-success-bg)] px-3 py-1.5 text-caption font-semibold text-[var(--status-success)] hover:opacity-90 animate-pulse"
               >
                 <Package className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -1208,7 +1353,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </button>
             )}
             {step !== "MENU" && (
-              <Button variant="ghost" size="sm" className="min-h-11 gap-1" onClick={() => setStep("MENU")}>
+              <Button variant="ghost" size="sm" className="min-h-11 gap-1" onClick={handleBackToMenu}>
                 <ChevronLeft className="h-4 w-4" />
                 Cardapio
               </Button>
@@ -1219,6 +1364,84 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
       {step === "MENU" && (
         <main className="mx-auto max-w-7xl space-y-5 p-4 xl:px-6">
+          {/* Pedido criado mas ainda não pago — o cliente pode retomar o pagamento
+             OU seguir montando um pedido novo normalmente, sem ficar preso
+             num ou noutro. */}
+          {orderAwaitingPayment && (
+            <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+              <div className="flex items-start gap-3">
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                  style={{ backgroundColor: "var(--status-info-bg)", color: "var(--status-info, #2563EB)" }}
+                >
+                  <CreditCard className="h-4 w-4" strokeWidth={1.75} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">
+                    Pedido #{String(orderData!.daily_number).padStart(3, "0")} aguardando pagamento
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                    {currency.format(orderData!.total_amount)} · Continue de onde parou ou monte um pedido novo.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStep("PAYMENT")}
+                      className="flex h-9 items-center justify-center rounded-full bg-brand-red px-4 text-xs font-semibold text-white hover:bg-brand-red-dark active:scale-[0.98]"
+                    >
+                      Continuar pagamento
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDiscardPendingOrder}
+                      className="flex h-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] active:scale-[0.98]"
+                    >
+                      Começar um novo pedido
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Carrinho órfão de outra filial — bloqueia adicionar item até resolver */}
+          {branchDraftMismatch && (
+            <section className="rounded-2xl border border-[var(--status-warning,#D97706)]/30 bg-[var(--status-warning-bg,#FFFBEB)] p-4">
+              <div className="flex items-start gap-3">
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                  style={{ backgroundColor: "var(--status-warning-bg, #FFFBEB)", color: "var(--status-warning, #D97706)" }}
+                >
+                  <ShoppingCart className="h-4 w-4" strokeWidth={1.75} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">Você tem um pedido em aberto em outra unidade</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                    Pra pedir aqui em {branchName ?? "esta unidade"}, comece um novo pedido — o carrinho da outra unidade some.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleStartFreshOrder}
+                      className="flex h-9 items-center justify-center rounded-full bg-brand-red px-4 text-xs font-semibold text-white hover:bg-brand-red-dark active:scale-[0.98]"
+                    >
+                      Começar um novo pedido
+                    </button>
+                    {cartBranchSlug && (
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/pedir/${cartBranchSlug}`)}
+                        className="flex h-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-4 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] active:scale-[0.98]"
+                      >
+                        Ver esse pedido
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Hero — marrom escuro, copy direta ao benefício */}
           <section
             className="relative overflow-hidden rounded-3xl p-5 text-white shadow-[var(--shadow-md)] md:p-8"
@@ -1261,7 +1484,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </div>
 
               {/* Carrinho compacto no canto direito (desktop) */}
-              {items.length > 0 && (
+              {items.length > 0 && !branchDraftMismatch && (
                 <button
                   type="button"
                   onClick={() => setStep("REVIEW")}
@@ -1455,9 +1678,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   </div>
                 </div>
 
-                {items.length === 0 ? (
+                {items.length === 0 || branchDraftMismatch ? (
                   <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-subtle)] p-5 text-center">
-                    <p className="text-sm text-[var(--text-secondary)]">Escolha um krep para montar seu pedido.</p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      {branchDraftMismatch ? "Resolva o pedido em aberto de outra unidade acima." : "Escolha um krep para montar seu pedido."}
+                    </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1475,7 +1700,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                               )}
                             </div>
                             <button
-                              className="rounded-lg bg-[var(--bg-surface)] p-1.5 text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)]"
+                              className="focus-ring relative rounded-lg bg-[var(--bg-surface)] p-1.5 text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)] after:absolute after:inset-[-8px] after:content-['']"
                               onClick={() => removeItem(item.id)}
                               aria-label="Remover item"
                             >
@@ -1506,7 +1731,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           </div>
 
           {/* Sticky bottom cart bar — só mobile/tablet (sidebar cobre desktop) */}
-          {items.length > 0 && (
+          {items.length > 0 && !branchDraftMismatch && (
             <div
               className="xl:hidden fixed left-3 right-3 bottom-3 z-40 animate-in slide-in-from-bottom-8"
               style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
@@ -1597,7 +1822,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     </span>
                     <button
                       type="button"
-                      className="rounded-lg bg-[var(--bg-subtle)] p-2 text-[var(--text-secondary)] hover:bg-[var(--border)] ml-2"
+                      className="rounded-lg bg-[var(--bg-subtle)] p-2.5 text-[var(--text-secondary)] hover:bg-[var(--border)] ml-2"
                       onClick={() => openCustomization(item.product, item)}
                       aria-label="Editar item"
                     >
@@ -1605,7 +1830,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     </button>
                     <button
                       type="button"
-                      className="rounded-lg bg-[var(--status-danger-bg)] p-2 text-[var(--status-danger)] hover:opacity-80"
+                      className="rounded-lg bg-[var(--status-danger-bg)] p-2.5 text-[var(--status-danger)] hover:opacity-80"
                       onClick={() => removeItem(item.id)}
                       aria-label="Remover item"
                     >
@@ -2119,12 +2344,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
           <button
             type="button"
-            onClick={() => {
-              setOrderData(null);
-              setPaymentResult(null);
-              clearSavedPublicOrderSession();
-              setStep("MENU");
-            }}
+            onClick={handleBackToMenu}
             className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
@@ -2137,7 +2357,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               payerEmail={customerEmail}
               onPayerEmailChange={(email) => {
                 setCustomerEmail(email);
-                savePublicOrderSession(orderData, email);
+                savePublicOrderSession(orderData, email, branchSlug);
               }}
               onPaid={() => {
                 clearCart();
@@ -2258,7 +2478,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               {trackingUrl && (
                 <button
                   type="button"
-                  onClick={() => router.push(`/pedido/${encodeURIComponent(orderData!.public_token)}`)}
+                  onClick={() => router.push(`/pedido/${encodeURIComponent(orderData!.public_token)}?branch=${encodeURIComponent(branchSlug)}`)}
                   className="flex items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
                   style={{ height: 52 }}
                 >
@@ -2279,12 +2499,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               )}
               <button
                 type="button"
-                onClick={() => {
-                  setOrderData(null);
-                  setPaymentResult(null);
-                  clearSavedPublicOrderSession();
-                  setStep("MENU");
-                }}
+                onClick={handleDiscardPendingOrder}
                 className="flex w-full items-center justify-center rounded-full border-2 border-brand-red bg-transparent text-sm font-semibold text-brand-red hover:bg-[var(--brand-light)] active:scale-[0.98]"
                 style={{ height: 44 }}
               >
@@ -2304,9 +2519,45 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         isOpen={!!selectedProduct}
         onClose={closeCustomization}
         title={editingCartItemId ? "Editar item" : "Personalizar item"}
+        footer={selectedProduct && (
+          <div
+            className="px-5 py-3 border-t border-[var(--border)] shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.12)]"
+            style={{ backgroundColor: "var(--bg-surface)", paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 rounded-full bg-[var(--bg-subtle)] p-1 h-12">
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--bg-surface)] text-[var(--text-secondary)] shadow-sm disabled:opacity-40"
+                  disabled={quantity <= 1}
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  aria-label="Diminuir"
+                >
+                  <Minus className="h-4 w-4" strokeWidth={2} />
+                </button>
+                <span className="w-7 text-center text-base font-bold text-[var(--text-primary)] tabular-nums">{quantity}</span>
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-red text-white shadow-sm"
+                  onClick={() => setQuantity(quantity + 1)}
+                  aria-label="Aumentar"
+                >
+                  <Plus className="h-4 w-4" strokeWidth={2} />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                className="flex-1 flex items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-md)] hover:bg-brand-red-dark active:scale-[0.98]"
+                style={{ height: 52 }}
+              >
+                <span>{editingCartItemId ? "Salvar" : "Adicionar"}</span>
+                <span className="tabular-nums">· {currency.format(sheetSubtotal)}</span>
+              </button>
+            </div>
+          </div>
+        )}
       >
         {selectedProduct && (
-          <div className="pb-32">
+          <div className="pb-4">
             {/* Hero — foto (ou gradiente com ícone da categoria) com tags e preço flutuando por cima */}
             {(() => {
               const categoryKind = getCategoryKind(selectedProductCategory?.name);
@@ -2446,7 +2697,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           <div className="mt-2 flex items-center justify-between rounded-lg bg-[var(--bg-subtle)] p-1">
                             <button
                               type="button"
-                              className="rounded-md bg-[var(--bg-surface)] p-1.5 text-[var(--text-secondary)] disabled:opacity-40"
+                              className="focus-ring relative rounded-md bg-[var(--bg-surface)] p-1.5 text-[var(--text-secondary)] disabled:opacity-40 after:absolute after:inset-[-6px] after:content-['']"
                               disabled={qty === 0}
                               aria-label={`Diminuir ${addon.name}`}
                               onClick={() => {
@@ -2464,7 +2715,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                             <span className="font-semibold text-sm text-[var(--text-primary)] tabular-nums">{qty}</span>
                             <button
                               type="button"
-                              className="rounded-md bg-[var(--bg-surface)] p-1.5 text-brand-red"
+                              className="focus-ring relative rounded-md bg-[var(--bg-surface)] p-1.5 text-brand-red after:absolute after:inset-[-6px] after:content-['']"
                               aria-label={`Aumentar ${addon.name}`}
                               onClick={() => {
                                 setSelectedAddons((current) => {
@@ -2494,42 +2745,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 placeholder="Ex: sem sal, bem passado..."
               />
             </section>
-
-            {/* Footer sticky com quantidade + CTA */}
-            <div
-              className="sticky bottom-0 left-0 right-0 mt-6 px-5 py-3 border-t border-[var(--border)] shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.12)]"
-              style={{ backgroundColor: "var(--bg-surface)" }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1 rounded-full bg-[var(--bg-subtle)] p-1 h-12">
-                  <button
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--bg-surface)] text-[var(--text-secondary)] shadow-sm disabled:opacity-40"
-                    disabled={quantity <= 1}
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    aria-label="Diminuir"
-                  >
-                    <Minus className="h-4 w-4" strokeWidth={2} />
-                  </button>
-                  <span className="w-7 text-center text-base font-bold text-[var(--text-primary)] tabular-nums">{quantity}</span>
-                  <button
-                    className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-red text-white shadow-sm"
-                    onClick={() => setQuantity(quantity + 1)}
-                    aria-label="Aumentar"
-                  >
-                    <Plus className="h-4 w-4" strokeWidth={2} />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-md)] hover:bg-brand-red-dark active:scale-[0.98]"
-                  style={{ height: 52 }}
-                >
-                  <span>{editingCartItemId ? "Salvar" : "Adicionar"}</span>
-                  <span className="tabular-nums">· {currency.format(sheetSubtotal)}</span>
-                </button>
-              </div>
-            </div>
           </div>
         )}
       </BottomSheet>
