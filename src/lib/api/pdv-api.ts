@@ -189,6 +189,9 @@ export type CreatePublicOrderPayload = {
     longitude?: number;
   };
   delivery_address_id?: string;
+  /** Localização atual marcada no checkout — vale mesmo reaproveitando um endereço salvo (delivery_address_id). */
+  location_latitude?: number;
+  location_longitude?: number;
   save_address?: boolean;
   items: Array<{
     product_id: string;
