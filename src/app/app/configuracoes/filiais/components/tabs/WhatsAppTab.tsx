@@ -2,7 +2,7 @@ import { MessageSquare } from "lucide-react";
 import { BranchInput } from "@/lib/api/branches-admin-api";
 import { InheritedFieldIndicator } from "@/components/ui/InheritedFieldIndicator";
 import { resolveEffectiveWhatsAppTemplate, type WhatsAppEventType } from "@/lib/config/effective-branch-config";
-import { Field, FieldGroup, Toggle } from "../FormPrimitives";
+import { Field, FieldGroup, SwitchKnob, Toggle } from "../FormPrimitives";
 import { INPUT_CLS, WA_EVENTS, type WaTemplates } from "../../utils";
 
 export function WhatsAppTab({
@@ -49,15 +49,10 @@ export function WhatsAppTab({
                 iconBg="bg-teal-100"
                 iconColor="text-teal-600"
                 action={
-                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={enabled}
-                      onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], enabled: e.target.checked } }))}
-                      className="h-3.5 w-3.5 accent-brand-red"
-                    />
-                    <span className="text-[10px] font-bold text-[var(--text-secondary)]">Ativo</span>
-                  </label>
+                  <SwitchKnob
+                    checked={enabled}
+                    onChange={(v) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], enabled: v } }))}
+                  />
                 }
               >
                 <InheritedFieldIndicator

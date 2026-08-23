@@ -119,7 +119,7 @@ export function EntregaTab({
                         <button
                           type="button"
                           onClick={() => onRemoveZone(zone)}
-                          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
                           aria-label={`Remover ${zone.neighborhood}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -204,7 +204,7 @@ export function EntregaTab({
                         <button
                           type="button"
                           onClick={() => onRemoveCourier(courier)}
-                          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
                           aria-label={`Remover ${courier.name}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />

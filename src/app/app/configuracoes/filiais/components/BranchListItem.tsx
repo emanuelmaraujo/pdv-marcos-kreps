@@ -69,7 +69,7 @@ export function BranchListItem({
       <button
         type="button"
         onClick={onToggleActive}
-        className={`relative z-[1] flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-semibold shrink-0 ${
+        className={`relative z-[1] flex h-10 items-center gap-1 rounded-full px-3 text-xs font-semibold shrink-0 ${
           branch.active
             ? 'bg-[var(--status-success-bg)] text-[var(--status-success)] hover:opacity-90'
             : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)]'
