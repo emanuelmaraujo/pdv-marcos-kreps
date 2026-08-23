@@ -9,7 +9,7 @@
  * editar uma entrada.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   Bell,
@@ -27,6 +27,7 @@ import {
 import { pdvApi, PublicOrderStatusResponse } from "@/lib/api/pdv-api";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { OrderStatus } from "@/types/pdv";
+import { getLastBranchSlug } from "@/lib/utils/lastBranch";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -181,6 +182,17 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // "Fazer novo pedido" volta pra MESMA filial deste pedido em vez da lista
+  // genérica de filiais — sem isso o cliente ficava "preso" tendo que
+  // escolher a filial de novo toda vez que queria pedir mais uma vez no
+  // mesmo lugar. ?branch= vem de quem nos trouxe aqui (pill do /pedir,
+  // picker de rastreio); na falta dele, cai pro último /pedir/[slug]
+  // visitado neste dispositivo.
+  const newOrderHref = useMemo(() => {
+    const branch = searchParams.get("branch") || getLastBranchSlug();
+    return branch ? `/pedir/${encodeURIComponent(branch)}` : "/pedir";
+  }, [searchParams]);
   const [statusData, setStatusData] = useState<PublicOrderStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -581,7 +593,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
             <div className="space-y-2 pt-1">
               <button
                 type="button"
-                onClick={() => router.push("/pedir")}
+                onClick={() => router.push(newOrderHref)}
                 className="w-full flex items-center justify-center gap-2 rounded-2xl text-[14px] font-semibold text-white shadow-[var(--shadow-sm)] hover:opacity-90 active:scale-[0.98]"
                 style={{ backgroundColor: "var(--bg-inverse)", height: 50 }}
               >
