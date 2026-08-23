@@ -289,6 +289,12 @@ serve(async (req) => {
     let deliveryReference = isDelivery ? cleanText(deliveryAddrInput.reference, 200) : null;
     let deliveryLatitude = isDelivery ? cleanCoordinate(deliveryAddrInput.latitude, -90, 90) : null;
     let deliveryLongitude = isDelivery ? cleanCoordinate(deliveryAddrInput.longitude, -180, 180) : null;
+    // Override de localização enviado à parte de delivery_address — cobre o
+    // caso de reutilizar um endereço salvo (delivery_address_id): o cliente
+    // pode marcar a localização atual mesmo sem digitar um endereço novo, e
+    // isso não deve ser descartado quando o endereço vem do cadastro salvo.
+    const locationOverrideLatitude = isDelivery ? cleanCoordinate(body.location_latitude, -90, 90) : null;
+    const locationOverrideLongitude = isDelivery ? cleanCoordinate(body.location_longitude, -180, 180) : null;
 
     // Resolve filial:
     // - Com slug: caminho normal (/pedir/{slug})
@@ -456,6 +462,9 @@ serve(async (req) => {
       const feeResult = await resolveDeliveryFee(supabaseAdmin, branch.id, deliveryNeighborhood);
       if (feeResult.blocked) throw new Error(feeResult.reason);
       deliveryFeeValue = feeResult.fee;
+
+      if (locationOverrideLatitude !== null) deliveryLatitude = locationOverrideLatitude;
+      if (locationOverrideLongitude !== null) deliveryLongitude = locationOverrideLongitude;
     }
 
     let packingFeeValue = 0;

@@ -1009,6 +1009,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           latitude: deliveryAddress.latitude,
           longitude: deliveryAddress.longitude,
         } : undefined,
+        // Cobre o caso de reaproveitar endereço salvo: o pin marcado agora
+        // vale mesmo sem digitar um endereço novo.
+        location_latitude: orderType === "ENTREGA" ? deliveryAddress.latitude : undefined,
+        location_longitude: orderType === "ENTREGA" ? deliveryAddress.longitude : undefined,
         save_address: orderType === "ENTREGA" && !selectedSavedAddress && saveThisAddress,
         items: items.map((item) => ({
           product_id: item.product.id,
@@ -1860,6 +1864,29 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       </div>
                     )}
 
+                    {/* Sempre visível, mesmo reaproveitando um endereço salvo — o pin marcado
+                        agora vale pra este pedido independente de qual endereço for usado. */}
+                    <div className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={handleUseCurrentLocation}
+                        disabled={locationStatus === "loading"}
+                        className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs font-medium text-[var(--text-secondary)] outline-none transition-colors hover:border-brand-red hover:text-brand-red disabled:cursor-default disabled:opacity-70"
+                      >
+                        {locationStatus === "loading" ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <LocateFixed size={14} className={locationStatus === "resolved" ? "text-emerald-600" : undefined} />
+                        )}
+                        {locationStatus === "resolved"
+                          ? "Localização marcada — toque para remarcar"
+                          : "Marcar minha localização atual (opcional)"}
+                      </button>
+                      {locationStatus === "error" && (
+                        <p className="text-[11px] text-[var(--text-secondary)]">{locationError}</p>
+                      )}
+                    </div>
+
                     {selectedAddressId === null && (
                       <div className="grid grid-cols-2 gap-2">
                         <input
@@ -1905,26 +1932,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           value={deliveryAddress.reference}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, reference: e.target.value }))}
                         />
-                        <div className="col-span-2 flex flex-col gap-1">
-                          <button
-                            type="button"
-                            onClick={handleUseCurrentLocation}
-                            disabled={locationStatus === "loading"}
-                            className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs font-medium text-[var(--text-secondary)] outline-none transition-colors hover:border-brand-red hover:text-brand-red disabled:cursor-default disabled:opacity-70"
-                          >
-                            {locationStatus === "loading" ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <LocateFixed size={14} className={locationStatus === "resolved" ? "text-emerald-600" : undefined} />
-                            )}
-                            {locationStatus === "resolved"
-                              ? "Localização marcada — toque para remarcar"
-                              : "Marcar minha localização atual (opcional)"}
-                          </button>
-                          {locationStatus === "error" && (
-                            <p className="text-[11px] text-[var(--text-secondary)]">{locationError}</p>
-                          )}
-                        </div>
                         {checkoutPhone && (
                           <label className="col-span-2 flex min-h-11 cursor-pointer items-center gap-2.5 py-2 text-xs text-[var(--text-secondary)]">
                             <input
