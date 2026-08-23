@@ -222,16 +222,9 @@ export function TabbedForm({
           : ""
       }`}
     >
-      <button
-        type="button"
-        onClick={() => goTo(activeIndex - 1)}
-        disabled={activeIndex === 0}
-        className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] disabled:opacity-0"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Voltar
-      </button>
-      <div className="hidden items-center gap-1 sm:flex">
+      {/* Progresso — texto compacto em vez de espalhar Voltar/Salvar nas
+          pontas opostas da barra com um vão vazio gigante no meio. */}
+      <div className="flex items-center gap-1.5">
         {tabs.map((tab, index) => (
           <span
             key={tab.id}
@@ -240,16 +233,32 @@ export function TabbedForm({
             }`}
           />
         ))}
+        <span className="ml-1.5 hidden text-xs font-bold text-[var(--text-muted)] sm:inline">
+          {activeIndex + 1} de {tabs.length}
+        </span>
       </div>
-      <button
-        type="button"
-        onClick={handleNext}
-        disabled={submitting}
-        className="flex items-center gap-1.5 rounded-xl bg-brand-red px-5 py-2.5 text-sm font-black text-white shadow-md shadow-brand-red/25 transition-all hover:bg-brand-red/90 active:scale-[0.98] disabled:opacity-60"
-      >
-        {isLast ? submitLabel : "Próximo"}
-        {!isLast && <ChevronRight className="h-4 w-4" />}
-      </button>
+
+      <div className="flex items-center gap-2">
+        {activeIndex > 0 && (
+          <button
+            type="button"
+            onClick={() => goTo(activeIndex - 1)}
+            className="flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)]"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Voltar</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleNext}
+          disabled={submitting}
+          className="flex items-center gap-1.5 rounded-xl bg-brand-red px-5 py-2.5 text-sm font-black text-white shadow-md shadow-brand-red/25 transition-all hover:bg-brand-red/90 active:scale-[0.98] disabled:opacity-60"
+        >
+          {isLast ? submitLabel : "Próximo"}
+          {!isLast && <ChevronRight className="h-4 w-4" />}
+        </button>
+      </div>
     </div>
   );
 
