@@ -34,11 +34,26 @@ function fullAddress(order: Order) {
   return parts.join(", ");
 }
 
+// Endereço completo pra busca no mapa — sem cidade/UF/CEP a busca fica
+// ambígua (o Google pode resolver pra uma rua de mesmo nome em outra
+// cidade), diferente do texto exibido na tela, que não precisa disso.
+function mapsSearchAddress(order: Order) {
+  const parts = [
+    order.delivery_street,
+    order.delivery_number,
+    order.delivery_neighborhood,
+    order.delivery_city,
+    order.delivery_state,
+    order.delivery_postal_code,
+  ].filter(Boolean);
+  return parts.join(", ");
+}
+
 function mapsUrlForOrder(order: Order): string | null {
   if (order.delivery_latitude != null && order.delivery_longitude != null) {
     return mapsUrlForCoordinates(order.delivery_latitude, order.delivery_longitude);
   }
-  const address = fullAddress(order);
+  const address = mapsSearchAddress(order);
   return address ? mapsUrlForAddress(address) : null;
 }
 
