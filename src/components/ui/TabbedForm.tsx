@@ -106,9 +106,8 @@ export function TabbedForm({
 
   const isPage = variant === "page";
 
-  const tabBar = (
+  const mobilePills = (
     <>
-      {header}
       <div className="flex gap-1 overflow-x-auto px-3 pt-3 sm:px-5">
         {tabs.map((tab, index) => {
           const active = tab.id === activeTab;
@@ -138,13 +137,57 @@ export function TabbedForm({
     </>
   );
 
+  // Navegação lateral (desktop) — cada item mostra ícone, label e a
+  // descrição da aba, mais parecido com um painel de configurações
+  // "de verdade" (Stripe/Linear) do que com abas em pill esticadas.
+  const sidebarNav = (
+    <nav className="hidden lg:block lg:space-y-1 lg:p-2">
+      {tabs.map((tab, index) => {
+        const active = tab.id === activeTab;
+        const done = index < activeIndex;
+        const Icon = tab.icon;
+        const tabAccent = tab.accent ?? DEFAULT_ACCENT;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => goTo(index)}
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
+              active ? `${tabAccent.iconBg} shadow-sm` : "hover:bg-[var(--bg-subtle)]"
+            }`}
+          >
+            <span
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                active ? "bg-white/70 shadow-sm" : "bg-[var(--bg-subtle)]"
+              }`}
+            >
+              {done ? (
+                <Check className={`h-4 w-4 ${active ? tabAccent.iconColor : "text-[var(--status-success)]"}`} />
+              ) : Icon ? (
+                <Icon className={`h-4 w-4 ${active ? tabAccent.iconColor : "text-[var(--text-muted)]"}`} />
+              ) : null}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className={`block text-sm font-bold ${active ? tabAccent.iconColor : "text-[var(--text-primary)]"}`}>
+                {tab.label}
+              </span>
+              {tab.description && (
+                <span className="block truncate text-[11px] leading-snug text-[var(--text-muted)]">{tab.description}</span>
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+
   const content = (
     <div
       key={activeTab}
-      className={`animate-fade-in ${isPage ? "px-4 py-5 sm:px-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}`}
+      className={`animate-fade-in ${isPage ? "px-4 py-5 sm:px-6 lg:px-7 lg:py-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}`}
     >
       {(CurrentIcon || current?.description) && (
-        <div className="mb-5 flex items-center gap-3">
+        <div className="mb-5 flex items-center gap-3 lg:hidden">
           {CurrentIcon && (
             <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-1 ring-black/5 ${accent.iconBg}`}>
               <CurrentIcon className={`h-4.5 w-4.5 ${accent.iconColor}`} />
@@ -169,7 +212,7 @@ export function TabbedForm({
 
   const nav = (
     <div
-      className={`flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--bg-base)] px-4 py-3 sm:px-6 ${
+      className={`flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--bg-base)] px-4 py-3 sm:px-6 lg:px-7 ${
         isPage ? "sticky bottom-20 z-10 md:bottom-0" : ""
       }`}
     >
@@ -206,17 +249,27 @@ export function TabbedForm({
 
   if (isPage) {
     return (
-      <div>
-        <div className="sticky top-14 z-10 bg-[var(--bg-base)]">{tabBar}</div>
-        {content}
-        {nav}
+      <div className="lg:flex lg:items-start lg:gap-6">
+        <div className="sticky top-14 z-10 bg-[var(--bg-base)] lg:w-72 lg:shrink-0 lg:rounded-2xl lg:border lg:border-[var(--border)] lg:bg-[var(--bg-surface)] lg:shadow-sm">
+          {header}
+          <div className="lg:hidden">{mobilePills}</div>
+          {sidebarNav}
+        </div>
+
+        <div className="lg:min-w-0 lg:flex-1">
+          <div className="lg:overflow-hidden lg:rounded-2xl lg:border lg:border-[var(--border)] lg:bg-[var(--bg-surface)] lg:shadow-sm">
+            {content}
+          </div>
+          {nav}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      {tabBar}
+      {header}
+      {mobilePills}
       {content}
       {nav}
     </div>

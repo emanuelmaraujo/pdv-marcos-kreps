@@ -41,17 +41,14 @@ export function WhatsAppTab({
             );
             const enabled = waCfg[ev.key]?.enabled !== false;
             return (
-              <FieldGroup key={ev.key}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50">
-                      <MessageSquare className="h-4 w-4 text-teal-600" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-black text-[var(--text-primary)]">{ev.label}</p>
-                      <p className="text-[10px] text-[var(--text-muted)]">{ev.hint}</p>
-                    </div>
-                  </div>
+              <FieldGroup
+                key={ev.key}
+                title={ev.label}
+                description={ev.hint}
+                icon={MessageSquare}
+                iconBg="bg-teal-100"
+                iconColor="text-teal-600"
+                action={
                   <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
                     <input
                       type="checkbox"
@@ -61,8 +58,8 @@ export function WhatsAppTab({
                     />
                     <span className="text-[10px] font-bold text-[var(--text-secondary)]">Ativo</span>
                   </label>
-                </div>
-
+                }
+              >
                 <InheritedFieldIndicator
                   source={effective.source}
                   onReset={effective.source === "branch" ? () => {
