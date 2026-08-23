@@ -188,7 +188,7 @@ export function TabbedForm({
   const content = (
     <div
       key={activeTab}
-      className={`animate-fade-in ${isPage ? "px-4 py-5 sm:px-6 lg:px-7 lg:py-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}`}
+      className={`animate-fade-in ${isPage ? "px-4 py-5 pb-24 sm:px-6 lg:px-7 lg:py-6 lg:pb-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}`}
     >
       {(CurrentIcon || current?.description) && (
         <div className="mb-5 flex items-center gap-3 lg:hidden">
@@ -214,17 +214,26 @@ export function TabbedForm({
     </div>
   );
 
+  // "Componentes soltos" (isPage/mobile): sem barra sólida contínua atrás —
+  // cada peça (chip de progresso, Voltar, Próximo) flutua com sua própria
+  // pílula/sombra, então nunca cobre o conteúdo por baixo como uma faixa
+  // opaca esticada de ponta a ponta. No desktop (lg:) e no variant="sheet"
+  // (BottomSheet, com scroll próprio já contido) mantém a barra sólida —
+  // ali ela não sobrepõe nada, só fecha o rodapé do card.
   const nav = (
     <div
-      className={`flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--bg-base)] px-4 py-3 sm:px-6 lg:px-7 ${
+      className={`flex items-center justify-between gap-3 ${
         isPage
-          ? "sticky bottom-20 z-10 md:bottom-0 lg:mt-4 lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:shadow-[var(--elevation-2)]"
-          : ""
+          ? "sticky bottom-20 z-10 px-4 py-3 sm:px-6 md:bottom-0 lg:static lg:mt-4 lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:px-7 lg:shadow-[var(--elevation-2)]"
+          : "border-t border-[var(--border)] bg-[var(--bg-base)] px-4 py-3 sm:px-6"
       }`}
     >
-      {/* Progresso — texto compacto em vez de espalhar Voltar/Salvar nas
-          pontas opostas da barra com um vão vazio gigante no meio. */}
-      <div className="flex items-center gap-1.5">
+      {/* Progresso — chip solto com fundo/sombra próprios (não uma faixa full-width) */}
+      <div
+        className={`flex items-center gap-1.5 ${
+          isPage ? "rounded-full border border-[var(--border-strong)] bg-[var(--bg-subtle)] px-3 py-2 shadow-[var(--elevation-2)] lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none" : ""
+        }`}
+      >
         {tabs.map((tab, index) => (
           <span
             key={tab.id}
@@ -243,7 +252,9 @@ export function TabbedForm({
           <button
             type="button"
             onClick={() => goTo(activeIndex - 1)}
-            className="flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)]"
+            className={`flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] ${
+              isPage ? "border border-[var(--border-strong)] bg-[var(--bg-subtle)] shadow-[var(--elevation-2)] lg:border-0 lg:bg-transparent lg:shadow-none" : ""
+            }`}
           >
             <ChevronLeft className="h-4 w-4" />
             <span className="hidden sm:inline">Voltar</span>
