@@ -73,7 +73,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       />
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <main className="min-h-[calc(100vh-3.5rem)] overflow-y-auto pb-20 pt-14 md:pb-6 lg:ml-60">
+      <main className="min-h-[calc(100vh-3.5rem)] pb-20 pt-14 md:pb-6 lg:ml-60">
         <div className="mx-auto w-full max-w-7xl">{children}</div>
       </main>
 

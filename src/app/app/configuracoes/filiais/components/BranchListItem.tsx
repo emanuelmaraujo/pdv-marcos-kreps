@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, Edit3, Power } from "lucide-react";
+import { Bike, Check, ChevronRight, MessageSquare, Power } from "lucide-react";
 import { Branch } from "@/types/pdv";
 import { TYPE_OPTIONS, avatarStyleFor } from "../utils";
 
@@ -15,14 +15,20 @@ export function BranchListItem({
   const avatar = avatarStyleFor(branch.id, branch.code);
   return (
     <div
-      className={`flex items-center gap-3 rounded-2xl border bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)] ${
+      className={`group relative flex items-center gap-3 rounded-2xl border bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)] transition-all hover:shadow-md ${
         isCurrent
           ? 'border-[var(--status-info)]/30 ring-1 ring-[var(--status-info)]/15'
-          : 'border-[var(--border)]'
+          : 'border-[var(--border)] hover:border-[var(--border-strong)]'
       }`}
     >
+      <Link
+        href={`/app/configuracoes/filiais/${branch.id}`}
+        className="absolute inset-0 z-0 rounded-2xl"
+        aria-label={`Editar ${branch.name}`}
+      />
+
       <div
-        className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl text-white"
+        className="relative z-[1] flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl text-white pointer-events-none"
         style={{ backgroundColor: avatar.bg }}
       >
         <span className="text-xs font-semibold leading-none">{branch.code}</span>
@@ -30,7 +36,7 @@ export function BranchListItem({
           {TYPE_OPTIONS.find((t) => t.value === branch.type)?.label.split(' ')[0]}
         </span>
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="relative z-[1] min-w-0 flex-1 pointer-events-none">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{branch.name}</p>
           {isCurrent && (
@@ -51,11 +57,19 @@ export function BranchListItem({
           )}
           {!branch.ordering_enabled && <span className="ml-2 text-[var(--status-warning)]">· pedidos offline</span>}
         </p>
+        <div className="mt-1.5 flex items-center gap-2.5">
+          <span className={`flex items-center gap-1 text-[10px] font-semibold ${branch.delivery_enabled ? 'text-[var(--status-info)]' : 'text-[var(--text-muted)]'}`}>
+            <Bike className="h-3 w-3" strokeWidth={2} /> {branch.delivery_enabled ? 'Entrega ligada' : 'Sem entrega'}
+          </span>
+          <span className={`flex items-center gap-1 text-[10px] font-semibold ${branch.whatsapp_enabled ? 'text-[var(--status-success)]' : 'text-[var(--text-muted)]'}`}>
+            <MessageSquare className="h-3 w-3" strokeWidth={2} /> {branch.whatsapp_enabled ? 'WhatsApp ligado' : 'WhatsApp desligado'}
+          </span>
+        </div>
       </div>
       <button
         type="button"
         onClick={onToggleActive}
-        className={`flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-semibold shrink-0 ${
+        className={`relative z-[1] flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-semibold shrink-0 ${
           branch.active
             ? 'bg-[var(--status-success-bg)] text-[var(--status-success)] hover:opacity-90'
             : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)]'
@@ -64,13 +78,7 @@ export function BranchListItem({
       >
         <Power className="h-3 w-3" strokeWidth={1.75} /> {branch.active ? 'Ativa' : 'Inativa'}
       </button>
-      <Link
-        href={`/app/configuracoes/filiais/${branch.id}`}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)]"
-        aria-label="Editar filial"
-      >
-        <Edit3 className="h-3.5 w-3.5" strokeWidth={1.75} />
-      </Link>
+      <ChevronRight className="relative z-[1] h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform group-hover:translate-x-0.5 pointer-events-none" strokeWidth={1.75} />
     </div>
   );
 }
