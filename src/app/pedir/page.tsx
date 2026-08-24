@@ -322,6 +322,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [quantity, setQuantity] = useState(1);
   const [itemNotes, setItemNotes] = useState("");
   const [step, setStep] = useState<"MENU" | "REVIEW" | "INFO" | "PAYMENT" | "PAID">("MENU");
+  // Lido dentro do polling de revalidação de horário (interval, closure velha) — sem
+  // isso o polling não sabe que o usuário já avançou pro pagamento e pode derrubar
+  // o checkout no meio do preenchimento do cartão.
+  const stepRef = useRef(step);
+  useEffect(() => { stepRef.current = step; }, [step]);
   const [customerEmail, setCustomerEmail] = useState("");
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [rememberCheckoutData, setRememberCheckoutData] = useState(false);
@@ -608,6 +613,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
   useEffect(() => {
     const recheck = async () => {
+      // Não revalida (nem limpa carrinho/derruba a tela) com o cliente em
+      // PAGAMENTO/PAGO: isso forçava um re-render do componente inteiro a
+      // cada 60s, o que remontava o widget de cartão do Mercado Pago e
+      // apagava os dados já digitados. Ver MercadoPagoBrick.
+      if (stepRef.current === "PAYMENT" || stepRef.current === "PAID") return;
       try {
         const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
         if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
