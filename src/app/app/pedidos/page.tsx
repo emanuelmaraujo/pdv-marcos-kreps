@@ -262,13 +262,14 @@ function AvgWaitBadge({ minutes }: { minutes: number | null }) {
 // ─── Kanban Column ────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  config, orders, now, onCardClick, onQuickAction, searchQuery, isLoading,
+  config, orders, now, onCardClick, onQuickAction, onMarkDelivered, searchQuery, isLoading,
 }: {
   config: KanbanColumnConfig;
   orders: Order[];
   now: number;
   onCardClick: (order: Order) => void;
   onQuickAction: (order: Order) => Promise<void>;
+  onMarkDelivered: (order: Order) => Promise<void>;
   searchQuery: string;
   isLoading?: boolean;
 }) {
@@ -322,6 +323,7 @@ function KanbanColumn({
               now={now}
               onClick={onCardClick}
               onQuickAction={config.status === "ENTREGUE" || config.status === "CANCELADO" ? undefined : onQuickAction}
+              onMarkDelivered={config.status === "NA_FILA" ? onMarkDelivered : undefined}
             />
           ))
         )}
@@ -473,6 +475,18 @@ export default function PedidosPage() {
         setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: order.status } : o)));
       }
       addToast("error", getFriendlyErrorMessage(err, "Não conseguimos atualizar o status do pedido. Tente novamente."));
+    }
+  }, [fetchOrders, addToast]);
+
+  // Atalho da fila: pula PRONTO e marca ENTREGUE direto (balcão/viagem servidos na hora).
+  const handleMarkDelivered = useCallback(async (order: Order): Promise<void> => {
+    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: "ENTREGUE" } : o)));
+    try {
+      await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
+      await fetchOrders(false);
+    } catch (err) {
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: order.status } : o)));
+      addToast("error", getFriendlyErrorMessage(err, "Não conseguimos marcar o pedido como entregue. Tente novamente."));
     }
   }, [fetchOrders, addToast]);
 
@@ -631,6 +645,7 @@ export default function PedidosPage() {
             now={now}
             onCardClick={setSelectedOrder}
             onQuickAction={handleQuickAction}
+            onMarkDelivered={handleMarkDelivered}
             searchQuery={searchQuery}
             isLoading={isLoading}
           />
@@ -669,6 +684,7 @@ export default function PedidosPage() {
                 now={now}
                 onClick={setSelectedOrder}
                 onQuickAction={handleQuickAction}
+                onMarkDelivered={handleMarkDelivered}
               />
             ))}
           </div>

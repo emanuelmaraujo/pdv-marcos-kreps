@@ -260,6 +260,15 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
         onClose={onClose}
         maxWidth="3xl"
         bodyClassName="contents"
+        footer={
+          <Button
+            variant="outline"
+            className="h-11 w-full rounded-2xl border-2 text-sm font-black"
+            onClick={onClose}
+          >
+            FECHAR
+          </Button>
+        }
         header={
         <div className="relative overflow-hidden bg-gradient-to-br from-brand-charcoal to-zinc-800 px-5 py-4 text-white shrink-0">
           <div className="absolute right-16 top-0 bottom-0 flex items-center opacity-[0.06]">
@@ -268,6 +277,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
 
           <button
             onClick={onClose}
+            aria-label="Fechar"
             className="absolute right-4 top-4 rounded-xl p-2 text-white/50 hover:bg-white/10 hover:text-white transition-colors"
           >
             <X size={18} />

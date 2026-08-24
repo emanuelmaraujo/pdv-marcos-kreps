@@ -96,7 +96,10 @@ serve(async (req) => {
       // Permite reverter PRONTO → NA_FILA (pedido marcado como pronto por engano).
       if (cur === "PRONTO") allowed = true;
     } else if (status === "ENTREGUE") {
-      if (cur === "PRONTO" || cur === "PRONTO_PARCIAL") allowed = true;
+      // NA_FILA -> ENTREGUE permite marcar como entregue direto da fila
+      // (ex: balcão/viagem servidos na hora, sem passar pelo estado PRONTO).
+      // Pedidos de ENTREGA já são barrados antes daqui (linha acima).
+      if (cur === "PRONTO" || cur === "PRONTO_PARCIAL" || cur === "NA_FILA") allowed = true;
     } else if (status === "CANCELADO") {
       if (["AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "NA_FILA", "PRONTO_PARCIAL", "PRONTO"].includes(cur)) {
         allowed = true;
