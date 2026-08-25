@@ -245,14 +245,6 @@ export default function NovoPedidoPage() {
     });
   }, []);
 
-  const clearAddon = useCallback((addonId: string) => {
-    setSelectedAddons(prev => {
-      const next = new Map(prev);
-      next.delete(addonId);
-      return next;
-    });
-  }, []);
-
   const handleAddToCart = useCallback(() => {
     if (!selectedProduct) return;
 
@@ -628,11 +620,21 @@ export default function NovoPedidoPage() {
                   </p>
                 </div>
               </div>
-              {editingCartItemId && (
-                <span className="bg-brand-charcoal text-white text-[11px] font-semibold px-3 py-1 rounded-full shrink-0">
-                  Editando
-                </span>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {editingCartItemId && (
+                  <span className="bg-brand-charcoal text-white text-[11px] font-semibold px-3 py-1 rounded-full">
+                    Editando
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={closeCustomization}
+                  className="p-2 rounded-full bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)] active:scale-90"
+                  aria-label="Fechar e voltar ao cardápio"
+                >
+                  <X size={18} strokeWidth={2} />
+                </button>
+              </div>
             </div>
 
             {/* Ingredients Selection */}
@@ -679,17 +681,8 @@ export default function NovoPedidoPage() {
                         onClick={() => updateAddonQty(addon.id, 1)}
                       >
                         {isSelected && (
-                          <div className="absolute top-2 right-2 flex items-center gap-1">
-                            <span className="w-5 h-5 bg-[var(--status-success)] text-white rounded-full flex items-center justify-center text-[11px] font-semibold">
-                              {qty}
-                            </span>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); clearAddon(addon.id); }}
-                              className="w-5 h-5 bg-[var(--bg-surface)] rounded-full shadow-[var(--shadow-sm)] flex items-center justify-center border border-[var(--border)] active:scale-90"
-                              aria-label={`Remover ${addon.name}`}
-                            >
-                              <X size={11} className="text-[var(--text-muted)]" strokeWidth={2.5} />
-                            </button>
+                          <div className="absolute top-2 right-2 w-5 h-5 bg-[var(--status-success)] text-white rounded-full flex items-center justify-center text-[11px] font-semibold">
+                            {qty}
                           </div>
                         )}
                         <div className="flex flex-col gap-1">
