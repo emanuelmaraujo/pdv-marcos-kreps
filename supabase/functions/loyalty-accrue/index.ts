@@ -22,11 +22,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { enqueueLoyaltyWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-internal-secret",
-};
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
 const PROGRAM_ID = "default";
 const STAMP_RATE_LIMIT_HOURS = 48;
@@ -38,39 +34,41 @@ function generateRewardCode(): string {
   return `KRP-${block(4)}-${block(4)}`;
 }
 
-function jsonOk(payload: Record<string, unknown>, status = 200): Response {
+function jsonOk(req: Request, payload: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify({ ok: true, ...payload }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...publicCorsHeaders(req, { extraHeaders: "x-internal-secret" }), "Content-Type": "application/json" },
   });
 }
 
-function jsonSkip(reason: string): Response {
+function jsonSkip(req: Request, reason: string): Response {
   return new Response(JSON.stringify({ ok: true, skipped: true, reason }), {
     status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...publicCorsHeaders(req, { extraHeaders: "x-internal-secret" }), "Content-Type": "application/json" },
   });
 }
 
-function jsonError(msg: string, status = 400): Response {
+function jsonError(req: Request, msg: string, status = 400): Response {
   return new Response(JSON.stringify({ ok: false, error: msg }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...publicCorsHeaders(req, { extraHeaders: "x-internal-secret" }), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: publicCorsHeaders(req, { extraHeaders: "x-internal-secret" }) });
+  }
 
   try {
     const internalSecret = req.headers.get("x-internal-secret");
     const expected = Deno.env.get("LOYALTY_INTERNAL_SECRET") ?? "";
     if (!expected || internalSecret !== expected) {
-      return jsonError("Acesso negado.", 401);
+      return jsonError(req, "Acesso negado.", 401);
     }
 
     const { order_id } = await req.json().catch(() => ({}));
-    if (!order_id) return jsonError("order_id ausente.");
+    if (!order_id) return jsonError(req, "order_id ausente.");
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -85,11 +83,11 @@ serve(async (req) => {
       if (typeof v === "string") return v.replace(/^"|"$/g, "").toLowerCase() === "true";
       return false;
     })();
-    if (!loyaltyEnabled) return jsonSkip("feature_disabled");
+    if (!loyaltyEnabled) return jsonSkip(req, "feature_disabled");
 
     // Programa
     const { data: program } = await supabaseAdmin.from("loyalty_programs").select("*").eq("id", PROGRAM_ID).maybeSingle();
-    if (!program || !program.active) return jsonSkip("program_inactive");
+    if (!program || !program.active) return jsonSkip(req, "program_inactive");
 
     // Pedido — só conta quando totalmente pago
     const { data: order, error: orderErr } = await supabaseAdmin
@@ -97,19 +95,19 @@ serve(async (req) => {
       .select("id, branch_id, customer_id, customer_name, customer_phone, total_amount, payment_status, branches(name)")
       .eq("id", order_id)
       .maybeSingle();
-    if (orderErr || !order) return jsonError(`Pedido inexistente: ${orderErr?.message ?? "not found"}`);
-    if (order.payment_status !== "PAID") return jsonSkip("order_not_paid");
-    if (!order.customer_id) return jsonSkip("order_without_customer");
+    if (orderErr || !order) return jsonError(req, `Pedido inexistente: ${orderErr?.message ?? "not found"}`);
+    if (order.payment_status !== "PAID") return jsonSkip(req, "order_not_paid");
+    if (!order.customer_id) return jsonSkip(req, "order_without_customer");
 
     // Escopo de filial (vazio = todas)
     const scope: string[] = Array.isArray(program.branch_scope) ? program.branch_scope : [];
     if (scope.length > 0 && order.branch_id && !scope.includes(order.branch_id)) {
-      return jsonSkip("branch_not_in_scope");
+      return jsonSkip(req, "branch_not_in_scope");
     }
 
     // Valor mínimo
     if (Number(order.total_amount ?? 0) < Number(program.min_order_brl ?? 0)) {
-      return jsonSkip("below_min_order");
+      return jsonSkip(req, "below_min_order");
     }
 
     // Upsert da conta
@@ -135,7 +133,7 @@ serve(async (req) => {
           .eq("customer_id", order.customer_id)
           .eq("program_id", PROGRAM_ID)
           .maybeSingle();
-        if (!reread) return jsonError(`Erro ao criar conta: ${insErr.message}`);
+        if (!reread) return jsonError(req, `Erro ao criar conta: ${insErr.message}`);
         account = reread;
       } else {
         account = inserted;
@@ -160,8 +158,8 @@ serve(async (req) => {
       reason: "order_paid",
     });
     if (txErr) {
-      if (txErr.code === "23505") return jsonSkip("already_credited");
-      return jsonError(`Erro ao registrar selo: ${txErr.message}`);
+      if (txErr.code === "23505") return jsonSkip(req, "already_credited");
+      return jsonError(req, `Erro ao registrar selo: ${txErr.message}`);
     }
 
     // Atualiza cache
@@ -175,7 +173,7 @@ serve(async (req) => {
       .eq("id", account.id)
       .select("*")
       .single();
-    if (updErr || !updatedAccount) return jsonError(`Erro ao atualizar conta: ${updErr?.message}`);
+    if (updErr || !updatedAccount) return jsonError(req, `Erro ao atualizar conta: ${updErr?.message}`);
 
     await supabaseAdmin.from("audit_logs").insert({
       action: "LOYALTY_STAMP_EARNED",
@@ -260,7 +258,7 @@ serve(async (req) => {
       });
     }
 
-    return jsonOk({
+    return jsonOk(req, {
       account_id: account.id,
       current_stamps: newBalance,
       reward_issued: !!rewardJustIssued,
@@ -268,7 +266,7 @@ serve(async (req) => {
     });
   } catch (err: any) {
     console.error("[loyalty-accrue] EXCEPTION:", err?.message ?? err);
-    return jsonError(err?.message ?? "Erro desconhecido", 500);
+    return jsonError(req, err?.message ?? "Erro desconhecido", 500);
   }
 });
 

@@ -7,12 +7,11 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function getCorsHeaders(req: Request) {
+  return publicCorsHeaders(req);
+}
 
 const REPORT_TZ = "America/Sao_Paulo";
 
@@ -35,7 +34,7 @@ function minutesBetween(start: string | null, end: string | null): number | null
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -44,7 +43,7 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         status: 401,
       });
     }
@@ -54,7 +53,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Token inválido ou expirado" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         status: 401,
       });
     }
@@ -66,7 +65,7 @@ serve(async (req) => {
       .single();
     if (profileError || !profile || profile.role !== "ADMIN" || !profile.active) {
       return new Response(JSON.stringify({ error: "Acesso negado: Apenas administradores ativos." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
         status: 403,
       });
     }
@@ -154,14 +153,14 @@ serve(async (req) => {
       .sort((a, b) => (a.day === b.day ? a.courier_name.localeCompare(b.courier_name) : b.day.localeCompare(a.day)));
 
     return new Response(JSON.stringify({ success: true, rows }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       status: 200,
     });
   } catch (error: any) {
     console.error("[courier-delivery-report] failed", error?.message);
     return new Response(
       JSON.stringify({ success: false, error: error?.message ?? "Erro desconhecido" }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 400 },
     );
   }
 });

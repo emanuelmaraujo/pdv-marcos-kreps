@@ -15,19 +15,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { enqueueLoyaltyWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
-};
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
 const PROGRAM_ID = "default";
 const EXPIRING_WINDOW_DAYS = 5;
 
-function jsonError(msg: string, status = 400): Response {
+function jsonError(req: Request, msg: string, status = 400): Response {
   return new Response(JSON.stringify({ ok: false, error: msg }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }), "Content-Type": "application/json" },
   });
 }
 
@@ -42,7 +38,9 @@ async function buildPortalUrlForCustomer(supabaseAdmin: any, customerId: string 
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }) });
+  }
 
   try {
     const supabaseAdmin = createClient(
@@ -56,11 +54,11 @@ serve(async (req) => {
     if (!cron || cron !== expected) {
       // tenta Bearer ADMIN
       const auth = req.headers.get("Authorization");
-      if (!auth) return jsonError("Não autorizado.", 401);
+      if (!auth) return jsonError(req, "Não autorizado.", 401);
       const { data: { user } } = await supabaseAdmin.auth.getUser(auth.replace("Bearer ", ""));
-      if (!user) return jsonError("Token inválido.", 401);
+      if (!user) return jsonError(req, "Token inválido.", 401);
       const { data: profile } = await supabaseAdmin.from("profiles").select("role, active").eq("id", user.id).single();
-      if (!profile?.active || profile.role !== "ADMIN") return jsonError("Apenas ADMIN.", 403);
+      if (!profile?.active || profile.role !== "ADMIN") return jsonError(req, "Apenas ADMIN.", 403);
     }
 
     const { data: program } = await supabaseAdmin.from("loyalty_programs").select("stamp_ttl_days").eq("id", PROGRAM_ID).maybeSingle();
@@ -165,10 +163,10 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ ok: true, expired_rewards: expiredRewards, expiring_notified: expiringNotified, expired_stamps: expiredStamps }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      { headers: { ...publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }), "Content-Type": "application/json" }, status: 200 },
     );
   } catch (err: any) {
     console.error("[loyalty-expire] failed", err?.message);
-    return jsonError(err?.message ?? "Erro desconhecido", 500);
+    return jsonError(req, err?.message ?? "Erro desconhecido", 500);
   }
 });

@@ -1,14 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { settingBool, settingNumber } from "../_shared/print-format.ts";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+function getCorsHeaders(req: Request) {
+  return publicCorsHeaders(req);
+}
+
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -197,13 +198,13 @@ serve(async (req) => {
         order: { id: order.id, total_amount: newTotal, packing_fee: newPackingFee, type: newOrderType },
         item: { id: item.id, total_price: newItemTotal, is_takeout },
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 200 },
     );
   } catch (error: any) {
     console.error("[edit-order-item] failed", error?.message);
     return new Response(
       JSON.stringify({ success: false, error: error?.message ?? "Erro desconhecido" }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 400 },
     );
   }
 });

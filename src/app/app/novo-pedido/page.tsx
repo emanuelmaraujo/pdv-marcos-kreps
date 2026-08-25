@@ -12,7 +12,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/feedback/EmptyState";
-import { Minus, Plus, Utensils, ShoppingCart, AlertCircle, Sandwich, Cake, GlassWater, Coffee, Flame, Star, IceCream, Beef, Hamburger, ChevronRight, BookOpen, type LucideIcon } from "lucide-react";
+import { Minus, Plus, X, Utensils, ShoppingCart, AlertCircle, Sandwich, Cake, GlassWater, Coffee, Flame, Star, IceCream, Beef, Hamburger, ChevronRight, BookOpen, type LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
   ALL_FILTER,
@@ -241,6 +241,14 @@ export default function NovoPedidoPage() {
       const newQty = Math.max(0, current + delta);
       if (newQty === 0) next.delete(addonId);
       else next.set(addonId, newQty);
+      return next;
+    });
+  }, []);
+
+  const clearAddon = useCallback((addonId: string) => {
+    setSelectedAddons(prev => {
+      const next = new Map(prev);
+      next.delete(addonId);
       return next;
     });
   }, []);
@@ -671,8 +679,17 @@ export default function NovoPedidoPage() {
                         onClick={() => updateAddonQty(addon.id, 1)}
                       >
                         {isSelected && (
-                          <div className="absolute top-2 right-2 w-5 h-5 bg-[var(--status-success)] text-white rounded-full flex items-center justify-center text-[11px] font-semibold">
-                            {qty}
+                          <div className="absolute top-2 right-2 flex items-center gap-1">
+                            <span className="w-5 h-5 bg-[var(--status-success)] text-white rounded-full flex items-center justify-center text-[11px] font-semibold">
+                              {qty}
+                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); clearAddon(addon.id); }}
+                              className="w-5 h-5 bg-[var(--bg-surface)] rounded-full shadow-[var(--shadow-sm)] flex items-center justify-center border border-[var(--border)] active:scale-90"
+                              aria-label={`Remover ${addon.name}`}
+                            >
+                              <X size={11} className="text-[var(--text-muted)]" strokeWidth={2.5} />
+                            </button>
                           </div>
                         )}
                         <div className="flex flex-col gap-1">

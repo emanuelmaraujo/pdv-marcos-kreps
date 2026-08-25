@@ -5,11 +5,12 @@ import { parseBranchPrinterConfig, shouldPrint } from "../_shared/branch-print-c
 import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 import { resolveDeliveryFee } from "../_shared/delivery.ts";
 import { fetchCepAddress } from "../_shared/cep.ts";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+function getCorsHeaders(req: Request) {
+  return publicCorsHeaders(req);
+}
+
 
 // Normaliza telefone BR para E.164 canonico ("+55DDDNNNNNNNN[N]"). Retorna null se invalido.
 function normalizeBrazilPhone(value: unknown): string | null {
@@ -30,7 +31,7 @@ function normalizeBrazilPhone(value: unknown): string | null {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -625,7 +626,7 @@ serve(async (req) => {
         ifood_charged_amount: ifoodChargedAmount
       },
       printer_jobs: createdJobsResponse
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }, status: 200 });
 
   } catch (error: any) {
     console.error("[create-attendant-order] Failed to create order", {
@@ -634,7 +635,7 @@ serve(async (req) => {
       details: error?.details,
     });
     return new Response(JSON.stringify({ success: false, error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       status: 400,
     });
   }
