@@ -12,7 +12,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/feedback/EmptyState";
-import { Minus, Plus, Utensils, ShoppingCart, AlertCircle, Sandwich, Cake, GlassWater, Coffee, Flame, Star, IceCream, Beef, Hamburger, ChevronRight, BookOpen, type LucideIcon } from "lucide-react";
+import { Minus, Plus, X, Utensils, ShoppingCart, AlertCircle, Sandwich, Cake, GlassWater, Coffee, Flame, Star, IceCream, Beef, Hamburger, ChevronRight, BookOpen, type LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
   ALL_FILTER,
@@ -620,11 +620,21 @@ export default function NovoPedidoPage() {
                   </p>
                 </div>
               </div>
-              {editingCartItemId && (
-                <span className="bg-brand-charcoal text-white text-[11px] font-semibold px-3 py-1 rounded-full shrink-0">
-                  Editando
-                </span>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                {editingCartItemId && (
+                  <span className="bg-brand-charcoal text-white text-[11px] font-semibold px-3 py-1 rounded-full">
+                    Editando
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={closeCustomization}
+                  className="p-2 rounded-full bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)] active:scale-90"
+                  aria-label="Fechar e voltar ao cardápio"
+                >
+                  <X size={18} strokeWidth={2} />
+                </button>
+              </div>
             </div>
 
             {/* Ingredients Selection */}

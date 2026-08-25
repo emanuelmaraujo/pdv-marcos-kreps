@@ -30,6 +30,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -55,12 +56,6 @@ const DEFINITIVE_ERROR_CODES = new Set([
 ]);
 
 const TOKEN_EXPIRED_CODE = 190;
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-cron-secret",
-};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,10 +107,10 @@ function parseStringSetting(value: unknown, fallback: string): string {
   return fallback;
 }
 
-function jsonResponse(body: any, status = 200) {
+function jsonResponse(req: Request, body: any, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }), "Content-Type": "application/json" },
   });
 }
 
@@ -490,7 +485,7 @@ async function finalize(
 // ---------------------------------------------------------------------------
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }) });
   }
 
   const supabaseAdmin = createClient(
@@ -501,14 +496,14 @@ serve(async (req) => {
   // 1. Auth
   const auth = await authorize(req, supabaseAdmin);
   if ("error" in auth) {
-    return jsonResponse({ success: false, error: auth.error }, auth.status);
+    return jsonResponse(req, { success: false, error: auth.error }, auth.status);
   }
 
   // 2. Secrets check
   const accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
   const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
   if (!accessToken || !phoneNumberId) {
-    return jsonResponse(
+    return jsonResponse(req, 
       { success: false, error: "Secrets WhatsApp ausentes no servidor." },
       500,
     );
@@ -527,11 +522,11 @@ serve(async (req) => {
   // 3. Test path (admin only)
   if (action === "send_test") {
     if (auth.mode !== "admin") {
-      return jsonResponse({ success: false, error: "Apenas admin pode disparar teste." }, 403);
+      return jsonResponse(req, { success: false, error: "Apenas admin pode disparar teste." }, 403);
     }
     const phone = (body.phone ?? "").trim();
     if (!phone || digitsOnly(phone).length < 12) {
-      return jsonResponse({ success: false, error: "Telefone de teste invalido." }, 400);
+      return jsonResponse(req, { success: false, error: "Telefone de teste invalido." }, 400);
     }
     const templateEvent = body.event_type === "order_received" ? "order_received" : "order_ready";
     const templateName = body.template_name?.trim() ||
@@ -577,7 +572,7 @@ serve(async (req) => {
         console.log(
           `[send-whatsapp send_test] OK template=${templateName} to=${maskPhone(phone)} provider=${data.messages[0].id}`,
         );
-        return jsonResponse({
+        return jsonResponse(req, {
           success: true,
           template: templateName,
           to_masked: maskPhone(phone),
@@ -587,9 +582,9 @@ serve(async (req) => {
       const code = data?.error?.code ?? response.status;
       const message = sanitizeErrorMessage(data?.error?.message ?? `HTTP ${response.status}`);
       console.error(`[send-whatsapp send_test] FAIL code=${code} to=${maskPhone(phone)}`);
-      return jsonResponse({ success: false, error_code: code, error: message }, 200);
+      return jsonResponse(req, { success: false, error_code: code, error: message }, 200);
     } catch (e: any) {
-      return jsonResponse(
+      return jsonResponse(req, 
         { success: false, error: sanitizeErrorMessage(e?.message) },
         200,
       );
@@ -601,12 +596,12 @@ serve(async (req) => {
 
   // 4. process_queue
   if (action !== "process_queue") {
-    return jsonResponse({ success: false, error: "Acao desconhecida." }, 400);
+    return jsonResponse(req, { success: false, error: "Acao desconhecida." }, 400);
   }
 
   const claimed = await claimBatch(supabaseAdmin);
   if (claimed.length === 0) {
-    return jsonResponse({ success: true, processed: 0, message: "Fila vazia." });
+    return jsonResponse(req, { success: true, processed: 0, message: "Fila vazia." });
   }
 
   const results: DispatchResult[] = [];
@@ -626,5 +621,5 @@ serve(async (req) => {
   console.log(
     `[send-whatsapp] batch done sent=${summary.sent} pending=${summary.pending} failed=${summary.failed} skipped=${summary.skipped}`,
   );
-  return jsonResponse(summary);
+  return jsonResponse(req, summary);
 });

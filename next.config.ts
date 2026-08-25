@@ -8,6 +8,18 @@ const nextConfig: NextConfig = {
     // editável por quem já tem acesso ao cadastro de produtos (admin).
     remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

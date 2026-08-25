@@ -10,24 +10,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { fireLoyaltyAccrue } from "../_shared/loyalty-accrue-fire.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
-};
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
 const LOOKBACK_HOURS = 48;
 const BATCH_LIMIT = 200;
 
-function jsonError(msg: string, status = 400): Response {
+function jsonError(req: Request, msg: string, status = 400): Response {
   return new Response(JSON.stringify({ ok: false, error: msg }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }) });
+  }
 
   try {
     const supabaseAdmin = createClient(
@@ -39,11 +37,11 @@ serve(async (req) => {
     const expected = Deno.env.get("LOYALTY_CRON_SECRET") ?? "";
     if (!cron || cron !== expected) {
       const auth = req.headers.get("Authorization");
-      if (!auth) return jsonError("Não autorizado.", 401);
+      if (!auth) return jsonError(req, "Não autorizado.", 401);
       const { data: { user } } = await supabaseAdmin.auth.getUser(auth.replace("Bearer ", ""));
-      if (!user) return jsonError("Token inválido.", 401);
+      if (!user) return jsonError(req, "Token inválido.", 401);
       const { data: profile } = await supabaseAdmin.from("profiles").select("role, active").eq("id", user.id).single();
-      if (!profile?.active || profile.role !== "ADMIN") return jsonError("Apenas ADMIN.", 403);
+      if (!profile?.active || profile.role !== "ADMIN") return jsonError(req, "Apenas ADMIN.", 403);
     }
 
     const cutoff = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
@@ -60,7 +58,7 @@ serve(async (req) => {
 
     if (!orders?.length) {
       return new Response(JSON.stringify({ ok: true, scanned: 0, fired: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }), "Content-Type": "application/json" },
       });
     }
 
@@ -78,11 +76,11 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ ok: true, scanned: orders.length, missing: missing.length, fired }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...publicCorsHeaders(req, { extraHeaders: "x-cron-secret" }), "Content-Type": "application/json" },
       status: 200,
     });
   } catch (err: any) {
     console.error("[loyalty-reconcile] failed", err?.message);
-    return jsonError(err?.message ?? "Erro desconhecido", 500);
+    return jsonError(req, err?.message ?? "Erro desconhecido", 500);
   }
 });
