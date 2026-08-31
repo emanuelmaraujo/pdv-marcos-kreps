@@ -1,5 +1,6 @@
 import { createClient } from '../supabase/client';
 import { Category, Product, Ingredient, ProductIngredient, ProductAddon, Addon } from '@/types/pdv';
+import { normalizeProductImageUrl } from '@/lib/utils/productImage';
 
 export interface MenuData {
   categories: Category[];
@@ -13,6 +14,19 @@ export interface MenuData {
 export type CreateProductInput = Omit<Product, 'id' | 'created_at'>;
 export type CreateAddonInput = Omit<Addon, 'id' | 'created_at'>;
 export type CreateCategoryInput = Omit<Category, 'id' | 'created_at' | 'sort_order'> & { sort_order?: number };
+
+/**
+ * Rede de segurança: qualquer caminho que grave `image_url` passa por aqui, pra
+ * nunca ir pro banco um link de compartilhamento que o navegador não desenha.
+ * Link recusado pelo normalizador vira erro na hora do salvamento, em vez de
+ * virar um espaço vazio no cardápio.
+ */
+function withNormalizedImage<T extends { image_url?: string | null }>(input: T): T {
+  if (!('image_url' in input)) return input;
+  const { url, error } = normalizeProductImageUrl(input.image_url);
+  if (error) throw new Error(error);
+  return { ...input, image_url: url };
+}
 
 export const menuApi = {
   /**
@@ -110,7 +124,7 @@ export const menuApi = {
     const supabase = createClient();
     const { error } = await supabase
       .from('products')
-      .update(updates)
+      .update(withNormalizedImage(updates))
       .eq('id', id);
       
     if (error) throw new Error(`Erro ao atualizar produto: ${error.message}`);
@@ -128,7 +142,8 @@ export const menuApi = {
 
   createProduct: async (product: CreateProductInput, branchId?: string | null) => {
     const supabase = createClient();
-    const payload = branchId ? { ...product, branch_id: branchId } : product;
+    const normalized = withNormalizedImage(product);
+    const payload = branchId ? { ...normalized, branch_id: branchId } : normalized;
     const { data, error } = await supabase
       .from('products')
       .insert([payload])
