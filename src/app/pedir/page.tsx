@@ -34,6 +34,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { ProductImage } from "@/components/menu/ProductImage";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { Addon, CustomerAddress, DeliveryZone, Ingredient, OrderStatus, Product } from "@/types/pdv";
@@ -1622,23 +1623,21 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                             </span>
                           )}
                           <div className="flex items-start gap-3">
-                            {product.image_url ? (
-                              <Image
-                                src={product.image_url}
-                                alt=""
-                                width={56}
-                                height={56}
-                                sizes="56px"
-                                className="h-14 w-14 shrink-0 rounded-xl object-cover bg-[var(--bg-subtle)]"
-                              />
-                            ) : (
-                              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-brand-red">
-                                {categoryKind === "SAVORY" ? <Flame className="h-6 w-6" strokeWidth={1.75} />
-                                : categoryKind === "SWEET" ? <Sparkles className="h-6 w-6" strokeWidth={1.75} />
-                                : categoryKind === "DRINK" ? <Package className="h-6 w-6" strokeWidth={1.75} />
-                                : <Utensils className="h-6 w-6" strokeWidth={1.75} />}
-                              </div>
-                            )}
+                            <ProductImage
+                              src={product.image_url}
+                              width={56}
+                              height={56}
+                              sizes="56px"
+                              className="h-14 w-14 shrink-0 rounded-xl object-cover bg-[var(--bg-subtle)]"
+                              fallback={
+                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-brand-red">
+                                  {categoryKind === "SAVORY" ? <Flame className="h-6 w-6" strokeWidth={1.75} />
+                                  : categoryKind === "SWEET" ? <Sparkles className="h-6 w-6" strokeWidth={1.75} />
+                                  : categoryKind === "DRINK" ? <Package className="h-6 w-6" strokeWidth={1.75} />
+                                  : <Utensils className="h-6 w-6" strokeWidth={1.75} />}
+                                </div>
+                              }
+                            />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {code && (
@@ -2579,24 +2578,22 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               const tags = getProductTags(selectedProduct, selectedProductCategory?.name, menuIndexes).filter((t) => t !== "Outros");
               return (
                 <div className="relative aspect-[4/3] w-full overflow-hidden bg-[var(--bg-inverse)]">
-                  {selectedProduct.image_url ? (
-                    <Image
-                      src={selectedProduct.image_url}
-                      alt=""
-                      width={480}
-                      height={360}
-                      sizes="(max-width: 448px) 100vw, 448px"
-                      className="h-full w-full object-cover"
-                      priority
-                    />
-                  ) : (
-                    <div
-                      className="flex h-full w-full items-center justify-center"
-                      style={{ background: "linear-gradient(135deg, var(--bg-inverse), var(--brand-red-dark))" }}
-                    >
-                      <HeroIcon className="h-16 w-16 text-white/20" strokeWidth={1.25} />
-                    </div>
-                  )}
+                  <ProductImage
+                    src={selectedProduct.image_url}
+                    width={480}
+                    height={360}
+                    sizes="(max-width: 448px) 100vw, 448px"
+                    className="h-full w-full object-cover"
+                    priority
+                    fallback={
+                      <div
+                        className="flex h-full w-full items-center justify-center"
+                        style={{ background: "linear-gradient(135deg, var(--bg-inverse), var(--brand-red-dark))" }}
+                      >
+                        <HeroIcon className="h-16 w-16 text-white/20" strokeWidth={1.25} />
+                      </div>
+                    }
+                  />
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
                   {tags.length > 0 && (
                     <div className="absolute left-4 top-4 flex flex-wrap gap-1.5">
