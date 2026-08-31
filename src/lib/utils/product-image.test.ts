@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildImageCandidates,
+  extractDriveFileId,
   getSafeProductImageUrl,
   looksLikeImagePath,
   normalizeProductImageUrl,
@@ -60,15 +62,29 @@ describe("normalizeProductImageUrl", () => {
     });
   });
 
-  it("converte link de compartilhamento do Google Drive", () => {
-    const byPath = normalizeProductImageUrl(
-      "https://drive.google.com/file/d/1AbCdEfGhIjK/view?usp=sharing",
-    );
-    expect(byPath.url).toBe("https://lh3.googleusercontent.com/d/1AbCdEfGhIjK");
-    expect(byPath.error).toBeNull();
+  it("converte todo formato de link do Drive para o endereço que serve a imagem", () => {
+    const esperado = `https://drive.google.com/thumbnail?id=${ID}&sz=w1000`;
+    const links = [
+      `https://drive.google.com/file/d/${ID}/view?usp=sharing`,
+      `https://drive.google.com/file/d/${ID}/view?usp=drive_link`,
+      `https://drive.google.com/open?id=${ID}`,
+      `https://drive.google.com/uc?export=view&id=${ID}`,
+      `https://drive.usercontent.google.com/download?id=${ID}&export=download`,
+      `https://docs.google.com/uc?id=${ID}`,
+      `https://lh3.googleusercontent.com/d/${ID}=w800`,
+      `  https://drive.google.com/file/d/${ID}/view  `,
+      `drive.google.com/file/d/${ID}/view`,
+    ];
+    for (const link of links) {
+      const result = normalizeProductImageUrl(link);
+      expect(result.error, link).toBeNull();
+      expect(result.url, link).toBe(esperado);
+    }
+  });
 
-    const byQuery = normalizeProductImageUrl("https://drive.google.com/open?id=1AbCdEfGhIjK");
-    expect(byQuery.url).toBe("https://lh3.googleusercontent.com/d/1AbCdEfGhIjK");
+  it("não avisa \"converti\" quando o link do Drive já está no formato final", () => {
+    const direct = `https://drive.google.com/thumbnail?id=${ID}&sz=w1000`;
+    expect(normalizeProductImageUrl(direct)).toMatchObject({ url: direct, notice: null });
   });
 
   it("recusa link de pasta do Drive com explicação", () => {
@@ -119,6 +135,44 @@ describe("normalizeProductImageUrl", () => {
   it("mantém intacto um link direto normal", () => {
     const url = "https://cdn.site.com/fotos/produto-1.webp?v=2";
     expect(normalizeProductImageUrl(url)).toMatchObject({ url, error: null, notice: null });
+  });
+});
+
+describe("extractDriveFileId", () => {
+  it("acha o id em qualquer formato do Drive", () => {
+    expect(extractDriveFileId(`https://drive.google.com/file/d/${ID}/view?usp=sharing`)).toBe(ID);
+    expect(extractDriveFileId(`https://lh3.googleusercontent.com/d/${ID}=w1000`)).toBe(ID);
+    expect(extractDriveFileId(`https://drive.google.com/thumbnail?id=${ID}&sz=w1000`)).toBe(ID);
+  });
+
+  it("ignora o que não é arquivo do Drive", () => {
+    expect(extractDriveFileId("https://cdn.site.com/a.jpg")).toBeNull();
+    expect(extractDriveFileId(`https://drive.google.com/drive/folders/${ID}`)).toBeNull();
+    expect(extractDriveFileId("/cardapio/bebidas/suco-uva.svg")).toBeNull();
+    expect(extractDriveFileId(null)).toBeNull();
+  });
+});
+
+describe("buildImageCandidates", () => {
+  it("dá ao Drive uma fila de endereços alternativos da mesma foto", () => {
+    const candidatos = buildImageCandidates(`https://drive.google.com/file/d/${ID}/view`);
+    expect(candidatos).toEqual([
+      `https://drive.google.com/thumbnail?id=${ID}&sz=w1000`,
+      `https://lh3.googleusercontent.com/d/${ID}=w1000`,
+      `https://lh3.googleusercontent.com/d/${ID}`,
+      `https://drive.google.com/uc?export=view&id=${ID}`,
+    ]);
+    // Qualquer formato de entrada gera a mesma fila — inclusive o que já foi
+    // salvo no banco antes, no formato antigo.
+    expect(buildImageCandidates(`https://lh3.googleusercontent.com/d/${ID}`)).toEqual(candidatos);
+  });
+
+  it("para link comum, a fila é só o próprio endereço", () => {
+    expect(buildImageCandidates("https://cdn.site.com/a.jpg")).toEqual(["https://cdn.site.com/a.jpg"]);
+    expect(buildImageCandidates("/cardapio/bebidas/suco-uva.svg")).toEqual([
+      "/cardapio/bebidas/suco-uva.svg",
+    ]);
+    expect(buildImageCandidates(null)).toEqual([]);
   });
 });
 
