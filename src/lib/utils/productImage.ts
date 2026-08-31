@@ -1,5 +1,6 @@
 /**
- * Normalização de URL de foto de produto.
+ * Normalização de URL de foto de produto — com atenção especial ao Google Drive,
+ * que é onde as fotos do cardápio ficam hospedadas.
  *
  * Contexto: o admin cola um link qualquer no cadastro do produto. Na prática o
  * que ele cola quase nunca é o endereço direto do arquivo de imagem — é link de
@@ -67,12 +68,71 @@ const PAGE_ONLY_HOSTS: { match: (host: string, url: URL) => boolean; message: st
   },
 ];
 
-/** Extrai o ID do arquivo em qualquer um dos formatos de link do Google Drive. */
-function driveFileId(url: URL): string | null {
-  const byPath = url.pathname.match(/\/file\/d\/([^/]+)/) ?? url.pathname.match(/^\/d\/([^/]+)/);
-  if (byPath) return byPath[1];
-  const byQuery = url.searchParams.get("id");
-  return byQuery && byQuery.trim() ? byQuery.trim() : null;
+/** Hosts que servem arquivo do Google Drive, em qualquer um dos formatos. */
+const DRIVE_HOSTS = new Set([
+  "drive.google.com",
+  "docs.google.com",
+  "drive.usercontent.google.com",
+  "lh3.googleusercontent.com",
+]);
+
+/**
+ * Extrai o ID do arquivo de qualquer link do Drive:
+ *   drive.google.com/file/d/<id>/view?usp=sharing   (o "Copiar link")
+ *   drive.google.com/open?id=<id>
+ *   drive.google.com/uc?export=view&id=<id>         (formato antigo)
+ *   drive.google.com/thumbnail?id=<id>&sz=w1000
+ *   drive.usercontent.google.com/download?id=<id>
+ *   lh3.googleusercontent.com/d/<id>=w1000          (CDN)
+ */
+export function extractDriveFileId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  if (!DRIVE_HOSTS.has(host)) return null;
+  if (url.pathname.includes("/folders/")) return null;
+
+  const byPath =
+    url.pathname.match(/\/file\/d\/([^/?#]+)/) ?? url.pathname.match(/^\/d\/([^/?#]+)/);
+  // No lh3 o tamanho vem grudado no id ("<id>=w1000") — corta no "=".
+  const fromPath = byPath?.[1]?.split("=")[0];
+  if (fromPath) return fromPath;
+
+  const byQuery = url.searchParams.get("id")?.trim();
+  return byQuery || null;
+}
+
+/** Endereço que serve a imagem em si, a partir do id do arquivo. */
+function driveImageUrl(id: string): string {
+  return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+}
+
+/**
+ * Endereços alternativos da MESMA foto do Drive, em ordem de tentativa.
+ *
+ * O Google serve arquivo do Drive por mais de um endpoint e nenhum deles
+ * responde para 100% dos arquivos: depende de quando o arquivo foi criado, do
+ * tipo e de como está compartilhado. Em vez de apostar num só e deixar o
+ * cardápio com buraco, a foto tenta um por um e só desiste no fim.
+ *
+ * Para link que não é do Drive, a lista tem só o próprio endereço.
+ */
+export function buildImageCandidates(url: string | null | undefined): string[] {
+  const clean = url?.trim();
+  if (!clean) return [];
+  const id = extractDriveFileId(clean);
+  if (!id) return [clean];
+  return [
+    `https://drive.google.com/thumbnail?id=${id}&sz=w1000`,
+    `https://lh3.googleusercontent.com/d/${id}=w1000`,
+    `https://lh3.googleusercontent.com/d/${id}`,
+    `https://drive.google.com/uc?export=view&id=${id}`,
+  ];
 }
 
 export function normalizeProductImageUrl(raw: string | null | undefined): NormalizedImageUrl {
@@ -131,15 +191,18 @@ export function normalizeProductImageUrl(raw: string | null | undefined): Normal
     if (blocked.match(host, url)) return fail(blocked.message);
   }
 
-  // Google Drive: link de compartilhamento → endereço direto do arquivo.
-  if (host === "drive.google.com" || host === "docs.google.com") {
-    const id = driveFileId(url);
+  // Google Drive: link de compartilhamento → endereço que serve a imagem.
+  if (DRIVE_HOSTS.has(host)) {
+    const id = extractDriveFileId(url.toString());
     if (!id) {
-      return fail("Não achei o arquivo nesse link do Drive. Use \"Compartilhar → Copiar link\" na foto.");
+      return fail("Não achei o arquivo nesse link do Drive. Na foto, use \"Compartilhar → Copiar link\".");
     }
+    const direct = driveImageUrl(id);
     return ok(
-      `https://lh3.googleusercontent.com/d/${id}`,
-      "Converti o link do Drive. Confira se o arquivo está compartilhado com \"qualquer pessoa com o link\".",
+      direct,
+      url.toString() === direct
+        ? null
+        : "Converti o link do Drive. A foto precisa estar compartilhada como \"qualquer pessoa com o link\".",
     );
   }
 

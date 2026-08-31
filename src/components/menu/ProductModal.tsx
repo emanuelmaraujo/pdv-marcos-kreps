@@ -5,7 +5,7 @@ import { Product, Category } from "@/types/pdv";
 import { AlertCircle, CheckCircle2, ImageOff, Info, Loader2, X, Save } from "lucide-react";
 import { DuplicateProductButton } from "./DuplicateProductButton";
 import { ProductImage } from "./ProductImage";
-import { looksLikeImagePath, normalizeProductImageUrl } from "@/lib/utils/productImage";
+import { extractDriveFileId, looksLikeImagePath, normalizeProductImageUrl } from "@/lib/utils/productImage";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -155,33 +155,45 @@ export function ProductModal({
                 placeholder="Cole aqui o link da foto (opcional)"
               />
             </div>
-            {imageMessage ? (
-              <p
-                className={`mt-1.5 ml-1 flex items-start gap-1.5 text-[11px] leading-snug ${
-                  imageMessage.kind === "error" ? "text-brand-red" : "text-[var(--text-muted)]"
-                }`}
-              >
-                {imageMessage.kind === "error" ? (
-                  <AlertCircle className="mt-px h-3 w-3 shrink-0" strokeWidth={2} />
-                ) : (
-                  <Info className="mt-px h-3 w-3 shrink-0" strokeWidth={2} />
-                )}
+            {/* Ordem importa: falha ao carregar vem antes do aviso de "converti o
+                link", senão o admin via só o aviso simpático e não descobria que
+                a foto continuou sem aparecer. */}
+            {imageMessage?.kind === "error" ? (
+              <p className="mt-1.5 ml-1 flex items-start gap-1.5 text-[11px] leading-snug text-brand-red">
+                <AlertCircle className="mt-px h-3 w-3 shrink-0" strokeWidth={2} />
                 {imageMessage.text}
               </p>
             ) : imageLoadFailed ? (
               <p className="mt-1.5 ml-1 flex items-start gap-1.5 text-[11px] leading-snug text-brand-red">
                 <AlertCircle className="mt-px h-3 w-3 shrink-0" strokeWidth={2} />
-                Esse link não abriu como imagem. Abra a foto no navegador, clique com o botão
-                direito e use &quot;Copiar endereço da imagem&quot;.
+                {extractDriveFileId(previewUrl) ? (
+                  <span>
+                    A foto não abriu. Quase sempre é compartilhamento: no Drive, abra a foto,
+                    <strong> Compartilhar → Acesso geral → &quot;Qualquer pessoa com o link&quot; → Leitor</strong>,
+                    e cole o link de novo.
+                  </span>
+                ) : (
+                  <span>
+                    Esse link não abriu como imagem. Abra a foto no navegador, clique com o botão
+                    direito e use &quot;Copiar endereço da imagem&quot;.
+                  </span>
+                )}
               </p>
-            ) : previewUrl && !imageLoadFailed ? (
+            ) : imageMessage ? (
+              <p className="mt-1.5 ml-1 flex items-start gap-1.5 text-[11px] leading-snug text-[var(--text-muted)]">
+                <Info className="mt-px h-3 w-3 shrink-0" strokeWidth={2} />
+                {imageMessage.text}
+              </p>
+            ) : previewUrl ? (
               <p className="mt-1.5 ml-1 flex items-start gap-1.5 text-[11px] leading-snug text-[var(--text-muted)]">
                 <CheckCircle2 className="mt-px h-3 w-3 shrink-0 text-green-600" strokeWidth={2} />
                 Foto carregada — é assim que ela aparece no cardápio.
               </p>
             ) : (
-              <p className="mt-1.5 ml-1 text-[11px] text-[var(--text-muted)]">
-                Sem foto, o produto aparece com um ícone no cardápio público.
+              <p className="mt-1.5 ml-1 text-[11px] leading-snug text-[var(--text-muted)]">
+                Sem foto, o produto aparece com um ícone no cardápio público. Do Google Drive:
+                compartilhe a foto (ou a pasta inteira) como &quot;qualquer pessoa com o link&quot; e
+                cole aqui o link normal — eu converto sozinho.
               </p>
             )}
           </div>
