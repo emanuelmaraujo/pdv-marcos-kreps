@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 
 import { useCart, CartItem } from "@/features/cart/useCart";
@@ -21,6 +22,35 @@ import {
   getProductSummary,
   getProductTags,
 } from "@/lib/menu/productTags";
+import { getSafeProductImageUrl } from "@/lib/utils/product-image";
+
+function ProductThumbnail({ product, Icon, iconBg, iconColor }: {
+  product: Product;
+  Icon: LucideIcon;
+  iconBg: string;
+  iconColor: string;
+}) {
+  const [hasImageError, setHasImageError] = useState(false);
+  const imageUrl = getSafeProductImageUrl(product.image_url);
+
+  return (
+    <div className={`flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl ${iconBg} ${iconColor}`}>
+      {imageUrl && !hasImageError ? (
+        <Image
+          src={imageUrl}
+          alt={product.name}
+          width={56}
+          height={56}
+          unoptimized
+          className="h-14 w-14 object-cover"
+          onError={() => setHasImageError(true)}
+        />
+      ) : (
+        <Icon className="h-6 w-6" strokeWidth={1.75} />
+      )}
+    </div>
+  );
+}
 
 function serializeCustomizationDraft({
   productId,
@@ -609,9 +639,7 @@ export default function NovoPedidoPage() {
                               available ? "cursor-pointer hover:shadow-[var(--shadow-md)] active:scale-[0.98]" : "opacity-60"
                             }`}
                           >
-                            <div className={`w-14 h-14 ${iconBg} rounded-xl flex items-center justify-center shrink-0 ${iconColor}`}>
-                              <ProductIcon className="w-6 h-6" strokeWidth={1.75} />
-                            </div>
+                            <ProductThumbnail key={`${product.id}:${product.image_url ?? ""}`} product={product} Icon={ProductIcon} iconBg={iconBg} iconColor={iconColor} />
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between items-start gap-2">
                                 <h3 className="text-[var(--text-primary)] font-semibold text-sm leading-tight">{product.name}</h3>
