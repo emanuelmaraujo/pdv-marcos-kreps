@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomSheet } from "@/components/ui/BottomSheet";
-import { DiscardChangesDialog } from "@/components/feedback/DiscardChangesDialog";
 import { Button } from "@/components/ui/Button";
 import { useCart, CartItem } from "@/features/cart/useCart";
 import { pdvApi } from "@/lib/api/pdv-api";
@@ -152,63 +151,8 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
   const [profileNotice, setProfileNotice] = useState("");
   const [profileLookupRetry, setProfileLookupRetry] = useState(0);
   const [rememberCustomerData, setRememberCustomerData] = useState(false);
-  const [isDiscardCheckoutOpen, setIsDiscardCheckoutOpen] = useState(false);
   const customerNameRef = useRef(customerName);
   const lastAutofilledPhoneRef = useRef<string | null>(null);
-  const checkoutBaselineRef = useRef<string | null>(null);
-  const checkoutDraftRef = useRef("");
-
-  const checkoutDraft = useMemo(() => JSON.stringify({
-    step,
-    splitBill,
-    selectedPaymentMethod,
-    hasDiscount,
-    discountType,
-    discountValue,
-    discountReason,
-    deliveryStreet,
-    deliveryNumber,
-    deliveryComplement,
-    deliveryNeighborhood,
-    deliveryCity,
-    deliveryState,
-    deliveryPostalCode,
-    deliveryReference,
-    customAmountStr,
-    ifoodAmountStr,
-    customerName,
-    customerPhone,
-    orderNotes,
-    orderType,
-    rememberCustomerData,
-  }), [
-    customAmountStr,
-    customerName,
-    customerPhone,
-    deliveryCity,
-    deliveryComplement,
-    deliveryNeighborhood,
-    deliveryNumber,
-    deliveryPostalCode,
-    deliveryReference,
-    deliveryState,
-    deliveryStreet,
-    discountReason,
-    discountType,
-    discountValue,
-    hasDiscount,
-    ifoodAmountStr,
-    orderNotes,
-    orderType,
-    rememberCustomerData,
-    selectedPaymentMethod,
-    splitBill,
-    step,
-  ]);
-
-  useEffect(() => {
-    checkoutDraftRef.current = checkoutDraft;
-  }, [checkoutDraft]);
 
   useEffect(() => {
     customerNameRef.current = customerName;
@@ -236,17 +180,6 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
       setStep(0);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      checkoutBaselineRef.current = null;
-      return;
-    }
-    const frame = window.requestAnimationFrame(() => {
-      checkoutBaselineRef.current = checkoutDraftRef.current;
-    });
-    return () => window.cancelAnimationFrame(frame);
   }, [isOpen]);
 
   // Reset delivery address fields when the sheet closes (next order starts clean)
@@ -282,6 +215,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
 
     if (!normalizedPhone) {
       const idleTimer = window.setTimeout(() => {
+        if (lastAutofilledPhoneRef.current) {
+          lastAutofilledPhoneRef.current = null;
+          setCustomerInfo("", formatWhatsAppInput(customerPhone));
+          setRememberCustomerData(false);
+        }
         setProfileLookupState("idle");
         setProfileNotice("");
       }, 0);
@@ -296,6 +234,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
     const timer = window.setTimeout(async () => {
       if (phoneChanged) {
         lastAutofilledPhoneRef.current = null;
+        setCustomerInfo("", formatWhatsAppInput(normalizedPhone));
         setProfileNotice("");
         setRememberCustomerData(false);
       }
@@ -546,25 +485,13 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
   };
 
   const finishClose = () => {
-    checkoutBaselineRef.current = null;
-    setIsDiscardCheckoutOpen(false);
     if (successData) setSuccessData(null);
     setError(null);
     onClose();
   };
 
-  const handleClose = () => {
-    const hasUnsavedChanges =
-      !successData &&
-      checkoutBaselineRef.current !== null &&
-      checkoutDraft !== checkoutBaselineRef.current;
-
-    if (hasUnsavedChanges) {
-      setIsDiscardCheckoutOpen(true);
-      return;
-    }
-    finishClose();
-  };
+  // Fechar só volta ao cardápio com o rascunho intacto; não há descarte a confirmar.
+  const handleClose = finishClose;
 
   // ─── Success screen ───────────────────────────────────────────────────────
 
@@ -1296,14 +1223,6 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
         )}
       </div>
     </BottomSheet>
-    <DiscardChangesDialog
-      isOpen={isDiscardCheckoutOpen}
-      title="Fechar checkout?"
-      description="O carrinho continua salvo. Revise desconto, entrega e pagamento em andamento ao reabrir."
-      onCancel={() => setIsDiscardCheckoutOpen(false)}
-      onDiscard={finishClose}
-    />
-
     {/* PayItemsModal após criar pedido em modo "dividir conta" */}
     {splitOrder && (
       <PayItemsModal

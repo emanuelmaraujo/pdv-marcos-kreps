@@ -518,24 +518,19 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     };
   }, [branchSlug, clearCart]);
 
-  // Checkout expresso: se este dispositivo já tem um perfil salvo (90 dias)
-  // de um pedido anterior, pré-popula o telefone assim que a página carrega
-  // — não espera o cliente chegar em "Dados" e digitar de novo. O efeito
-  // abaixo (que já existia) reconhece esse telefone e completa o resto
-  // (nome/e-mail/modalidade) sozinho.
-  useEffect(() => {
-    if (customerPhone.trim()) return;
-    const saved = readSavedPublicProfile();
-    if (saved?.phone_e164) {
-      setCustomerInfo(saved.name, formatWhatsAppInput(saved.phone_e164));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
     if (!normalizedPhone) {
       const timer = window.setTimeout(() => {
+        if (lastAutofilledPhoneRef.current) {
+          lastAutofilledPhoneRef.current = null;
+          setCustomerInfo("", formatWhatsAppInput(customerPhone));
+          setCustomerEmail("");
+          setMarketingOptIn(false);
+          setRememberCheckoutData(false);
+          setSavedAddresses([]);
+          setSelectedAddressId(null);
+        }
         setProfileLookupState("idle");
         if (!customerPhone.trim()) setProfileNotice("");
       }, 0);
