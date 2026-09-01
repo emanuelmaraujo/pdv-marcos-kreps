@@ -111,3 +111,7 @@ mensagem de retentativa em vez de manter o checkout em “procurando”.
 
 O estudo de usabilidade e plano sem implementação visual estão em
 `docs/estudo-mobile-first-pedidos-e-consulta-cliente.md`.
+
+## Evidência visual
+
+![Consulta de cliente com timeout e retentativa em 360 px](evidence/p0-consulta-timeout-360.png)

@@ -167,5 +167,8 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
   `(55) 99998-7654` e encontrou o cliente; `6199997777` mostrou cliente
   novo.
 - A pausa controlada da Edge Function local revelou a ausência de timeout,
-  documentada como pendência P0. Não foi criado pedido nem pagamento durante a
-  validação.
+  corrigida no PR #157: após 8 s a interface exibiu erro e **Tentar novamente**;
+  ao reativar a função, a retentativa retornou “Cliente novo”. Não foi criado
+  pedido nem pagamento durante a validação.
+
+![Consulta de cliente com timeout e retentativa em 360 px](evidence/p0-consulta-timeout-360.png)
