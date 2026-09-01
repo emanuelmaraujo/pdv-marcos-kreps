@@ -1,16 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
-// cash-report é protegida por JWT de ADMIN — wildcard CORS é seguro
-// (Authorization headers não são auto-enviados pelo browser cross-origin).
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function getCorsHeaders(_req: Request) {
-  return corsHeaders;
+function getCorsHeaders(req: Request) {
+  return publicCorsHeaders(req);
 }
 
 /**
@@ -637,14 +630,14 @@ serve(async (req) => {
         note: isFilteredByCategory ? "Valores por produto usam preço histórico e não rateiam descontos do pedido." : null
       }
     }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       status: 200
     });
 
   } catch (error: any) {
     console.error(`[cash-report] Erro:`, error);
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       status: 400
     });
   }

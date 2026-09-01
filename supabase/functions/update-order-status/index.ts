@@ -19,14 +19,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 import { sendOrderReadyPush } from "../_shared/push-enqueue.ts";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+function getCorsHeaders(req: Request) {
+  return publicCorsHeaders(req);
+}
+
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
 
   try {
     const authHeader = req.headers.get("Authorization");
@@ -96,7 +97,10 @@ serve(async (req) => {
       // Permite reverter PRONTO → NA_FILA (pedido marcado como pronto por engano).
       if (cur === "PRONTO") allowed = true;
     } else if (status === "ENTREGUE") {
-      if (cur === "PRONTO" || cur === "PRONTO_PARCIAL") allowed = true;
+      // NA_FILA -> ENTREGUE permite marcar como entregue direto da fila
+      // (ex: balcão/viagem servidos na hora, sem passar pelo estado PRONTO).
+      // Pedidos de ENTREGA já são barrados antes daqui (linha acima).
+      if (cur === "PRONTO" || cur === "PRONTO_PARCIAL" || cur === "NA_FILA") allowed = true;
     } else if (status === "CANCELADO") {
       if (["AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "NA_FILA", "PRONTO_PARCIAL", "PRONTO"].includes(cur)) {
         allowed = true;
@@ -195,13 +199,13 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, order: orderAfter }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 200 },
     );
   } catch (error: any) {
     console.error("[update-order-status] failed", error?.message);
     return new Response(
       JSON.stringify({ success: false, error: error?.message ?? "Erro desconhecido" }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 400 },
     );
   }
 });

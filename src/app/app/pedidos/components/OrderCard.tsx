@@ -47,6 +47,9 @@ interface Props {
   onClick: (order: Order) => void;
   now: number;
   onQuickAction?: (order: Order) => Promise<void>;
+  /** Marca o pedido como entregue direto da fila, pulando o estado PRONTO
+   * (útil pra balcão/viagem servidos na hora). Não se aplica a ENTREGA. */
+  onMarkDelivered?: (order: Order) => Promise<void>;
 }
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -111,8 +114,9 @@ const ACTIVE_STATUSES: Order["status"][] = [
   "NA_FILA", "AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "PRONTO_PARCIAL", "PRONTO", "SAIU_PARA_ENTREGA",
 ];
 
-export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
+export function OrderCard({ order, onClick, now, onQuickAction, onMarkDelivered }: Props) {
   const [quickLoading, setQuickLoading] = useState(false);
+  const [deliverLoading, setDeliverLoading] = useState(false);
 
   const isPendingPayment = order.payment_status === "PENDING" || order.payment_status === "PARTIAL";
   const time = new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -169,6 +173,22 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
     }
   };
 
+  // Botão extra só na fila (NA_FILA) pra balcão/viagem servidos na hora —
+  // pula o estado PRONTO e vai direto pra ENTREGUE. ENTREGA sempre passa
+  // por despacho, então não ganha esse atalho.
+  const canDeliverFromQueue = !!onMarkDelivered && order.status === "NA_FILA" && order.type !== "ENTREGA";
+
+  const handleDeliverClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onMarkDelivered || deliverLoading) return;
+    setDeliverLoading(true);
+    try {
+      await onMarkDelivered(order);
+    } finally {
+      setDeliverLoading(false);
+    }
+  };
+
   const borderClass = isUrgent
     ? "border-[var(--status-danger)]/40 ring-2 ring-[var(--status-danger)]/20"
     : isWarning
@@ -179,8 +199,8 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
 
   return (
     <div
-      className={`group relative cursor-pointer overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] active:scale-[0.98] ${borderClass} ${quickLoading ? "opacity-60 pointer-events-none" : ""}`}
-      onClick={() => !quickLoading && onClick(order)}
+      className={`group relative cursor-pointer overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] active:scale-[0.98] ${borderClass} ${quickLoading || deliverLoading ? "opacity-60 pointer-events-none" : ""}`}
+      onClick={() => !quickLoading && !deliverLoading && onClick(order)}
     >
       {/* Status accent bar */}
       <div className={`h-1 ${ACCENT[order.status]}`} />
@@ -304,19 +324,34 @@ export function OrderCard({ order, onClick, now, onQuickAction }: Props) {
               {currency.format(order.total_amount).replace("R$", "").trim()}
             </span>
           </div>
-          {quickActionConfig && (
-            <button
-              type="button"
-              onClick={handleQuickClick}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shadow-[var(--shadow-sm)] active:scale-95 ${quickActionConfig.color}`}
-            >
-              {quickLoading
-                ? <Loader2 className="h-3 w-3 animate-spin" />
-                : <quickActionConfig.Icon className="h-3 w-3" />
-              }
-              {quickActionConfig.label}
-            </button>
-          )}
+          <div className="flex items-center gap-1.5">
+            {canDeliverFromQueue && (
+              <button
+                type="button"
+                onClick={handleDeliverClick}
+                className="flex items-center gap-1.5 rounded-full bg-[var(--status-success)] px-3 py-1.5 text-xs font-semibold text-white shadow-[var(--shadow-sm)] active:scale-95 hover:opacity-90"
+              >
+                {deliverLoading
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <CheckCircle2 className="h-3 w-3" />
+                }
+                Entregue
+              </button>
+            )}
+            {quickActionConfig && (
+              <button
+                type="button"
+                onClick={handleQuickClick}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shadow-[var(--shadow-sm)] active:scale-95 ${quickActionConfig.color}`}
+              >
+                {quickLoading
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <quickActionConfig.Icon className="h-3 w-3" />
+                }
+                {quickActionConfig.label}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

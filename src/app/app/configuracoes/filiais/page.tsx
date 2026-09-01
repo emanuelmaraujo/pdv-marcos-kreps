@@ -47,7 +47,7 @@ export default function FiliaisPage() {
     <div className="mx-auto max-w-4xl space-y-4 px-3 py-4 md:px-6">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <header className="flex items-center justify-between gap-2">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">Filiais</h1>
           <p className="text-xs text-[var(--text-secondary)]">
@@ -55,8 +55,8 @@ export default function FiliaisPage() {
             Senha exibida como <strong className="text-[var(--text-primary)]">P-042-1</strong>.
           </p>
         </div>
-        <Link href="/app/configuracoes/filiais/novo">
-          <Button className="gap-2">
+        <Link href="/app/configuracoes/filiais/novo" className="sm:shrink-0">
+          <Button className="w-full gap-2 sm:w-auto">
             <Plus className="h-4 w-4" strokeWidth={2} /> Nova filial
           </Button>
         </Link>

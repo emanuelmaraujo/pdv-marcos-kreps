@@ -245,7 +245,22 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
 
   return (
     <>
-    <BottomSheet isOpen={isOpen} onClose={onClose} title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}>
+    <BottomSheet
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}
+      footer={
+        <div className="border-t border-[var(--border)] px-6 py-4">
+          <Button
+            variant="outline"
+            className="h-11 w-full rounded-2xl border-2 text-sm font-black"
+            onClick={onClose}
+          >
+            FECHAR
+          </Button>
+        </div>
+      }
+    >
       <div className="flex flex-col gap-5 pb-10">
 
         {/* Error */}

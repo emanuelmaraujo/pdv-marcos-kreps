@@ -19,23 +19,20 @@ export function ImpressaoTab({
         const effective = resolveEffectivePrinterSector(globalSettings, { printer_config: printerCfg }, s.key as SectorKey);
         const enabled = printerCfg[s.key]?.enabled !== false;
         return (
-          <FieldGroup key={s.key}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50">
-                  <Printer className="h-4 w-4 text-violet-600" />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-black text-[var(--text-primary)]">{s.label}</p>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">{s.sector}</p>
-                </div>
-              </div>
+          <FieldGroup
+            key={s.key}
+            title={s.label}
+            subtitle={s.sector}
+            icon={Printer}
+            iconBg="bg-violet-100"
+            iconColor="text-violet-600"
+            action={
               <SwitchKnob
                 checked={enabled}
                 onChange={(v) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], enabled: v } }))}
               />
-            </div>
-
+            }
+          >
             <InheritedFieldIndicator
               source={effective.source}
               onReset={effective.source === "branch" ? () => {

@@ -2,7 +2,7 @@ import { MessageSquare } from "lucide-react";
 import { BranchInput } from "@/lib/api/branches-admin-api";
 import { InheritedFieldIndicator } from "@/components/ui/InheritedFieldIndicator";
 import { resolveEffectiveWhatsAppTemplate, type WhatsAppEventType } from "@/lib/config/effective-branch-config";
-import { Field, FieldGroup, Toggle } from "../FormPrimitives";
+import { Field, FieldGroup, SwitchKnob, Toggle } from "../FormPrimitives";
 import { INPUT_CLS, WA_EVENTS, type WaTemplates } from "../../utils";
 
 export function WhatsAppTab({
@@ -41,28 +41,20 @@ export function WhatsAppTab({
             );
             const enabled = waCfg[ev.key]?.enabled !== false;
             return (
-              <FieldGroup key={ev.key}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50">
-                      <MessageSquare className="h-4 w-4 text-teal-600" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-black text-[var(--text-primary)]">{ev.label}</p>
-                      <p className="text-[10px] text-[var(--text-muted)]">{ev.hint}</p>
-                    </div>
-                  </div>
-                  <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={enabled}
-                      onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], enabled: e.target.checked } }))}
-                      className="h-3.5 w-3.5 accent-brand-red"
-                    />
-                    <span className="text-[10px] font-bold text-[var(--text-secondary)]">Ativo</span>
-                  </label>
-                </div>
-
+              <FieldGroup
+                key={ev.key}
+                title={ev.label}
+                description={ev.hint}
+                icon={MessageSquare}
+                iconBg="bg-teal-100"
+                iconColor="text-teal-600"
+                action={
+                  <SwitchKnob
+                    checked={enabled}
+                    onChange={(v) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], enabled: v } }))}
+                  />
+                }
+              >
                 <InheritedFieldIndicator
                   source={effective.source}
                   onReset={effective.source === "branch" ? () => {

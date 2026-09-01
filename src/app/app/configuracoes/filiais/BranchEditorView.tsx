@@ -137,11 +137,11 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
         </Link>
       </div>
       {branchId && (
-        <div className="mt-2.5 flex gap-1.5 overflow-x-auto">
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
           {statusPills.map((pill) => (
             <span
               key={pill.label}
-              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold ${PILL_TONE_CLS[pill.tone]}`}
+              className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold ${PILL_TONE_CLS[pill.tone]}`}
             >
               <pill.icon className="h-3 w-3" strokeWidth={2} />
               {pill.label}

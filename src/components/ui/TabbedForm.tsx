@@ -106,45 +106,92 @@ export function TabbedForm({
 
   const isPage = variant === "page";
 
-  const tabBar = (
+  const mobilePills = (
     <>
-      {header}
-      <div className="flex gap-1 overflow-x-auto px-3 pt-3 sm:px-5">
-        {tabs.map((tab, index) => {
-          const active = tab.id === activeTab;
-          const done = index < activeIndex;
-          const Icon = tab.icon;
-          const tabAccent = tab.accent ?? DEFAULT_ACCENT;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => goTo(index)}
-              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all ${
-                active
-                  ? `${tabAccent.iconBg} ${tabAccent.iconColor} shadow-sm`
-                  : done
-                    ? "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
-                    : "text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-secondary)]"
-              }`}
-            >
-              {done ? <Check className="h-3.5 w-3.5" /> : Icon ? <Icon className="h-3.5 w-3.5" /> : null}
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="relative">
+        <div className="hide-scrollbar flex gap-1 overflow-x-auto px-3 pt-3 sm:px-5">
+          {tabs.map((tab, index) => {
+            const active = tab.id === activeTab;
+            const done = index < activeIndex;
+            const Icon = tab.icon;
+            const tabAccent = tab.accent ?? DEFAULT_ACCENT;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => goTo(index)}
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all ${
+                  active
+                    ? `${tabAccent.iconBg} ${tabAccent.iconColor} shadow-sm`
+                    : done
+                      ? "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+                      : "text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-secondary)]"
+                }`}
+              >
+                {done ? <Check className="h-3.5 w-3.5" /> : Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+        {/* Sinaliza que há mais abas fora da tela, sem depender da scrollbar nativa do SO/navegador (que em alguns Windows mostra setas feias por cima do conteúdo). */}
+        <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-[var(--bg-base)] to-transparent" />
       </div>
       <div className="mx-3 mt-3 border-b border-[var(--border)] sm:mx-5" />
     </>
   );
 
+  // Navegação lateral (desktop) — cada item mostra ícone, label e a
+  // descrição da aba, mais parecido com um painel de configurações
+  // "de verdade" (Stripe/Linear) do que com abas em pill esticadas.
+  const sidebarNav = (
+    <nav className="hidden lg:block lg:space-y-1 lg:p-2">
+      {tabs.map((tab, index) => {
+        const active = tab.id === activeTab;
+        const done = index < activeIndex;
+        const Icon = tab.icon;
+        const tabAccent = tab.accent ?? DEFAULT_ACCENT;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => goTo(index)}
+            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
+              active ? `${tabAccent.iconBg} shadow-sm` : "hover:bg-[var(--bg-subtle)]"
+            }`}
+          >
+            <span
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                active ? "bg-white/70 shadow-sm" : "bg-[var(--bg-base)]"
+              }`}
+            >
+              {done ? (
+                <Check className={`h-4 w-4 ${active ? tabAccent.iconColor : "text-[var(--status-success)]"}`} />
+              ) : Icon ? (
+                <Icon className={`h-4 w-4 ${active ? tabAccent.iconColor : "text-[var(--text-muted)]"}`} />
+              ) : null}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className={`block text-sm font-bold ${active ? tabAccent.iconColor : "text-[var(--text-primary)]"}`}>
+                {tab.label}
+              </span>
+              {tab.description && (
+                <span className="block truncate text-[11px] leading-snug text-[var(--text-muted)]">{tab.description}</span>
+              )}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+
   const content = (
     <div
       key={activeTab}
-      className={`animate-fade-in ${isPage ? "px-4 py-5 sm:px-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}`}
+      className={`animate-fade-in ${isPage ? "px-4 py-5 pb-24 sm:px-6 lg:px-7 lg:py-6 lg:pb-6" : "flex-1 overflow-y-auto px-4 py-5 sm:px-6"}`}
     >
       {(CurrentIcon || current?.description) && (
-        <div className="mb-5 flex items-center gap-3">
+        <div className="mb-5 flex items-center gap-3 lg:hidden">
           {CurrentIcon && (
             <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-1 ring-black/5 ${accent.iconBg}`}>
               <CurrentIcon className={`h-4.5 w-4.5 ${accent.iconColor}`} />
@@ -167,22 +214,26 @@ export function TabbedForm({
     </div>
   );
 
+  // "Componentes soltos" (isPage/mobile): sem barra sólida contínua atrás —
+  // cada peça (chip de progresso, Voltar, Próximo) flutua com sua própria
+  // pílula/sombra, então nunca cobre o conteúdo por baixo como uma faixa
+  // opaca esticada de ponta a ponta. No desktop (lg:) e no variant="sheet"
+  // (BottomSheet, com scroll próprio já contido) mantém a barra sólida —
+  // ali ela não sobrepõe nada, só fecha o rodapé do card.
   const nav = (
     <div
-      className={`flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--bg-base)] px-4 py-3 sm:px-6 ${
-        isPage ? "sticky bottom-20 z-10 md:bottom-0" : ""
+      className={`flex items-center justify-between gap-3 ${
+        isPage
+          ? "sticky bottom-20 z-10 px-4 py-3 sm:px-6 md:bottom-0 lg:static lg:mt-4 lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:px-7 lg:shadow-[var(--elevation-2)]"
+          : "border-t border-[var(--border)] bg-[var(--bg-base)] px-4 py-3 sm:px-6"
       }`}
     >
-      <button
-        type="button"
-        onClick={() => goTo(activeIndex - 1)}
-        disabled={activeIndex === 0}
-        className="flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] disabled:opacity-0"
+      {/* Progresso — chip solto com fundo/sombra próprios (não uma faixa full-width) */}
+      <div
+        className={`flex items-center gap-1.5 ${
+          isPage ? "rounded-full border border-[var(--border-strong)] bg-[var(--bg-subtle)] px-3 py-2 shadow-[var(--elevation-2)] lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none" : ""
+        }`}
       >
-        <ChevronLeft className="h-4 w-4" />
-        Voltar
-      </button>
-      <div className="hidden items-center gap-1 sm:flex">
         {tabs.map((tab, index) => (
           <span
             key={tab.id}
@@ -191,32 +242,60 @@ export function TabbedForm({
             }`}
           />
         ))}
+        <span className="ml-1.5 hidden text-xs font-bold text-[var(--text-muted)] sm:inline">
+          {activeIndex + 1} de {tabs.length}
+        </span>
       </div>
-      <button
-        type="button"
-        onClick={handleNext}
-        disabled={submitting}
-        className="flex items-center gap-1.5 rounded-xl bg-brand-red px-5 py-2.5 text-sm font-black text-white shadow-md shadow-brand-red/25 transition-all hover:bg-brand-red/90 active:scale-[0.98] disabled:opacity-60"
-      >
-        {isLast ? submitLabel : "Próximo"}
-        {!isLast && <ChevronRight className="h-4 w-4" />}
-      </button>
+
+      <div className="flex items-center gap-2">
+        {activeIndex > 0 && (
+          <button
+            type="button"
+            onClick={() => goTo(activeIndex - 1)}
+            className={`flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] ${
+              isPage ? "border border-[var(--border-strong)] bg-[var(--bg-subtle)] shadow-[var(--elevation-2)] lg:border-0 lg:bg-transparent lg:shadow-none" : ""
+            }`}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Voltar</span>
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleNext}
+          disabled={submitting}
+          className="flex items-center gap-1.5 rounded-xl bg-brand-red px-5 py-2.5 text-sm font-black text-white shadow-md shadow-brand-red/25 transition-all hover:bg-brand-red/90 active:scale-[0.98] disabled:opacity-60"
+        >
+          {isLast ? submitLabel : "Próximo"}
+          {!isLast && <ChevronRight className="h-4 w-4" />}
+        </button>
+      </div>
     </div>
   );
 
   if (isPage) {
     return (
-      <div>
-        <div className="sticky top-14 z-10 bg-[var(--bg-base)]">{tabBar}</div>
-        {content}
-        {nav}
+      <div className="lg:flex lg:items-start lg:gap-6">
+        <div className="sticky top-14 z-10 bg-[var(--bg-base)] lg:w-72 lg:shrink-0 lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:shadow-[var(--elevation-2)]">
+          {header}
+          <div className="lg:hidden">{mobilePills}</div>
+          {sidebarNav}
+        </div>
+
+        <div className="lg:min-w-0 lg:flex-1">
+          <div className="lg:overflow-hidden lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:shadow-[var(--elevation-2)]">
+            {content}
+          </div>
+          {nav}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      {tabBar}
+      {header}
+      {mobilePills}
       {content}
       {nav}
     </div>

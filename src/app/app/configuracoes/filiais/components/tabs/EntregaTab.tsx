@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Bike, Loader2, MapPin, Plus, Trash2, User } from "lucide-react";
 import { BranchInput } from "@/lib/api/branches-admin-api";
 import { Courier, DeliveryZone } from "@/types/pdv";
-import { Select } from "@/components/ui/Select";
+import { Combobox } from "@/components/ui/Combobox";
 import { Field, FieldGroup, Toggle } from "../FormPrimitives";
 import { BRASILIA_NEIGHBORHOODS } from "@/lib/constants/brasilia-neighborhoods";
 import { INPUT_CLS } from "../../utils";
@@ -77,13 +77,7 @@ export function EntregaTab({
           </Field>
 
           <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
-          <FieldGroup>
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
-                <MapPin className="h-4 w-4 text-emerald-600" />
-              </span>
-              <p className="text-xs font-black text-[var(--text-primary)]">Bairros atendidos</p>
-            </div>
+          <FieldGroup title="Bairros atendidos" icon={MapPin} iconBg="bg-emerald-100" iconColor="text-emerald-600">
             <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
               {zones.length > 0
                 ? 'Assim que há bairros cadastrados, entregas fora da lista são bloqueadas — o cliente vê que não atendemos aquele endereço.'
@@ -125,7 +119,7 @@ export function EntregaTab({
                         <button
                           type="button"
                           onClick={() => onRemoveZone(zone)}
-                          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
                           aria-label={`Remover ${zone.neighborhood}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -136,16 +130,14 @@ export function EntregaTab({
                 ) : null}
 
                 <div className="space-y-2 border-t border-[var(--border)] pt-3">
-                  <Select
+                  <Combobox
                     value={newZone.neighborhood}
-                    onChange={(e) => setNewZone({ ...newZone, neighborhood: e.target.value })}
-                    className={`${INPUT_CLS} w-full`}
-                  >
-                    <option value="">Selecione o bairro...</option>
-                    {BRASILIA_NEIGHBORHOODS
-                      .filter((name) => !zones.some((z) => z.neighborhood === name))
-                      .map((name) => <option key={name} value={name}>{name}</option>)}
-                  </Select>
+                    onChange={(v) => setNewZone({ ...newZone, neighborhood: v })}
+                    options={BRASILIA_NEIGHBORHOODS.filter((name) => !zones.some((z) => z.neighborhood === name))}
+                    placeholder="Selecione o bairro..."
+                    searchPlaceholder="Buscar bairro..."
+                    emptyLabel="Nenhum bairro encontrado."
+                  />
                   <div className="flex gap-2">
                     <input
                       type="number"
@@ -171,13 +163,7 @@ export function EntregaTab({
             )}
           </FieldGroup>
 
-          <FieldGroup>
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
-                <Bike className="h-4 w-4 text-indigo-600" />
-              </span>
-              <p className="text-xs font-black text-[var(--text-primary)]">Entregadores cadastrados</p>
-            </div>
+          <FieldGroup title="Entregadores cadastrados" icon={Bike} iconBg="bg-indigo-100" iconColor="text-indigo-600">
             <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
               Opcional — o despacho sempre permite digitar um entregador avulso também.{" "}
               <Link href="/app/relatorios/entregadores" className="font-semibold text-brand-red hover:underline">
@@ -218,7 +204,7 @@ export function EntregaTab({
                         <button
                           type="button"
                           onClick={() => onRemoveCourier(courier)}
-                          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--status-danger-bg)] hover:text-[var(--status-danger)]"
                           aria-label={`Remover ${courier.name}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />

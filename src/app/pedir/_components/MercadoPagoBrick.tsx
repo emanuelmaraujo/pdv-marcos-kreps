@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
 import { PAYMENT_METHOD_CODE, loadMercadoPagoScript } from "./payment-helpers";
@@ -18,6 +18,15 @@ export function MercadoPagoBrick({
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState("");
   const publicKey = process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY;
+
+  // Callbacks acessados via ref (não entram nas deps do efeito abaixo): o pai
+  // (`/pedir`) passa arrow functions inline, recriadas a cada render dele. Se
+  // entrassem nas deps, qualquer re-render do pai remontava o Brick inteiro,
+  // apagando os dados de cartão que o cliente já tinha digitado no iframe.
+  const onResultRef = useRef(onResult);
+  const onPaidRef = useRef(onPaid);
+  useEffect(() => { onResultRef.current = onResult; }, [onResult]);
+  useEffect(() => { onPaidRef.current = onPaid; }, [onPaid]);
 
   useEffect(() => {
     let controller: { unmount: () => void } | null = null;
@@ -56,14 +65,14 @@ export function MercadoPagoBrick({
                   idempotency_key: idempotencyKey,
                 })
                   .then((response) => {
-                    onResult(response);
+                    onResultRef.current(response);
                     if (!response.success) {
                       setError(response.error || "Nao foi possivel processar o pagamento.");
                       reject();
                       return;
                     }
                     if (response.payment?.status === "approved" || response.already_paid) {
-                      onPaid();
+                      onPaidRef.current();
                     }
                     resolve();
                   })
@@ -90,7 +99,7 @@ export function MercadoPagoBrick({
       cancelled = true;
       if (controller) controller.unmount();
     };
-  }, [onPaid, onResult, order.order_id, order.public_token, order.total_amount, publicKey]);
+  }, [order.order_id, order.public_token, order.total_amount, publicKey]);
 
   if (!publicKey) {
     return (

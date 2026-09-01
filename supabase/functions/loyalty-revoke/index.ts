@@ -19,28 +19,26 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-internal-secret",
-};
-
-function ok(body: Record<string, unknown>): Response {
+function ok(req: Request, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify({ ok: true, ...body }), {
     status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...publicCorsHeaders(req, { extraHeaders: "x-internal-secret" }), "Content-Type": "application/json" },
   });
 }
 
-function jsonError(msg: string, status = 400): Response {
+function jsonError(req: Request, msg: string, status = 400): Response {
   return new Response(JSON.stringify({ ok: false, error: msg }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...publicCorsHeaders(req, { extraHeaders: "x-internal-secret" }), "Content-Type": "application/json" },
   });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: publicCorsHeaders(req, { extraHeaders: "x-internal-secret" }) });
+  }
 
   try {
     const supabaseAdmin = createClient(
@@ -56,16 +54,16 @@ serve(async (req) => {
       actor = { mode: "internal" };
     } else {
       const auth = req.headers.get("Authorization");
-      if (!auth) return jsonError("Não autorizado.", 401);
+      if (!auth) return jsonError(req, "Não autorizado.", 401);
       const { data: { user } } = await supabaseAdmin.auth.getUser(auth.replace("Bearer ", ""));
-      if (!user) return jsonError("Token inválido.", 401);
+      if (!user) return jsonError(req, "Token inválido.", 401);
       const { data: profile } = await supabaseAdmin.from("profiles").select("role, active").eq("id", user.id).single();
-      if (!profile?.active || profile.role !== "ADMIN") return jsonError("Apenas ADMIN.", 403);
+      if (!profile?.active || profile.role !== "ADMIN") return jsonError(req, "Apenas ADMIN.", 403);
       actor = { mode: "admin", userId: user.id };
     }
 
     const { order_id, force } = await req.json().catch(() => ({}));
-    if (!order_id) return jsonError("order_id ausente.");
+    if (!order_id) return jsonError(req, "order_id ausente.");
 
     const { data: earn } = await supabaseAdmin
       .from("loyalty_transactions")
@@ -73,7 +71,7 @@ serve(async (req) => {
       .eq("kind", "EARN")
       .eq("order_id", order_id)
       .maybeSingle();
-    if (!earn) return ok({ action: "skipped", reason: "no_earn" });
+    if (!earn) return ok(req, { action: "skipped", reason: "no_earn" });
 
     // Recompensa que possivelmente nasceu desse selo: a ADJUST(unlock_reward) imediatamente
     // após o EARN tem reward_id. Para simplificar, achamos qualquer reward com mesma conta
@@ -83,7 +81,7 @@ serve(async (req) => {
       .select("id, current_stamps, lifetime_stamps")
       .eq("id", earn.account_id)
       .maybeSingle();
-    if (!account) return ok({ action: "skipped", reason: "no_account" });
+    if (!account) return ok(req, { action: "skipped", reason: "no_account" });
 
     // ADJUST(unlock_reward) carrega order_id do pedido que desbloqueou — match exato.
     const { data: unlockTx } = await supabaseAdmin
@@ -116,7 +114,7 @@ serve(async (req) => {
         user_id: actor.mode === "admin" ? actor.userId : null,
         new_data: { order_id, reason: blockedReason },
       });
-      return ok({ action: "blocked", reason: blockedReason });
+      return ok(req, { action: "blocked", reason: blockedReason });
     }
 
     const newCurrent = Math.max(0, (account.current_stamps ?? 0) - 1);
@@ -147,9 +145,9 @@ serve(async (req) => {
       new_data: { order_id, reward_revoked: !!linkedRewardId, force: !!force },
     });
 
-    return ok({ action: "revoked", current_stamps: newCurrent });
+    return ok(req, { action: "revoked", current_stamps: newCurrent });
   } catch (err: any) {
     console.error("[loyalty-revoke] failed", err?.message);
-    return jsonError(err?.message ?? "Erro desconhecido", 500);
+    return jsonError(req, err?.message ?? "Erro desconhecido", 500);
   }
 });

@@ -1,4 +1,4 @@
-import { Landmark, Store, Tent } from "lucide-react";
+import { Building2, Check, Landmark, Phone, Store, Tent, Wallet } from "lucide-react";
 import { BranchInput } from "@/lib/api/branches-admin-api";
 import { Field, FieldGroup, Toggle } from "../FormPrimitives";
 import { INPUT_CLS, TYPE_OPTIONS, slugify, validateBranchCode, validateBranchSlug } from "../../utils";
@@ -17,7 +17,7 @@ export function DadosTab({
 
   return (
     <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
-      <FieldGroup>
+      <FieldGroup title="Identificação" icon={Building2} iconBg="bg-blue-100" iconColor="text-blue-600">
         <Field label="Nome da filial" required>
           <input
             type="text"
@@ -70,7 +70,7 @@ export function DadosTab({
           </p>
         )}
 
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="flex flex-col gap-2 sm:grid sm:grid-cols-3 sm:gap-3">
           {TYPE_OPTIONS.map((t) => {
             const Icon = TYPE_ICONS[t.value];
             const active = editing.type === t.value;
@@ -79,15 +79,24 @@ export function DadosTab({
                 key={t.value}
                 type="button"
                 onClick={() => setField('type', t.value)}
-                className={`rounded-xl border px-3 py-2.5 text-left transition-all ${
+                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all sm:block sm:gap-0 ${
                   active
                     ? 'border-brand-red bg-[var(--status-danger-bg)] text-brand-red shadow-sm'
-                    : 'border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]'
+                    : 'border-[var(--border-strong)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                <Icon className={`h-4 w-4 ${active ? 'text-brand-red' : 'text-[var(--text-muted)]'}`} />
-                <p className="mt-1.5 text-xs font-black">{t.label}</p>
-                <p className="mt-0.5 text-[10px] leading-tight opacity-70">{t.desc}</p>
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                    active ? 'bg-red-100' : 'bg-[var(--bg-base)]'
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${active ? 'text-red-600' : 'text-[var(--text-muted)]'}`} />
+                </span>
+                <div className="min-w-0 flex-1 sm:mt-2 sm:flex-none">
+                  <p className="text-xs font-black">{t.label}</p>
+                  <p className="mt-0.5 text-[10.5px] leading-snug opacity-80">{t.desc}</p>
+                </div>
+                {active && <Check className="h-4 w-4 shrink-0 text-brand-red sm:hidden" strokeWidth={2.5} />}
               </button>
             );
           })}
@@ -95,28 +104,16 @@ export function DadosTab({
       </FieldGroup>
 
       <div className="space-y-4">
-        <FieldGroup title="Contato e taxas">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Telefone">
-              <input
-                type="tel"
-                value={editing.phone ?? ''}
-                onChange={(e) => setField('phone', e.target.value)}
-                className={INPUT_CLS}
-                placeholder="(61) 99999-9999"
-              />
-            </Field>
-            <Field label="Taxa de embalagem (R$)">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={editing.packing_fee ?? 0}
-                onChange={(e) => setField('packing_fee', Number(e.target.value))}
-                className={INPUT_CLS}
-              />
-            </Field>
-          </div>
+        <FieldGroup title="Contato" icon={Phone} iconBg="bg-amber-100" iconColor="text-amber-600">
+          <Field label="Telefone">
+            <input
+              type="tel"
+              value={editing.phone ?? ''}
+              onChange={(e) => setField('phone', e.target.value)}
+              className={INPUT_CLS}
+              placeholder="(61) 99999-9999"
+            />
+          </Field>
 
           <Field label="Endereço">
             <input
@@ -127,32 +124,46 @@ export function DadosTab({
               placeholder="Rua X, nº Y — Asa Norte"
             />
           </Field>
+        </FieldGroup>
 
-          <Field label="Meta mensal de faturamento (R$)">
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={editing.monthly_revenue_goal ?? ''}
-              onChange={(e) => setField('monthly_revenue_goal', e.target.value === '' ? null : Number(e.target.value))}
-              className={INPUT_CLS}
-              placeholder="Deixe em branco pra não acompanhar meta"
-            />
-          </Field>
+        <FieldGroup title="Taxas e metas" icon={Wallet} iconBg="bg-emerald-100" iconColor="text-emerald-600">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Taxa de embalagem (R$)">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={editing.packing_fee ?? 0}
+                onChange={(e) => setField('packing_fee', Number(e.target.value))}
+                className={INPUT_CLS}
+              />
+            </Field>
+            <Field label="Meta mensal (R$)" hint="opcional">
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={editing.monthly_revenue_goal ?? ''}
+                onChange={(e) => setField('monthly_revenue_goal', e.target.value === '' ? null : Number(e.target.value))}
+                className={INPUT_CLS}
+                placeholder="Sem meta"
+              />
+            </Field>
+          </div>
         </FieldGroup>
 
         <div className="flex flex-col gap-2">
-          <Toggle
-            label="Aceitar pedidos online"
-            desc="Clientes podem abrir /pedir/slug e montar o pedido"
-            checked={editing.ordering_enabled !== false}
-            onChange={(v) => setField('ordering_enabled', v)}
-          />
           <Toggle
             label="Ativa"
             desc="Filial inativa some do seletor de filiais e do checkout público"
             checked={editing.active !== false}
             onChange={(v) => setField('active', v)}
+          />
+          <Toggle
+            label="Aceitar pedidos online"
+            desc="Clientes podem abrir /pedir/slug e montar o pedido"
+            checked={editing.ordering_enabled !== false}
+            onChange={(v) => setField('ordering_enabled', v)}
           />
         </div>
       </div>
