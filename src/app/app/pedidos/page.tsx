@@ -9,7 +9,7 @@ import { pdvApi } from "@/lib/api/pdv-api";
 import { createClient } from "@/lib/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
-import { getSelectedOrderSyncCandidate } from "@/lib/utils/order-refresh";
+import { getSelectedOrderSyncCandidate, hasOrderBoardChanged } from "@/lib/utils/order-refresh";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
@@ -352,8 +352,10 @@ export default function PedidosPage() {
   const { toasts, addToast, removeToast } = useToast();
 
   const selectedOrderRef = useRef<Order | null>(null);
+  const ordersRef = useRef<Order[]>([]);
 
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
 
   // Limpa o ref imediatamente para evitar race condition com Realtime/polling:
   // sem isso, fetchOrders pode reabrir o modal entre o setState e o useEffect do ref.
@@ -379,19 +381,25 @@ export default function PedidosPage() {
     setError("");
     try {
       const data = await ordersApi.getTodayOrders(currentBranch?.id ?? null);
-      setOrders(data || []);
+      const nextOrders = data || [];
       const current = selectedOrderRef.current;
+      const boardChanged = hasOrderBoardChanged(ordersRef.current, nextOrders);
+      ordersRef.current = nextOrders;
+      setOrders(nextOrders);
       // Atualizacoes automaticas mantem o board vivo, mas nao substituem o
       // pedido que o atendente esta manipulando. Isso evita zerar selecoes e
       // formularios internos (especialmente o pagamento por itens).
-      const updated = getSelectedOrderSyncCandidate(current, data || [], syncSelectedOrder);
+      const updated = getSelectedOrderSyncCandidate(current, nextOrders, syncSelectedOrder);
       if (updated) setSelectedOrder(updated);
+      if (!showLoading && !syncSelectedOrder && current && boardChanged) {
+        addToast("success", "Quadro atualizado. O pedido aberto foi preservado.");
+      }
     } catch (err) {
       setError(getFriendlyErrorMessage(err, "Não conseguimos carregar os pedidos agora. Tente novamente."));
     } finally {
       setIsLoading(false);
     }
-  }, [currentBranch]);
+  }, [addToast, currentBranch]);
 
   // Initial load + realtime + polling de fallback. Refaz quando filial muda.
   //

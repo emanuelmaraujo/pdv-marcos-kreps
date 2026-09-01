@@ -118,7 +118,7 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 |---|---|---|
 | Cabeçalho do quadro priorizado | Implementado: em 360/390 px busca, atualização e abas ficam visíveis primeiro; o resumo operacional recolhe por padrão e abre sem ocultar filtros nem busca | `pedidos/page.tsx`, `OrderTab`, `QuickMetric` |
 | Resumo persistente de pagamento por itens | Implementado: o cabeçalho fixo exibe selecionado, restante e, na etapa de método, a forma atual; os CTAs informam quantidade e valor do lote | `PayItemsModal.tsx`, `Sheet.tsx` |
-| Indicador de atualização não intrusivo | Realtime/polling atualiza lista sem resetar detalhe e avisa discretamente quando houver mudança relacionada | `pedidos/page.tsx`, `order-refresh.ts` |
+| Indicador de atualização não intrusivo | Implementado: Realtime/polling atualiza a lista, preserva o detalhe e exibe um aviso breve somente se o quadro mudou enquanto há pedido aberto | `pedidos/page.tsx`, `order-refresh.ts`, `Toast.tsx` |
 | Identificação de cliente no mesmo bloco | telefone, estado, nome e retentativa têm ordem visual estável e mensagem curta | `OrderSummarySheet.tsx`, utilitários de telefone |
 
 ### P2 — consistência e refinamento
@@ -167,6 +167,17 @@ O segundo incremento P1 reduz a altura inicial do quadro em telas menores: o
 resumo de métricas recolhe por padrão, enquanto busca, atualização e abas de
 status seguem imediatamente disponíveis. Isso antecipa o primeiro card sem
 remover filtros ou dados operacionais.
+
+O terceiro incremento P1 torna a atualização automática observável sem tomar o
+controle do atendente: ao detectar mudança material no quadro com um detalhe
+aberto, a aplicação mostra um aviso breve e mantém o pedido aberto intacto.
+
+Em 01/09/2026, a tentativa de repetir o walkthrough autenticado deste
+incremento em 360/390 px confirmou a conexão do navegador integrado, mas ele
+não pode alcançar `localhost` nem o IP local pela política de navegação. A
+conta e os dois pedidos criados exclusivamente para esse teste foram removidos;
+portanto, a homologação visual do cabeçalho e do aviso de atualização continua
+pendente em navegador com acesso ao ambiente local ou aparelho físico.
 
 ![Confirmação de descarte do checkout em 360 px](evidence/p0-rascunho-mobile-360.png)
 
