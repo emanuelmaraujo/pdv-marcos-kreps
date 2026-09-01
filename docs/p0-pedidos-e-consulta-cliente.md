@@ -130,6 +130,9 @@ etapa, forma de pagamento nem mensagem em andamento.
 3. **Janela operacional.** “Hoje” no quadro considera a virada de dia
    operacional às 03:00 (America/São_Paulo); pedidos criados antes disso não
    aparecem na consulta do dia seguinte, como esperado.
+4. **Pagamento por itens mais verificável.** O P1 inicial agora mostra lote,
+   valor e método no cabeçalho persistente e no CTA. A mudança é apenas de
+   clareza visual; os cálculos e a chamada de pagamento permanecem os mesmos.
 
 ## Arquivos do P0
 

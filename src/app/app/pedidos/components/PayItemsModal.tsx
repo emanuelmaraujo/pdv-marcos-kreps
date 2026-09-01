@@ -137,6 +137,8 @@ export function PayItemsModal({
   const orderLabel = order.branch?.code
     ? `${order.branch.code}-${String(order.daily_number).padStart(3, '0')}`
     : `#${String(order.daily_number).padStart(3, '0')}`;
+  const selectedItemLabel = `${selected.size} item${selected.size !== 1 ? 's' : ''}`;
+  const selectedPaymentLabel = PAYMENT_LABEL[paymentMethod];
 
   function toggleItem(itemId: string) {
     setSelected((prev) => {
@@ -215,6 +217,11 @@ export function PayItemsModal({
               <p className="mt-0.5 text-xs font-medium text-[var(--text-secondary)]">
                 Pedido {orderLabel} - {unpaidItems.length} pendente{unpaidItems.length !== 1 ? 's' : ''} - {currency.format(pendingTotal)}
               </p>
+              {step === 'method' && selected.size > 0 && (
+                <p className="mt-1 text-xs font-black text-brand-red">
+                  Lote: {selectedItemLabel} · {currency.format(selectedTotal)} · {selectedPaymentLabel}
+                </p>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -421,7 +428,7 @@ export function PayItemsModal({
               className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--bg-inverse)] px-5 text-sm font-black text-white shadow-[var(--shadow-sm)] transition-all active:scale-95 disabled:opacity-50"
             >
               <ListChecks className="h-4 w-4" />
-              Escolher forma de pagamento
+              Escolher forma · {selectedItemLabel} · {currency.format(selectedTotal)}
             </button>
           ) : (
             <button
@@ -431,7 +438,7 @@ export function PayItemsModal({
               className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand-red px-5 text-sm font-black text-white shadow-[var(--shadow-sm)] shadow-brand-red/20 transition-all active:scale-95 disabled:opacity-50"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {loading ? 'Registrando...' : 'Registrar pagamento'}
+              {loading ? 'Registrando...' : `Registrar ${selectedItemLabel} · ${currency.format(selectedTotal)}`}
             </button>
           )}
         </div>

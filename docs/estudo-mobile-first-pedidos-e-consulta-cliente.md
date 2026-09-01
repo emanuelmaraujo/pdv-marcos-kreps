@@ -117,7 +117,7 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 | Melhoria | Critérios de aceite | Arquivos/componentes prováveis |
 |---|---|---|
 | Cabeçalho do quadro priorizado | em 360 px há pelo menos um card acionável na primeira dobra; filtros secundários podem recolher sem perder busca | `pedidos/page.tsx`, `OrderTab`, `QuickMetric` |
-| Resumo persistente de pagamento por itens | selecionado, restante e método atual ficam visíveis ao rolar; CTA informa valor e quantidade | `PayItemsModal.tsx`, `Sheet.tsx` |
+| Resumo persistente de pagamento por itens | Implementado: o cabeçalho fixo exibe selecionado, restante e, na etapa de método, a forma atual; os CTAs informam quantidade e valor do lote | `PayItemsModal.tsx`, `Sheet.tsx` |
 | Indicador de atualização não intrusivo | Realtime/polling atualiza lista sem resetar detalhe e avisa discretamente quando houver mudança relacionada | `pedidos/page.tsx`, `order-refresh.ts` |
 | Identificação de cliente no mesmo bloco | telefone, estado, nome e retentativa têm ordem visual estável e mensagem curta | `OrderSummarySheet.tsx`, utilitários de telefone |
 
@@ -156,6 +156,12 @@ O segundo incremento formalizou a política do pagamento por itens: uma nova
 versão do mesmo pedido não limpa seu rascunho local; somente a troca de pedido
 faz essa inicialização. Isso mantém o comportamento homologado para polling e
 Realtime mesmo se a fonte do pedido mudar de referência numa refatoração futura.
+
+O primeiro incremento P1 aproveita a estrutura já persistente do sheet de
+pagamento por itens: durante a escolha do método, o cabeçalho informa lote,
+valor e método; os CTAs também identificam quantidade e valor antes de avançar
+ou registrar. Não houve mudança em cálculo, método selecionado ou chamada de
+pagamento.
 
 ![Confirmação de descarte do checkout em 360 px](evidence/p0-rascunho-mobile-360.png)
 
