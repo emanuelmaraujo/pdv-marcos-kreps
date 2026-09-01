@@ -146,13 +146,26 @@ export const useCart = create<CartState>()(
       partialize: (state) => ({
         items:         state.items,
         orderType:     state.orderType,
-        customerName:  state.customerName,
-        customerPhone: state.customerPhone,
         orderNotes:    state.orderNotes,
         source:        state.source,
         targetOrderId: state.targetOrderId,
         branchSlug:    state.branchSlug,
       }),
+      // Identificação é específica de cada pagamento. Não a reidrata de uma
+      // sessão anterior, mas mantém o rascunho enquanto a pessoa apenas fecha
+      // e reabre o checkout na mesma sessão.
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<CartState>;
+        const cart = { ...persisted };
+        delete cart.customerName;
+        delete cart.customerPhone;
+        return {
+          ...currentState,
+          ...cart,
+          customerName: "",
+          customerPhone: "",
+        };
+      },
     },
   ),
 );

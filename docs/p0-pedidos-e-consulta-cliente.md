@@ -1,6 +1,7 @@
 # P0 — Estabilidade de pedidos e consulta de cliente
 
-Atualizado em 2026-09-01 após os PRs #156, #157, #158 e #159.
+Atualizado em 2026-09-01 após os PRs #156 a #165 e os ajustes de
+acompanhamento do checkout.
 
 ## Resultado executivo
 
@@ -116,6 +117,28 @@ etapa, forma de pagamento nem mensagem em andamento.
 - [x] `PayItemsModal` usa a regra antes de limpar seu estado local;
 - [x] o refresh automático do quadro permanece protegido por
   `getSelectedOrderSyncCandidate`.
+
+### P0.5 — retorno preserva rascunho e nova sessão inicia sem identificação
+
+Fechar o checkout agora só retorna ao cardápio e mantém o rascunho atual; como
+não há descarte nessa ação, não é exibida confirmação. Nome e WhatsApp deixam
+de ser gravados no carrinho persistente e dados legados também são descartados
+na reidratação. Assim, uma nova sessão começa sem identificação prévia, mas
+fechar e reabrir o checkout na mesma sessão continua preservando o pedido em
+andamento.
+
+Quando um nome tiver sido preenchido por consulta de WhatsApp, apagar ou trocar
+esse telefone limpa somente esse nome associado antes da próxima consulta. No
+fluxo público, o perfil salvo ainda pode completar os dados depois de o cliente
+digitar o WhatsApp, mas não pré-preenche mais o campo ao abrir uma nova compra.
+
+### Aceite para validação manual
+
+- [ ] voltar/fechar o checkout não pergunta sobre descarte e conserva itens,
+  etapas e campos ao reabrir na mesma sessão;
+- [ ] abrir uma nova sessão ou novo pagamento mostra WhatsApp e nome vazios;
+- [ ] apagar o WhatsApp encontrado limpa o nome que veio daquela consulta;
+- [ ] digitar novamente o mesmo WhatsApp continua preenchendo o nome encontrado.
 
 ## Limitações e achados
 
