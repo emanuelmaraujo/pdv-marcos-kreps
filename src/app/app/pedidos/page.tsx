@@ -26,6 +26,7 @@ import {
   Radio,
   EyeOff,
   Eye,
+  ChevronDown,
 } from "lucide-react";
 
 // Próximo status é determinístico para estas transições (ao contrário de
@@ -344,6 +345,7 @@ export default function PedidosPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [showCancelled, setShowCancelled] = useState(false);
+  const [showOperationalSummary, setShowOperationalSummary] = useState(false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const isMdPlus = useSyncExternalStore(subscribeMdPlus, getMdPlusSnapshot, () => false);
   const { currentBranch } = useBranch();
@@ -581,7 +583,7 @@ export default function PedidosPage() {
       {/* ── Shared header ──────────────────────────────────────── */}
       <section className="z-20 -mx-3 border-b border-[var(--border)] bg-[var(--bg-surface)]/95 px-3 py-3 shadow-[var(--shadow-sm)] backdrop-blur md:sticky md:top-14 md:mx-0 md:rounded-2xl md:border md:px-4 md:py-3">
 
-        {/* Search + metrics row */}
+        {/* Busca e ação imediata ficam na primeira dobra; o resumo abre só sob demanda em telas menores. */}
         <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" strokeWidth={1.75} />
@@ -594,26 +596,40 @@ export default function PedidosPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            type="button"
+            onClick={() => setShowOperationalSummary((visible) => !visible)}
+            aria-expanded={showOperationalSummary}
+            aria-controls="orders-operational-summary"
+            className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)] hover:bg-[var(--bg-subtle)] active:scale-95 lg:hidden"
+          >
+            Resumo
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showOperationalSummary ? "rotate-180" : ""}`} />
+          </button>
+
+          <button
+            onClick={() => fetchOrders()}
+            aria-label="Atualizar pedidos"
+            className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)] hover:bg-[var(--bg-subtle)] active:scale-95"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-brand-red" : ""}`} />
+            <span className="hidden sm:inline">Atualizar</span>
+          </button>
+        <div
+          id="orders-operational-summary"
+          className={`${showOperationalSummary ? "grid" : "hidden"} basis-full grid-cols-2 gap-2 lg:mt-0 lg:basis-auto lg:flex lg:items-center lg:gap-2 lg:overflow-visible`}
+        >
             <QuickMetric icon={ShoppingBag} label="Hoje"     value={orders.length}              detail="pedidos" />
             <QuickMetric icon={Clock}       label="Fila"     value={queueCount + waitingCount}  detail="em preparo" tone="brand" />
             <QuickMetric icon={PackageCheck}label="Prontos"  value={readyCount}                 detail="retirada"   tone="success" />
             <QuickMetric icon={CreditCard}  label="Recebido" value={currency.format(receivedTotal)} detail={`${pendingPayCount} pend.`} tone="info" />
 
             {/* Live badge */}
-            <div className="hidden md:flex items-center gap-1.5 rounded-xl bg-[var(--status-success-bg)] px-3 h-11">
+            <div className="hidden lg:flex items-center gap-1.5 rounded-xl bg-[var(--status-success-bg)] px-3 h-11">
               <Radio className={`h-3 w-3 text-[var(--status-success)] ${!isLoading ? "animate-pulse" : ""}`} />
               <span className="text-[11px] font-semibold text-[var(--status-success)]">Ao vivo</span>
             </div>
-
-            <button
-              onClick={() => fetchOrders()}
-              className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)] hover:bg-[var(--bg-subtle)] active:scale-95"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-brand-red" : ""}`} />
-              <span className="hidden sm:inline">Atualizar</span>
-            </button>
-          </div>
+        </div>
         </div>
 
         {/* Tabs — mobile/tablet only */}
