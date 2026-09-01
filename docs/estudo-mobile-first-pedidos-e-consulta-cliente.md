@@ -145,6 +145,18 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
    tempo até confirmar pedido. Cada passo precisa de rollback somente de
    frontend.
 
+### Incremento P0 entregue após o estudo
+
+O primeiro incremento foi limitado às superfícies de interação, sem redesenho
+das telas nem mudança de regra operacional: `BottomSheet` e `Sheet` agora
+respeitam safe area, teclado (via `visualViewport`) e ficam acima da navegação
+fixa; o foco de um campo é trazido à área visível. A personalização de produto
+e o checkout com rascunho alterado usam uma confirmação acessível antes de
+fechar. Em 360 px, cancelar preservou o nome digitado e descartar manteve os
+itens no carrinho.
+
+![Confirmação de descarte do checkout em 360 px](evidence/p0-rascunho-mobile-360.png)
+
 ## Riscos técnicos e guardrails
 
 - Não alterar schema, cálculo, taxas, status, regras de impressão ou integração

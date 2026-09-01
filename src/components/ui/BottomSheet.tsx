@@ -61,10 +61,41 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || !sheetRef.current) return;
+
+    const viewport = window.visualViewport;
+    const updateKeyboardInset = () => {
+      if (!sheetRef.current) return;
+      const inset = viewport
+        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+        : 0;
+      sheetRef.current.style.setProperty("--keyboard-inset", `${inset}px`);
+    };
+    const keepFocusedFieldVisible = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      window.setTimeout(() => {
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+      }, 80);
+    };
+
+    updateKeyboardInset();
+    viewport?.addEventListener("resize", updateKeyboardInset);
+    viewport?.addEventListener("scroll", updateKeyboardInset);
+    document.addEventListener("focusin", keepFocusedFieldVisible);
+
+    return () => {
+      viewport?.removeEventListener("resize", updateKeyboardInset);
+      viewport?.removeEventListener("scroll", updateKeyboardInset);
+      document.removeEventListener("focusin", keepFocusedFieldVisible);
+    };
+  }, [isOpen, sheetRef]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[40] flex items-end justify-center sm:items-center pb-16 sm:pb-0">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center pb-[calc(4rem+env(safe-area-inset-bottom))] sm:items-center sm:pb-0">
       {/* Backdrop - Only covers area above menu */}
       <div
         className="fixed inset-0 bg-zinc-900/45 transition-opacity"
@@ -76,8 +107,11 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
          (barra de endereço / teclado não empurram o footer pra fora). */}
       <div
         ref={sheetRef}
-        className="relative z-[45] flex w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xl transform-gpu transition-transform will-change-transform animate-in slide-in-from-bottom duration-300 sm:rounded-2xl"
-        style={{ maxHeight: 'calc(100dvh - 4rem)' }}
+        className="relative z-[75] flex w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xl transform-gpu transition-transform will-change-transform animate-in slide-in-from-bottom duration-300 sm:rounded-2xl"
+        style={{
+          maxHeight: 'calc(100dvh - 4rem - env(safe-area-inset-bottom) - var(--keyboard-inset, 0px))',
+          marginBottom: 'var(--keyboard-inset, 0px)',
+        }}
       >
         <div
           className="shrink-0 touch-none border-b border-[var(--border)]"
@@ -106,7 +140,14 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
           {children}
         </div>
 
-        {footer && <div className="shrink-0">{footer}</div>}
+        {footer && (
+          <div
+            className="shrink-0"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

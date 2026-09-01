@@ -12,6 +12,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { DiscardChangesDialog } from "@/components/feedback/DiscardChangesDialog";
 import { Minus, Plus, X, Utensils, ShoppingCart, AlertCircle, Sandwich, Cake, GlassWater, Coffee, Flame, Star, IceCream, Beef, Hamburger, ChevronRight, BookOpen, type LucideIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -20,6 +21,34 @@ import {
   getProductSummary,
   getProductTags,
 } from "@/lib/menu/productTags";
+
+function serializeCustomizationDraft({
+  productId,
+  editingCartItemId,
+  removedIngredientIds,
+  selectedAddons,
+  quantity,
+  notes,
+  itemIsTakeout,
+}: {
+  productId: string;
+  editingCartItemId: string | null;
+  removedIngredientIds: Iterable<string>;
+  selectedAddons: Iterable<[string, number]>;
+  quantity: number;
+  notes: string;
+  itemIsTakeout: boolean;
+}) {
+  return JSON.stringify({
+    productId,
+    editingCartItemId,
+    removedIngredientIds: Array.from(removedIngredientIds).sort(),
+    selectedAddons: Array.from(selectedAddons).sort(([first], [second]) => first.localeCompare(second)),
+    quantity,
+    notes,
+    itemIsTakeout,
+  });
+}
 
 export default function NovoPedidoPage() {
   const searchParams = useSearchParams();
@@ -59,6 +88,8 @@ export default function NovoPedidoPage() {
   const [notes, setNotes] = useState("");
   const [itemIsTakeout, setItemIsTakeout] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isDiscardCustomizationOpen, setIsDiscardCustomizationOpen] = useState(false);
+  const customizationBaselineRef = useRef<string | null>(null);
 
   useEffect(() => {
     async function loadMenu() {
@@ -210,6 +241,15 @@ export default function NovoPedidoPage() {
       setQuantity(existingItem.quantity);
       setNotes(existingItem.notes || "");
       setItemIsTakeout(existingItem.is_takeout ?? false);
+      customizationBaselineRef.current = serializeCustomizationDraft({
+        productId: product.id,
+        editingCartItemId: existingItem.id,
+        removedIngredientIds: existingItem.removed_ingredients,
+        selectedAddons: existingItem.addons.map((addon) => [addon.addon_id, addon.quantity] as [string, number]),
+        quantity: existingItem.quantity,
+        notes: existingItem.notes || "",
+        itemIsTakeout: existingItem.is_takeout ?? false,
+      });
     } else {
       setEditingCartItemId(null);
       setRemovedIngredientIds(new Set());
@@ -217,13 +257,53 @@ export default function NovoPedidoPage() {
       setQuantity(1);
       setNotes("");
       setItemIsTakeout(false);
+      customizationBaselineRef.current = serializeCustomizationDraft({
+        productId: product.id,
+        editingCartItemId: null,
+        removedIngredientIds: [],
+        selectedAddons: [],
+        quantity: 1,
+        notes: "",
+        itemIsTakeout: false,
+      });
     }
   }, []);
 
-  const closeCustomization = useCallback(() => {
+  const closeCustomization = useCallback((confirmDiscard = true) => {
+    const currentDraft = selectedProduct
+      ? serializeCustomizationDraft({
+          productId: selectedProduct.id,
+          editingCartItemId,
+          removedIngredientIds,
+          selectedAddons,
+          quantity,
+          notes,
+          itemIsTakeout,
+        })
+      : null;
+    const hasUnsavedChanges =
+      confirmDiscard &&
+      customizationBaselineRef.current !== null &&
+      currentDraft !== customizationBaselineRef.current;
+
+    if (hasUnsavedChanges) {
+      setIsDiscardCustomizationOpen(true);
+      return;
+    }
+
+    customizationBaselineRef.current = null;
+    setIsDiscardCustomizationOpen(false);
     setSelectedProduct(null);
     setEditingCartItemId(null);
-  }, []);
+  }, [
+    editingCartItemId,
+    itemIsTakeout,
+    notes,
+    quantity,
+    removedIngredientIds,
+    selectedAddons,
+    selectedProduct,
+  ]);
 
   const toggleIngredient = useCallback((ingredientId: string) => {
     setRemovedIngredientIds(prev => {
@@ -268,7 +348,7 @@ export default function NovoPedidoPage() {
       addItem(itemData);
     }
 
-    closeCustomization();
+    closeCustomization(false);
   }, [
     addItem,
     closeCustomization,
@@ -628,7 +708,7 @@ export default function NovoPedidoPage() {
                 )}
                 <button
                   type="button"
-                  onClick={closeCustomization}
+                  onClick={() => closeCustomization()}
                   className="p-2 rounded-full bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:bg-[var(--border)] active:scale-90"
                   aria-label="Fechar e voltar ao cardápio"
                 >
@@ -788,6 +868,14 @@ export default function NovoPedidoPage() {
           </div>
         )}
       </BottomSheet>
+
+      <DiscardChangesDialog
+        isOpen={isDiscardCustomizationOpen}
+        title="Descartar alterações?"
+        description="Os ajustes deste item não foram adicionados ao pedido."
+        onCancel={() => setIsDiscardCustomizationOpen(false)}
+        onDiscard={() => closeCustomization(false)}
+      />
     </div>
   );
 }
