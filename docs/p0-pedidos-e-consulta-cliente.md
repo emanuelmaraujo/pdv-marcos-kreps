@@ -1,6 +1,6 @@
 # P0 — Estabilidade de pedidos e consulta de cliente
 
-Atualizado em 2026-09-01 após a validação do PR #156.
+Atualizado em 2026-09-01 após os PRs #156, #157, #158 e #159.
 
 ## Resultado executivo
 
@@ -51,10 +51,9 @@ internacionais para E.164. Falhas de invocação não são convertidas em
 - [x] cliente inexistente mostra “Cliente novo”;
 - [x] `(55) 99998-7654` preserva o DDD e encontra o cadastro;
 - [x] função ativa no projeto remoto;
-- [ ] erro de servidor e clique em **Tentar novamente** validados no navegador:
-  ao pausar a função local, a interface permaneceu em “procurando” sem timeout,
-  portanto o estado de erro não foi alcançado de forma confiável. O timeout de
-  8 s foi adicionado, homologado localmente e integrado pelo PR #157.
+- [x] erro de servidor e clique em **Tentar novamente** validados no navegador:
+  a pausa controlada da função local alcançou o erro após 8 s, e a retentativa
+  retornou “Cliente novo” depois de reativar a função.
 
 ## Validação executada
 
@@ -101,6 +100,20 @@ não é removido.
 - [x] continuar editando preserva o nome digitado no checkout;
 - [x] descartar fecha o checkout sem apagar os itens do carrinho;
 - [x] nenhuma regra de preço, pagamento, banco ou impressão foi alterada.
+
+### P0.4 — regressão do pagamento por itens
+
+O rascunho local de pagamento por itens agora só é reinicializado ao abrir um
+pedido diferente. Uma nova referência de itens do mesmo pedido — vinda de
+polling, Realtime ou atualização explícita — não apaga item selecionado, valor,
+etapa, forma de pagamento nem mensagem em andamento.
+
+### Aceite validado
+
+- [x] regra pura cobre polling/Realtime do mesmo pedido e troca de pedido;
+- [x] `PayItemsModal` usa a regra antes de limpar seu estado local;
+- [x] o refresh automático do quadro permanece protegido por
+  `getSelectedOrderSyncCandidate`.
 
 ## Limitações e achados
 
