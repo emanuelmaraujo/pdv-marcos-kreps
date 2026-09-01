@@ -128,7 +128,7 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 |---|---|---|
 | Unificar detalhe responsivo | Implementado o primeiro incremento: uma fonte de dados de apresentação e ações alimenta sheet e modal; os layouts continuam próprios para cada largura, preservando os atalhos existentes | `OrderDetailsSheet.tsx`, `OrderDetailsModal.tsx`, `order-details-shared.ts` |
 | Pistas de overflow e alvo de toque | Implementado no quadro: a faixa de status tem pista visual para continuação em 360/390 px e abas, busca, resumo, atualização, retentativa e ações rápidas de card têm 44 px de altura mínima | `pedidos/page.tsx`, `OrderCard.tsx` |
-| Modo de concentração | reduzir métricas secundárias durante atendimento sem eliminar acesso | layout de `pedidos/page.tsx`, preferências locais |
+| Modo de concentração | Implementado: preferência local e reversível recolhe métricas secundárias; busca, abas, atualização, cards, detalhe, pagamentos e o resumo sob demanda continuam acessíveis | `pedidos/page.tsx`, `localStorage` do navegador |
 
 ## Implementação incremental proposta
 
