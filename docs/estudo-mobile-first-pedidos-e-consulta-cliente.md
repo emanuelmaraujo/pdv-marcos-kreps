@@ -109,7 +109,7 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 
 | Melhoria | Critérios de aceite | Arquivos/componentes prováveis |
 |---|---|---|
-| Timeout, cancelamento e retentativa da consulta de cliente | após prazo definido, “procurando” vira erro acionável; **Tentar novamente** reexecuta somente o telefone atual; resposta antiga não sobrescreve edição recente | `OrderSummarySheet.tsx`, `pdv-api.ts`, testes de consulta |
+| Timeout, cancelamento e retentativa da consulta de cliente | Implementado no PR #157 com abort em 8 s; após prazo definido, “procurando” vira erro acionável; **Tentar novamente** reexecuta somente o telefone atual; resposta antiga não sobrescreve edição recente | `OrderSummarySheet.tsx`, `pdv-api.ts`, testes de consulta |
 | Ação do checkout acima do teclado/safe area | em 360/390 com teclado aberto, campo ativo e CTA continuam visíveis; nenhuma submissão ocorre por toque encoberto | `BottomSheet.tsx`, `OrderSummarySheet.tsx`, tokens CSS |
 | Proteção de rascunho sujo | fechar checkout/personalização com alteração exibe confirmação; cancelar preserva o formulário e confirmar descarta apenas o rascunho correto | `novo-pedido/page.tsx`, `BottomSheet.tsx`, store do carrinho |
 | Regressão de estado no pagamento por itens | testes de componente cobrem polling/Realtime com item, total, etapa e método selecionados; ações explícitas continuam sincronizando | `PayItemsModal.tsx`, `order-refresh.ts`, testes |

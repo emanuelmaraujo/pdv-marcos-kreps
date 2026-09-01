@@ -11,8 +11,9 @@ autenticada local confirmou a estabilidade do pagamento por itens em polling e
 Realtime, além dos fluxos de cliente existente, inexistente e DDD 55.
 
 Não houve merge novo nesta etapa: o PR já estava merged. A correção de
-hidratação da tela de login encontrada durante a validação segue em uma
-alteração de acompanhamento, separada das mudanças do PR já publicado.
+hidratação da tela de login e o timeout da consulta encontrados durante a
+validação seguem em uma alteração de acompanhamento, separada das mudanças do
+PR já publicado.
 
 ## Escopo confirmado
 
@@ -52,7 +53,8 @@ internacionais para E.164. Falhas de invocação não são convertidas em
 - [x] função ativa no projeto remoto;
 - [ ] erro de servidor e clique em **Tentar novamente** validados no navegador:
   ao pausar a função local, a interface permaneceu em “procurando” sem timeout,
-  portanto o estado de erro não foi alcançado de forma confiável.
+  portanto o estado de erro não foi alcançado de forma confiável. O timeout de
+  8 s foi adicionado no PR #157 e ainda requer homologação manual.
 
 ## Validação executada
 
@@ -70,19 +72,23 @@ internacionais para E.164. Falhas de invocação não são convertidas em
 | Cliente existente / inexistente / DDD 55 | aprovado |
 | Dados sintéticos | removidos; consulta final retornou zero pedidos, clientes, perfil e usuário de teste |
 
-## Correção complementar encontrada
+## Correções complementares
 
 Em `src/app/login/page.tsx`, a disponibilidade de passkey era calculada na
 inicialização do estado. Como ela só existe no navegador, o HTML do servidor e
 do cliente podiam divergir e provocar erro de hidratação. A correção inicia o
 estado como `false` e verifica a capacidade em `useEffect`.
 
+Em `src/lib/api/pdv-api.ts`, a consulta autenticada de cliente agora usa
+`AbortController` com limite de 8 segundos. Ao exceder o prazo, retorna uma
+mensagem de retentativa em vez de manter o checkout em “procurando”.
+
 ## Limitações e achados
 
-1. **Sem timeout na consulta de perfil.** Quando a Edge Function fica
-   indisponível, a requisição pode ficar indefinidamente em `checking`. Isso
-   impede apresentar o botão **Tentar novamente**. Deve ser tratado como P0 de
-   resiliência antes de considerar o cenário de erro homologado.
+1. **Homologação pendente do timeout.** A indisponibilidade revelou que a
+   interface ficava indefinidamente em `checking`. O PR #157 inclui abort em
+   8 s para expor **Tentar novamente**, mas o teste de navegador contra uma
+   função indisponível precisa ser repetido antes do merge.
 2. **Configuração local insegura por padrão.** `.env.local` aponta para o
    projeto remoto; iniciar `npm run dev` sem sobrescrever as variáveis públicas
    pode testar contra dados remotos. A validação usou apenas Supabase local e

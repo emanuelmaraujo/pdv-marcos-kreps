@@ -106,6 +106,7 @@ async function invokeEdgeFunction<T = unknown>(
   functionName: string,
   payload: Record<string, unknown>,
   extraHeaders: Record<string, string> = {},
+  signal?: AbortSignal,
 ): Promise<T> {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -116,6 +117,7 @@ async function invokeEdgeFunction<T = unknown>(
       ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
       ...extraHeaders,
     },
+    signal,
   });
 
   if (error) {
@@ -447,14 +449,28 @@ export const pdvApi = {
   // Authenticated lookup for ADMIN/ATTENDANT — returns any customer matching
   // the phone, regardless of remember_checkout_data. Used by /app/novo-pedido.
   getCustomerProfile: async (payload: { customer_phone: string }) => {
-    const response = await invokeEdgeFunction<AttendantCustomerProfileResponse>(
-      'get-customer-profile',
-      payload,
-    );
-    if (!response?.success) {
-      throw new Error(response?.error || 'Nao foi possivel consultar o cliente.');
+    const controller = new AbortController();
+    const timeout = globalThis.setTimeout(() => controller.abort(), 8_000);
+
+    try {
+      const response = await invokeEdgeFunction<AttendantCustomerProfileResponse>(
+        'get-customer-profile',
+        payload,
+        {},
+        controller.signal,
+      );
+      if (!response?.success) {
+        throw new Error(response?.error || 'Nao foi possivel consultar o cliente.');
+      }
+      return response;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error('A consulta demorou demais. Tente novamente.');
+      }
+      throw error;
+    } finally {
+      globalThis.clearTimeout(timeout);
     }
-    return response;
   },
 
   getPublicCheckoutConfig: async (branchSlug?: string): Promise<PublicCheckoutConfigResponse> => {
