@@ -54,6 +54,8 @@ internacionais para E.164. Falhas de invocação não são convertidas em
 - [x] erro de servidor e clique em **Tentar novamente** validados no navegador:
   a pausa controlada da função local alcançou o erro após 8 s, e a retentativa
   retornou “Cliente novo” depois de reativar a função.
+- [x] timeout de consulta coberto por teste unitário: a chamada é abortada no
+  prazo e conserva as falhas originais quando não houve expiração.
 
 ## Validação executada
 
