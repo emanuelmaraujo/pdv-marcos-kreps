@@ -1,5 +1,6 @@
 import { createClient } from '../supabase/client';
 import { PaymentMethod, OrderStatus, OrderItemStatus, Order, PaymentTransaction, CustomerAddress, DeliveryZone } from '@/types/pdv';
+import { runWithAbortTimeout } from '@/lib/utils/abort-timeout';
 
 export class OrderingClosedError extends Error {
   constructor(message: string) {
@@ -449,28 +450,20 @@ export const pdvApi = {
   // Authenticated lookup for ADMIN/ATTENDANT — returns any customer matching
   // the phone, regardless of remember_checkout_data. Used by /app/novo-pedido.
   getCustomerProfile: async (payload: { customer_phone: string }) => {
-    const controller = new AbortController();
-    const timeout = globalThis.setTimeout(() => controller.abort(), 8_000);
-
-    try {
-      const response = await invokeEdgeFunction<AttendantCustomerProfileResponse>(
+    const response = await runWithAbortTimeout(
+      (signal) => invokeEdgeFunction<AttendantCustomerProfileResponse>(
         'get-customer-profile',
         payload,
         {},
-        controller.signal,
-      );
-      if (!response?.success) {
-        throw new Error(response?.error || 'Nao foi possivel consultar o cliente.');
-      }
-      return response;
-    } catch (error) {
-      if (controller.signal.aborted) {
-        throw new Error('A consulta demorou demais. Tente novamente.');
-      }
-      throw error;
-    } finally {
-      globalThis.clearTimeout(timeout);
+        signal,
+      ),
+      8_000,
+      'A consulta demorou demais. Tente novamente.',
+    );
+    if (!response?.success) {
+      throw new Error(response?.error || 'Nao foi possivel consultar o cliente.');
     }
+    return response;
   },
 
   getPublicCheckoutConfig: async (branchSlug?: string): Promise<PublicCheckoutConfigResponse> => {
