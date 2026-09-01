@@ -27,6 +27,7 @@ import {
   EyeOff,
   Eye,
   ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 // Próximo status é determinístico para estas transições (ao contrário de
@@ -228,8 +229,10 @@ function QuickMetric({
 function OrderTab({ active, label, count, onClick }: { active: boolean; label: string; count?: number; onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`inline-flex h-9 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-xs font-semibold ${
+      aria-pressed={active}
+      className={`inline-flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-xs font-semibold ${
         active
           ? "bg-brand-red text-white shadow-[var(--shadow-sm)]"
           : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]"
@@ -600,7 +603,7 @@ export default function PedidosPage() {
               placeholder="Buscar número ou cliente..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] pl-10 pr-4 text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"
+              className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] pl-10 pr-4 text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"
             />
           </div>
 
@@ -609,7 +612,7 @@ export default function PedidosPage() {
             onClick={() => setShowOperationalSummary((visible) => !visible)}
             aria-expanded={showOperationalSummary}
             aria-controls="orders-operational-summary"
-            className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)] hover:bg-[var(--bg-subtle)] active:scale-95 lg:hidden"
+            className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)] hover:bg-[var(--bg-subtle)] active:scale-95 lg:hidden"
           >
             Resumo
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showOperationalSummary ? "rotate-180" : ""}`} />
@@ -618,7 +621,7 @@ export default function PedidosPage() {
           <button
             onClick={() => fetchOrders()}
             aria-label="Atualizar pedidos"
-            className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)] hover:bg-[var(--bg-subtle)] active:scale-95"
+            className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-xs font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-sm)] hover:bg-[var(--bg-subtle)] active:scale-95"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin text-brand-red" : ""}`} />
             <span className="hidden sm:inline">Atualizar</span>
@@ -641,18 +644,30 @@ export default function PedidosPage() {
         </div>
 
         {/* Tabs — mobile/tablet only */}
-        <div className="mt-2.5 flex gap-1.5 overflow-x-auto rounded-full bg-[var(--bg-subtle)] p-1 hide-scrollbar lg:hidden">
-          <OrderTab active={activeTab === "TODOS"} label="Todos" count={orders.length} onClick={() => setActiveTab("TODOS")} />
-          {tabs.map((tab) => (
-            <OrderTab key={tab.id} active={activeTab === tab.id} label={tab.label} count={tab.count} onClick={() => setActiveTab(tab.id)} />
-          ))}
+        <div className="relative mt-2.5 lg:hidden">
+          <div
+            role="group"
+            aria-label="Filtrar pedidos por status"
+            className="flex gap-1.5 overflow-x-auto rounded-full bg-[var(--bg-subtle)] p-1 pr-7 hide-scrollbar"
+          >
+            <OrderTab active={activeTab === "TODOS"} label="Todos" count={orders.length} onClick={() => setActiveTab("TODOS")} />
+            {tabs.map((tab) => (
+              <OrderTab key={tab.id} active={activeTab === tab.id} label={tab.label} count={tab.count} onClick={() => setActiveTab(tab.id)} />
+            ))}
+          </div>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 flex w-11 items-center justify-end rounded-r-full bg-gradient-to-l from-[var(--bg-subtle)] via-[var(--bg-subtle)]/90 to-transparent pr-1 text-[var(--text-muted)] md:hidden"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </span>
         </div>
 
         {/* Desktop Kanban controls */}
         <div className="mt-2.5 hidden items-center justify-end gap-3 lg:flex">
           <button
             onClick={() => setShowCancelled((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+            className={`flex h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ${
               showCancelled
                 ? "bg-[var(--bg-inverse)] text-white"
                 : "border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
@@ -695,7 +710,7 @@ export default function PedidosPage() {
         ) : error ? (
           <div className="mx-3 rounded-2xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] p-4 text-center">
             <p className="text-sm font-semibold text-[var(--status-danger)]">{error}</p>
-            <button onClick={() => fetchOrders()} className="mt-2 text-xs font-semibold text-[var(--status-danger)] underline">
+            <button onClick={() => fetchOrders()} className="mt-2 inline-flex h-11 items-center text-xs font-semibold text-[var(--status-danger)] underline">
               Tentar novamente
             </button>
           </div>

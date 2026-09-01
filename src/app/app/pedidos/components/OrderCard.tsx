@@ -329,7 +329,7 @@ export function OrderCard({ order, onClick, now, onQuickAction, onMarkDelivered 
               <button
                 type="button"
                 onClick={handleDeliverClick}
-                className="flex items-center gap-1.5 rounded-full bg-[var(--status-success)] px-3 py-1.5 text-xs font-semibold text-white shadow-[var(--shadow-sm)] active:scale-95 hover:opacity-90"
+                className="flex h-11 items-center gap-1.5 rounded-full bg-[var(--status-success)] px-3 text-xs font-semibold text-white shadow-[var(--shadow-sm)] active:scale-95 hover:opacity-90"
               >
                 {deliverLoading
                   ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -342,7 +342,7 @@ export function OrderCard({ order, onClick, now, onQuickAction, onMarkDelivered 
               <button
                 type="button"
                 onClick={handleQuickClick}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shadow-[var(--shadow-sm)] active:scale-95 ${quickActionConfig.color}`}
+                className={`flex h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-[var(--shadow-sm)] active:scale-95 ${quickActionConfig.color}`}
               >
                 {quickLoading
                   ? <Loader2 className="h-3 w-3 animate-spin" />
