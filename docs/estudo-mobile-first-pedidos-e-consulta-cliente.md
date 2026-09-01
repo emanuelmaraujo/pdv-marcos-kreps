@@ -119,7 +119,7 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 | Cabeçalho do quadro priorizado | Implementado: em 360/390 px busca, atualização e abas ficam visíveis primeiro; o resumo operacional recolhe por padrão e abre sem ocultar filtros nem busca | `pedidos/page.tsx`, `OrderTab`, `QuickMetric` |
 | Resumo persistente de pagamento por itens | Implementado: o cabeçalho fixo exibe selecionado, restante e, na etapa de método, a forma atual; os CTAs informam quantidade e valor do lote | `PayItemsModal.tsx`, `Sheet.tsx` |
 | Indicador de atualização não intrusivo | Implementado: Realtime/polling atualiza a lista, preserva o detalhe e exibe um aviso breve somente se o quadro mudou enquanto há pedido aberto | `pedidos/page.tsx`, `order-refresh.ts`, `Toast.tsx` |
-| Identificação de cliente no mesmo bloco | telefone, estado, nome e retentativa têm ordem visual estável e mensagem curta | `OrderSummarySheet.tsx`, utilitários de telefone |
+| Identificação de cliente no mesmo bloco | Implementado: WhatsApp, estado da consulta, retentativa, nome preenchido e opção de salvar ocupam uma única seção; a consulta antecede o nome e a retentativa tem alvo de 44 px | `OrderSummarySheet.tsx`, utilitários de telefone |
 
 ### P2 — consistência e refinamento
 
@@ -171,6 +171,11 @@ remover filtros ou dados operacionais.
 O terceiro incremento P1 torna a atualização automática observável sem tomar o
 controle do atendente: ao detectar mudança material no quadro com um detalhe
 aberto, a aplicação mostra um aviso breve e mantém o pedido aberto intacto.
+
+O quarto incremento P1 organiza a identificação para o balcão: o WhatsApp vem
+primeiro, seu estado (incluindo erro e retentativa) aparece imediatamente abaixo
+e o nome fica no mesmo bloco, tornando visível o preenchimento automático sem
+alterar a consulta, o telefone enviado ou a persistência do checkout.
 
 Em 01/09/2026, a tentativa de repetir o walkthrough autenticado deste
 incremento em 360/390 px confirmou a conexão do navegador integrado, mas ele
