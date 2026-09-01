@@ -9,6 +9,7 @@ import { pdvApi } from "@/lib/api/pdv-api";
 import { createClient } from "@/lib/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { getSelectedOrderSyncCandidate } from "@/lib/utils/order-refresh";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
@@ -365,17 +366,24 @@ export default function PedidosPage() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const fetchOrders = useCallback(async (showLoading = true) => {
+  const fetchOrders = useCallback(async ({
+    showLoading = true,
+    syncSelectedOrder = false,
+  }: {
+    showLoading?: boolean;
+    syncSelectedOrder?: boolean;
+  } = {}) => {
     if (showLoading) setIsLoading(true);
     setError("");
     try {
       const data = await ordersApi.getTodayOrders(currentBranch?.id ?? null);
       setOrders(data || []);
       const current = selectedOrderRef.current;
-      if (current) {
-        const updated = data.find((o) => o.id === current.id);
-        if (updated) setSelectedOrder(updated);
-      }
+      // Atualizacoes automaticas mantem o board vivo, mas nao substituem o
+      // pedido que o atendente esta manipulando. Isso evita zerar selecoes e
+      // formularios internos (especialmente o pagamento por itens).
+      const updated = getSelectedOrderSyncCandidate(current, data || [], syncSelectedOrder);
+      if (updated) setSelectedOrder(updated);
     } catch (err) {
       setError(getFriendlyErrorMessage(err, "Não conseguimos carregar os pedidos agora. Tente novamente."));
     } finally {
@@ -405,7 +413,7 @@ export default function PedidosPage() {
       if (debounceTimer) window.clearTimeout(debounceTimer);
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
-        fetchOrders(false);
+        fetchOrders({ showLoading: false });
       }, 400);
     };
 
@@ -418,12 +426,12 @@ export default function PedidosPage() {
     const POLL_MS = 15_000;
     const pollInterval = window.setInterval(() => {
       if (document.visibilityState === "visible") {
-        fetchOrders(false);
+        fetchOrders({ showLoading: false });
       }
     }, POLL_MS);
 
     const onVisibility = () => {
-      if (document.visibilityState === "visible") fetchOrders(false);
+      if (document.visibilityState === "visible") fetchOrders({ showLoading: false });
     };
     document.addEventListener("visibilitychange", onVisibility);
 
@@ -468,7 +476,7 @@ export default function PedidosPage() {
       } else if (order.status === "SAIU_PARA_ENTREGA") {
         await pdvApi.confirmDelivery({ orderId: order.id });
       }
-      await fetchOrders(false);
+      await fetchOrders({ showLoading: false });
     } catch (err) {
       if (optimisticStatus) {
         // Reverte a atualização otimista — o servidor não confirmou a mudança.
@@ -483,7 +491,7 @@ export default function PedidosPage() {
     setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: "ENTREGUE" } : o)));
     try {
       await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
-      await fetchOrders(false);
+      await fetchOrders({ showLoading: false });
     } catch (err) {
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: order.status } : o)));
       addToast("error", getFriendlyErrorMessage(err, "Não conseguimos marcar o pedido como entregue. Tente novamente."));
@@ -698,7 +706,7 @@ export default function PedidosPage() {
           order={selectedOrder}
           isOpen={!!selectedOrder}
           onClose={handleCloseModal}
-          onOrderUpdated={() => fetchOrders(false)}
+          onOrderUpdated={() => fetchOrders({ showLoading: false, syncSelectedOrder: true })}
         />
       )}
 
@@ -709,7 +717,7 @@ export default function PedidosPage() {
           order={selectedOrder}
           isOpen={!!selectedOrder}
           onClose={handleCloseModal}
-          onOrderUpdated={() => fetchOrders(false)}
+          onOrderUpdated={() => fetchOrders({ showLoading: false, syncSelectedOrder: true })}
         />
       )}
     </div>

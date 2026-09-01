@@ -298,6 +298,7 @@ export type PublicCustomerProfileResponse = {
 export type AttendantCustomerProfileResponse = {
   success: boolean;
   found: boolean;
+  error?: string;
   profile?: {
     name?: string | null;
     email?: string | null;
@@ -446,16 +447,14 @@ export const pdvApi = {
   // Authenticated lookup for ADMIN/ATTENDANT — returns any customer matching
   // the phone, regardless of remember_checkout_data. Used by /app/novo-pedido.
   getCustomerProfile: async (payload: { customer_phone: string }) => {
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    const { data, error } = await supabase.functions.invoke('get-customer-profile', {
-      body: payload,
-      headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
-    });
-    if (error) {
-      return { success: false, found: false } as AttendantCustomerProfileResponse;
+    const response = await invokeEdgeFunction<AttendantCustomerProfileResponse>(
+      'get-customer-profile',
+      payload,
+    );
+    if (!response?.success) {
+      throw new Error(response?.error || 'Nao foi possivel consultar o cliente.');
     }
-    return data as AttendantCustomerProfileResponse;
+    return response;
   },
 
   getPublicCheckoutConfig: async (branchSlug?: string): Promise<PublicCheckoutConfigResponse> => {

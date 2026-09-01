@@ -31,36 +31,13 @@ import {
   Users,
   Bike,
   MapPin,
+  RefreshCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PayItemsModal } from "@/app/app/pedidos/components/PayItemsModal";
 import { Order } from "@/types/pdv";
 import { useBranch } from "@/contexts/BranchContext";
-
-// ─── Phone helpers (mirror /pedir page) ───────────────────────────────────────
-
-function normalizeBrazilPhone(value: string): string | null {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("55")) digits = digits.slice(2);
-  digits = digits.replace(/^0+/, "");
-  if (digits.length !== 10 && digits.length !== 11) return null;
-  const ddd = Number(digits.slice(0, 2));
-  if (ddd < 11 || ddd > 99) return null;
-  if (digits.length === 11 && digits[2] !== "9") return null;
-  return `+55${digits}`;
-}
-
-function formatWhatsAppInput(value: string): string {
-  const normalized = normalizeBrazilPhone(value);
-  const digits = (
-    normalized ? normalized.replace(/^\+55/, "") : value.replace(/\D/g, "").replace(/^55/, "")
-  ).slice(0, 11);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-}
+import { formatWhatsAppInput, normalizeBrazilPhone } from "@/lib/utils/phone";
 
 // ─── Local storage helpers for recent names ───────────────────────────────────
 
@@ -170,8 +147,9 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
   const [ifoodAmountStr, setIfoodAmountStr] = useState("");
 
   // Customer profile lookup (mirrors /pedir behavior)
-  const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found" | "not_found">("idle");
+  const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found" | "not_found" | "error">("idle");
   const [profileNotice, setProfileNotice] = useState("");
+  const [profileLookupRetry, setProfileLookupRetry] = useState(0);
   const [rememberCustomerData, setRememberCustomerData] = useState(false);
   const customerNameRef = useRef(customerName);
   const lastAutofilledPhoneRef = useRef<string | null>(null);
@@ -238,7 +216,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
     if (!normalizedPhone) {
       const idleTimer = window.setTimeout(() => {
         setProfileLookupState("idle");
-        if (!customerPhone.trim()) setProfileNotice("");
+        setProfileNotice("");
       }, 0);
       return () => window.clearTimeout(idleTimer);
     }
@@ -269,10 +247,16 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
           setProfileLookupState("not_found");
           setProfileNotice("");
         }
-      } catch {
+      } catch (lookupError) {
         if (!cancelled) {
-          setProfileLookupState("not_found");
-          setProfileNotice("");
+          const isSessionError = lookupError instanceof Error
+            && /status:\s*401|sessao|nao autenticado/i.test(lookupError.message);
+          setProfileLookupState("error");
+          setProfileNotice(
+            isSessionError
+              ? "Sua sessão expirou. Entre novamente para consultar clientes."
+              : "Não foi possível consultar o cliente agora.",
+          );
         }
       }
     }, 500);
@@ -281,7 +265,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [customerPhone, isOpen, setCustomerInfo]);
+  }, [customerPhone, isOpen, profileLookupRetry, setCustomerInfo]);
 
   const isDeliveryOrder = orderType === "ENTREGA";
   const estimatedSubtotal = getEstimatedSubtotal();
@@ -859,6 +843,21 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                 <p className="text-[11px] font-medium text-[var(--text-muted)]">
                   Cliente novo. Marque a opção abaixo para salvar para a próxima vez.
                 </p>
+              )}
+              {profileLookupState === "error" && (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] px-3 py-2.5">
+                  <p className="text-[11px] font-bold text-[var(--status-danger)]">
+                    {profileNotice}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setProfileLookupRetry((value) => value + 1)}
+                    className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--bg-surface)] px-3 text-[11px] font-black text-[var(--status-danger)]"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Tentar novamente
+                  </button>
+                </div>
               )}
 
               {/* Remember toggle — só aparece com telefone valido */}
