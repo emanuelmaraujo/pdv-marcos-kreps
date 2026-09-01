@@ -28,6 +28,7 @@ import {
   Eye,
   ChevronDown,
   ChevronRight,
+  Focus as FocusIcon,
 } from "lucide-react";
 
 // Próximo status é determinístico para estas transições (ao contrário de
@@ -67,6 +68,8 @@ interface KanbanColumnConfig {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const ORDERS_FOCUS_MODE_STORAGE_KEY = "pdv:orders-focus-mode";
+const ORDERS_FOCUS_MODE_EVENT = "pdv:orders-focus-mode-change";
 
 const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
   NA_FILA: 0,
@@ -166,6 +169,20 @@ function subscribeMdPlus(callback: () => void) {
 
 function getMdPlusSnapshot() {
   return typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
+}
+
+function subscribeFocusMode(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", callback);
+  window.addEventListener(ORDERS_FOCUS_MODE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(ORDERS_FOCUS_MODE_EVENT, callback);
+  };
+}
+
+function getFocusModeSnapshot() {
+  return typeof window !== "undefined" && window.localStorage.getItem(ORDERS_FOCUS_MODE_STORAGE_KEY) === "true";
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -349,6 +366,7 @@ export default function PedidosPage() {
   const [now, setNow] = useState(() => Date.now());
   const [showCancelled, setShowCancelled] = useState(false);
   const [showOperationalSummary, setShowOperationalSummary] = useState(false);
+  const isFocusMode = useSyncExternalStore(subscribeFocusMode, getFocusModeSnapshot, () => false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const isMdPlus = useSyncExternalStore(subscribeMdPlus, getMdPlusSnapshot, () => false);
   const { currentBranch } = useBranch();
@@ -359,6 +377,13 @@ export default function PedidosPage() {
 
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  const toggleFocusMode = useCallback(() => {
+    const next = !getFocusModeSnapshot();
+    window.localStorage.setItem(ORDERS_FOCUS_MODE_STORAGE_KEY, String(next));
+    window.dispatchEvent(new Event(ORDERS_FOCUS_MODE_EVENT));
+    if (next) setShowOperationalSummary(false);
+  }, []);
 
   // Limpa o ref imediatamente para evitar race condition com Realtime/polling:
   // sem isso, fetchOrders pode reabrir o modal entre o setState e o useEffect do ref.
@@ -609,6 +634,22 @@ export default function PedidosPage() {
 
           <button
             type="button"
+            onClick={toggleFocusMode}
+            aria-pressed={isFocusMode}
+            aria-label={isFocusMode ? "Desativar modo de concentração" : "Ativar modo de concentração"}
+            title={isFocusMode ? "Desativar modo de concentração" : "Ativar modo de concentração"}
+            className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold shadow-[var(--shadow-sm)] active:scale-95 ${
+              isFocusMode
+                ? "border-brand-red/30 bg-brand-red text-white hover:bg-brand-red/90"
+                : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
+            }`}
+          >
+            <FocusIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Foco</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowOperationalSummary((visible) => !visible)}
             aria-expanded={showOperationalSummary}
             aria-controls="orders-operational-summary"
@@ -628,7 +669,7 @@ export default function PedidosPage() {
           </button>
         <div
           id="orders-operational-summary"
-          className={`${showOperationalSummary ? "grid" : "hidden"} basis-full grid-cols-2 gap-2 lg:mt-0 lg:basis-auto lg:flex lg:items-center lg:gap-2 lg:overflow-visible`}
+          className={`${!isFocusMode || showOperationalSummary ? "grid lg:flex" : "hidden"} basis-full grid-cols-2 gap-2 lg:mt-0 lg:basis-auto lg:items-center lg:gap-2 lg:overflow-visible`}
         >
             <QuickMetric icon={ShoppingBag} label="Hoje"     value={orders.length}              detail="pedidos" />
             <QuickMetric icon={Clock}       label="Fila"     value={queueCount + waitingCount}  detail="em preparo" tone="brand" />
