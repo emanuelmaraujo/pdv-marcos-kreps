@@ -861,86 +861,98 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
               </div>
             )}
 
-            {/* Customer name */}
-            <div className="space-y-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nome do Cliente</p>
-              <div className="relative">
-                <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 transition-all focus-within:border-brand-red/30 focus-within:bg-[var(--bg-surface)] focus-within:ring-4 focus-within:ring-brand-red/10">
-                  <User className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
-                  <input
-                    type="text"
-                    placeholder="Ex: Marcos Silva"
-                    value={customerName}
-                    onChange={(e) => setCustomerInfo(e.target.value, customerPhone)}
-                    onFocus={() => setShowNameSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
-                    className="flex-1 bg-transparent py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
-                  />
+            {/* Customer identity: phone first to make lookup states and the resolved name contiguous. */}
+            <section aria-labelledby="customer-identification-heading" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3.5">
+              <div>
+                <h3 id="customer-identification-heading" className="text-xs font-black text-[var(--text-primary)]">Identificação do cliente</h3>
+                <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">Informe o WhatsApp para localizar e preencher o nome.</p>
+              </div>
+
+              {/* WhatsApp */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="customer-whatsapp" className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">WhatsApp (opcional)</label>
+                  {profileLookupState === "checking" && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-[var(--text-secondary)]">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      procurando...
+                    </span>
+                  )}
                 </div>
-                {showNameSuggestions && recentNames.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg">
-                    {recentNames.map((name) => (
+                <input
+                  id="customer-whatsapp"
+                  type="tel"
+                  placeholder="(00) 00000-0000"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerInfo(customerName, e.target.value)}
+                  onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"
+                />
+
+                <div aria-live="polite">
+                  {profileLookupState === "found" && profileNotice && (
+                    <p className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {profileNotice}
+                    </p>
+                  )}
+                  {profileLookupState === "not_found" && (
+                    <p className="text-[11px] font-medium text-[var(--text-muted)]">
+                      Cliente novo. Marque a opção abaixo para salvar para a próxima vez.
+                    </p>
+                  )}
+                  {profileLookupState === "error" && (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] px-3 py-2.5">
+                      <p className="text-[11px] font-bold text-[var(--status-danger)]">
+                        {profileNotice}
+                      </p>
                       <button
-                        key={name}
                         type="button"
-                        onMouseDown={() => setCustomerInfo(name, customerPhone)}
-                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
+                        onClick={() => setProfileLookupRetry((value) => value + 1)}
+                        className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--bg-surface)] px-3 text-[11px] font-black text-[var(--status-danger)]"
                       >
-                        <Clock className="h-3 w-3 text-[var(--text-muted)]" />
-                        {name}
+                        <RefreshCw className="h-3 w-3" />
+                        Tentar novamente
                       </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* WhatsApp */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">WhatsApp (opcional)</p>
-                {profileLookupState === "checking" && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-[var(--text-secondary)]">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    procurando...
-                  </span>
-                )}
-              </div>
-              <input
-                type="tel"
-                placeholder="(00) 00000-0000"
-                value={customerPhone}
-                onChange={(e) => setCustomerInfo(customerName, e.target.value)}
-                onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"
-              />
-
-              {profileLookupState === "found" && profileNotice && (
-                <p className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  {profileNotice}
-                </p>
-              )}
-              {profileLookupState === "not_found" && (
-                <p className="text-[11px] font-medium text-[var(--text-muted)]">
-                  Cliente novo. Marque a opção abaixo para salvar para a próxima vez.
-                </p>
-              )}
-              {profileLookupState === "error" && (
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] px-3 py-2.5">
-                  <p className="text-[11px] font-bold text-[var(--status-danger)]">
-                    {profileNotice}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setProfileLookupRetry((value) => value + 1)}
-                    className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--status-danger)]/30 bg-[var(--bg-surface)] px-3 text-[11px] font-black text-[var(--status-danger)]"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Tentar novamente
-                  </button>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* Customer name remains directly below lookup result so autofill is visible. */}
+              <div className="space-y-2">
+                <label htmlFor="customer-name" className="block text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nome do cliente</label>
+                <div className="relative">
+                  <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 transition-all focus-within:border-brand-red/30 focus-within:bg-[var(--bg-surface)] focus-within:ring-4 focus-within:ring-brand-red/10">
+                    <User className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+                    <input
+                      id="customer-name"
+                      type="text"
+                      placeholder="Ex: Marcos Silva"
+                      value={customerName}
+                      onChange={(e) => setCustomerInfo(e.target.value, customerPhone)}
+                      onFocus={() => setShowNameSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
+                      className="flex-1 bg-transparent py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+                    />
+                  </div>
+                  {showNameSuggestions && recentNames.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg">
+                      {recentNames.map((name) => (
+                        <button
+                          key={name}
+                          type="button"
+                          onMouseDown={() => setCustomerInfo(name, customerPhone)}
+                          className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
+                        >
+                          <Clock className="h-3 w-3 text-[var(--text-muted)]" />
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {/* Remember toggle — só aparece com telefone valido */}
               {normalizeBrazilPhone(customerPhone) && (
@@ -966,7 +978,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                   </span>
                 </button>
               )}
-            </div>
+            </section>
 
             {/* Notes */}
             <div className="space-y-2">
