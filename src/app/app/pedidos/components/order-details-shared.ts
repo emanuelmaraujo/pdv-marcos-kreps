@@ -20,6 +20,23 @@ export const orderCurrency = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
+export const POST_PAYMENT_ADDITION_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Uma comanda paga segue aberta por uma hora para acréscimos. Depois disso,
+ * novos itens precisam virar um novo pedido, para não reabrir vendas antigas.
+ */
+export function isOrderOpenForAdditions(order: Order, now = Date.now()) {
+  if (["CANCELADO", "EXPIRADO", "AGUARDANDO_CONFIRMACAO", "SAIU_PARA_ENTREGA"].includes(order.status)) return false;
+  if (!order.paid_at) return true;
+  return now - new Date(order.paid_at).getTime() <= POST_PAYMENT_ADDITION_WINDOW_MS;
+}
+
+export function additionWindowRemainingMinutes(order: Order, now = Date.now()) {
+  if (!order.paid_at) return null;
+  return Math.max(0, Math.ceil((POST_PAYMENT_ADDITION_WINDOW_MS - (now - new Date(order.paid_at).getTime())) / 60_000));
+}
+
 export function formatOrderTime(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", {
     hour: "2-digit",

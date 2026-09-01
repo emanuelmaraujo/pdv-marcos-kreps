@@ -6,12 +6,18 @@ import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
 import { PayItemsModal } from "./PayItemsModal";
 import { EditOrderItemSheet } from "./EditOrderItemSheet";
+import { OrderFulfillmentSummary } from "./OrderFulfillmentSummary";
+import { CategoryLookup } from "./order-item-presentation";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   formatDuration,
   formatOrderTime as fmt,
   minutesBetween,
   ORDER_DETAILS_PAYMENT_METHOD_BY_VALUE as PAYMENT_METHOD_CONFIG,
+  getOutstandingOrderAmount,
+  additionWindowRemainingMinutes,
+  isOrderOpenForAdditions,
   orderCurrency as currency,
   useOrderDetailsActions,
 } from "./order-details-shared";
@@ -28,6 +34,9 @@ import {
   Bike,
   MapPin,
   Clock,
+  ChevronDown,
+  ChevronUp,
+  History,
 } from "lucide-react";
 
 interface Props {
@@ -35,6 +44,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onOrderUpdated: () => void | Promise<void>;
+  categoryLookup?: CategoryLookup;
 }
 
 function TimelineStep({
@@ -82,8 +92,9 @@ function TimeMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Props) {
+export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, categoryLookup = {} }: Props) {
   const router = useRouter();
+  const [showProgress, setShowProgress] = useState(false);
   const {
     isLoading, errorMsg, setErrorMsg,
     showCancelReason, setShowCancelReason, cancelReason, setCancelReason,
@@ -112,7 +123,10 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
   const subtotal = order.total_amount + order.discount_amount - order.packing_fee - Number(order.delivery_fee ?? 0);
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
   const isPaid = order.payment_status === "PAID" || order.payment_status === "COURTESY";
-  const canAddItems = !isCANCELADO && !["EXPIRADO", "AGUARDANDO_CONFIRMACAO", "SAIU_PARA_ENTREGA"].includes(order.status) && !isAppAwaitingPayment;
+  const outstandingAmount = getOutstandingOrderAmount(order);
+  const hasOutstandingPayment = (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") && outstandingAmount > 0;
+  const canAddItems = !isAppAwaitingPayment && isOrderOpenForAdditions(order);
+  const additionMinutesLeft = additionWindowRemainingMinutes(order);
 
   const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
   const elapsedMin = isENTREGUE && order.delivered_at && queueEnteredAt
@@ -140,14 +154,35 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
       onClose={onClose}
       title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}
       footer={
-        <div className="border-t border-[var(--border)] px-6 py-4">
-          <Button
-            variant="outline"
-            className="h-11 w-full rounded-2xl border-2 text-sm font-black"
-            onClick={onClose}
-          >
-            FECHAR
-          </Button>
+        <div className="space-y-2 border-t border-[var(--border)] px-4 py-3">
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && hasOutstandingPayment && !isAppAwaitingPayment && (
+            <Button className="h-12 w-full rounded-2xl bg-brand-red text-sm font-black hover:bg-brand-red/90" onClick={() => setShowPayItems(true)} disabled={isLoading}>
+              RECEBER {currency.format(outstandingAmount)}
+            </Button>
+          )}
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "AGUARDANDO_CONFIRMACAO" && (
+            <Button className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-black hover:bg-emerald-600" onClick={onConfirm} disabled={isLoading}>
+              CONFIRMAR PEDIDO
+            </Button>
+          )}
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "NA_FILA" && (
+            <div className="flex gap-2">
+              <Button className="h-12 flex-1 rounded-2xl bg-brand-amber text-sm font-black text-brand-charcoal hover:bg-brand-amber/90" onClick={onReady} disabled={isLoading}>
+                MARCAR PRONTO
+              </Button>
+              {!isDelivery && <Button className="h-12 rounded-2xl bg-emerald-500 px-3 text-xs font-black hover:bg-emerald-600" onClick={onDeliver} disabled={isLoading}>ENTREGUE</Button>}
+            </div>
+          )}
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "PRONTO" && !isDelivery && (
+            <Button className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-black hover:bg-emerald-600" onClick={onDeliver} disabled={isLoading}>ENTREGAR</Button>
+          )}
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "PRONTO" && isDelivery && !showDispatchForm && (
+            <Button className="h-12 w-full rounded-2xl bg-blue-500 text-sm font-black hover:bg-blue-600" onClick={openDispatchForm} disabled={isLoading}>DESPACHAR ENTREGA</Button>
+          )}
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "SAIU_PARA_ENTREGA" && (
+            <Button className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-black hover:bg-emerald-600" onClick={onConfirmDelivery} disabled={isLoading}>CONFIRMAR ENTREGA</Button>
+          )}
+          <Button variant="outline" className="h-9 w-full rounded-xl border-0 text-xs font-black text-[var(--text-muted)]" onClick={onClose}>FECHAR</Button>
         </div>
       }
     >
@@ -225,8 +260,15 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               </div>
             )}
 
-            {/* Timeline */}
-            {!isCANCELADO && !isDelivery && (
+            {!isCANCELADO && (
+              <button type="button" onClick={() => setShowProgress((value) => !value)} aria-expanded={showProgress} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-300 hover:text-white">
+                <History size={12} /> {showProgress ? "Ocultar andamento" : "Ver andamento"}
+                {showProgress ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+            )}
+
+            {/* Histórico fica disponível sem competir com a ação principal. */}
+            {showProgress && !isCANCELADO && !isDelivery && (
               <div className="flex items-center gap-2 pt-1">
                 <TimelineStep label="Criado"    time={fmt(order.created_at)}           done={true} />
                 <TimelineConnector done={!!order.confirmed_at} />
@@ -237,7 +279,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 <TimelineStep label="Entregue"  time={order.delivered_at ? fmt(order.delivered_at) : undefined} active={isENTREGUE}  done={isENTREGUE} />
               </div>
             )}
-            {!isCANCELADO && isDelivery && (
+            {showProgress && !isCANCELADO && isDelivery && (
               <div className="flex items-center gap-2 pt-1">
                 <TimelineStep label="Criado"    time={fmt(order.created_at)}           done={true} />
                 <TimelineConnector done={!!order.confirmed_at} />
@@ -258,7 +300,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
           </div>
         </div>
 
-        {isDelivery ? (
+        <OrderFulfillmentSummary order={order} />
+
+        {showProgress && (isDelivery ? (
           <div className="grid grid-cols-4 gap-2">
             <TimeMetric label="Fila" value={formatDuration(queueMinutes)} />
             <TimeMetric label="Pronto > saiu" value={formatDuration(readyToDispatchedMinutes)} />
@@ -271,12 +315,38 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
             <TimeMetric label="Pronto > entrega" value={formatDuration(readyToDeliveredMinutes)} />
             <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
           </div>
+        ))}
+
+        {hasOutstandingPayment && !isAppAwaitingPayment && (
+          <section className="overflow-hidden rounded-2xl border-2 border-brand-red/20 bg-brand-red/5">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-brand-red">Pagamento a finalizar</p>
+                <p className="mt-0.5 text-sm font-bold text-[var(--text-primary)]">Itens novos entram automaticamente nesta cobrança.</p>
+              </div>
+              <span className="shrink-0 text-lg font-black tabular-nums text-brand-red">{currency.format(outstandingAmount)}</span>
+            </div>
+            <Button className="h-13 w-full rounded-none bg-brand-red font-black hover:bg-brand-red/90" onClick={() => setShowPayItems(true)} disabled={isLoading}>
+              RECEBER ITENS PENDENTES
+            </Button>
+          </section>
+        )}
+
+        {canAddItems && order.paid_at && (
+          <button
+            type="button"
+            onClick={() => router.push(`/app/novo-pedido?add_to=${order.id}`)}
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[var(--status-info)]/25 bg-[var(--status-info-bg)] px-4 py-3 text-left active:scale-[0.99]"
+          >
+            <span className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--status-info)] text-white"><PlusCircle size={18} /></span><span><span className="block text-sm font-black text-[var(--text-primary)]">Adicionar à mesma comanda</span><span className="block text-xs font-semibold text-[var(--text-secondary)]">Os novos itens voltam para pagamento pendente.</span></span></span>
+            <span className="shrink-0 text-[11px] font-black text-[var(--status-info)]">{additionMinutesLeft} min</span>
+          </button>
         )}
 
         {/* Items com controles por item */}
         <div className="space-y-3">
           <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] px-1">Itens do Pedido</p>
-          <OrderItemsControl order={order} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
+          <OrderItemsControl order={order} categoryLookup={categoryLookup} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
 
           {/* Financial summary */}
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
@@ -330,13 +400,24 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                 </Button>
               )}
               {order.status === "NA_FILA" && (
-                <Button
-                  className="h-14 w-full rounded-2xl bg-brand-amber text-lg font-black text-brand-charcoal shadow-lg shadow-brand-amber/20 hover:bg-brand-amber/90 gap-2"
-                  onClick={onReady}
-                  disabled={isLoading}
-                >
-                  <Package size={20} /> MARCAR PRONTO
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="h-14 flex-1 rounded-2xl bg-brand-amber text-base font-black text-brand-charcoal shadow-lg shadow-brand-amber/20 hover:bg-brand-amber/90 gap-2"
+                    onClick={onReady}
+                    disabled={isLoading}
+                  >
+                    <Package size={20} /> MARCAR PRONTO
+                  </Button>
+                  {!isDelivery && (
+                    <Button
+                      className="h-14 rounded-2xl bg-emerald-500 px-3 text-xs font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-1.5"
+                      onClick={onDeliver}
+                      disabled={isLoading}
+                    >
+                      <CheckCircle2 size={17} /> ENTREGUE AGORA
+                    </Button>
+                  )}
+                </div>
               )}
               {order.status === "PRONTO" && !isDelivery && (
                 <div className="flex gap-2">
@@ -444,23 +525,6 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               )}
 
               {/* Payment pending / partial alert */}
-              {(order.payment_status === "PENDING" || order.payment_status === "PARTIAL") && order.status !== "CANCELADO" && !isAppAwaitingPayment && (
-                <div className="rounded-2xl border-2 border-brand-amber/30 bg-brand-amber/5 p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-brand-amber">
-                    <AlertTriangle size={16} />
-                    <span className="text-xs font-black uppercase tracking-widest">
-                      {order.payment_status === "PARTIAL" ? "Pagamento Parcial" : "Pagamento Pendente"}
-                    </span>
-                  </div>
-                  <Button
-                    className="h-12 w-full bg-brand-amber font-black text-brand-charcoal hover:bg-brand-amber/80"
-                    onClick={() => setShowPayItems(true)}
-                    disabled={isLoading}
-                  >
-                    PAGAR ITENS PENDENTES
-                  </Button>
-                </div>
-              )}
 
               {/* Add to order */}
               {canAddItems && (
@@ -470,7 +534,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
                   onClick={() => router.push(`/app/novo-pedido?add_to=${order.id}`)}
                   disabled={isLoading}
                 >
-                  <PlusCircle size={18} /> ADICIONAR À COMANDA
+                  <PlusCircle size={18} /> {order.paid_at ? "ADICIONAR À MESMA COMANDA" : "ADICIONAR À COMANDA"}
                 </Button>
               )}
 

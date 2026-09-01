@@ -5,6 +5,7 @@ import { Order, OrderItem, OrderItemStatus } from '@/types/pdv';
 import { pdvApi } from '@/lib/api/pdv-api';
 import { getFriendlyErrorMessage } from '@/lib/errors/messages';
 import { Clock, ChefHat, CheckCircle2, Package, X, Loader2, Wallet, Pencil, ShoppingBag, Utensils } from 'lucide-react';
+import { CategoryLookup, groupOrderItems } from './order-item-presentation';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -41,10 +42,12 @@ function itemLabel(order: Order, item: OrderItem): string {
 
 export function OrderItemsControl({
   order,
+  categoryLookup = {},
   onMutated,
   onEditItem,
 }: {
   order: Order;
+  categoryLookup?: CategoryLookup;
   onMutated?: () => void;
   onEditItem?: (item: OrderItem) => void;
 }) {
@@ -53,6 +56,7 @@ export function OrderItemsControl({
 
   const items = order.items ?? [];
   if (items.length === 0) return null;
+  const itemGroups = groupOrderItems(items, categoryLookup);
 
   const readyItems = items.filter((i) => i.status === 'READY');
   const canDeliverReady = readyItems.length > 0;
@@ -123,8 +127,16 @@ export function OrderItemsControl({
         </div>
       )}
 
-      <ul className="space-y-2">
-        {items.map((item) => {
+      <div className="space-y-4">
+        {itemGroups.map((group) => (
+          <section key={group.id} aria-label={group.label}>
+            <div className="mb-2 flex items-center gap-2 px-1">
+              <span className="h-px flex-1 bg-[var(--border)]" />
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">{group.label}</h4>
+              <span className="h-px flex-1 bg-[var(--border)]" />
+            </div>
+            <ul className="space-y-2">
+        {group.items.map((item) => {
           const meta = STATUS_META[item.status];
           const next = NEXT_QUICK[item.status];
           const isBusy = busyId === item.id;
@@ -253,7 +265,10 @@ export function OrderItemsControl({
             </li>
           );
         })}
-      </ul>
+            </ul>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }

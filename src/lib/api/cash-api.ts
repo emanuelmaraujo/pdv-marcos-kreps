@@ -181,12 +181,21 @@ export const cashApi = {
     if (user) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, active")
         .eq("id", user.id)
         .maybeSingle();
 
       role = (profile?.role as UserRole | undefined) ?? null;
+
+      if (role !== "ADMIN" || profile?.active !== true) {
+        throw new Error("Acesso restrito ao caixa. Solicite a um administrador.");
+      }
+    } else {
+      throw new Error("Sua sessão expirou. Entre novamente para acessar o caixa.");
     }
+
+    // Esta checagem acontece antes de qualquer consulta a pedidos. Esconder o
+    // item no menu não é uma proteção suficiente para dados financeiros.
 
     // Mesma regra do cash-report: usa paid_at se existir, senão confirmed_at,
     // senão created_at. Garante que caixa e relatório mostrem o mesmo pedido

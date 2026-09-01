@@ -66,7 +66,7 @@ serve(async (req) => {
     // 3. Buscar e validar pedido original
     const { data: order, error: orderErr } = await supabaseAdmin
       .from('orders')
-      .select('id, daily_number, status, payment_status, total_amount, type, customer_name, customer_phone, notes, branch_id, branches ( code, name, printer_config )')
+      .select('id, daily_number, status, payment_status, paid_at, total_amount, type, customer_name, customer_phone, notes, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
@@ -76,6 +76,18 @@ serve(async (req) => {
     const allowedStatuses = ['AGUARDANDO_PAGAMENTO', 'NA_FILA', 'PRONTO_PARCIAL', 'PRONTO', 'ENTREGUE'];
     if (!allowedStatuses.includes(order.status)) {
       throw new Error(`Não é possível adicionar itens a um pedido com status ${order.status}.`);
+    }
+
+    // Uma venda que já foi encerrada pode receber acréscimos apenas durante a
+    // janela operacional de uma hora. Os novos order_items nascem PENDING e o
+    // trigger recalcula o pedido para PARTIAL/PENDING, sem mexer no que já foi
+    // pago nem colocar o novo lote à frente dos demais na produção.
+    if (order.paid_at) {
+      const paidAtMs = Date.parse(order.paid_at);
+      const windowMs = 60 * 60 * 1000;
+      if (!Number.isFinite(paidAtMs) || Date.now() - paidAtMs > windowMs) {
+        throw new Error('Esta comanda já foi encerrada há mais de uma hora. Abra um novo pedido para adicionar itens.');
+      }
     }
 
     // 4. Buscar configurações

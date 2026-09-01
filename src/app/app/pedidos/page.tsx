@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
 import { pdvApi } from "@/lib/api/pdv-api";
+import { menuApi } from "@/lib/api/menu-api";
 import { createClient } from "@/lib/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
@@ -14,6 +15,8 @@ import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
 import { OrderDetailsModal } from "./components/OrderDetailsModal";
+import { PayItemsModal } from "./components/PayItemsModal";
+import { categoryLookup, CategoryLookup } from "./components/order-item-presentation";
 import {
   ClipboardList,
   Clock,
@@ -45,6 +48,10 @@ const OPTIMISTIC_NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type TabStatus =
+  | "AGORA"
+  | "PRODUCAO"
+  | "ENTREGA"
+  | "CONCLUIDOS"
   | "TODOS"
   | "PAGAMENTO_PENDENTE"
   | "AGUARDANDO_CONFIRMACAO"
@@ -67,7 +74,6 @@ interface KanbanColumnConfig {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const ORDERS_FOCUS_MODE_STORAGE_KEY = "pdv:orders-focus-mode";
 const ORDERS_FOCUS_MODE_EVENT = "pdv:orders-focus-mode-change";
 
@@ -215,6 +221,14 @@ function isDeliveredPendingPayment(order: Order) {
   return order.status === "ENTREGUE" && hasPendingPayment(order);
 }
 
+function isReopenedComanda(order: Order) {
+  return Boolean(order.paid_at) && (order.items ?? []).some((item) =>
+    item.status !== "CANCELLED"
+    && !["PAID", "COURTESY"].includes(item.payment_status)
+    && (item.addition_batch_no ?? 1) > 1,
+  );
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function QuickMetric({
@@ -284,7 +298,7 @@ function AvgWaitBadge({ minutes }: { minutes: number | null }) {
 // ─── Kanban Column ────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  config, orders, now, onCardClick, onQuickAction, onMarkDelivered, searchQuery, isLoading,
+  config, orders, now, onCardClick, onQuickAction, onMarkDelivered, onPay, categoryLookup, searchQuery, isLoading,
 }: {
   config: KanbanColumnConfig;
   orders: Order[];
@@ -292,6 +306,8 @@ function KanbanColumn({
   onCardClick: (order: Order) => void;
   onQuickAction: (order: Order) => Promise<void>;
   onMarkDelivered: (order: Order) => Promise<void>;
+  onPay: (order: Order) => void;
+  categoryLookup: CategoryLookup;
   searchQuery: string;
   isLoading?: boolean;
 }) {
@@ -300,7 +316,7 @@ function KanbanColumn({
       const q = searchQuery.toLowerCase().trim();
       return !q || String(o.daily_number).includes(q) || o.customer_name?.toLowerCase().includes(q);
     })
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    .sort((a, b) => Number(isReopenedComanda(a)) - Number(isReopenedComanda(b)) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   const avgWait = config.showAvgWait ? getAvgWaitMinutes(filtered, now) : null;
 
@@ -345,7 +361,9 @@ function KanbanColumn({
               now={now}
               onClick={onCardClick}
               onQuickAction={config.status === "ENTREGUE" || config.status === "CANCELADO" ? undefined : onQuickAction}
-              onMarkDelivered={config.status === "NA_FILA" ? onMarkDelivered : undefined}
+              onMarkDelivered={onMarkDelivered}
+              onPay={onPay}
+              categoryLookup={categoryLookup}
             />
           ))
         )}
@@ -360,12 +378,14 @@ export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<TabStatus>("NA_FILA");
+  const [activeTab, setActiveTab] = useState<TabStatus>("AGORA");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [showCancelled, setShowCancelled] = useState(false);
   const [showOperationalSummary, setShowOperationalSummary] = useState(false);
+  const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
+  const [orderCategories, setOrderCategories] = useState<CategoryLookup>({});
   const isFocusMode = useSyncExternalStore(subscribeFocusMode, getFocusModeSnapshot, () => false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const isMdPlus = useSyncExternalStore(subscribeMdPlus, getMdPlusSnapshot, () => false);
@@ -377,6 +397,14 @@ export default function PedidosPage() {
 
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
+
+  useEffect(() => {
+    let active = true;
+    menuApi.getMenuData(currentBranch?.id ?? null)
+      .then((menu) => { if (active) setOrderCategories(categoryLookup(menu.categories)); })
+      .catch(() => { if (active) setOrderCategories({}); });
+    return () => { active = false; };
+  }, [currentBranch?.id]);
 
   const toggleFocusMode = useCallback(() => {
     const next = !getFocusModeSnapshot();
@@ -524,14 +552,16 @@ export default function PedidosPage() {
     }
   }, [fetchOrders, addToast]);
 
-  // Atalho da fila: pula PRONTO e marca ENTREGUE direto (balcão/viagem servidos na hora).
+  // Atendimento imediato (balcão/viagem): não exige uma passagem artificial
+  // por PRONTO. É uma operação diferente da entrega por motoboy, que sempre
+  // segue por despacho e confirmação de rota.
   const handleMarkDelivered = useCallback(async (order: Order): Promise<void> => {
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: "ENTREGUE" } : o)));
+    setOrders((prev) => prev.map((current) => current.id === order.id ? { ...current, status: "ENTREGUE" } : current));
     try {
       await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
       await fetchOrders({ showLoading: false });
     } catch (err) {
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: order.status } : o)));
+      setOrders((prev) => prev.map((current) => current.id === order.id ? { ...current, status: order.status } : current));
       addToast("error", getFriendlyErrorMessage(err, "Não conseguimos marcar o pedido como entregue. Tente novamente."));
     }
   }, [fetchOrders, addToast]);
@@ -541,19 +571,36 @@ export default function PedidosPage() {
   const queueCount       = getCount("NA_FILA");
   const readyCount       = getCount("PRONTO");
   const waitingCount     = getCount("AGUARDANDO_CONFIRMACAO");
-  const deliveredPendingCount = orders.filter(isDeliveredPendingPayment).length;
   const pendingPayCount  = orders.filter((o) =>
     hasPendingPayment(o) && !["CANCELADO", "EXPIRADO"].includes(o.status)
   ).length;
-  const receivedTotal    = orders
-    .filter((o) => o.payment_status === "PAID" || o.payment_status === "COURTESY")
-    .reduce((sum, o) => sum + o.total_amount, 0);
+  const actionPriority = (order: Order) => {
+    // Acréscimos pagos depois não devem saltar à frente do fluxo que já está
+    // em andamento. Continuam visíveis na esteira, porém depois dos pedidos
+    // originais que pedem uma ação imediata.
+    if (isReopenedComanda(order)) return 5;
+    if (hasPendingPayment(order)) return 0;
+    if (order.status === "PRONTO" || order.status === "PRONTO_PARCIAL") return 1;
+    if (order.status === "SAIU_PARA_ENTREGA") return 2;
+    if (order.status === "AGUARDANDO_CONFIRMACAO") return 3;
+    if (order.status === "NA_FILA") return 4;
+    return 9;
+  };
 
-  // Mobile/tablet filtered + sorted orders
+  // A fila inicial é orientada pela próxima responsabilidade, não por um
+  // status técnico. Assim pagamentos que precisam ser fechados não somem.
   const filteredOrders = orders
     .filter((order) => {
       const q = searchQuery.toLowerCase().trim();
-      const matchesTab = activeTab === "TODOS" ||
+      const matchesTab = activeTab === "AGORA"
+        ? !["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(order.status)
+        : activeTab === "PRODUCAO"
+        ? ["AGUARDANDO_CONFIRMACAO", "NA_FILA", "PRONTO_PARCIAL"].includes(order.status)
+        : activeTab === "ENTREGA"
+        ? order.type === "ENTREGA" && ["PRONTO", "SAIU_PARA_ENTREGA"].includes(order.status)
+        : activeTab === "CONCLUIDOS"
+        ? ["ENTREGUE", "CANCELADO"].includes(order.status)
+        : activeTab === "TODOS" ||
         (activeTab === "PAGAMENTO_PENDENTE"
           ? hasPendingPayment(order) && !["CANCELADO", "EXPIRADO"].includes(order.status)
           : activeTab === "ENTREGUE_PENDENTE"
@@ -566,6 +613,10 @@ export default function PedidosPage() {
       return matchesTab && matchesSearch;
     })
     .sort((a, b) => {
+      if (activeTab === "AGORA") {
+        const priority = actionPriority(a) - actionPriority(b);
+        if (priority !== 0) return priority;
+      }
       if (activeTab !== "TODOS") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       if (isDeliveredPendingPayment(a) !== isDeliveredPendingPayment(b)) {
         return isDeliveredPendingPayment(a) ? -1 : 1;
@@ -575,17 +626,12 @@ export default function PedidosPage() {
     });
 
   const partialCount = getCount("PRONTO_PARCIAL");
-  const dispatchedCount = getCount("SAIU_PARA_ENTREGA");
   const tabs: { id: TabStatus; label: string; count?: number }[] = [
-    { id: "PAGAMENTO_PENDENTE",    label: "Ag. pagto",  count: pendingPayCount },
-    { id: "NA_FILA",               label: "Na fila",    count: queueCount },
-    { id: "PRONTO_PARCIAL",        label: "Parciais",   count: partialCount },
-    { id: "PRONTO",                label: "Prontos",    count: readyCount },
-    { id: "SAIU_PARA_ENTREGA",     label: "Em entrega", count: dispatchedCount },
-    { id: "ENTREGUE_PENDENTE",     label: "Pend. pagto", count: deliveredPendingCount },
-    { id: "AGUARDANDO_CONFIRMACAO",label: "Aguardando", count: waitingCount },
-    { id: "ENTREGUE",              label: "Entregues",  count: orders.filter((o) => o.status === "ENTREGUE" && !isDeliveredPendingPayment(o)).length },
-    { id: "CANCELADO",             label: "Cancelados", count: getCount("CANCELADO") },
+    { id: "AGORA", label: "Agora", count: orders.filter((order) => !["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(order.status)).length },
+    { id: "TODOS", label: "Todos", count: orders.length },
+    { id: "PRODUCAO", label: "Produção", count: queueCount + waitingCount + partialCount },
+    { id: "ENTREGA", label: "Entrega", count: orders.filter((order) => order.type === "ENTREGA" && ["PRONTO", "SAIU_PARA_ENTREGA"].includes(order.status)).length },
+    { id: "CONCLUIDOS", label: "Concluídos", count: orders.filter((order) => ["ENTREGUE", "CANCELADO"].includes(order.status)).length },
   ];
 
   const kanbanColumns = showCancelled
@@ -606,7 +652,7 @@ export default function PedidosPage() {
     {
       key: "PAGAMENTO_PENDENTE",
       config: PAYMENT_PENDING_COLUMN,
-      orders: orders.filter((o) => hasPendingPayment(o) && !["CANCELADO", "EXPIRADO"].includes(o.status)),
+      orders: orders.filter((o) => hasPendingPayment(o) && !isReopenedComanda(o) && !["CANCELADO", "EXPIRADO"].includes(o.status)),
     },
     ...desktopSections,
   ];
@@ -671,10 +717,10 @@ export default function PedidosPage() {
           id="orders-operational-summary"
           className={`${!isFocusMode || showOperationalSummary ? "grid lg:flex" : "hidden"} basis-full grid-cols-2 gap-2 lg:mt-0 lg:basis-auto lg:items-center lg:gap-2 lg:overflow-visible`}
         >
-            <QuickMetric icon={ShoppingBag} label="Hoje"     value={orders.length}              detail="pedidos" />
-            <QuickMetric icon={Clock}       label="Fila"     value={queueCount + waitingCount}  detail="em preparo" tone="brand" />
+            <QuickMetric icon={CreditCard}  label="A receber" value={pendingPayCount}            detail="pendentes" tone="brand" />
+            <QuickMetric icon={Clock}       label="Produção"  value={queueCount + waitingCount}  detail="em preparo" tone="info" />
             <QuickMetric icon={PackageCheck}label="Prontos"  value={readyCount}                 detail="retirada"   tone="success" />
-            <QuickMetric icon={CreditCard}  label="Recebido" value={currency.format(receivedTotal)} detail={`${pendingPayCount} pend.`} tone="info" />
+            <QuickMetric icon={ShoppingBag} label="Hoje"     value={orders.length}              detail="pedidos" />
 
             {/* Live badge */}
             <div className="hidden lg:flex items-center gap-1.5 rounded-xl bg-[var(--status-success-bg)] px-3 h-11">
@@ -691,7 +737,6 @@ export default function PedidosPage() {
             aria-label="Filtrar pedidos por status"
             className="flex gap-1.5 overflow-x-auto rounded-full bg-[var(--bg-subtle)] p-1 pr-7 hide-scrollbar"
           >
-            <OrderTab active={activeTab === "TODOS"} label="Todos" count={orders.length} onClick={() => setActiveTab("TODOS")} />
             {tabs.map((tab) => (
               <OrderTab key={tab.id} active={activeTab === tab.id} label={tab.label} count={tab.count} onClick={() => setActiveTab(tab.id)} />
             ))}
@@ -734,6 +779,8 @@ export default function PedidosPage() {
             onCardClick={setSelectedOrder}
             onQuickAction={handleQuickAction}
             onMarkDelivered={handleMarkDelivered}
+            onPay={setPaymentOrder}
+            categoryLookup={orderCategories}
             searchQuery={searchQuery}
             isLoading={isLoading}
           />
@@ -773,6 +820,8 @@ export default function PedidosPage() {
                 onClick={setSelectedOrder}
                 onQuickAction={handleQuickAction}
                 onMarkDelivered={handleMarkDelivered}
+                onPay={setPaymentOrder}
+                categoryLookup={orderCategories}
               />
             ))}
           </div>
@@ -787,6 +836,7 @@ export default function PedidosPage() {
           isOpen={!!selectedOrder}
           onClose={handleCloseModal}
           onOrderUpdated={() => fetchOrders({ showLoading: false, syncSelectedOrder: true })}
+          categoryLookup={orderCategories}
         />
       )}
 
@@ -798,6 +848,15 @@ export default function PedidosPage() {
           isOpen={!!selectedOrder}
           onClose={handleCloseModal}
           onOrderUpdated={() => fetchOrders({ showLoading: false, syncSelectedOrder: true })}
+          categoryLookup={orderCategories}
+        />
+      )}
+      {paymentOrder && (
+        <PayItemsModal
+          order={paymentOrder}
+          onClose={() => setPaymentOrder(null)}
+          onPaymentRegistered={() => fetchOrders({ showLoading: false })}
+          onPaid={() => { setPaymentOrder(null); fetchOrders({ showLoading: false }); }}
         />
       )}
     </div>

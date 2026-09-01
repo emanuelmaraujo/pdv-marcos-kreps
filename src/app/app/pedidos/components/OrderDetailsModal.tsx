@@ -8,11 +8,15 @@ import { OrderStatusBadge } from "./OrderStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
 import { PayItemsModal } from "./PayItemsModal";
 import { EditOrderItemSheet } from "./EditOrderItemSheet";
+import { OrderFulfillmentSummary } from "./OrderFulfillmentSummary";
+import { CategoryLookup } from "./order-item-presentation";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { useRouter } from "next/navigation";
 import {
   formatDuration,
   formatOrderTime as fmt,
+  additionWindowRemainingMinutes,
+  isOrderOpenForAdditions,
   minutesBetween,
   ORDER_DETAILS_PAYMENT_LABELS as PAYMENT_LABEL,
   ORDER_DETAILS_PAYMENT_METHODS as PAYMENT_METHODS,
@@ -66,9 +70,10 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onOrderUpdated: () => void | Promise<void>;
+  categoryLookup?: CategoryLookup;
 }
 
-export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Props) {
+export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated, categoryLookup = {} }: Props) {
   const router = useRouter();
   const [showHistory, setShowHistory] = useState(false);
   const {
@@ -116,7 +121,8 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   const subtotal     = order.total_amount + order.discount_amount - order.packing_fee - Number(order.delivery_fee ?? 0);
   const isAppAwaitingPayment = order.source === "APP" && order.status === "AGUARDANDO_PAGAMENTO";
   const isPaid       = order.payment_status === "PAID" || order.payment_status === "COURTESY";
-  const canAddItems = !isCANCELADO && !["EXPIRADO", "AGUARDANDO_CONFIRMACAO", "SAIU_PARA_ENTREGA"].includes(order.status) && !isAppAwaitingPayment;
+  const canAddItems = !isAppAwaitingPayment && isOrderOpenForAdditions(order);
+  const additionMinutesLeft = additionWindowRemainingMinutes(order);
 
   const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
   const elapsedMin = isENTREGUE && order.delivered_at && queueEnteredAt
@@ -282,12 +288,14 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
           {/* LEFT — items + financial + history */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4 lg:border-r border-[var(--border)]">
 
+            <OrderFulfillmentSummary order={order} />
+
             {/* Items + controles por item */}
             <div className="space-y-3">
               <p className="mb-2 px-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
                 Itens do Pedido
               </p>
-              <OrderItemsControl order={order} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
+              <OrderItemsControl order={order} categoryLookup={categoryLookup} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
 
               {/* Financial summary */}
               <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
@@ -409,13 +417,24 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </Button>
                 )}
                 {order.status === "NA_FILA" && (
-                  <Button
-                    className="h-14 w-full rounded-2xl bg-brand-amber text-base font-black text-brand-charcoal shadow-lg shadow-brand-amber/20 hover:bg-brand-amber/90 gap-2"
-                    onClick={onReady}
-                    disabled={isLoading}
-                  >
-                    <Package size={18} /> MARCAR PRONTO
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      className="h-14 flex-1 rounded-2xl bg-brand-amber text-sm font-black text-brand-charcoal shadow-lg shadow-brand-amber/20 hover:bg-brand-amber/90 gap-1.5"
+                      onClick={onReady}
+                      disabled={isLoading}
+                    >
+                      <Package size={17} /> MARCAR PRONTO
+                    </Button>
+                    {!isDelivery && (
+                      <Button
+                        className="h-14 rounded-2xl bg-emerald-500 px-2.5 text-[10px] font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-1"
+                        onClick={onDeliver}
+                        disabled={isLoading}
+                      >
+                        <CheckCircle2 size={15} /> ENTREGUE AGORA
+                      </Button>
+                    )}
+                  </div>
                 )}
                 {order.status === "PRONTO" && !isDelivery && (
                   <div className="flex gap-2">
@@ -549,7 +568,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                     onClick={() => router.push(`/app/novo-pedido?add_to=${order.id}`)}
                     disabled={isLoading}
                   >
-                    <PlusCircle size={15} /> ADICIONAR À COMANDA
+                    <PlusCircle size={15} /> {order.paid_at ? `ADICIONAR À COMANDA · ${additionMinutesLeft} MIN` : "ADICIONAR À COMANDA"}
                   </Button>
                 )}
 

@@ -142,7 +142,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successData, setSuccessData] = useState<{ daily_number: number; total_amount: number; ifood_charged_amount?: number | null; order_type?: "BALCAO" | "VIAGEM" | "ENTREGA" } | null>(null);
+  const [successData, setSuccessData] = useState<{ order_id: string; daily_number: number; total_amount: number; ifood_charged_amount?: number | null; order_type?: "BALCAO" | "VIAGEM" | "ENTREGA" } | null>(null);
   const [customAmountStr, setCustomAmountStr] = useState("");
   const [ifoodAmountStr, setIfoodAmountStr] = useState("");
 
@@ -468,6 +468,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
         }
 
         setSuccessData({
+          order_id: response.order.order_id,
           daily_number: response.order.daily_number,
           total_amount: response.order.total_amount,
           ifood_charged_amount: response.order.ifood_charged_amount,
@@ -535,6 +536,17 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
           <Button onClick={handleClose} className="w-full h-14 text-lg font-black">
             Novo Pedido
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              finishClose();
+              router.push(`/app/novo-pedido?add_to=${successData.order_id}`);
+            }}
+            className="w-full h-12 rounded-2xl border-2 font-black text-sm"
+          >
+            Adicionar à mesma comanda
+          </Button>
+          <p className="-mt-2 text-xs font-semibold text-[var(--text-muted)]">Após o pagamento, a comanda fica aberta por 1 hora para acréscimos.</p>
         </div>
       </BottomSheet>
     );
@@ -1236,11 +1248,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
         }}
         onClose={() => {
           setSplitOrder(null);
-          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | "ENTREGA" | undefined) ?? orderType });
+          setSuccessData({ order_id: splitOrder.id, daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | "ENTREGA" | undefined) ?? orderType });
         }}
         onPaid={() => {
           setSplitOrder(null);
-          setSuccessData({ daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | "ENTREGA" | undefined) ?? orderType });
+          setSuccessData({ order_id: splitOrder.id, daily_number: splitOrder.daily_number, total_amount: splitOrder.total_amount, order_type: (splitOrder.type as "BALCAO" | "VIAGEM" | "ENTREGA" | undefined) ?? orderType });
         }}
       />
     )}

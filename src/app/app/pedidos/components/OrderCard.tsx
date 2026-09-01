@@ -1,368 +1,69 @@
 import { useState } from "react";
 import { Order, OrderItem, OrderItemStatus } from "@/types/pdv";
-import { Clock, ShoppingBag, User, Utensils, Package, CheckCircle2, Loader2, Bike } from "lucide-react";
+import { Bike, CheckCircle2, Clock, CreditCard, Loader2, Package, ShoppingBag, Utensils } from "lucide-react";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
-
-// Cor de cada estado de item — usada nos chips de progresso embaixo do card.
-const ITEM_DOT: Record<OrderItemStatus, string> = {
-  PENDING:        "bg-[var(--text-muted)]/40",
-  IN_PREPARATION: "bg-[var(--status-warning)]",
-  READY:          "bg-[var(--status-success)]",
-  DELIVERED:      "bg-[var(--status-success)] opacity-60",
-  CANCELLED:      "bg-[var(--bg-subtle)] ring-1 ring-[var(--border)]",
-};
-
-function ItemProgress({ items, branchCode, dailyNumber }: {
-  items: OrderItem[];
-  branchCode?: string;
-  dailyNumber: number;
-}) {
-  const active = items.filter((i) => i.status !== "CANCELLED");
-  if (active.length < 2) return null; // único item: chips não agregam valor
-
-  const doneCount = active.filter((i) => i.status === "READY" || i.status === "DELIVERED").length;
-  const orderLabel = branchCode ? `${branchCode}-${String(dailyNumber).padStart(3, "0")}` : String(dailyNumber);
-
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5">
-      <span className="text-[11px] font-semibold text-[var(--text-secondary)]">
-        {doneCount}/{active.length} prontos
-      </span>
-      <div className="flex flex-1 flex-wrap items-center gap-1">
-        {items.map((i) => (
-          <span
-            key={i.id}
-            title={`${orderLabel}-${i.sequence_no ?? "?"} · ${i.product_name_snapshot} · ${i.status}`}
-            className={`h-2.5 w-2.5 rounded-full ${ITEM_DOT[i.status]}`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface Props {
-  order: Order;
-  onClick: (order: Order) => void;
-  now: number;
-  onQuickAction?: (order: Order) => Promise<void>;
-  /** Marca o pedido como entregue direto da fila, pulando o estado PRONTO
-   * (útil pra balcão/viagem servidos na hora). Não se aplica a ENTREGA. */
-  onMarkDelivered?: (order: Order) => Promise<void>;
-}
+import { CategoryLookup, groupOrderItems } from "./order-item-presentation";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const ITEM_DOT: Record<OrderItemStatus, string> = { PENDING: "bg-[var(--text-muted)]/40", IN_PREPARATION: "bg-[var(--status-warning)]", READY: "bg-[var(--status-success)]", DELIVERED: "bg-[var(--status-success)] opacity-60", CANCELLED: "bg-[var(--bg-subtle)] ring-1 ring-[var(--border)]" };
+const ACTIVE_STATUSES: Order["status"][] = ["NA_FILA", "AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "PRONTO_PARCIAL", "PRONTO", "SAIU_PARA_ENTREGA"];
+const ACCENT: Record<Order["status"], string> = { AGUARDANDO_CONFIRMACAO: "bg-[var(--status-warning)]", AGUARDANDO_PAGAMENTO: "bg-[var(--status-warning)]", NA_FILA: "bg-[var(--status-info)]", PRONTO_PARCIAL: "bg-[var(--status-warning)]", PRONTO: "bg-[var(--status-success)]", SAIU_PARA_ENTREGA: "bg-blue-500", ENTREGUE: "bg-[var(--status-neutral)]", CANCELADO: "bg-[var(--status-danger)]", EXPIRADO: "bg-[var(--status-neutral)]" };
 
-/**
- * Badge prominente de tipo de pedido.
- * VIAGEM é destacado em laranja (warning) com texto "VIAGEM" — não dá pra perder.
- * BALCÃO fica em cinza neutro com texto "BALCÃO".
- */
 function OrderTypeBadge({ type }: { type: Order["type"] }) {
-  const isViagem = type === "VIAGEM";
-  const isEntrega = type === "ENTREGA";
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-        isEntrega
-          ? "bg-blue-500/10 text-blue-600 ring-1 ring-blue-500/30"
-          : isViagem
-          ? "bg-[var(--status-warning-bg)] text-[var(--status-warning)] ring-1 ring-[var(--status-warning)]/30"
-          : "bg-[var(--bg-subtle)] text-[var(--text-secondary)] ring-1 ring-[var(--border)]"
-      }`}
-      title={isEntrega ? "Pedido para entrega" : isViagem ? "Pedido para viagem" : "Pedido para o balcão"}
-    >
-      {isEntrega
-        ? <Bike className="h-2.5 w-2.5" strokeWidth={2.25} />
-        : isViagem
-        ? <ShoppingBag className="h-2.5 w-2.5" strokeWidth={2.25} />
-        : <Utensils className="h-2.5 w-2.5" strokeWidth={2.25} />}
-      {isEntrega ? "Entrega" : isViagem ? "Viagem" : "Balcão"}
-    </span>
-  );
+  const config = type === "ENTREGA" ? { label: "Entrega", Icon: Bike, className: "bg-blue-500/10 text-blue-600 ring-blue-500/25" } : type === "VIAGEM" ? { label: "Viagem", Icon: ShoppingBag, className: "bg-[var(--status-warning-bg)] text-[var(--status-warning)] ring-[var(--status-warning)]/25" } : { label: "Balcão", Icon: Utensils, className: "bg-[var(--bg-subtle)] text-[var(--text-secondary)] ring-[var(--border)]" };
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ring-1 ${config.className}`}><config.Icon className="h-2.5 w-2.5" />{config.label}</span>;
 }
 
 function ElapsedTimer({ since, now }: { since: string; now: number }) {
-  const elapsed = Math.floor((now - new Date(since).getTime()) / 1000 / 60);
-  const colorClass =
-    elapsed < 10  ? "bg-[var(--status-success-bg)] text-[var(--status-success)]"
-    : elapsed < 20 ? "bg-[var(--status-warning-bg)] text-[var(--status-warning)]"
-    : "bg-[var(--status-danger-bg)] text-[var(--status-danger)]";
-  const display = elapsed < 60 ? `${elapsed}min` : `${Math.floor(elapsed / 60)}h${elapsed % 60}m`;
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${colorClass}`}>
-      <Clock className="h-2.5 w-2.5" />
-      {display}
-    </span>
-  );
+  const minutes = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000));
+  const color = minutes >= 20 ? "bg-[var(--status-danger-bg)] text-[var(--status-danger)]" : minutes >= 10 ? "bg-[var(--status-warning-bg)] text-[var(--status-warning)]" : "bg-[var(--status-success-bg)] text-[var(--status-success)]";
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${color}`}><Clock className="h-2.5 w-2.5" />{minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)}h${minutes % 60}m`}</span>;
 }
 
-const ACCENT: Record<Order["status"], string> = {
-  AGUARDANDO_CONFIRMACAO: "bg-[var(--status-warning)]",
-  AGUARDANDO_PAGAMENTO:   "bg-[var(--status-warning)]",
-  NA_FILA:                "bg-[var(--status-info)]",
-  PRONTO_PARCIAL:         "bg-[var(--status-warning)]",
-  PRONTO:                 "bg-[var(--status-success)]",
-  SAIU_PARA_ENTREGA:      "bg-blue-500",
-  ENTREGUE:               "bg-[var(--status-neutral)]",
-  CANCELADO:              "bg-[var(--status-danger)]",
-  EXPIRADO:               "bg-[var(--status-neutral)]",
-};
+function ItemPreview({ items, categories }: { items: OrderItem[]; categories: CategoryLookup }) {
+  const visible = groupOrderItems(items, categories).flatMap((group) => group.items.map((item) => ({ group: group.label, item }))).slice(0, 4);
+  const hiddenCount = Math.max(0, items.filter((item) => item.status !== "CANCELLED").length - visible.length);
+  return <div className="space-y-1.5">{visible.map(({ group, item }, index) => {
+    const showGroup = index === 0 || group !== visible[index - 1].group;
+    const addons = item.addons ?? [];
+    return <div key={item.id} className="min-w-0">
+      {showGroup && <p className="mb-0.5 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">{group}</p>}
+      <p className="truncate text-xs font-semibold leading-snug text-[var(--text-primary)]"><span className="mr-1.5 inline-flex min-w-5 justify-center rounded bg-[var(--bg-subtle)] px-1 text-[9px] font-black text-[var(--text-secondary)]">{item.quantity}×</span>{item.product_name_snapshot}</p>
+      {addons.length > 0 && <p className="truncate pl-7 text-[11px] font-medium text-[var(--status-success)]">+ {addons.map((addon) => `${addon.quantity > 1 ? `${addon.quantity}× ` : ""}${addon.addon_name_snapshot}`).join(", ")}</p>}
+      {item.removed_ingredients && item.removed_ingredients.length > 0 && <p className="truncate pl-7 text-[11px] font-medium text-[var(--status-danger)]">Sem {item.removed_ingredients.map((ingredient) => ingredient.ingredient_name_snapshot).join(", ")}</p>}
+    </div>;
+  })}{hiddenCount > 0 && <p className="pl-0.5 text-[11px] font-semibold text-[var(--text-muted)]">+{hiddenCount} item{hiddenCount > 1 ? "s" : ""} no pedido</p>}</div>;
+}
 
-const ACTIVE_STATUSES: Order["status"][] = [
-  "NA_FILA", "AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "PRONTO_PARCIAL", "PRONTO", "SAIU_PARA_ENTREGA",
-];
+interface Props { order: Order; onClick: (order: Order) => void; now: number; categoryLookup?: CategoryLookup; onQuickAction?: (order: Order) => Promise<void>; onMarkDelivered?: (order: Order) => Promise<void>; onPay?: (order: Order) => void; }
 
-export function OrderCard({ order, onClick, now, onQuickAction, onMarkDelivered }: Props) {
-  const [quickLoading, setQuickLoading] = useState(false);
-  const [deliverLoading, setDeliverLoading] = useState(false);
+export function OrderCard({ order, onClick, now, categoryLookup = {}, onQuickAction, onMarkDelivered, onPay }: Props) {
+  const [loading, setLoading] = useState(false);
+  const active = ACTIVE_STATUSES.includes(order.status);
+  const pendingPayment = order.payment_status === "PENDING" || order.payment_status === "PARTIAL" || (order.items ?? []).some((item) => item.status !== "CANCELLED" && !["PAID", "COURTESY"].includes(item.payment_status));
+  const pendingAmount = (order.items ?? []).filter((item) => item.status !== "CANCELLED" && !["PAID", "COURTESY"].includes(item.payment_status)).reduce((sum, item) => sum + Number(item.total_price ?? 0), 0) + (!order.paid_at ? Number(order.packing_fee ?? 0) + Number(order.delivery_fee ?? 0) : 0);
+  const reopenedComanda = Boolean(order.paid_at) && (order.items ?? []).some((item) => item.status !== "CANCELLED" && !["PAID", "COURTESY"].includes(item.payment_status) && (item.addition_batch_no ?? 1) > 1);
+  const since = order.queue_entered_at ?? order.confirmed_at;
+  const elapsed = since ? Math.floor((now - new Date(since).getTime()) / 60_000) : 0;
+  const urgent = active && elapsed >= 20;
+  const activeItems = (order.items ?? []).filter((item) => item.status !== "CANCELLED");
+  const readyItems = activeItems.filter((item) => ["READY", "DELIVERED"].includes(item.status)).length;
+  const nextAction = pendingPayment && onPay ? { label: `${reopenedComanda ? "Receber adicional" : "Receber"} ${currency.format(pendingAmount || order.total_amount)}`, Icon: CreditCard, color: "bg-brand-red text-white hover:bg-brand-red/90", run: () => onPay(order) } : order.status === "AGUARDANDO_CONFIRMACAO" ? { label: "Confirmar pedido", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90", run: () => onQuickAction?.(order) } : order.status === "NA_FILA" ? { label: "Marcar pronto", Icon: Package, color: "bg-brand-amber text-brand-charcoal hover:bg-brand-amber/90", run: () => onQuickAction?.(order) } : order.status === "PRONTO_PARCIAL" ? { label: "Ver itens prontos", Icon: Package, color: "bg-[var(--status-warning)] text-white hover:opacity-90", run: () => onClick(order) } : order.status === "PRONTO" && order.type === "ENTREGA" ? { label: "Despachar entrega", Icon: Bike, color: "bg-blue-500 text-white hover:bg-blue-600", run: () => onClick(order) } : order.status === "PRONTO" ? { label: "Confirmar entrega", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90", run: () => onQuickAction?.(order) } : order.status === "SAIU_PARA_ENTREGA" ? { label: "Confirmar entrega", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90", run: () => onQuickAction?.(order) } : null;
+  const canDeliverImmediately = order.status === "NA_FILA" && order.type !== "ENTREGA" && Boolean(onMarkDelivered);
+  const triggerAction = async (event: React.MouseEvent) => { event.stopPropagation(); if (!nextAction || loading) return; setLoading(true); try { await nextAction.run(); } finally { setLoading(false); } };
+  const triggerImmediateDelivery = async (event: React.MouseEvent) => { event.stopPropagation(); if (!onMarkDelivered || loading) return; setLoading(true); try { await onMarkDelivered(order); } finally { setLoading(false); } };
 
-  const isPendingPayment = order.payment_status === "PENDING" || order.payment_status === "PARTIAL";
-  const time = new Date(order.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  const itemCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-  const firstItems = order.items?.slice(0, 3) ?? [];
-  const extraItems = Math.max((order.items?.length ?? 0) - 3, 0);
-  const isActive = ACTIVE_STATUSES.includes(order.status);
-  const latestTransaction = order.transactions
-    ?.slice()
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-
-  // Ponto de partida: quando entrou na fila. Usado como base de tempo em TODOS os estados.
-  const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
-
-  // Timer ao vivo — só para pedidos ativos, contando desde a entrada na fila
-  const activeElapsedMin = isActive && queueEnteredAt
-    ? Math.floor((now - new Date(queueEnteredAt).getTime()) / 1000 / 60)
-    : null;
-
-  // Tempo estático para pedidos entregues: da fila até a entrega
-  const deliveredElapsedMin = order.status === "ENTREGUE" && order.delivered_at && queueEnteredAt
-    ? Math.round((new Date(order.delivered_at).getTime() - new Date(queueEnteredAt).getTime()) / 60000)
-    : null;
-
-  const elapsed = activeElapsedMin ?? 0;
-  const isUrgent  = isActive && elapsed >= 20;
-  const isWarning = isActive && elapsed >= 10 && elapsed < 20;
-  // Banner/borda de pagamento pendente para pedidos ativos E para entregues não pagos
-  const showPendingPayBanner = isPendingPayment && order.status !== "CANCELADO" && order.status !== "EXPIRADO";
-
-  // Pedidos de ENTREGA em PRONTO não têm ação rápida: despachar exige escolher/confirmar
-  // o entregador no OrderDetailsSheet, não cabe num toque só no card.
-  const quickActionConfig =
-    order.status === "AGUARDANDO_CONFIRMACAO"
-      ? { label: "Confirmar",       Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90" }
-      : order.status === "NA_FILA"
-      ? { label: "Pronto",          Icon: Package,      color: "bg-[var(--status-warning)] text-white hover:opacity-90" }
-      : order.status === "PRONTO_PARCIAL"
-      ? { label: "Entregar prontos", Icon: Package,      color: "bg-[var(--status-warning)] text-white hover:opacity-90" }
-      : order.status === "PRONTO" && order.type !== "ENTREGA"
-      ? { label: "Entregar",        Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90" }
-      : order.status === "SAIU_PARA_ENTREGA"
-      ? { label: "Confirmar entrega", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90" }
-      : null;
-
-  const handleQuickClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!onQuickAction || quickLoading) return;
-    setQuickLoading(true);
-    try {
-      await onQuickAction(order);
-    } finally {
-      setQuickLoading(false);
-    }
-  };
-
-  // Botão extra só na fila (NA_FILA) pra balcão/viagem servidos na hora —
-  // pula o estado PRONTO e vai direto pra ENTREGUE. ENTREGA sempre passa
-  // por despacho, então não ganha esse atalho.
-  const canDeliverFromQueue = !!onMarkDelivered && order.status === "NA_FILA" && order.type !== "ENTREGA";
-
-  const handleDeliverClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!onMarkDelivered || deliverLoading) return;
-    setDeliverLoading(true);
-    try {
-      await onMarkDelivered(order);
-    } finally {
-      setDeliverLoading(false);
-    }
-  };
-
-  const borderClass = isUrgent
-    ? "border-[var(--status-danger)]/40 ring-2 ring-[var(--status-danger)]/20"
-    : isWarning
-    ? "border-[var(--status-warning)]/40 ring-1 ring-[var(--status-warning)]/20"
-    : showPendingPayBanner
-    ? "border-[var(--status-warning)]/30 ring-1 ring-[var(--status-warning)]/10"
-    : "border-[var(--border)]";
-
-  return (
-    <div
-      className={`group relative cursor-pointer overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] active:scale-[0.98] ${borderClass} ${quickLoading || deliverLoading ? "opacity-60 pointer-events-none" : ""}`}
-      onClick={() => !quickLoading && !deliverLoading && onClick(order)}
-    >
-      {/* Status accent bar */}
-      <div className={`h-1 ${ACCENT[order.status]}`} />
-
-      {/* Urgent pulse overlay */}
-      {isUrgent && (
-        <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-[var(--status-danger)]/20 animate-pulse" />
-      )}
-
-      <div className="p-3.5 space-y-2.5">
-        {/* Row 1: number + time + type + timer + payment badge */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 min-w-[2.5rem] shrink-0 flex-col items-center justify-center rounded-xl bg-brand-charcoal px-1 text-white shadow-[var(--shadow-sm)]">
-              {order.branch?.code && (
-                <span className="text-[8px] font-semibold leading-none text-[var(--text-muted)]">{order.branch.code}</span>
-              )}
-              <span className={`font-bold leading-none ${String(order.daily_number).length > 2 ? "text-sm" : "text-base"}`}>
-                {String(order.daily_number).padStart(2, "0")}
-              </span>
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-[var(--text-muted)]">
-                <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
-                <span className="text-[11px] font-medium tabular-nums">{time}</span>
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-1">
-                <OrderTypeBadge type={order.type} />
-                <OrderStatusBadge status={order.status} />
-                {activeElapsedMin !== null && <ElapsedTimer since={queueEnteredAt!} now={now} />}
-                {deliveredElapsedMin !== null && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--status-neutral-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
-                    <Clock className="h-2.5 w-2.5" />
-                    {deliveredElapsedMin < 60
-                      ? `${deliveredElapsedMin}min`
-                      : `${Math.floor(deliveredElapsedMin / 60)}h${deliveredElapsedMin % 60}m`}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <PaymentStatusBadge status={order.payment_status} />
-        </div>
-
-        {/* Row 2: customer name + item count */}
-        <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-1.5">
-          <User className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" strokeWidth={1.75} />
-          <span className={`flex-1 truncate text-sm font-semibold ${order.customer_name ? "text-[var(--text-primary)]" : "italic text-[var(--text-muted)]"}`}>
-            {order.customer_name || "Cliente final"}
-            {order.customer_phone && (
-              <span className="ml-1 text-xs font-medium text-[var(--text-muted)]">
-                {order.customer_phone}
-              </span>
-            )}
-          </span>
-          {itemCount > 0 && (
-            <span className="ml-auto shrink-0 rounded-full bg-[var(--border)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
-              {itemCount}×
-            </span>
-          )}
-        </div>
-
-        {/* Row 3: payment pending banner */}
-        {order.status === "AGUARDANDO_PAGAMENTO" && (
-          <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-[11px] font-semibold text-[var(--status-warning)]">
-            <span>
-              {latestTransaction?.internal_payment_method ?? "Pagamento online"}
-            </span>
-            {latestTransaction?.provider_status && (
-              <span className="ml-1 opacity-80">({latestTransaction.provider_status})</span>
-            )}
-            {latestTransaction?.expires_at && (
-              <span className="block text-[10px] opacity-70">
-                Expira {new Date(latestTransaction.expires_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Row 3: item list preview */}
-        {firstItems.length > 0 && (
-          <div className="space-y-0.5 px-0.5">
-            {firstItems.map((item) => (
-              <p key={item.id} className="truncate text-xs font-medium text-[var(--text-secondary)] leading-snug">
-                {item.sequence_no != null && (
-                  <span className="mr-1 inline-block rounded bg-[var(--bg-subtle)] px-1 text-[9px] font-semibold text-[var(--text-secondary)]">
-                    {item.sequence_no}
-                  </span>
-                )}
-                <span className="font-semibold text-[var(--text-primary)]">{item.quantity}×</span>{" "}
-                {item.product?.name ?? item.product_name_snapshot}
-                {item.addons && item.addons.length > 0 && (
-                  <span className="text-[var(--status-success)] font-semibold">
-                    {" "}+{item.addons.map((a) => a.addon?.name ?? a.addon_name_snapshot).join(", ")}
-                  </span>
-                )}
-                {item.removed_ingredients && item.removed_ingredients.length > 0 && (
-                  <span className="text-brand-red font-semibold">
-                    {" "}−{item.removed_ingredients.map((ri) => ri.ingredient?.name ?? ri.ingredient_name_snapshot).join(", ")}
-                  </span>
-                )}
-              </p>
-            ))}
-            {extraItems > 0 && (
-              <p className="text-[11px] font-medium text-[var(--text-muted)]">+{extraItems} mais...</p>
-            )}
-          </div>
-        )}
-
-        {/* Per-item progress chips — só aparece em pedidos com 2+ itens ativos */}
-        {order.items && isActive && (
-          <ItemProgress items={order.items} branchCode={order.branch?.code} dailyNumber={order.daily_number} />
-        )}
-
-        {/* Row 4: total + quick action */}
-        <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-2.5">
-          <div className="text-right">
-            <p className="text-[10px] font-medium text-[var(--text-muted)]">Total</p>
-            <span className="text-base font-semibold text-[var(--text-primary)] tabular-nums">
-              <span className="mr-0.5 text-xs text-[var(--text-secondary)]">R$</span>
-              {currency.format(order.total_amount).replace("R$", "").trim()}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {canDeliverFromQueue && (
-              <button
-                type="button"
-                onClick={handleDeliverClick}
-                className="flex h-11 items-center gap-1.5 rounded-full bg-[var(--status-success)] px-3 text-xs font-semibold text-white shadow-[var(--shadow-sm)] active:scale-95 hover:opacity-90"
-              >
-                {deliverLoading
-                  ? <Loader2 className="h-3 w-3 animate-spin" />
-                  : <CheckCircle2 className="h-3 w-3" />
-                }
-                Entregue
-              </button>
-            )}
-            {quickActionConfig && (
-              <button
-                type="button"
-                onClick={handleQuickClick}
-                className={`flex h-11 items-center gap-1.5 rounded-full px-3 text-xs font-semibold shadow-[var(--shadow-sm)] active:scale-95 ${quickActionConfig.color}`}
-              >
-                {quickLoading
-                  ? <Loader2 className="h-3 w-3 animate-spin" />
-                  : <quickActionConfig.Icon className="h-3 w-3" />
-                }
-                {quickActionConfig.label}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Pending payment banner — só para pedidos ainda ativos */}
-      {showPendingPayBanner && (
-        <div className="bg-[var(--status-warning-bg)] px-4 py-1.5 text-center">
-          <span className="text-[11px] font-semibold text-[var(--status-warning)]">
-            Aguardando pagamento
-          </span>
-        </div>
-      )}
+  return <article onClick={() => !loading && onClick(order)} className={`relative overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] transition active:scale-[0.99] ${urgent ? "border-[var(--status-danger)]/50 ring-2 ring-[var(--status-danger)]/15" : pendingPayment ? "border-brand-red/25" : "border-[var(--border)]"} ${loading ? "pointer-events-none opacity-60" : "cursor-pointer hover:shadow-[var(--shadow-md)]"}`}>
+    <div className={`h-1 ${ACCENT[order.status]}`} />
+    <div className="space-y-3 p-3.5">
+      <header className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><span className="flex h-10 min-w-10 flex-col items-center justify-center rounded-xl bg-brand-charcoal px-1 text-sm font-black text-white">{order.branch?.code && <small className="text-[8px] leading-none text-zinc-400">{order.branch.code}</small>}{String(order.daily_number).padStart(2, "0")}</span><div className="min-w-0"><p className="truncate text-sm font-black text-[var(--text-primary)]">{order.customer_name || "Cliente final"}</p><div className="mt-1 flex flex-wrap items-center gap-1"><OrderTypeBadge type={order.type} /><OrderStatusBadge status={order.status} />{active && since && <ElapsedTimer since={since} now={now} />}</div></div></div><PaymentStatusBadge status={pendingPayment ? "PARTIAL" : order.payment_status} /></header>
+      {order.type === "VIAGEM" && <div className="flex items-center gap-2 rounded-xl border border-[var(--status-warning)]/25 bg-[var(--status-warning-bg)] px-3 py-2 text-[11px] font-black uppercase tracking-wide text-[var(--status-warning)]"><ShoppingBag className="h-3.5 w-3.5" />Para viagem · separar para retirada</div>}
+      {order.type === "ENTREGA" && <div className="flex items-center gap-2 rounded-xl border border-blue-500/25 bg-blue-500/10 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-blue-600"><Bike className="h-3.5 w-3.5" /><span className="truncate">Entrega{order.delivery_neighborhood ? ` · ${order.delivery_neighborhood}` : " · definir despacho"}</span></div>}
+      {pendingPayment && <div className="flex items-center justify-between gap-2 rounded-xl bg-brand-red/5 px-3 py-2 text-xs font-bold text-brand-red"><span>{reopenedComanda ? "Adicional aguardando pagamento" : `Pagamento ${order.payment_status === "PARTIAL" ? "parcial" : "pendente"}`}</span><span className="tabular-nums">{currency.format(pendingAmount || order.total_amount)}</span></div>}
+      {(order.items ?? []).length > 0 && <ItemPreview items={order.items ?? []} categories={categoryLookup} />}
+      {activeItems.length > 1 && <div className="flex items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5"><span className="text-[11px] font-semibold text-[var(--text-secondary)]">{readyItems}/{activeItems.length} prontos</span><div className="flex flex-1 flex-wrap gap-1">{activeItems.map((item) => <span key={item.id} className={`h-2 w-2 rounded-full ${ITEM_DOT[item.status]}`} />)}</div></div>}
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-2.5"><div><p className="text-[10px] font-medium text-[var(--text-muted)]">Total do pedido</p><p className="text-base font-black tabular-nums text-[var(--text-primary)]">{currency.format(order.total_amount)}</p></div><div className="ml-auto flex items-center gap-1.5">{canDeliverImmediately && <button type="button" onClick={triggerImmediateDelivery} className="flex h-11 items-center gap-1.5 rounded-xl border-2 border-[var(--status-success)]/35 bg-[var(--status-success-bg)] px-2.5 text-xs font-black text-[var(--status-success)] active:scale-95">{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Entregue</button>}{nextAction && <button type="button" onClick={triggerAction} className={`flex h-11 max-w-[210px] items-center gap-1.5 rounded-xl px-3 text-xs font-black shadow-sm active:scale-95 ${nextAction.color}`}>{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <nextAction.Icon className="h-3.5 w-3.5" />}{nextAction.label}</button>}</div></footer>
     </div>
-  );
+  </article>;
 }

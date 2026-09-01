@@ -206,17 +206,18 @@ export default function CaixaPage() {
   const dateInputRef = useRef<HTMLInputElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { currentBranchId, currentBranch } = useBranch();
-  const { isAdmin, isLoading: userLoading } = useUser();
+  const { user, isAdmin, isLoading: userLoading } = useUser();
   const router = useRouter();
+  const canViewCash = isAdmin && user?.active === true;
 
   const isToday = selectedDayLabel === todayLabel();
 
   // Somente ADMIN pode ver o caixa
   useEffect(() => {
-    if (!userLoading && !isAdmin) {
+    if (!userLoading && !canViewCash) {
       router.replace("/app/pedidos");
     }
-  }, [isAdmin, userLoading, router]);
+  }, [canViewCash, userLoading, router]);
 
   // Converte label "YYYY-MM-DD" → Date (meio-dia SP para evitar offset)
   const labelToDate = useCallback((label: string) => {
@@ -225,6 +226,7 @@ export default function CaixaPage() {
   }, []);
 
   const loadCash = useCallback(async (refreshing = false, dayLabel = selectedDayLabel) => {
+    if (!canViewCash) return;
     if (refreshing) setIsRefreshing(true);
     else setIsLoading(true);
     setError("");
@@ -237,9 +239,10 @@ export default function CaixaPage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [currentBranchId, selectedDayLabel, labelToDate]);
+  }, [canViewCash, currentBranchId, selectedDayLabel, labelToDate]);
 
   const loadComparison = useCallback(async (dayLabel: string) => {
+    if (!canViewCash) return;
     setIsCompLoading(true);
     try {
       const refDate = labelToDate(dayLabel);
@@ -250,25 +253,28 @@ export default function CaixaPage() {
     } finally {
       setIsCompLoading(false);
     }
-  }, [currentBranchId, labelToDate]);
+  }, [canViewCash, currentBranchId, labelToDate]);
 
   // Carrega quando muda dia ou filial
   useEffect(() => {
+    if (!canViewCash) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCash(false, selectedDayLabel);
-  }, [selectedDayLabel, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canViewCash, selectedDayLabel, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!canViewCash) return;
     if (showComparison) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       loadComparison(selectedDayLabel);
     } else {
       setPrevData(null);
     }
-  }, [showComparison, selectedDayLabel, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canViewCash, showComparison, selectedDayLabel, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-refresh a cada 60s só quando está no dia de hoje
   useEffect(() => {
+    if (!canViewCash) return;
     const startInterval = () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(() => {
@@ -297,7 +303,7 @@ export default function CaixaPage() {
       stopInterval();
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [loadCash, isToday]);
+  }, [canViewCash, loadCash, isToday]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value; // "YYYY-MM-DD"
@@ -328,6 +334,16 @@ export default function CaixaPage() {
 
   const lastUpdate = data?.generatedAt ? timeFormatter.format(new Date(data.generatedAt)) : null;
   const insights = useMemo(() => (data ? buildInsights(data) : []), [data]);
+
+  if (userLoading || !canViewCash) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[var(--bg-base)] p-6">
+        <p className="text-sm font-bold text-[var(--text-muted)]">
+          {userLoading ? "Verificando acesso ao caixa..." : "Redirecionando para pedidos..."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col bg-[var(--bg-base)]">

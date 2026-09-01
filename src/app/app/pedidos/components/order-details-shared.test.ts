@@ -3,6 +3,9 @@ import type { Order } from "@/types/pdv";
 import {
   formatDuration,
   getOutstandingOrderAmount,
+  additionWindowRemainingMinutes,
+  isOrderOpenForAdditions,
+  POST_PAYMENT_ADDITION_WINDOW_MS,
   ORDER_DETAILS_PAYMENT_LABELS,
   ORDER_DETAILS_PAYMENT_METHODS,
 } from "./order-details-shared";
@@ -35,5 +38,14 @@ describe("detalhe compartilhado de pedido", () => {
     expect(formatDuration(null)).toBe("--");
     expect(formatDuration(42)).toBe("42min");
     expect(formatDuration(65)).toBe("1h 5min");
+  });
+
+  it("mantém uma comanda paga aberta por uma hora apenas para acréscimos", () => {
+    const now = Date.parse("2026-09-01T12:00:00.000Z");
+    const order = { status: "ENTREGUE", paid_at: new Date(now - 20 * 60_000).toISOString() } as Order;
+
+    expect(isOrderOpenForAdditions(order, now)).toBe(true);
+    expect(additionWindowRemainingMinutes(order, now)).toBe(40);
+    expect(isOrderOpenForAdditions({ ...order, paid_at: new Date(now - POST_PAYMENT_ADDITION_WINDOW_MS - 1).toISOString() }, now)).toBe(false);
   });
 });
