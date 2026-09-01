@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSelectedOrderSyncCandidate } from "./order-refresh";
+import { getSelectedOrderSyncCandidate, hasOrderBoardChanged } from "./order-refresh";
 
 interface TestOrder {
   id: string;
@@ -33,5 +33,19 @@ describe("getSelectedOrderSyncCandidate", () => {
       ),
     ).toBeNull();
     expect(getSelectedOrderSyncCandidate(null, refreshedOrders, true)).toBeNull();
+  });
+});
+
+describe("hasOrderBoardChanged", () => {
+  const current = [{ id: "pedido-1", updated_at: "2026-09-01T10:00:00Z", status: "NA_FILA" }];
+
+  it("ignora respostas equivalentes com novas referências de objeto", () => {
+    expect(hasOrderBoardChanged(current, [{ ...current[0] }])).toBe(false);
+  });
+
+  it("detecta pedidos novos, removidos ou atualizados", () => {
+    expect(hasOrderBoardChanged(current, [])).toBe(true);
+    expect(hasOrderBoardChanged(current, [{ ...current[0], updated_at: "2026-09-01T10:01:00Z" }])).toBe(true);
+    expect(hasOrderBoardChanged(current, [{ ...current[0], status: "PRONTO" }])).toBe(true);
   });
 });
