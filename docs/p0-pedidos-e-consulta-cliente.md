@@ -83,6 +83,25 @@ Em `src/lib/api/pdv-api.ts`, a consulta autenticada de cliente agora usa
 `AbortController` com limite de 8 segundos. Ao exceder o prazo, retorna uma
 mensagem de retentativa em vez de manter o checkout em “procurando”.
 
+### P0.3 — checkout seguro em tela pequena
+
+O primeiro incremento aprovado do estudo mobile-first eleva sheets e diálogos
+acima da navegação fixa, considera `safe-area`, viewport visual e teclado para
+manter a ação de rodapé acessível e centraliza o campo que recebeu foco. Também
+passa a pedir confirmação antes de fechar a personalização de um produto ou um
+checkout alterado. Escolher **Continuar editando** conserva o rascunho; escolher
+**Descartar alterações** fecha somente a superfície — o carrinho persistente
+não é removido.
+
+### Aceite validado
+
+- [x] em 360 px o sheet fica acima de cabeçalho, navegação e carrinho fixos;
+- [x] a confirmação de descarte é legível e os dois botões têm pelo menos 48 px
+  de altura;
+- [x] continuar editando preserva o nome digitado no checkout;
+- [x] descartar fecha o checkout sem apagar os itens do carrinho;
+- [x] nenhuma regra de preço, pagamento, banco ou impressão foi alterada.
+
 ## Limitações e achados
 
 1. **Timeout homologado.** A indisponibilidade revelou que a interface ficava
@@ -108,6 +127,10 @@ mensagem de retentativa em vez de manter o checkout em “procurando”.
 | `src/lib/api/pdv-api.ts` | propagação de erro da função |
 | `src/lib/utils/phone.ts` | normalização e máscara |
 | `supabase/functions/get-customer-profile/index.ts` | resposta e lookup de perfil |
+| `src/components/ui/BottomSheet.tsx` e `src/components/ui/Sheet.tsx` | viewport visual, safe area e empilhamento dos sheets |
+| `src/components/feedback/DiscardChangesDialog.tsx` | confirmação reutilizável de descarte |
+| `src/app/app/novo-pedido/page.tsx` | proteção da personalização de item |
+| `src/components/checkout/OrderSummarySheet.tsx` | proteção do rascunho do checkout |
 
 O estudo de usabilidade e plano sem implementação visual estão em
 `docs/estudo-mobile-first-pedidos-e-consulta-cliente.md`.
@@ -115,3 +138,5 @@ O estudo de usabilidade e plano sem implementação visual estão em
 ## Evidência visual
 
 ![Consulta de cliente com timeout e retentativa em 360 px](evidence/p0-consulta-timeout-360.png)
+
+![Confirmação de descarte do checkout em 360 px](evidence/p0-rascunho-mobile-360.png)

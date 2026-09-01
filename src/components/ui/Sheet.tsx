@@ -43,6 +43,7 @@ const MAX_WIDTH: Record<NonNullable<SheetProps["maxWidth"]>, string> = {
 
 export function Sheet({ isOpen, onClose, title, header, children, maxWidth = "md", footer, bodyClassName }: SheetProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -60,11 +61,31 @@ export function Sheet({ isOpen, onClose, title, header, children, maxWidth = "md
     };
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen || !sheetRef.current) return;
+
+    const viewport = window.visualViewport;
+    const updateKeyboardInset = () => {
+      if (!sheetRef.current) return;
+      const inset = viewport
+        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+        : 0;
+      sheetRef.current.style.setProperty("--keyboard-inset", `${inset}px`);
+    };
+    updateKeyboardInset();
+    viewport?.addEventListener("resize", updateKeyboardInset);
+    viewport?.addEventListener("scroll", updateKeyboardInset);
+    return () => {
+      viewport?.removeEventListener("resize", updateKeyboardInset);
+      viewport?.removeEventListener("scroll", updateKeyboardInset);
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[40] flex items-end justify-center pb-16 sm:pb-0 md:items-center"
+      className="fixed inset-0 z-[70] flex items-end justify-center pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-0 md:items-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby={header ? undefined : "sheet-title"}
@@ -75,8 +96,13 @@ export function Sheet({ isOpen, onClose, title, header, children, maxWidth = "md
       />
 
       <div
-        className={`animate-sheet-slide-up md:animate-modal-scale-in relative z-[45] flex w-full ${MAX_WIDTH[maxWidth]} flex-col rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] transform-gpu will-change-transform md:rounded-2xl`}
-        style={{ boxShadow: "var(--elevation-4)", maxHeight: "90vh" }}
+        ref={sheetRef}
+        className={`animate-sheet-slide-up md:animate-modal-scale-in relative z-[75] flex w-full ${MAX_WIDTH[maxWidth]} flex-col overflow-hidden rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] transform-gpu will-change-transform md:rounded-2xl`}
+        style={{
+          boxShadow: "var(--elevation-4)",
+          maxHeight: "calc(90dvh - var(--keyboard-inset, 0px))",
+          marginBottom: "var(--keyboard-inset, 0px)",
+        }}
       >
         {header ?? (
           <div className="flex items-center justify-between border-b border-[var(--border)] px-6 py-4">
@@ -94,10 +120,15 @@ export function Sheet({ isOpen, onClose, title, header, children, maxWidth = "md
           </div>
         )}
 
-        <div className={bodyClassName ?? "max-h-[75vh] overflow-y-auto overscroll-contain"}>{children}</div>
+        <div className={bodyClassName ?? "min-h-0 max-h-[75dvh] overflow-y-auto overscroll-contain"}>{children}</div>
 
         {footer && (
-          <div className="border-t border-[var(--border)] px-6 py-4">{footer}</div>
+          <div
+            className="border-t border-[var(--border)] px-6 py-4"
+            style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+          >
+            {footer}
+          </div>
         )}
       </div>
     </div>
