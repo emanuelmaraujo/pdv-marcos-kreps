@@ -126,7 +126,7 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 
 | Melhoria | Critérios de aceite | Arquivos/componentes prováveis |
 |---|---|---|
-| Unificar detalhe responsivo | uma fonte de conteúdo/ações alimenta sheet e modal, com paridade de atalhos e estados | `OrderDetailsSheet.tsx`, `OrderDetailsModal.tsx`, componente compartilhado |
+| Unificar detalhe responsivo | Implementado o primeiro incremento: uma fonte de dados de apresentação e ações alimenta sheet e modal; os layouts continuam próprios para cada largura, preservando os atalhos existentes | `OrderDetailsSheet.tsx`, `OrderDetailsModal.tsx`, `order-details-shared.ts` |
 | Pistas de overflow e alvo de toque | tabs horizontais indicam continuação; todos os controles operacionais atingem 44 × 44 px | `pedidos/page.tsx`, componentes UI |
 | Modo de concentração | reduzir métricas secundárias durante atendimento sem eliminar acesso | layout de `pedidos/page.tsx`, preferências locais |
 
@@ -138,7 +138,10 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 3. Reorganizar o topo do quadro e o resumo persistente de pagamento (P1),
    medindo toques e tempo de tarefa com atendentes.
 4. Extrair conteúdo comum de detalhe e normalizar os componentes de superfície
-   (P2), mantendo contratos e regras atuais.
+   (P2), mantendo contratos e regras atuais. Primeiro incremento concluído:
+   catálogo de pagamento, cálculos de detalhe e ações operacionais são comuns;
+   qualquer consolidação visual posterior deve preservar as superfícies e ser
+   validada separadamente.
 5. Liberar por tela e acompanhar erros de pagamento, abandono de checkout e
    tempo até confirmar pedido. Cada passo precisa de rollback somente de
    frontend.
