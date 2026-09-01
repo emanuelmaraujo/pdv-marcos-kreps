@@ -54,7 +54,7 @@ internacionais para E.164. Falhas de invocação não são convertidas em
 - [ ] erro de servidor e clique em **Tentar novamente** validados no navegador:
   ao pausar a função local, a interface permaneceu em “procurando” sem timeout,
   portanto o estado de erro não foi alcançado de forma confiável. O timeout de
-  8 s foi adicionado no PR #157 e ainda requer homologação manual.
+  8 s foi adicionado, homologado localmente e integrado pelo PR #157.
 
 ## Validação executada
 
@@ -85,10 +85,10 @@ mensagem de retentativa em vez de manter o checkout em “procurando”.
 
 ## Limitações e achados
 
-1. **Homologação pendente do timeout.** A indisponibilidade revelou que a
-   interface ficava indefinidamente em `checking`. O PR #157 inclui abort em
-   8 s para expor **Tentar novamente**, mas o teste de navegador contra uma
-   função indisponível precisa ser repetido antes do merge.
+1. **Timeout homologado.** A indisponibilidade revelou que a interface ficava
+   indefinidamente em `checking`. O PR #157 adicionou abort em 8 s; em 360 px
+   a interface exibiu erro e **Tentar novamente**, e a retentativa retornou o
+   estado de cliente novo após reativar a função.
 2. **Configuração local insegura por padrão.** `.env.local` aponta para o
    projeto remoto; iniciar `npm run dev` sem sobrescrever as variáveis públicas
    pode testar contra dados remotos. A validação usou apenas Supabase local e
