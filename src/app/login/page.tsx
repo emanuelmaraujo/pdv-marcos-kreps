@@ -33,11 +33,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [error, setError] = useState("");
-  // Mostra o botão de passkey em qualquer dispositivo que suporta WebAuthn —
-  // o SO sabe se há passkey sincronizada (iCloud Keychain, Google Password
-  // Manager, etc) e mostra a UI nativa. Se não houver, o clique abre prompt
-  // de cross-device (QR code do celular).
-  const [showBiometric] = useState(() => canTryDiscoverablePasskey());
+  // A capacidade WebAuthn só existe no navegador. Começamos com o mesmo
+  // valor no servidor e no cliente e descobrimos a capacidade após hidratar,
+  // evitando que o botão de passkey cause hydration mismatch no login.
+  const [showBiometric, setShowBiometric] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -60,12 +59,16 @@ export default function LoginPage() {
 
   // Enforce 24h client-side session expiry
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setShowBiometric(canTryDiscoverablePasskey());
+    });
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session && isSessionExpired()) {
         await supabase.auth.signOut();
         localStorage.removeItem(SESSION_KEY);
       }
     });
+    return () => window.cancelAnimationFrame(frame);
   }, [supabase]);
 
   const handleLogin = async (e: React.FormEvent) => {
