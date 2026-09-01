@@ -86,20 +86,18 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 | carregamento | menu e pedidos têm estado de carregamento | usar skeleton que preserve a geometria dos cards e evite salto visual |
 | vazio | quadro pode não ter pedidos e consulta pode não encontrar cliente | orientar próxima ação sem confundir “sem pedido” com falha de filtro |
 | sucesso | checkout tem confirmação e consulta preenche nome | feedback deve manter número/total como confirmação rápida |
-| erro | mensagens existem para consulta e submissão | consulta de perfil não tem timeout: indisponibilidade pode ficar em “procurando” |
+| erro | mensagens existem para consulta e submissão | consulta de perfil expira em 8 s e oferece retentativa; falta validar continuamente em aparelho físico/rede lenta |
 | atualização automática | polling, Realtime e visibilidade atualizam o quadro | manter detalhe congelado foi validado; sinalizar atualização pendente sem forçar troca de contexto |
 
 ## Riscos de perda de dados ou reinicialização
 
-1. Fechar acidentalmente a personalização ou checkout pode descartar
-   observações, adicionais, endereço e desconto; não há confirmação de descarte
-   baseada em rascunho sujo.
-2. O pagamento por itens dependia da identidade de `order.items`; o PR #156
-   protege a atualização automática, mas uma futura refatoração que sincronize
-   o pedido aberto sem intenção pode reintroduzir o reset.
-3. Chamadas lentas de consulta não têm cancelamento/timeout visível. Trocar o
-   telefone durante uma resposta tardia deve continuar protegido por identidade
-   da requisição.
+1. A confirmação de descarte já protege personalização e checkout, mas ainda
+   precisa de validação em aparelho físico com teclado aberto.
+2. O pagamento por itens preserva o rascunho quando recebe uma nova versão do
+   mesmo pedido; a regra está coberta por teste unitário e deve permanecer
+   junto ao componente em futuras refatorações.
+3. Chamadas lentas de consulta expiram em 8 s. Trocar o telefone durante uma
+   resposta tardia continua exigindo proteção por identidade da requisição.
 4. Dados de nomes recentes ficam em `localStorage`; em balcão compartilhado,
    a política de retenção precisa ser deliberada.
 
@@ -112,7 +110,7 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 | Timeout, cancelamento e retentativa da consulta de cliente | Implementado e homologado no PR #157 com abort em 8 s; após prazo definido, “procurando” vira erro acionável; **Tentar novamente** reexecuta somente o telefone atual; resposta antiga não sobrescreve edição recente | `OrderSummarySheet.tsx`, `pdv-api.ts`, testes de consulta |
 | Ação do checkout acima do teclado/safe area | em 360/390 com teclado aberto, campo ativo e CTA continuam visíveis; nenhuma submissão ocorre por toque encoberto | `BottomSheet.tsx`, `OrderSummarySheet.tsx`, tokens CSS |
 | Proteção de rascunho sujo | fechar checkout/personalização com alteração exibe confirmação; cancelar preserva o formulário e confirmar descarta apenas o rascunho correto | `novo-pedido/page.tsx`, `BottomSheet.tsx`, store do carrinho |
-| Regressão de estado no pagamento por itens | testes de componente cobrem polling/Realtime com item, total, etapa e método selecionados; ações explícitas continuam sincronizando | `PayItemsModal.tsx`, `order-refresh.ts`, testes |
+| Regressão de estado no pagamento por itens | Implementado: teste unitário cobre a política de não reinicializar o mesmo pedido e o componente só limpa o rascunho ao trocar de pedido; a validação funcional de item, valor, etapa e método segue registrada no walkthrough | `PayItemsModal.tsx`, `payment-items-state.ts`, `order-refresh.ts`, testes |
 
 ### P1 — velocidade e clareza de balcão
 
@@ -133,10 +131,9 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 
 ## Implementação incremental proposta
 
-1. Criar testes de regressão para timeout/abort de consulta e rascunho sujo,
-   sem alterar layout.
-2. Corrigir P0 de consulta e safe area em feature flag interna; validar em
-   aparelho físico 360/390 e com rede lenta.
+1. Criar testes de regressão adicionais para timeout/abort da consulta e
+   descarte de rascunho, sem alterar layout.
+2. Validar os P0 entregues em aparelho físico 360/390 e com rede lenta.
 3. Reorganizar o topo do quadro e o resumo persistente de pagamento (P1),
    medindo toques e tempo de tarefa com atendentes.
 4. Extrair conteúdo comum de detalhe e normalizar os componentes de superfície
@@ -154,6 +151,11 @@ fixa; o foco de um campo é trazido à área visível. A personalização de pro
 e o checkout com rascunho alterado usam uma confirmação acessível antes de
 fechar. Em 360 px, cancelar preservou o nome digitado e descartar manteve os
 itens no carrinho.
+
+O segundo incremento formalizou a política do pagamento por itens: uma nova
+versão do mesmo pedido não limpa seu rascunho local; somente a troca de pedido
+faz essa inicialização. Isso mantém o comportamento homologado para polling e
+Realtime mesmo se a fonte do pedido mudar de referência numa refatoração futura.
 
 ![Confirmação de descarte do checkout em 360 px](evidence/p0-rascunho-mobile-360.png)
 

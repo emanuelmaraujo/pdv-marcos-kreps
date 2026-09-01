@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Order, OrderItem, PaymentMethod, PaymentStatus } from '@/types/pdv';
 import { pdvApi } from '@/lib/api/pdv-api';
 import { Sheet } from '@/components/ui/Sheet';
 import { getFriendlyErrorMessage } from '@/lib/errors/messages';
+import { shouldResetPaymentItemsDraft } from '@/lib/utils/payment-items-state';
 import {
   X,
   Loader2,
@@ -92,10 +93,14 @@ export function PayItemsModal({
   const [ifoodAmountStr, setIfoodAmountStr] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const previousOrderIdRef = useRef(order.id);
 
   const canUseIfood = includeIfood ?? allowIfood ?? context === 'new-order';
 
   useEffect(() => {
+    if (!shouldResetPaymentItemsDraft(previousOrderIdRef.current, order.id)) return;
+
+    previousOrderIdRef.current = order.id;
     const timer = window.setTimeout(() => {
       setItems(order.items ?? []);
       setSelected(new Set());
