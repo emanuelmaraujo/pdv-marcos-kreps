@@ -10,6 +10,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://marcoskreps.com.br"),
   title: "Pedir · Marcos Krep's",
   description: "Faça seu pedido online no Marcos Krep's — crepes na hora, pagamento seguro.",
   // Manifest próprio (src/app/pedir/manifest.ts) — sem isso, "Adicionar à tela
