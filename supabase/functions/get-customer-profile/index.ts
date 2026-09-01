@@ -23,7 +23,9 @@ function normalizeBrazilPhone(value: unknown): string | null {
   if (typeof value !== "string") return null;
   let digits = value.replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("55")) digits = digits.slice(2);
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    digits = digits.slice(2);
+  }
   digits = digits.replace(/^0+/, "");
   if (digits.length !== 10 && digits.length !== 11) return null;
   const ddd = Number(digits.slice(0, 2));
@@ -32,7 +34,7 @@ function normalizeBrazilPhone(value: unknown): string | null {
   return `+55${digits}`;
 }
 
-function jsonResponse(body: Record<string, unknown>, status = 200) {
+function jsonResponse(req: Request, body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
@@ -44,14 +46,14 @@ serve(async (req) => {
     return new Response("ok", { headers: getCorsHeaders(req) });
   }
   if (req.method !== "POST") {
-    return jsonResponse({ success: false, found: false, error: "Metodo nao permitido." }, 405);
+    return jsonResponse(req, { success: false, found: false, error: "Metodo nao permitido." }, 405);
   }
 
   try {
     // ---- Auth: ADMIN or ATTENDANT only -----------------------------------
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return jsonResponse({ success: false, found: false, error: "Nao autenticado." }, 401);
+      return jsonResponse(req, { success: false, found: false, error: "Nao autenticado." }, 401);
     }
     const jwt = authHeader.replace("Bearer ", "");
 
@@ -61,7 +63,7 @@ serve(async (req) => {
     );
     const { data: { user }, error: userErr } = await supabaseClientAuth.auth.getUser(jwt);
     if (userErr || !user) {
-      return jsonResponse({ success: false, found: false, error: "Sessao invalida." }, 401);
+      return jsonResponse(req, { success: false, found: false, error: "Sessao invalida." }, 401);
     }
 
     const supabaseAdmin = createClient(
@@ -75,14 +77,14 @@ serve(async (req) => {
       .single();
 
     if (!profile?.active || (profile.role !== "ADMIN" && profile.role !== "ATTENDANT")) {
-      return jsonResponse({ success: false, found: false, error: "Sem permissao." }, 403);
+      return jsonResponse(req, { success: false, found: false, error: "Sem permissao." }, 403);
     }
 
     // ---- Lookup ----------------------------------------------------------
     const body = await req.json().catch(() => ({}));
     const phone = normalizeBrazilPhone(body.customer_phone);
     if (!phone) {
-      return jsonResponse({ success: true, found: false });
+      return jsonResponse(req, { success: true, found: false });
     }
 
     const { data: customer, error: customerErr } = await supabaseAdmin
@@ -92,16 +94,16 @@ serve(async (req) => {
       .maybeSingle();
 
     if (customerErr) {
-      // Pode indicar coluna ausente (migracao pendente). Nao bloqueia: retorna not_found.
+      // Falha real de infraestrutura ou migracao: nao mascarar como cliente inexistente.
       console.error("[get-customer-profile] lookup failed — possivel migracao pendente:", customerErr.message, customerErr.code);
-      return jsonResponse({ success: true, found: false });
+      return jsonResponse(req, { success: false, found: false, error: "Falha ao consultar cadastro." }, 500);
     }
 
     if (!customer) {
-      return jsonResponse({ success: true, found: false });
+      return jsonResponse(req, { success: true, found: false });
     }
 
-    return jsonResponse({
+    return jsonResponse(req, {
       success: true,
       found: true,
       profile: {
@@ -116,6 +118,6 @@ serve(async (req) => {
     });
   } catch (e: any) {
     console.error("[get-customer-profile] exception", e?.message ?? "unknown");
-    return jsonResponse({ success: false, found: false, error: "Erro interno." }, 500);
+    return jsonResponse(req, { success: false, found: false, error: "Erro interno." }, 500);
   }
 });
