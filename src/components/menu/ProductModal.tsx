@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Product, Category } from "@/types/pdv";
-import { ImageOff, Loader2, X, Save } from "lucide-react";
+import { ExternalLink, ImageOff, Loader2, X, Save } from "lucide-react";
 import { DuplicateProductButton } from "./DuplicateProductButton";
+import { getSafeProductImageUrl } from "@/lib/utils/product-image";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -34,6 +35,8 @@ export function ProductModal({
       image_url: "",
     }
   );
+
+  const imageUrl = getSafeProductImageUrl(formData.image_url);
 
   if (!isOpen) return null;
 
@@ -89,32 +92,54 @@ export function ProductModal({
               Foto do produto (URL)
             </label>
             <div className="flex items-center gap-3">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--bg-subtle)] text-[var(--text-muted)]">
-                {formData.image_url?.trim() && !imageError ? (
+              {imageUrl && !imageError ? (
+                <a
+                  href={imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[var(--bg-subtle)] text-[var(--text-muted)] focus-ring"
+                  aria-label="Abrir imagem do produto em nova aba"
+                  title="Abrir imagem"
+                >
                   <Image
-                    key={formData.image_url}
-                    src={formData.image_url.trim()}
-                    alt=""
+                    key={imageUrl}
+                    src={imageUrl}
+                    alt="Prévia da imagem do produto"
                     width={64}
                     height={64}
                     unoptimized
                     className="h-16 w-16 object-cover"
                     onError={() => setImageError(true)}
                   />
-                ) : (
+                </a>
+              ) : (
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--bg-subtle)] text-[var(--text-muted)]">
                   <ImageOff className="h-6 w-6" strokeWidth={1.5} />
+                </div>
+              )}
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <input
+                  type="url"
+                  value={formData.image_url ?? ""}
+                  onChange={(e) => {
+                    setImageError(false);
+                    setFormData({ ...formData, image_url: e.target.value });
+                  }}
+                  className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
+                  placeholder="https://... (opcional)"
+                />
+                {imageUrl && (
+                  <a
+                    href={imageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-11 items-center gap-1.5 px-1 text-xs font-bold text-brand-red underline-offset-2 hover:underline focus-ring"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Abrir imagem
+                  </a>
                 )}
               </div>
-              <input
-                type="url"
-                value={formData.image_url ?? ""}
-                onChange={(e) => {
-                  setImageError(false);
-                  setFormData({ ...formData, image_url: e.target.value });
-                }}
-                className="w-full px-4 py-3 bg-[var(--bg-subtle)] border border-[var(--border)] rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red transition-all"
-                placeholder="https://... (opcional)"
-              />
             </div>
             <p className="mt-1 ml-1 text-[11px] text-[var(--text-muted)]">
               Sem foto, o produto aparece com um ícone no cardápio público.
