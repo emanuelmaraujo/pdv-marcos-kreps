@@ -1,161 +1,117 @@
 # P0 — Estabilidade de pedidos e consulta de cliente
 
-Atualizado em 2026-08-31.
+Atualizado em 2026-09-01 após a validação do PR #156.
 
-## Objetivo
+## Resultado executivo
 
-Corrigir dois problemas operacionais prioritários nas telas usadas pelos atendentes:
+O PR #156 foi integrado em `main` antes desta revisão (commit de merge
+`2a2673d`). A produção do frontend está aprovada pelo deployment do commit,
+e a Edge Function `get-customer-profile` está ativa na versão 14. A validação
+autenticada local confirmou a estabilidade do pagamento por itens em polling e
+Realtime, além dos fluxos de cliente existente, inexistente e DDD 55.
 
-1. manter o quadro de pedidos atualizado sem reiniciar o pedido que está aberto;
-2. fazer a consulta de cliente por telefone distinguir corretamente cliente inexistente de falha técnica.
+Não houve merge novo nesta etapa: o PR já estava merged. A correção de
+hidratação da tela de login e o timeout da consulta encontrados durante a
+validação seguem em uma alteração de acompanhamento, separada das mudanças do
+PR já publicado.
 
-O trabalho preserva o fluxo atual e evita mudanças amplas de interface ou banco de dados nesta etapa.
+## Escopo confirmado
 
-## Escopo analisado
+- `/app/pedidos`: lista, polling de 15 s, Realtime, detalhe e pagamento por
+  itens;
+- `/app/novo-pedido`: identificação de cliente e checkout;
+- `get-customer-profile`, cliente de API e normalização brasileira;
+- limpeza integral dos registros criados exclusivamente para o teste.
 
-- `/app/pedidos`: quadro, atualização automática e detalhe do pedido;
-- modal/sheet de pagamento por itens;
-- resumo do novo pedido e identificação do cliente;
-- cliente de API das Edge Functions;
-- Edge Function `get-customer-profile`;
-- normalização de telefone brasileiro.
+## P0.1 — Pedido aberto não reinicia
 
-## P0.1 — Pedido aberto não deve reiniciar durante atualização automática
+O quadro continua a buscar pedidos por polling, Realtime e retorno à aba. A
+regra em `src/lib/utils/order-refresh.ts` impede que esses caminhos
+automáticos substituam o objeto do pedido aberto; a sincronização do detalhe é
+reservada a uma ação explícita concluída.
 
-### Problema observado
+### Aceite
 
-O quadro recebe atualizações por três caminhos:
+- [x] quadro atualiza com polling de 15 segundos;
+- [x] atualização Realtime em outro pedido atualiza o quadro;
+- [x] pagamento por itens permanece no mesmo passo;
+- [x] item marcado, total selecionado e forma de pagamento persistem;
+- [x] ação explícita ainda pode pedir sincronização do detalhe.
 
-- eventos Realtime do Supabase;
-- polling de segurança a cada 15 segundos;
-- atualização ao retornar para a aba.
+## P0.2 — Consulta por telefone
 
-Antes da correção, cada atualização substituía também o objeto do pedido aberto. O componente de pagamento por itens interpreta a mudança de `order.items` como um novo contexto e reinicia seleções, etapa, forma de pagamento e mensagens internas. Isso podia acontecer enquanto o atendente informava quanto cada pessoa pagou.
+O fluxo separa `checking`, `found`, `not_found` e `error`. A
+normalização preserva o DDD 55 para número nacional e converte formatos
+internacionais para E.164. Falhas de invocação não são convertidas em
+“cliente novo”.
 
-### Solução aplicada
+### Aceite
 
-- a lista de pedidos continua recebendo todas as atualizações automáticas;
-- o pedido aberto fica congelado durante Realtime, polling e retorno à aba;
-- o pedido aberto só é sincronizado depois de uma ação explícita concluída, como pagamento ou alteração de status;
-- a regra foi extraída para uma função pura e recebeu testes próprios.
+- [x] cliente existente preenche o nome;
+- [x] cliente inexistente mostra “Cliente novo”;
+- [x] `(55) 99998-7654` preserva o DDD e encontra o cadastro;
+- [x] função ativa no projeto remoto;
+- [ ] erro de servidor e clique em **Tentar novamente** validados no navegador:
+  ao pausar a função local, a interface permaneceu em “procurando” sem timeout,
+  portanto o estado de erro não foi alcançado de forma confiável. O timeout de
+  8 s foi adicionado no PR #157 e ainda requer homologação manual.
 
-### Critérios de aceite
+## Validação executada
 
-- [x] o quadro continua atualizando automaticamente;
-- [x] atualização automática não fornece um novo objeto para o pedido aberto;
-- [x] uma ação explícita pode sincronizar o pedido aberto com a resposta mais recente;
-- [x] pedido inexistente na nova lista não é aberto ou fechado implicitamente;
-- [ ] confirmar o fluxo completo com um usuário atendente autenticado e pedidos reais de teste.
-
-## P0.2 — Consulta do cliente por telefone
-
-### Problemas encontrados
-
-1. A Edge Function usava `req` fora do escopo no helper de resposta JSON.
-2. Erros da Edge Function eram convertidos no frontend em `found: false`, fazendo uma falha técnica aparecer como “Cliente novo”.
-3. A normalização removia todo prefixo `55`, inclusive quando `55` era o DDD de um número nacional.
-4. A interface não oferecia uma mensagem clara nem uma ação de nova tentativa quando a consulta falhava.
-
-### Solução aplicada
-
-- corrigido o escopo de `req` em todas as respostas da Edge Function;
-- falhas de banco ou infraestrutura agora retornam erro, sem fingir que o cliente não existe;
-- o cliente da API propaga falhas de invocação;
-- a interface separa os estados `consultando`, `encontrado`, `não encontrado` e `erro`;
-- falhas exibem mensagem visível e botão **Tentar novamente**;
-- a normalização reconhece `+55`/`0055` como código do país, preservando o DDD 55 em números nacionais;
-- foram adicionados testes para formatos válidos e inválidos.
-
-### Critérios de aceite
-
-- [x] telefone nacional e internacional é normalizado para E.164;
-- [x] DDD 55 não é removido indevidamente;
-- [x] falha técnica não aparece como cliente novo;
-- [x] atendente pode tentar a consulta novamente;
-- [x] erro de sessão recebe mensagem específica;
-- [x] executar a Edge Function por HTTP contra Supabase local;
-- [ ] publicar `get-customer-profile` e confirmar o comportamento no ambiente de produção.
-
-## Arquivos alterados
-
-| Arquivo | Responsabilidade |
+| Verificação | Resultado |
 |---|---|
-| `src/app/app/pedidos/page.tsx` | separação entre atualização do quadro e sincronização do pedido aberto |
-| `src/lib/utils/order-refresh.ts` | regra testável de sincronização explícita |
-| `src/lib/utils/order-refresh.test.ts` | testes da estabilidade do pedido aberto |
-| `src/components/checkout/OrderSummarySheet.tsx` | estados de consulta, erro e nova tentativa |
-| `src/lib/api/pdv-api.ts` | propagação correta de falhas da Edge Function |
-| `src/lib/utils/phone.ts` | normalização e formatação centralizadas |
-| `src/lib/utils/phone.test.ts` | testes de telefone, incluindo DDD 55 |
-| `supabase/functions/get-customer-profile/index.ts` | correção de resposta, status HTTP e normalização no servidor |
+| Checks do PR #156 | Vercel Preview e deployment aprovados; nenhum comentário humano nem conflito pendente |
+| Estado do PR | `MERGED` em 2026-09-01, commit `2a2673d` |
+| Frontend | deployment Production do commit de merge com status `success` |
+| Edge Function | `get-customer-profile` ACTIVE, versão 14, JWT habilitado |
+| Testes Vitest | 74 testes em 7 arquivos aprovados |
+| ESLint | aprovado |
+| Build Next.js 16.3.1 | aprovado, TypeScript e 23 rotas |
+| Quadro de pedidos | aprovado com dois pedidos sintéticos locais |
+| Polling + Realtime | aprovado; estado do pagamento por itens preservado |
+| Cliente existente / inexistente / DDD 55 | aprovado |
+| Dados sintéticos | removidos; consulta final retornou zero pedidos, clientes, perfil e usuário de teste |
 
-## Validação local
+## Correções complementares
 
-### Automatizada
+Em `src/app/login/page.tsx`, a disponibilidade de passkey era calculada na
+inicialização do estado. Como ela só existe no navegador, o HTML do servidor e
+do cliente podiam divergir e provocar erro de hidratação. A correção inicia o
+estado como `false` e verifica a capacidade em `useEffect`.
 
-| Validação | Resultado |
+Em `src/lib/api/pdv-api.ts`, a consulta autenticada de cliente agora usa
+`AbortController` com limite de 8 segundos. Ao exceder o prazo, retorna uma
+mensagem de retentativa em vez de manter o checkout em “procurando”.
+
+## Limitações e achados
+
+1. **Homologação pendente do timeout.** A indisponibilidade revelou que a
+   interface ficava indefinidamente em `checking`. O PR #157 inclui abort em
+   8 s para expor **Tentar novamente**, mas o teste de navegador contra uma
+   função indisponível precisa ser repetido antes do merge.
+2. **Configuração local insegura por padrão.** `.env.local` aponta para o
+   projeto remoto; iniciar `npm run dev` sem sobrescrever as variáveis públicas
+   pode testar contra dados remotos. A validação usou apenas Supabase local e
+   variáveis temporárias de processo, já removidas.
+3. **Janela operacional.** “Hoje” no quadro considera a virada de dia
+   operacional às 03:00 (America/São_Paulo); pedidos criados antes disso não
+   aparecem na consulta do dia seguinte, como esperado.
+
+## Arquivos do P0
+
+| Arquivo | Papel |
 |---|---|
-| testes direcionados de atualização e telefone | 14 testes aprovados |
-| suíte completa do Vitest | 74 testes aprovados em 7 arquivos |
-| ESLint | aprovado, sem erros |
-| build de produção do Next.js | aprovado, com TypeScript e 23 rotas geradas |
-| Edge Function por HTTP no Supabase local | aprovado com usuário e cliente sintéticos |
-| limpeza dos dados sintéticos | confirmada: nenhum usuário ou cliente de teste remanescente |
+| `src/app/app/pedidos/page.tsx` | atualização do quadro sem substituir detalhe aberto |
+| `src/lib/utils/order-refresh.ts` | decisão pura de sincronização |
+| `src/app/app/pedidos/components/PayItemsModal.tsx` | pagamento por itens |
+| `src/components/checkout/OrderSummarySheet.tsx` | estados da consulta de cliente |
+| `src/lib/api/pdv-api.ts` | propagação de erro da função |
+| `src/lib/utils/phone.ts` | normalização e máscara |
+| `supabase/functions/get-customer-profile/index.ts` | resposta e lookup de perfil |
 
-### Aplicação em execução
+O estudo de usabilidade e plano sem implementação visual estão em
+`docs/estudo-mobile-first-pedidos-e-consulta-cliente.md`.
 
-- `npm run dev` iniciou o Next.js 16.3.1 corretamente em `http://localhost:3000`;
-- a rota `/app/pedidos` respondeu e redirecionou corretamente para `/login` sem sessão;
-- não existem credenciais de atendente de teste documentadas no repositório;
-- portanto, o teste visual autenticado dos dois fluxos continua pendente.
+## Evidência visual
 
-### Integração com Supabase local
-
-O runtime local das Edge Functions foi iniciado com `supabase functions serve`. O teste de integração:
-
-- confirmou CORS via `OPTIONS`;
-- confirmou `401` para requisição sem autenticação;
-- criou um usuário `ATTENDANT` e um cliente exclusivamente sintéticos;
-- autenticou o usuário no Supabase local;
-- consultou `(55) 99998-7654` e encontrou corretamente o cliente salvo como `+5555999987654`;
-- confirmou nome, quantidade de pedidos e comportamento operacional independente de `remember_checkout_data`;
-- confirmou que telefone inválido retorna `success: true` e `found: false`;
-- removeu os registros sintéticos e verificou que nenhum permaneceu.
-
-### Achado adicional fora do escopo
-
-Durante o acesso local, a tela de login apresentou erro de hidratação porque `showBiometric` é inicializado com uma capacidade disponível somente no navegador. O servidor renderiza o botão de passkey ausente e o cliente pode renderizá-lo presente. O problema está em `src/app/login/page.tsx` e já existia antes destas alterações. Ele não foi corrigido neste P0 para evitar ampliar o escopo, mas deve entrar no backlog técnico.
-
-## Validação manual pendente
-
-Quando houver Supabase local e uma conta de atendente de teste:
-
-1. entrar em `/app/pedidos`;
-2. abrir um pedido com vários itens não pagos;
-3. iniciar **Selecionar quanto cada um pagou** e marcar alguns itens;
-4. aguardar mais de 15 segundos e, se possível, provocar um evento Realtime em outro pedido;
-5. confirmar que as seleções, etapa e forma de pagamento permanecem intactas;
-6. concluir o pagamento e confirmar que o pedido aberto é sincronizado;
-7. criar um novo pedido e digitar um telefone de cliente existente;
-8. confirmar o preenchimento do perfil;
-9. consultar um número inexistente e confirmar a mensagem de cliente novo;
-10. simular indisponibilidade da função e confirmar mensagem de erro com **Tentar novamente**.
-
-## Publicação
-
-Esta alteração ainda não foi publicada. Para o P0.2 funcionar integralmente fora do ambiente local, é necessário publicar tanto o frontend quanto a Edge Function `get-customer-profile`. O deploy deve ser seguido pelos casos manuais acima e pela verificação do workflow responsável pelas funções Supabase.
-
-## Estudo mobile-first — próxima etapa, sem implementação neste P0
-
-As melhorias de interface continuam recomendadas, mas foram mantidas fora desta correção para reduzir risco operacional:
-
-- manter ações principais fixas na parte inferior do sheet;
-- aumentar áreas de toque de itens e formas de pagamento;
-- apresentar resumo persistente de selecionados e valor restante;
-- reduzir troca de etapas para pagamentos divididos;
-- preservar rascunho local ao fechar acidentalmente o sheet;
-- exibir o estado de sincronização do quadro sem interromper a tarefa atual;
-- posicionar busca de cliente, retorno da consulta e nova tentativa no mesmo bloco visual;
-- validar primeiro em larguras de 360 px e 390 px, depois tablet e desktop.
-
-Esses itens devem ser prototipados e testados com atendentes antes de alterar o fluxo produtivo.
+![Consulta de cliente com timeout e retentativa em 360 px](evidence/p0-consulta-timeout-360.png)
