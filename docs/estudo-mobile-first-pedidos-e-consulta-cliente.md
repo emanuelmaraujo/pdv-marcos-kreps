@@ -116,7 +116,7 @@ checkout, detalhe do pedido e sheet/modal de pagamento.
 
 | Melhoria | Critérios de aceite | Arquivos/componentes prováveis |
 |---|---|---|
-| Cabeçalho do quadro priorizado | em 360 px há pelo menos um card acionável na primeira dobra; filtros secundários podem recolher sem perder busca | `pedidos/page.tsx`, `OrderTab`, `QuickMetric` |
+| Cabeçalho do quadro priorizado | Implementado: em 360/390 px busca, atualização e abas ficam visíveis primeiro; o resumo operacional recolhe por padrão e abre sem ocultar filtros nem busca | `pedidos/page.tsx`, `OrderTab`, `QuickMetric` |
 | Resumo persistente de pagamento por itens | Implementado: o cabeçalho fixo exibe selecionado, restante e, na etapa de método, a forma atual; os CTAs informam quantidade e valor do lote | `PayItemsModal.tsx`, `Sheet.tsx` |
 | Indicador de atualização não intrusivo | Realtime/polling atualiza lista sem resetar detalhe e avisa discretamente quando houver mudança relacionada | `pedidos/page.tsx`, `order-refresh.ts` |
 | Identificação de cliente no mesmo bloco | telefone, estado, nome e retentativa têm ordem visual estável e mensagem curta | `OrderSummarySheet.tsx`, utilitários de telefone |
@@ -162,6 +162,11 @@ pagamento por itens: durante a escolha do método, o cabeçalho informa lote,
 valor e método; os CTAs também identificam quantidade e valor antes de avançar
 ou registrar. Não houve mudança em cálculo, método selecionado ou chamada de
 pagamento.
+
+O segundo incremento P1 reduz a altura inicial do quadro em telas menores: o
+resumo de métricas recolhe por padrão, enquanto busca, atualização e abas de
+status seguem imediatamente disponíveis. Isso antecipa o primeiro card sem
+remover filtros ou dados operacionais.
 
 ![Confirmação de descarte do checkout em 360 px](evidence/p0-rascunho-mobile-360.png)
 
