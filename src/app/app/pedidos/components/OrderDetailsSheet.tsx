@@ -1,5 +1,4 @@
-import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
-import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { Order, PaymentMethod } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { OrderStatusBadge } from "./OrderStatusBadge";
@@ -7,11 +6,15 @@ import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
 import { PayItemsModal } from "./PayItemsModal";
 import { EditOrderItemSheet } from "./EditOrderItemSheet";
-import { useState } from "react";
-import { pdvApi } from "@/lib/api/pdv-api";
-import { couriersApi } from "@/lib/api/branches-admin-api";
-import type { Courier } from "@/types/pdv";
 import { useRouter } from "next/navigation";
+import {
+  formatDuration,
+  formatOrderTime as fmt,
+  minutesBetween,
+  ORDER_DETAILS_PAYMENT_METHOD_BY_VALUE as PAYMENT_METHOD_CONFIG,
+  orderCurrency as currency,
+  useOrderDetailsActions,
+} from "./order-details-shared";
 import {
   PlusCircle,
   Printer,
@@ -25,11 +28,6 @@ import {
   Bike,
   MapPin,
   Clock,
-  QrCode,
-  Banknote,
-  CreditCard,
-  Gift,
-  Smartphone,
 } from "lucide-react";
 
 interface Props {
@@ -37,22 +35,6 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onOrderUpdated: () => void | Promise<void>;
-}
-
-const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-
-function fmt(iso: string) {
-  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function minutesBetween(start?: string | null, end?: string | null) {
-  if (!start || !end) return null;
-  return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
-}
-
-function formatDuration(minutes: number | null) {
-  if (minutes === null) return "--";
-  return minutes < 60 ? `${minutes}min` : `${Math.floor(minutes / 60)}h ${minutes % 60}min`;
 }
 
 function TimelineStep({
@@ -100,113 +82,21 @@ function TimeMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-const PAYMENT_METHOD_CONFIG: Record<
-  PaymentMethod,
-  { label: string; Icon: React.ElementType; colors: string }
-> = {
-  PIX:         { label: "PIX",          Icon: QrCode,      colors: "border-teal-500/30 bg-teal-500/10 text-teal-600 hover:bg-teal-500/20" },
-  CASH:        { label: "Dinheiro",     Icon: Banknote,    colors: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20" },
-  DEBIT_CARD:  { label: "Débito",       Icon: CreditCard,  colors: "border-blue-500/30 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20" },
-  CREDIT_CARD: { label: "Crédito",      Icon: CreditCard,  colors: "border-violet-500/30 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20" },
-  IFOOD:       { label: "iFood",        Icon: Smartphone,  colors: "border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20" },
-  COURTESY:    { label: "Cortesia",     Icon: Gift,        colors: "border-pink-500/30 bg-pink-500/10 text-pink-600 hover:bg-pink-500/20" },
-  PENDING:     { label: "Pendente",     Icon: Clock,       colors: "border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20" },
-};
-
-function getOutstandingAmount(order: Order) {
-  const pendingItemsTotal = (order.items ?? [])
-    .filter((item) => item.status !== "CANCELLED" && item.payment_status !== "PAID" && item.payment_status !== "COURTESY")
-    .reduce((sum, item) => sum + Number(item.total_price ?? 0), 0);
-  const feesTotal = !order.paid_at ? Number(order.packing_fee ?? 0) + Number(order.delivery_fee ?? 0) : 0;
-  return pendingItemsTotal + feesTotal;
-}
-
 export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Props) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [showCancelReason, setShowCancelReason] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  const [showPaymentSelection, setShowPaymentSelection] = useState(false);
-  const [showPayItems, setShowPayItems] = useState(false);
-  const [showChangeMethod, setShowChangeMethod] = useState(false);
-  const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
-  const [showDispatchForm, setShowDispatchForm] = useState(false);
-  const [courierNameInput, setCourierNameInput] = useState("");
-  const [courierPhoneInput, setCourierPhoneInput] = useState("");
-  const [courierIdInput, setCourierIdInput] = useState<string>("");
-  const [registeredCouriers, setRegisteredCouriers] = useState<Courier[]>([]);
+  const {
+    isLoading, errorMsg, setErrorMsg,
+    showCancelReason, setShowCancelReason, cancelReason, setCancelReason,
+    showPaymentSelection, setShowPaymentSelection, showPayItems, setShowPayItems,
+    showChangeMethod, setShowChangeMethod, editingItem, setEditingItem,
+    showDispatchForm, setShowDispatchForm,
+    courierNameInput, setCourierNameInput, courierPhoneInput, setCourierPhoneInput,
+    courierIdInput, setCourierIdInput, registeredCouriers,
+    onConfirm, onReady, onDeliver, onRevertToQueue, onConfirmDelivery, onCancel,
+    onMarkPayment, onChangeMethod, onReprint, onDispatch, openDispatchForm,
+  } = useOrderDetailsActions({ order, onClose, onOrderUpdated });
 
   if (!order) return null;
-
-  const handleAction = async (action: () => Promise<unknown>, options: { closeAfter?: boolean } = {}) => {
-    const closeAfter = options.closeAfter ?? false;
-    setIsLoading(true);
-    setErrorMsg("");
-    try {
-      await action();
-      await onOrderUpdated();
-      if (closeAfter) onClose();
-    } catch (err: unknown) {
-      setErrorMsg(getFriendlyErrorMessage(err, "Ocorreu um erro. Tente novamente."));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const onConfirm = () => handleAction(() => pdvApi.confirmOrder(order.id));
-  const onReady   = () => handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
-  const onDeliver = () =>
-    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" }));
-  const onDispatch = async () => {
-    setIsLoading(true);
-    setErrorMsg("");
-    try {
-      await pdvApi.dispatchDelivery({
-        orderId: order.id,
-        courierId: courierIdInput || undefined,
-        courierName: courierIdInput ? undefined : (courierNameInput.trim() || undefined),
-        courierPhone: courierIdInput ? undefined : (courierPhoneInput.trim() || undefined),
-      });
-      await onOrderUpdated();
-      setShowDispatchForm(false);
-    } catch (err: unknown) {
-      setErrorMsg(getFriendlyErrorMessage(err, "Ocorreu um erro ao despachar a entrega."));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  const openDispatchForm = async () => {
-    setCourierNameInput(order.courier_name || "");
-    setCourierPhoneInput(order.courier_phone || "");
-    setCourierIdInput("");
-    setShowDispatchForm(true);
-    try {
-      setRegisteredCouriers(await couriersApi.listByBranch(order.branch_id));
-    } catch {
-      setRegisteredCouriers([]);
-    }
-  };
-  const onConfirmDelivery = () =>
-    handleAction(() => pdvApi.confirmDelivery({ orderId: order.id }));
-  const onRevertToQueue = () =>
-    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "NA_FILA" }));
-  const onCancel = () => {
-    if (!cancelReason.trim()) { setErrorMsg("Motivo obrigatório."); return; }
-    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }), { closeAfter: true });
-  };
-  const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
-    handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: getOutstandingAmount(order) }));
-  const onChangeMethod = (method: PaymentMethod) =>
-    handleAction(async () => {
-      await pdvApi.changePaymentMethod({ orderId: order.id, paymentMethod: method });
-      setShowChangeMethod(false);
-    });
-  const onReprint = () =>
-    handleAction(() => pdvApi.reprintOrder({
-      orderId: order.id,
-      copies: order.source === "APP" ? ["KITCHEN", "JUICE_POTATO"] : ["CUSTOMER", "KITCHEN", "JUICE_POTATO"],
-    }));
 
   // Timeline logic
   const isDelivery = order.type === "ENTREGA";
@@ -633,14 +523,14 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {(["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD"] as PaymentMethod[]).map((method) => {
-                  const { label, Icon, colors } = PAYMENT_METHOD_CONFIG[method];
+                  const { label, Icon, color } = PAYMENT_METHOD_CONFIG[method];
                   const isCurrent = order.payment_method === method;
                   return (
                     <button
                       key={method}
                       onClick={() => onChangeMethod(method)}
                       disabled={isLoading || isCurrent}
-                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 font-black text-xs transition-all active:scale-95 ${colors} ${isCurrent ? "ring-2 ring-current ring-offset-1 opacity-70" : ""}`}
+                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 font-black text-xs transition-all active:scale-95 ${color} ${isCurrent ? "ring-2 ring-current ring-offset-1 opacity-70" : ""}`}
                     >
                       <Icon size={16} /> {label}
                     </button>
@@ -661,13 +551,13 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated }: Pr
               </div>
               <div className="grid grid-cols-3 gap-3">
                 {(["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD", "COURTESY"] as PaymentMethod[]).map((method) => {
-                  const { label, Icon, colors } = PAYMENT_METHOD_CONFIG[method];
+                  const { label, Icon, color } = PAYMENT_METHOD_CONFIG[method];
                   return (
                     <button
                       key={method}
                       onClick={() => onMarkPayment(method, method === "COURTESY" ? "COURTESY" : "PAID")}
                       disabled={isLoading}
-                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 font-black text-xs transition-all active:scale-95 ${colors}`}
+                      className={`flex flex-col items-center justify-center gap-2 h-16 rounded-2xl border-2 font-black text-xs transition-all active:scale-95 ${color}`}
                     >
                       <Icon size={16} /> {label}
                     </button>

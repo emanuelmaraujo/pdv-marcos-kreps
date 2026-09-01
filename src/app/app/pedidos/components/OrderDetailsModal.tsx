@@ -1,41 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Order, OrderItem, PaymentMethod, PaymentStatus } from "@/types/pdv";
+import { Order } from "@/types/pdv";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
-import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { OrderItemsControl } from "./OrderItemsControl";
 import { PayItemsModal } from "./PayItemsModal";
 import { EditOrderItemSheet } from "./EditOrderItemSheet";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
-import { pdvApi } from "@/lib/api/pdv-api";
-import { couriersApi } from "@/lib/api/branches-admin-api";
-import type { Courier } from "@/types/pdv";
 import { useRouter } from "next/navigation";
+import {
+  formatDuration,
+  formatOrderTime as fmt,
+  minutesBetween,
+  ORDER_DETAILS_PAYMENT_LABELS as PAYMENT_LABEL,
+  ORDER_DETAILS_PAYMENT_METHODS as PAYMENT_METHODS,
+  orderCurrency as currency,
+  useOrderDetailsActions,
+} from "./order-details-shared";
 import {
   X, PlusCircle, Printer, CheckCircle2, Package, XCircle,
   AlertTriangle, ArrowLeft, Utensils, ShoppingBag,
-  QrCode, Banknote, CreditCard, Gift, ChevronDown, ChevronUp,
-  History, Smartphone, Bike, MapPin,
+  ChevronDown, ChevronUp,
+  History, Bike, MapPin,
 } from "lucide-react";
-
-const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-
-function fmt(iso: string) {
-  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function minutesBetween(start?: string | null, end?: string | null) {
-  if (!start || !end) return null;
-  return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
-}
-
-function formatDuration(minutes: number | null) {
-  if (minutes === null) return "--";
-  return minutes < 60 ? `${minutes}min` : `${Math.floor(minutes / 60)}h ${minutes % 60}min`;
-}
 
 function TimelineStep({
   label, time, active, done,
@@ -72,28 +61,6 @@ function TimeMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-const PAYMENT_METHODS: { value: PaymentMethod; label: string; Icon: React.ElementType; color: string }[] = [
-  { value: "PIX",         label: "PIX",      Icon: QrCode,      color: "border-teal-500/30 bg-teal-500/10 text-teal-600 hover:bg-teal-500/20" },
-  { value: "CASH",        label: "Dinheiro", Icon: Banknote,    color: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20" },
-  { value: "DEBIT_CARD",  label: "Débito",   Icon: CreditCard,  color: "border-blue-500/30 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20" },
-  { value: "CREDIT_CARD", label: "Crédito",  Icon: CreditCard,  color: "border-violet-500/30 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20" },
-  { value: "IFOOD",       label: "iFood",    Icon: Smartphone,  color: "border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20" },
-  { value: "COURTESY",    label: "Cortesia", Icon: Gift,        color: "border-pink-500/30 bg-pink-500/10 text-pink-600 hover:bg-pink-500/20" },
-];
-
-const PAYMENT_LABEL: Record<string, string> = {
-  PIX: "PIX", CASH: "Dinheiro", DEBIT_CARD: "Débito",
-  CREDIT_CARD: "Crédito", IFOOD: "iFood", COURTESY: "Cortesia", PENDING: "Pendente",
-};
-
-function getOutstandingAmount(order: Order) {
-  const pendingItemsTotal = (order.items ?? [])
-    .filter((item) => item.status !== "CANCELLED" && item.payment_status !== "PAID" && item.payment_status !== "COURTESY")
-    .reduce((sum, item) => sum + Number(item.total_price ?? 0), 0);
-  const feesTotal = !order.paid_at ? Number(order.packing_fee ?? 0) + Number(order.delivery_fee ?? 0) : 0;
-  return pendingItemsTotal + feesTotal;
-}
-
 interface Props {
   order: Order | null;
   isOpen: boolean;
@@ -103,20 +70,19 @@ interface Props {
 
 export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Props) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [showCancelReason, setShowCancelReason] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  const [showPaymentSelection, setShowPaymentSelection] = useState(false);
-  const [showPayItems, setShowPayItems] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showChangeMethod, setShowChangeMethod] = useState(false);
-  const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
-  const [showDispatchForm, setShowDispatchForm] = useState(false);
-  const [courierNameInput, setCourierNameInput] = useState("");
-  const [courierPhoneInput, setCourierPhoneInput] = useState("");
-  const [courierIdInput, setCourierIdInput] = useState<string>("");
-  const [registeredCouriers, setRegisteredCouriers] = useState<Courier[]>([]);
+  const {
+    isLoading, errorMsg, setErrorMsg,
+    showCancelReason, setShowCancelReason, cancelReason, setCancelReason,
+    showPaymentSelection, setShowPaymentSelection, showPayItems, setShowPayItems,
+    showChangeMethod, setShowChangeMethod, editingItem, setEditingItem,
+    showDispatchForm, setShowDispatchForm,
+    courierNameInput, setCourierNameInput, courierPhoneInput, setCourierPhoneInput,
+    courierIdInput, setCourierIdInput, registeredCouriers,
+    onConfirm, onReady, onDeliver, onRevertToQueue, onConfirmDelivery, onCancel,
+    onMarkPayment, onChangeMethod, onReprint, onDispatch, openDispatchForm,
+    resetActionPanels,
+  } = useOrderDetailsActions({ order, onClose, onOrderUpdated });
 
   // Close on Escape
   useEffect(() => {
@@ -129,88 +95,14 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
   // Reset panels when order changes
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setErrorMsg("");
-      setShowCancelReason(false);
-      setCancelReason("");
-      setShowPaymentSelection(false);
-      setShowChangeMethod(false);
+      resetActionPanels();
       setShowHistory(false);
-      setShowDispatchForm(false);
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [order?.id]);
+  }, [order?.id, resetActionPanels]);
 
   if (!isOpen || !order) return null;
-
-  const handleAction = async (action: () => Promise<unknown>, options: { closeAfter?: boolean } = {}) => {
-    const closeAfter = options.closeAfter ?? false;
-    setIsLoading(true);
-    setErrorMsg("");
-    try {
-      await action();
-      await onOrderUpdated();
-      if (closeAfter) onClose();
-    } catch (err) {
-      setErrorMsg(getFriendlyErrorMessage(err, "Ocorreu um erro. Tente novamente."));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const onConfirm = () => handleAction(() => pdvApi.confirmOrder(order.id));
-  const onReady   = () => handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
-  const onDeliver = () =>
-    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" }));
-  const onRevertToQueue = () =>
-    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "NA_FILA" }));
-  const onDispatch = async () => {
-    setIsLoading(true);
-    setErrorMsg("");
-    try {
-      await pdvApi.dispatchDelivery({
-        orderId: order.id,
-        courierId: courierIdInput || undefined,
-        courierName: courierIdInput ? undefined : (courierNameInput.trim() || undefined),
-        courierPhone: courierIdInput ? undefined : (courierPhoneInput.trim() || undefined),
-      });
-      await onOrderUpdated();
-      setShowDispatchForm(false);
-    } catch (err) {
-      setErrorMsg(getFriendlyErrorMessage(err, "Ocorreu um erro ao despachar a entrega."));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  const openDispatchForm = async () => {
-    setCourierNameInput(order.courier_name || "");
-    setCourierPhoneInput(order.courier_phone || "");
-    setCourierIdInput("");
-    setShowDispatchForm(true);
-    try {
-      setRegisteredCouriers(await couriersApi.listByBranch(order.branch_id));
-    } catch {
-      setRegisteredCouriers([]);
-    }
-  };
-  const onConfirmDelivery = () =>
-    handleAction(() => pdvApi.confirmDelivery({ orderId: order.id }));
-  const onCancel = () => {
-    if (!cancelReason.trim()) { setErrorMsg("Motivo obrigatório."); return; }
-    handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }), { closeAfter: true });
-  };
-  const onMarkPayment = (method: PaymentMethod, pStatus: PaymentStatus) =>
-    handleAction(() => pdvApi.markPayment({ orderId: order.id, paymentMethod: method, status: pStatus, amount: getOutstandingAmount(order) }));
-  const onChangeMethod = (method: PaymentMethod) =>
-    handleAction(async () => {
-      await pdvApi.changePaymentMethod({ orderId: order.id, paymentMethod: method });
-      setShowChangeMethod(false);
-    });
-  const onReprint = () =>
-    handleAction(() => pdvApi.reprintOrder({
-      orderId: order.id,
-      copies: order.source === "APP" ? ["KITCHEN", "JUICE_POTATO"] : ["CUSTOMER", "KITCHEN", "JUICE_POTATO"],
-    }));
 
   const isDelivery   = order.type === "ENTREGA";
   const isCANCELADO  = order.status === "CANCELADO";
@@ -721,7 +613,7 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated }: Pr
                   </h4>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  {PAYMENT_METHODS.filter(m => m.value !== "COURTESY").map(({ value, label, Icon, color }) => (
+                  {PAYMENT_METHODS.filter((method) => method.value !== "COURTESY" && method.value !== "PENDING").map(({ value, label, Icon, color }) => (
                     <button
                       key={value}
                       onClick={() => onChangeMethod(value)}
