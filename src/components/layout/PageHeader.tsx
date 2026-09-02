@@ -9,10 +9,10 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, action, className }: PageHeaderProps) {
   return (
-    <header className={`sticky top-14 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur-md ${className || ""}`}>
+    <header className={`sticky top-14 z-30 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-surface)_92%,transparent)] backdrop-blur-md ${className || ""}`}>
       <div className="flex min-h-14 items-center justify-between gap-3 px-4 py-2 md:px-6 lg:px-8">
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-bold tracking-tight text-brand-charcoal">
+          <h1 className="truncate text-lg font-bold tracking-tight text-[var(--text-primary)]">
             {title}
           </h1>
           {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}

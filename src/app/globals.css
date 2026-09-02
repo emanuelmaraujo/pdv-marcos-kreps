@@ -301,6 +301,27 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Espaços analíticos (caixa e relatórios)
+   Uma superfície contínua evita que cada card pareça uma tela isolada. O
+   relevo fica reservado para informação acionável, e não para cada contêiner. */
+.cash-workspace,
+.report-workspace {
+  background-image:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--brand) 7%, transparent), transparent 26rem),
+    linear-gradient(var(--bg-base), var(--bg-base));
+}
+
+.analytics-toolbar {
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.analytics-context {
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-surface) 98%, var(--brand) 2%), var(--bg-surface));
+  box-shadow: var(--elevation-1);
+}
+
 /* Transições padrão — 150ms ease-out para hover/active */
 @layer base {
   button,

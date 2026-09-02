@@ -121,6 +121,15 @@ const SECTIONS: { id: Section; label: string; short: string; icon: React.Element
   { id: "orders",    label: "Pedidos",           short: "Pedidos",   icon: ListOrdered },
 ];
 
+const SECTION_DESCRIPTIONS: Record<Section, string> = {
+  overview: "Leia os sinais que exigem atenção e a saúde do período em poucos segundos.",
+  financial: "Separe receita, custos e exceções para decidir com números que fecham.",
+  sales: "Descubra quais produtos sustentam o resultado e quais precisam de ação.",
+  patterns: "Use volume, horários e tempos para ajustar escala e operação.",
+  compare: "Compare períodos equivalentes sem perder o contexto dos filtros ativos.",
+  orders: "Audite os pedidos que formam os indicadores antes de tomar uma decisão.",
+};
+
 // ── Computation helpers ───────────────────────────────────────────────────────
 
 function getSaleDate(order: OrderRecord): Date {
@@ -360,7 +369,7 @@ export default function RelatorioPage() {
   const printPeriodLabel = currentRangeForCompare?.label ?? PERIOD_LABELS[period];
 
   return (
-    <div className="flex h-full flex-col bg-[var(--bg-base)] print:block print:h-auto">
+    <div className="report-workspace flex h-full flex-col bg-[var(--bg-base)] print:block print:h-auto">
       {/* ── Control panel ── */}
       <ControlPanel
         period={period}
@@ -404,7 +413,7 @@ export default function RelatorioPage() {
         {isLoading && !report ? (
           <div className="p-8"><LoadingState message="Carregando dados..." /></div>
         ) : !report ? null : (
-          <div className="mx-auto max-w-7xl space-y-5 px-4 pb-28 pt-5 md:px-6 lg:px-8 print:max-w-none print:space-y-4 print:px-0 print:pb-4 print:pt-0">
+          <div className="mx-auto max-w-7xl space-y-6 px-4 pb-28 pt-6 md:px-6 lg:px-8 print:max-w-none print:space-y-4 print:px-0 print:pb-4 print:pt-0">
             {/* Cabeçalho só visível ao imprimir/exportar PDF — a tela usa o ControlPanel (que fica oculto no print). */}
             <div className="hidden print:flex print:flex-col print:gap-0.5 print:border-b print:border-black/20 print:pb-3">
               <p className="text-lg font-black text-black">Marcos Krep&apos;s — Relatório de Caixa</p>
@@ -412,6 +421,12 @@ export default function RelatorioPage() {
                 {SECTIONS.find((s) => s.id === activeSection)?.label} · {printPeriodLabel} · impresso em {longDate.format(new Date())} {reportTimeFormatter.format(new Date())}
               </p>
             </div>
+            <ReportContext
+              section={activeSection}
+              periodLabel={printPeriodLabel}
+              filters={filters}
+              branchName={currentBranch?.name ?? null}
+            />
             {activeSection === "overview"  && <SectionOverview  report={report} prevReport={prevReport} score={operationalScore} projection={projection} monthlyGoal={currentBranch?.monthly_revenue_goal ?? null} />}
             {activeSection === "financial" && <SectionFinancial report={report} dailyRows={dailyRows} />}
             {activeSection === "sales"     && <SectionSales     report={report} abcProducts={abcProducts} />}
@@ -460,14 +475,10 @@ function ControlPanel({
   const rangeLabel = rangeStart && rangeEnd
     ? `${reportDateLabelFmt.format(labelToDate(rangeStart))} → ${reportDateLabelFmt.format(labelToDate(rangeEnd))}`
     : "Intervalo";
-  // Usa o BottomSheet compartilhado do app (mesmo padrão de usuarios/pedidos/
-  // novo-pedido) em vez de um popover próprio — além de seguir o padrão
-  // mobile já estabelecido, um <div position:fixed> não fica sujeito ao
-  // clipping da linha de pills (que tem overflow-x-auto e, por spec de CSS,
-  // isso força overflow-y a virar "auto" também — um popover absoluto
-  // dentro dela ficava cortado no limite da linha, invisível/inclicável
-  // mesmo com o estado "aberto" correto).
+  // O rascunho só vira filtro ao tocar em "Aplicar". Assim o relatório não
+  // recarrega como um único dia depois de escolher a primeira ponta do range.
   const [showRangeSheet, setShowRangeSheet] = useState(false);
+  const [rangeDraft, setRangeDraft] = useState({ start: rangeStart, end: rangeEnd });
 
   const hasActiveFilters =
     (filters.category_id && filters.category_id !== "ALL") ||
@@ -479,9 +490,9 @@ function ControlPanel({
     onFilterChange({ ...filters, category_id: "ALL", payment_method: "ALL", order_type: "ALL", weekday: "ALL" });
 
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)] print:hidden">
+    <div className="analytics-toolbar sticky top-14 z-20 border-b border-[var(--border)] print:hidden">
       {/* Row 1: navigation + refresh */}
-      <div className="flex items-center gap-3 px-4 py-3 md:px-6">
+      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:px-6 lg:px-8">
         <button
           onClick={onBack}
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-95"
@@ -489,6 +500,11 @@ function ControlPanel({
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
         </button>
+
+        <div className="hidden shrink-0 md:block">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)]">Gestão</p>
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Relatório de caixa</p>
+        </div>
 
         {/* Period pills */}
         <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto hide-scrollbar rounded-full bg-[var(--bg-subtle)] p-1">
@@ -528,7 +544,10 @@ function ControlPanel({
 
           {/* Pill "Intervalo" — abre um BottomSheet (mesmo padrão mobile do resto do app) */}
           <button
-            onClick={() => setShowRangeSheet(true)}
+            onClick={() => {
+              setRangeDraft({ start: rangeStart, end: rangeEnd });
+              setShowRangeSheet(true);
+            }}
             className={`inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
               period === "range"
                 ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
@@ -541,41 +560,50 @@ function ControlPanel({
           </button>
         </div>
 
-        <BottomSheet isOpen={showRangeSheet} onClose={() => setShowRangeSheet(false)} title="Intervalo (dias comerciais)">
+        <BottomSheet isOpen={showRangeSheet} onClose={() => setShowRangeSheet(false)} title="Escolher intervalo">
           <div className="space-y-4 p-6">
+            <div className="rounded-xl bg-[var(--status-info-bg)] px-3 py-2.5 text-xs font-medium text-[var(--status-info)]">
+              Selecione o primeiro e o último dia. O relatório incluirá todos os dias entre eles.
+            </div>
             <div className="space-y-3">
               <div>
-                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">De</label>
+                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Início do período</label>
                 <input
                   type="date"
                   max={todayKey}
-                  value={rangeStart}
-                  onChange={(e) => onRangeChange(e.target.value, rangeEnd && e.target.value > rangeEnd ? e.target.value : rangeEnd)}
+                  value={rangeDraft.start}
+                  onChange={(e) => setRangeDraft((current) => ({
+                    start: e.target.value,
+                    end: current.end && e.target.value > current.end ? e.target.value : current.end,
+                  }))}
                   className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-sm font-medium text-[var(--text-primary)] focus:border-brand-red focus:outline-none"
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Até</label>
+                <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Fim do período</label>
                 <input
                   type="date"
                   max={todayKey}
-                  min={rangeStart || undefined}
-                  value={rangeEnd}
-                  onChange={(e) => onRangeChange(rangeStart, e.target.value)}
+                  min={rangeDraft.start || undefined}
+                  value={rangeDraft.end}
+                  onChange={(e) => setRangeDraft((current) => ({ ...current, end: e.target.value }))}
                   className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-sm font-medium text-[var(--text-primary)] focus:border-brand-red focus:outline-none"
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <button
-                onClick={() => { onRangeChange("", ""); setShowRangeSheet(false); }}
+                onClick={() => { setRangeDraft({ start: "", end: "" }); onRangeChange("", ""); setShowRangeSheet(false); }}
                 className="rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]"
               >
                 Limpar
               </button>
               <button
-                onClick={() => setShowRangeSheet(false)}
-                disabled={!rangeStart || !rangeEnd}
+                onClick={() => {
+                  onRangeChange(rangeDraft.start, rangeDraft.end);
+                  setShowRangeSheet(false);
+                }}
+                disabled={!rangeDraft.start || !rangeDraft.end}
                 className="rounded-lg bg-brand-red px-4 py-2 text-xs font-black text-white disabled:opacity-40"
               >
                 Aplicar
@@ -605,7 +633,8 @@ function ControlPanel({
       </div>
 
       {/* Row 2: secondary filters */}
-      <div className="flex items-center gap-2 overflow-x-auto border-t border-[var(--border)] px-4 pb-3 pt-2 hide-scrollbar md:px-6">
+      <div className="border-t border-[var(--border)]">
+        <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-4 pb-3 pt-2 hide-scrollbar md:px-6 lg:px-8">
         <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)]">
           <Filter className="h-3 w-3" strokeWidth={1.75} /> Filtros
         </span>
@@ -665,6 +694,7 @@ function ControlPanel({
             Limpar
           </button>
         )}
+        </div>
       </div>
     </div>
   );
@@ -702,8 +732,8 @@ function FilterChip({
 
 function SectionNav({ active, onChange }: { active: Section; onChange: (s: Section) => void }) {
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--bg-surface)] print:hidden">
-      <div className="flex overflow-x-auto hide-scrollbar">
+    <nav aria-label="Seções do relatório" className="border-b border-[var(--border)] bg-[var(--bg-surface)]/80 print:hidden">
+      <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-3 py-2 hide-scrollbar md:px-5 lg:px-7">
         {SECTIONS.map((s) => {
           const Icon = s.icon;
           const isActive = active === s.id;
@@ -711,21 +741,21 @@ function SectionNav({ active, onChange }: { active: Section; onChange: (s: Secti
             <button
               key={s.id}
               onClick={() => onChange(s.id)}
-              className={`relative inline-flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-semibold md:px-5 ${
-                isActive ? "text-[var(--text-primary)]" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+              className={`relative inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold md:px-4 ${
+                isActive
+                  ? "bg-[var(--bg-subtle)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                  : "text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-secondary)]"
               }`}
             >
               <Icon className="h-4 w-4" strokeWidth={isActive ? 2 : 1.75} />
               <span className="hidden sm:inline">{s.label}</span>
               <span className="sm:hidden">{s.short}</span>
-              {isActive && (
-                <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full bg-brand-red" />
-              )}
+              {isActive && <span className="h-1.5 w-1.5 rounded-full bg-brand-red" />}
             </button>
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }
 
@@ -742,6 +772,46 @@ function TopLoadingBar() {
         }
       `}</style>
     </div>
+  );
+}
+
+function ReportContext({
+  section: sectionId, periodLabel, filters, branchName,
+}: {
+  section: Section;
+  periodLabel: string;
+  filters: CashReportFilters;
+  branchName: string | null;
+}) {
+  const section = SECTIONS.find((item) => item.id === sectionId)!;
+  const Icon = section.icon;
+  const filterLabels = [
+    filters.order_type && filters.order_type !== "ALL"
+      ? ({ BALCAO: "Balcão", VIAGEM: "Retirada", ENTREGA: "Entrega" }[filters.order_type])
+      : null,
+    filters.payment_method && filters.payment_method !== "ALL"
+      ? PAYMENT_META[filters.payment_method]?.label ?? filters.payment_method
+      : null,
+    filters.weekday && filters.weekday !== "ALL" ? filters.weekday : null,
+  ].filter((label): label is string => Boolean(label));
+
+  return (
+    <section className="analytics-context rounded-2xl p-4 md:flex md:items-center md:justify-between md:gap-6 md:p-5">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-red/10 text-brand-red">
+          <Icon className="h-5 w-5" strokeWidth={1.75} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">{section.label}</p>
+          <h2 className="mt-0.5 text-subtitle font-semibold text-[var(--text-primary)]">{SECTION_DESCRIPTIONS[section.id]}</h2>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 md:mt-0 md:max-w-[45%] md:justify-end">
+        {branchName && <span className="rounded-full bg-[var(--bg-subtle)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">{branchName}</span>}
+        <span className="rounded-full bg-[var(--bg-inverse)] px-2.5 py-1 text-[11px] font-semibold text-white">{periodLabel}</span>
+        {filterLabels.map((label) => <span key={label} className="rounded-full border border-brand-red/15 bg-brand-red/5 px-2.5 py-1 text-[11px] font-semibold text-brand-red">{label}</span>)}
+      </div>
+    </section>
   );
 }
 

@@ -139,9 +139,13 @@ serve(async (req) => {
     const { start_date, end_date, category_id, payment_method, branch_id, order_type, weekday } = await req.json();
 
     // 4. Query Orders
-    let query = supabaseAdmin
-      .from('orders')
-      .select(`
+    // A API limita cada resposta a um bloco de linhas. Relatórios mensais ou
+    // históricos precisam percorrer todas as páginas para que os totais não
+    // sejam silenciosamente calculados só sobre os primeiros pedidos.
+    const buildOrdersQuery = () => {
+      let query = supabaseAdmin
+        .from('orders')
+        .select(`
         id,
         total_amount,
         payment_status,
@@ -159,24 +163,33 @@ serve(async (req) => {
         delivered_at,
         delivery_delivered_at,
         daily_number
-      `);
+        `)
+        .order('created_at', { ascending: false });
 
-    if (start_date && end_date) {
-      query = query.or([
-        `and(paid_at.not.is.null,paid_at.gte.${start_date},paid_at.lte.${end_date})`,
-        `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${start_date},confirmed_at.lte.${end_date})`,
-        `and(paid_at.is.null,confirmed_at.is.null,created_at.gte.${start_date},created_at.lte.${end_date})`,
-      ].join(','));
-    } else {
-      if (start_date) query = query.gte('created_at', start_date);
-      if (end_date) query = query.lte('created_at', end_date);
+      if (start_date && end_date) {
+        query = query.or([
+          `and(paid_at.not.is.null,paid_at.gte.${start_date},paid_at.lte.${end_date})`,
+          `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${start_date},confirmed_at.lte.${end_date})`,
+          `and(paid_at.is.null,confirmed_at.is.null,created_at.gte.${start_date},created_at.lte.${end_date})`,
+        ].join(','));
+      } else {
+        if (start_date) query = query.gte('created_at', start_date);
+        if (end_date) query = query.lte('created_at', end_date);
+      }
+      if (branch_id) query = query.eq('branch_id', branch_id);
+      if (order_type && order_type !== 'ALL') query = query.eq('type', order_type);
+      // Nota: filtro payment_method é aplicado depois, via tabela payments (suporte a split-bill)
+      return query;
+    };
+
+    const rawOrders: any[] = [];
+    const ORDER_PAGE_SIZE = 1000;
+    for (let from = 0; ; from += ORDER_PAGE_SIZE) {
+      const { data: page, error: ordersError } = await buildOrdersQuery().range(from, from + ORDER_PAGE_SIZE - 1);
+      if (ordersError) throw ordersError;
+      rawOrders.push(...(page ?? []));
+      if ((page?.length ?? 0) < ORDER_PAGE_SIZE) break;
     }
-    if (branch_id) query = query.eq('branch_id', branch_id);
-    if (order_type && order_type !== 'ALL') query = query.eq('type', order_type);
-    // Nota: filtro payment_method é aplicado depois, via tabela payments (suporte a split-bill)
-
-    const { data: rawOrders, error: ordersError } = await query;
-    if (ordersError) throw ordersError;
     const orders = (rawOrders || []).filter((order: any) => {
       if (!start_date && !end_date) return true;
       const saleTime = new Date(getSaleTimestamp(order)).getTime();
