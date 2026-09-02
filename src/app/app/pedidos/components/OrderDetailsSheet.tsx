@@ -203,6 +203,11 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
   const itemCount = (order.items ?? []).reduce((total, item) => total + Number(item.quantity ?? 0), 0);
   const typeLabel = order.type === "BALCAO" ? "Balcão" : isDelivery ? "Delivery" : "Para viagem";
   const sourceLabel = order.source === "ATTENDANT" ? "Atendente" : order.source === "QR_CODE" ? "QR Code" : order.source === "APP" ? "App" : order.source;
+  const canShowFooterAction = !showPaymentSelection && !showCancelReason && !showChangeMethod && (
+    (hasOutstandingPayment && !isAppAwaitingPayment) ||
+    (!hasOutstandingPayment && ["AGUARDANDO_CONFIRMACAO", "NA_FILA", "SAIU_PARA_ENTREGA"].includes(order.status)) ||
+    (!hasOutstandingPayment && order.status === "PRONTO" && (!isDelivery || !showDispatchForm))
+  );
 
   return (
     <>
@@ -210,8 +215,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
       isOpen={isOpen}
       onClose={onClose}
       title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}
-      footer={
-        <div className="space-y-2 border-t border-[var(--border)] px-4 py-3">
+      footer={canShowFooterAction ? (
+        <div className="border-t border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shadow-[0_-8px_18px_rgba(15,23,42,0.05)]">
           {!showPaymentSelection && !showCancelReason && !showChangeMethod && hasOutstandingPayment && !isAppAwaitingPayment && (
             <Button className="h-12 w-full rounded-2xl bg-brand-red text-sm font-black hover:bg-brand-red/90" onClick={() => setShowPayItems(true)} disabled={isLoading}>
               RECEBER {currency.format(outstandingAmount)}
@@ -239,9 +244,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "SAIU_PARA_ENTREGA" && (
             <Button className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-black hover:bg-emerald-600" onClick={onConfirmDelivery} disabled={isLoading}>CONFIRMAR ENTREGA</Button>
           )}
-          <Button variant="outline" className="h-9 w-full rounded-xl border-0 text-xs font-black text-[var(--text-muted)]" onClick={onClose}>FECHAR</Button>
         </div>
-      }
+      ) : undefined}
     >
       <div className="flex flex-col gap-4 px-4 py-4 pb-8">
 
