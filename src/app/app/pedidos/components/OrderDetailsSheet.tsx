@@ -32,11 +32,13 @@ import {
   Utensils,
   ShoppingBag,
   Bike,
-  MapPin,
   Clock,
   ChevronDown,
   ChevronUp,
   History,
+  CircleDollarSign,
+  MessageSquareText,
+  ReceiptText,
 } from "lucide-react";
 
 interface Props {
@@ -89,6 +91,58 @@ function TimeMetric({ label, value }: { label: string; value: string }) {
       <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">{label}</p>
       <p className="mt-0.5 text-sm font-black text-[var(--text-primary)]">{value}</p>
     </div>
+  );
+}
+
+function OrderActionBrief({
+  order,
+  isDelivery,
+  hasOutstandingPayment,
+  outstandingAmount,
+}: {
+  order: Order;
+  isDelivery: boolean;
+  hasOutstandingPayment: boolean;
+  outstandingAmount: number;
+}) {
+  const content = hasOutstandingPayment
+    ? {
+        eyebrow: "Prioridade financeira",
+        title: `Receber ${currency.format(outstandingAmount)}`,
+        description: "Há itens aguardando pagamento nesta comanda.",
+        tone: "border-brand-red/20 bg-brand-red/5 text-brand-red",
+        Icon: CircleDollarSign,
+      }
+    : order.status === "AGUARDANDO_CONFIRMACAO"
+      ? { eyebrow: "Próximo passo", title: "Confirmar pedido", description: "Envie o pedido para a fila de produção.", tone: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700", Icon: CheckCircle2 }
+      : order.status === "AGUARDANDO_PAGAMENTO"
+        ? { eyebrow: "Aguardando pagamento", title: "Pagamento em processamento", description: "O pedido segue para a produção após a confirmação do pagamento.", tone: "border-blue-500/25 bg-blue-500/10 text-blue-700", Icon: CircleDollarSign }
+      : order.status === "NA_FILA"
+        ? { eyebrow: "Em produção", title: "Acompanhar preparo", description: isDelivery ? "Quando estiver pronto, libere para despacho." : "Marque pronto ao finalizar — ou entregue direto no balcão.", tone: "border-brand-amber/35 bg-brand-amber/10 text-amber-800", Icon: Package }
+        : order.status === "PRONTO" && isDelivery
+          ? { eyebrow: "Pronto para sair", title: "Despachar entrega", description: "Confirme quem levará o pedido antes de colocá-lo em rota.", tone: "border-blue-500/25 bg-blue-500/10 text-blue-700", Icon: Bike }
+          : order.status === "PRONTO"
+            ? { eyebrow: "Aguardando retirada", title: "Confirmar entrega", description: "Finalize quando o cliente retirar o pedido.", tone: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700", Icon: CheckCircle2 }
+            : order.status === "SAIU_PARA_ENTREGA"
+              ? { eyebrow: "Entrega em rota", title: "Confirmar chegada", description: "Finalize assim que o pedido for entregue ao cliente.", tone: "border-blue-500/25 bg-blue-500/10 text-blue-700", Icon: Bike }
+              : order.status === "ENTREGUE"
+                ? { eyebrow: "Concluído", title: "Pedido entregue", description: "Consulte os itens, pagamento e histórico quando necessário.", tone: "border-emerald-500/20 bg-emerald-500/5 text-emerald-700", Icon: CheckCircle2 }
+                : order.status === "CANCELADO"
+                  ? { eyebrow: "Situação do pedido", title: "Pedido cancelado", description: "Nenhuma ação operacional está disponível.", tone: "border-red-500/20 bg-red-500/5 text-red-700", Icon: XCircle }
+                  : { eyebrow: "Situação do pedido", title: "Aguardando atualização", description: "Confira os dados do pedido antes de seguir.", tone: "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)]", Icon: ReceiptText };
+
+  const { Icon } = content;
+  return (
+    <section className={`rounded-2xl border p-3.5 ${content.tone}`}>
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/70 shadow-sm"><Icon size={19} /></span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-widest opacity-75">{content.eyebrow}</p>
+          <h3 className="mt-0.5 text-base font-black text-[var(--text-primary)]">{content.title}</h3>
+          <p className="mt-0.5 text-xs font-semibold text-[var(--text-secondary)]">{content.description}</p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -146,6 +200,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
   // ficou pronto esperando o entregador, e quanto tempo o entregador levou.
   const readyToDispatchedMinutes = minutesBetween(order.ready_at, order.dispatched_at);
   const dispatchedToDeliveredMinutes = minutesBetween(order.dispatched_at, order.delivery_delivered_at);
+  const itemCount = (order.items ?? []).reduce((total, item) => total + Number(item.quantity ?? 0), 0);
+  const typeLabel = order.type === "BALCAO" ? "Balcão" : isDelivery ? "Delivery" : "Para viagem";
+  const sourceLabel = order.source === "ATTENDANT" ? "Atendente" : order.source === "QR_CODE" ? "QR Code" : order.source === "APP" ? "App" : order.source;
 
   return (
     <>
@@ -186,7 +243,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
         </div>
       }
     >
-      <div className="flex flex-col gap-5 pb-10">
+      <div className="flex flex-col gap-4 px-4 py-4 pb-8">
 
         {/* Error */}
         {errorMsg && (
@@ -196,69 +253,37 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           </div>
         )}
 
-        {/* Hero Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-charcoal to-zinc-700 p-5 text-white shadow-lg">
-          <div className="absolute right-4 top-4 opacity-10">
+        {/* Identidade do pedido: informação primária, sem competir com a ação. */}
+        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-charcoal via-zinc-800 to-zinc-700 p-4 text-white shadow-lg shadow-zinc-950/15">
+          <div className="absolute right-3 top-2 opacity-[0.08]">
             {order.type === "BALCAO" ? (
-              <Utensils size={64} />
+              <Utensils size={76} />
             ) : isDelivery ? (
-              <Bike size={64} />
+              <Bike size={76} />
             ) : (
-              <ShoppingBag size={64} />
+              <ShoppingBag size={76} />
             )}
           </div>
-          <div className="relative space-y-3">
+          <div className="relative space-y-3.5">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)]">
-                  {order.type === "BALCAO" ? "Balcão" : isDelivery ? "Entrega" : "Para Viagem"} · {order.source === "APP" ? "App" : order.source}
-                </p>
-                <h2 className="mt-0.5 text-2xl font-black leading-tight">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">{typeLabel} · {sourceLabel}</p>
+                <h2 className="mt-1 truncate text-xl font-black leading-tight">
                   {order.customer_name || "Cliente Final"}
                 </h2>
-                <p className="mt-1 text-sm text-zinc-300">
-                  <Clock size={12} className="inline mr-1 opacity-70" />
-                  Criado às {fmt(order.created_at)}
-                  {elapsedLabel && (
-                    <span className="ml-2 font-black text-emerald-400">{elapsedLabel}</span>
-                  )}
-                </p>
+                <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-zinc-300"><Clock size={13} /> Criado às {fmt(order.created_at)} {elapsedLabel && <span className="ml-1 font-black text-emerald-300">· {elapsedLabel}</span>}</p>
               </div>
-              <div className="flex flex-col items-end gap-2">
-                {order.type === "VIAGEM" && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-200 ring-1 ring-amber-300/30">
-                    <ShoppingBag className="h-2.5 w-2.5" strokeWidth={2.25} />
-                    Viagem
-                  </span>
-                )}
-                {isDelivery && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-200 ring-1 ring-blue-300/30">
-                    <Bike className="h-2.5 w-2.5" strokeWidth={2.25} />
-                    Entrega
-                  </span>
-                )}
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
                 <OrderStatusBadge status={order.status} />
                 <PaymentStatusBadge status={order.payment_status} />
               </div>
             </div>
 
-            {/* Endereço de entrega */}
-            {isDelivery && (order.delivery_street || order.delivery_neighborhood) && (
-              <div className="flex items-start gap-2 rounded-xl bg-white/10 px-3 py-2">
-                <MapPin size={14} className="mt-0.5 shrink-0 text-blue-300" />
-                <p className="text-xs font-bold text-zinc-100 leading-snug">
-                  {[order.delivery_street, order.delivery_number].filter(Boolean).join(", ")}
-                  {order.delivery_complement ? ` - ${order.delivery_complement}` : ""}
-                  {order.delivery_neighborhood ? ` · ${order.delivery_neighborhood}` : ""}
-                  {order.delivery_reference ? ` (${order.delivery_reference})` : ""}
-                  {(order.courier_name || order.courier_phone) && (
-                    <span className="mt-1 block text-blue-200">
-                      Entregador: {order.courier_name || "—"}{order.courier_phone ? ` · ${order.courier_phone}` : ""}
-                    </span>
-                  )}
-                </p>
-              </div>
-            )}
+            <div className="grid grid-cols-3 divide-x divide-white/10 rounded-2xl bg-white/[0.08] py-2.5">
+              <div className="px-3"><p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">Pedido</p><p className="mt-0.5 text-sm font-black">#{String(order.daily_number).padStart(2, "0")}</p></div>
+              <div className="px-3"><p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">Itens</p><p className="mt-0.5 text-sm font-black">{itemCount || order.items?.length || 0}</p></div>
+              <div className="px-3"><p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">Total</p><p className="mt-0.5 text-sm font-black tabular-nums">{currency.format(order.total_amount)}</p></div>
+            </div>
 
             {!isCANCELADO && (
               <button type="button" onClick={() => setShowProgress((value) => !value)} aria-expanded={showProgress} className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-300 hover:text-white">
@@ -298,9 +323,21 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
               </p>
             )}
           </div>
-        </div>
+        </section>
+
+        <OrderActionBrief order={order} isDelivery={isDelivery} hasOutstandingPayment={hasOutstandingPayment} outstandingAmount={outstandingAmount} />
 
         <OrderFulfillmentSummary order={order} />
+
+        {order.notes && (
+          <section className="flex gap-3 rounded-2xl border border-violet-500/15 bg-violet-500/[0.06] p-3.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500 text-white"><MessageSquareText size={17} /></span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">Observação do pedido</p>
+              <p className="mt-1 text-sm font-semibold leading-snug text-[var(--text-primary)]">{order.notes}</p>
+            </div>
+          </section>
+        )}
 
         {showProgress && (isDelivery ? (
           <div className="grid grid-cols-4 gap-2">
@@ -343,14 +380,18 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           </button>
         )}
 
-        {/* Items com controles por item */}
-        <div className="space-y-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] px-1">Itens do Pedido</p>
+        {/* Itens primeiro; ajustes e totais ficam contextualizados abaixo. */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]"><ReceiptText size={13} /> Itens do pedido</p>
+            <span className="rounded-full bg-[var(--bg-subtle)] px-2 py-0.5 text-[10px] font-black text-[var(--text-secondary)]">{itemCount || order.items?.length || 0} {itemCount === 1 ? "item" : "itens"}</span>
+          </div>
           <OrderItemsControl order={order} categoryLookup={categoryLookup} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
 
           {/* Financial summary */}
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">
-            <div className="bg-[var(--bg-subtle)]/80 p-4 space-y-2">
+            <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-subtle)]/80 px-4 py-2.5"><span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Resumo da cobrança</span><PaymentStatusBadge status={order.payment_status} /></div>
+            <div className="p-4 space-y-2">
               {(hasDiscount || hasPacking || hasDeliveryFee) && (
                 <div className="flex justify-between text-xs font-semibold text-[var(--text-muted)]">
                   <span>Subtotal</span>
@@ -383,10 +424,11 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Actions */}
-        <div className="space-y-3">
+        {/* Gestão é secundária: a ação principal permanece fixa no rodapé. */}
+        <section className="space-y-3 border-t border-[var(--border)] pt-5">
+          <p className="px-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Ajustes e gestão</p>
           {!showPaymentSelection && !showCancelReason && !showChangeMethod && (
             <>
               {/* Primary status action */}
@@ -665,7 +707,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
               </div>
             </div>
           )}
-        </div>
+        </section>
       </div>
     </BottomSheet>
     {showPayItems && (
