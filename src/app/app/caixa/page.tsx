@@ -667,7 +667,7 @@ function StatusStrip({ data, prevData }: { data: CaixaData; prevData: CaixaData 
       {tiles.map((t) => {
         const m = toneMap[t.tone];
         return (
-          <div key={t.label} className={`flex items-center gap-3 rounded-2xl ${m.bg} px-4 py-3.5`}>
+          <div key={t.label} className={`cash-status-tile flex items-center gap-3 ${m.bg} px-4 py-3.5`}>
             <span className={`h-2 w-2 shrink-0 rounded-full ${m.fg.replace("text-", "bg-")}`} />
             <div className="min-w-0 flex-1">
               <p className={`text-[11px] font-medium ${m.fg}`}>{t.label}</p>
@@ -733,7 +733,7 @@ const INSIGHT_STYLE: Record<InsightSeverity, { wrap: string; icon: string; borde
 
 function InsightsSection({ insights }: { insights: DayInsight[] }) {
   return (
-    <div className="overflow-hidden rounded-3xl bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
+    <div className="cash-panel overflow-hidden">
       <div className="border-b border-[var(--border)] px-5 py-3.5">
         <div className="flex items-center gap-2">
           <Info className="h-4 w-4 text-[var(--text-muted)]" strokeWidth={1.75} />
@@ -790,7 +790,7 @@ function DayMetricsPanel({ data, prevData }: { data: CaixaData; prevData: CaixaD
         />
       )}
       {topThree.length > 0 && (
-        <div className="rounded-2xl bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)] col-span-2 sm:col-span-1">
+        <div className="cash-metric col-span-2 p-4 sm:col-span-1">
           <div className="flex items-center gap-1.5 mb-2.5">
             <Trophy className="h-3.5 w-3.5 text-[var(--status-warning)]" strokeWidth={1.75} />
             <p className="text-[11px] font-medium text-[var(--text-muted)]">Mais vendidos</p>
@@ -813,7 +813,7 @@ function MetricCard({ icon: Icon, label, value, color, delta: deltaBadge }: {
   icon: React.ElementType; label: string; value: string; color: string; delta?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
+    <div className="cash-metric p-4">
       <div className="flex items-center gap-1.5 mb-1.5">
         <Icon className={`h-3.5 w-3.5 ${color}`} strokeWidth={1.75} />
         <p className="text-[11px] font-medium text-[var(--text-muted)]">{label}</p>
@@ -835,7 +835,7 @@ function PaymentsCard({ items }: { items: PaymentBreakdown[]; received: number }
   if (active.length === 0 && !pending) return null;
 
   return (
-    <div className="overflow-hidden rounded-3xl bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] ring-1 ring-[var(--border)]">
+    <div className="cash-panel overflow-hidden">
       <div className="border-b border-[var(--border)] px-5 py-3.5">
         <div className="flex items-center gap-2">
           <Wallet className="h-4 w-4 text-[var(--text-muted)]" strokeWidth={1.75} />
@@ -894,7 +894,7 @@ function AdminCTA() {
   return (
     <Link
       href="/app/caixa/relatorio"
-      className="group flex items-center justify-between gap-4 rounded-3xl bg-[var(--bg-inverse)] px-6 py-5 shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] active:scale-[0.98]"
+      className="group flex items-center justify-between gap-4 rounded-3xl bg-[var(--bg-inverse)] px-6 py-5 shadow-[var(--elevation-2)] active:scale-[0.98]"
     >
       <div className="flex items-center gap-4">
         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">

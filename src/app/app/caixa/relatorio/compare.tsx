@@ -11,7 +11,7 @@ import {
   RefreshCw,
   TrendingUp,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Card as BaseCard, CardContent } from "@/components/ui/Card";
 import { CashReportResponse, reportsApi } from "@/lib/api/reports-api";
 import { getBusinessDayRange } from "@/lib/utils/business-day";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
@@ -23,6 +23,10 @@ const dateLabelFmt = new Intl.DateTimeFormat("pt-BR", {
   month: "2-digit",
   weekday: "short",
 });
+
+function CompareCard({ className = "", ...props }: React.ComponentProps<typeof BaseCard>) {
+  return <BaseCard {...props} className={`analytics-card ${className}`} />;
+}
 
 type CompareMode = "previous" | "sameWeekday" | "custom";
 
@@ -186,7 +190,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
   return (
     <div className="space-y-5">
       {/* Controles */}
-      <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
+      <CompareCard className="border-[var(--border)] shadow-[var(--shadow-sm)]">
         <CardContent className="p-4 md:p-5">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1 rounded-full bg-[var(--bg-subtle)] p-1">
@@ -285,20 +289,20 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
             </div>
           </div>
         </CardContent>
-      </Card>
+      </CompareCard>
 
       {error ? (
-        <Card className="border-red-500/30 bg-red-500/5">
+        <CompareCard className="border-red-500/30 bg-red-500/5">
           <CardContent className="p-4 text-sm font-medium text-red-600">{error}</CardContent>
-        </Card>
+        </CompareCard>
       ) : isLoading && !currReport ? (
-        <Card className="border-[var(--border)]">
+        <CompareCard className="border-[var(--border)]">
           <CardContent className="p-6 text-center text-sm font-medium text-[var(--text-muted)]">
             Carregando comparação...
           </CardContent>
-        </Card>
+        </CompareCard>
       ) : kpis.length > 0 ? (
-        <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
+        <CompareCard className="border-[var(--border)] shadow-[var(--shadow-sm)]">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] text-sm">
@@ -321,7 +325,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
               </table>
             </div>
           </CardContent>
-        </Card>
+        </CompareCard>
       ) : null}
     </div>
   );

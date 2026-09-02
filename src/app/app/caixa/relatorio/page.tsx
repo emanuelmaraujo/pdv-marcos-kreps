@@ -412,9 +412,6 @@ export default function RelatorioPage() {
         onToggleDetails={() => setShowDetails((current) => !current)}
       />
 
-      {/* ── Section navigation ── */}
-      <SectionNav active={activeSection} onChange={setActiveSection} />
-
       {/* Recarregando com dado antigo ainda na tela (troca de período/filtro) —
           uma barra fina em vez de esconder o layout inteiro atrás de um spinner. */}
       {isLoading && report && <TopLoadingBar />}
@@ -424,7 +421,7 @@ export default function RelatorioPage() {
         {isLoading && !report ? (
           <div className="p-8"><LoadingState message="Carregando dados..." /></div>
         ) : !report ? null : (
-          <div className="mx-auto max-w-7xl space-y-6 px-4 pb-28 pt-6 md:px-6 lg:px-8 print:max-w-none print:space-y-4 print:px-0 print:pb-4 print:pt-0">
+          <div className="mx-auto max-w-7xl px-4 pb-28 pt-6 md:px-6 lg:px-8 print:max-w-none print:px-0 print:pb-4 print:pt-0">
             {/* Cabeçalho só visível ao imprimir/exportar PDF — a tela usa o ControlPanel (que fica oculto no print). */}
             <div className="hidden print:flex print:flex-col print:gap-0.5 print:border-b print:border-black/20 print:pb-3">
               <p className="text-lg font-black text-black">Marcos Krep&apos;s — Relatório de Caixa</p>
@@ -432,26 +429,31 @@ export default function RelatorioPage() {
                 {SECTIONS.find((s) => s.id === activeSection)?.label} · {printPeriodLabel} · impresso em {longDate.format(new Date())} {reportTimeFormatter.format(new Date())}
               </p>
             </div>
-            <ReportContext
-              section={activeSection}
-              periodLabel={printPeriodLabel}
-              filters={filters}
-              branchName={currentBranch?.name ?? null}
-            />
-            {activeSection === "overview"  && <SectionOverview  report={report} prevReport={prevReport} score={operationalScore} projection={projection} monthlyGoal={currentBranch?.monthly_revenue_goal ?? null} />}
-            {activeSection === "financial" && <SectionFinancial report={report} dailyRows={dailyRows} />}
-            {activeSection === "sales"     && <SectionSales     report={report} abcProducts={abcProducts} />}
-            {activeSection === "patterns"  && <SectionPatterns  report={report} />}
-            {activeSection === "compare"   && currentRangeForCompare && (
-              <SectionCompare
-                currentRange={{ start: currentRangeForCompare.start, end: currentRangeForCompare.end, label: currentRangeForCompare.label }}
-                isSingleDay={currentRangeForCompare.isSingleDay}
-                branchId={currentBranchId ?? null}
-                orderType={filters.order_type ?? "ALL"}
-                weekday={filters.weekday ?? "ALL"}
-              />
-            )}
-            {activeSection === "orders"    && <SectionOrders    orders={orders} />}
+            <div className="lg:grid lg:grid-cols-[13.5rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+              <SectionNav active={activeSection} onChange={setActiveSection} />
+              <div className="min-w-0 space-y-6">
+                <ReportContext
+                  section={activeSection}
+                  periodLabel={printPeriodLabel}
+                  filters={filters}
+                  branchName={currentBranch?.name ?? null}
+                />
+                {activeSection === "overview"  && <SectionOverview  report={report} prevReport={prevReport} score={operationalScore} projection={projection} monthlyGoal={currentBranch?.monthly_revenue_goal ?? null} />}
+                {activeSection === "financial" && <SectionFinancial report={report} dailyRows={dailyRows} />}
+                {activeSection === "sales"     && <SectionSales     report={report} abcProducts={abcProducts} />}
+                {activeSection === "patterns"  && <SectionPatterns  report={report} />}
+                {activeSection === "compare"   && currentRangeForCompare && (
+                  <SectionCompare
+                    currentRange={{ start: currentRangeForCompare.start, end: currentRangeForCompare.end, label: currentRangeForCompare.label }}
+                    isSingleDay={currentRangeForCompare.isSingleDay}
+                    branchId={currentBranchId ?? null}
+                    orderType={filters.order_type ?? "ALL"}
+                    weekday={filters.weekday ?? "ALL"}
+                  />
+                )}
+                {activeSection === "orders"    && <SectionOrders    orders={orders} />}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -498,6 +500,8 @@ function ControlPanel({
     (filters.payment_method && filters.payment_method !== "ALL") ||
     (filters.order_type && filters.order_type !== "ALL") ||
     (filters.weekday && filters.weekday !== "ALL");
+  const activeFilterCount = [filters.category_id, filters.payment_method, filters.order_type, filters.weekday]
+    .filter((value) => value && value !== "ALL").length;
 
   const clearFilters = () =>
     onFilterChange({ ...filters, category_id: "ALL", payment_method: "ALL", order_type: "ALL", weekday: "ALL" });
@@ -661,8 +665,9 @@ function ControlPanel({
       {/* Row 2: secondary filters */}
       <div className="border-t border-[var(--border)]">
         <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-4 pb-3 pt-2 hide-scrollbar md:px-6 lg:px-8">
-        <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)]">
+        <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)]">
           <Filter className="h-3 w-3" strokeWidth={1.75} /> Filtros
+          {activeFilterCount > 0 && <span className="rounded-full bg-brand-red/10 px-1.5 py-0.5 text-[10px] font-bold text-brand-red">{activeFilterCount}</span>}
         </span>
 
         {/* Category filter */}
@@ -737,19 +742,19 @@ function FilterChip({
   return (
     <div className={`relative shrink-0 inline-flex items-center gap-1 rounded-full border px-1 py-0 transition-colors ${
       isActive
-        ? "border-brand-red bg-brand-red"
+        ? "border-brand-red/25 bg-brand-red/5"
         : "border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]"
     }`}>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`h-7 cursor-pointer appearance-none bg-transparent pl-2.5 pr-6 text-[11px] font-black focus:outline-none ${
-          isActive ? "text-white" : "text-[var(--text-secondary)]"
+          isActive ? "text-brand-red" : "text-[var(--text-secondary)]"
         }`}
       >
         {children}
       </select>
-      <ChevronDown className={`pointer-events-none absolute right-2 h-3 w-3 shrink-0 ${isActive ? "text-white/70" : "text-[var(--text-muted)]"}`} />
+      <ChevronDown className={`pointer-events-none absolute right-2 h-3 w-3 shrink-0 ${isActive ? "text-brand-red/70" : "text-[var(--text-muted)]"}`} />
     </div>
   );
 }
@@ -758,8 +763,9 @@ function FilterChip({
 
 function SectionNav({ active, onChange }: { active: Section; onChange: (s: Section) => void }) {
   return (
-    <nav aria-label="Seções do relatório" className="border-b border-[var(--border)] bg-[var(--bg-surface)]/80 print:hidden">
-      <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-3 py-2 hide-scrollbar md:px-5 lg:px-7">
+    <nav aria-label="Seções do relatório" className="mb-5 overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-2 print:hidden lg:sticky lg:top-4 lg:mb-0 lg:overflow-visible lg:p-3">
+      <p className="hidden px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)] lg:block">Explorar relatório</p>
+      <div className="flex gap-1 hide-scrollbar lg:flex-col">
         {SECTIONS.map((s) => {
           const Icon = s.icon;
           const isActive = active === s.id;
@@ -767,16 +773,16 @@ function SectionNav({ active, onChange }: { active: Section; onChange: (s: Secti
             <button
               key={s.id}
               onClick={() => onChange(s.id)}
-              className={`relative inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold md:px-4 ${
+              className={`relative inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold md:px-4 lg:w-full lg:justify-start lg:px-3 ${
                 isActive
-                  ? "bg-[var(--bg-subtle)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
+                  ? "bg-[var(--bg-inverse)] text-white shadow-[var(--elevation-1)]"
                   : "text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-secondary)]"
               }`}
             >
               <Icon className="h-4 w-4" strokeWidth={isActive ? 2 : 1.75} />
               <span className="hidden sm:inline">{s.label}</span>
               <span className="sm:hidden">{s.short}</span>
-              {isActive && <span className="h-1.5 w-1.5 rounded-full bg-brand-red" />}
+              {isActive && <span className="h-1.5 w-1.5 rounded-full bg-brand-red lg:ml-auto" />}
             </button>
           );
         })}
@@ -1313,7 +1319,7 @@ function GoalPacePanel({ pace }: { pace: GoalPace }) {
         </div>
         <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">{pace.progressPct.toFixed(0)}% da meta recebido até agora</p>
 
-        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+        <div className="analytics-tile mt-4 bg-[var(--bg-subtle)] p-4">
           <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Projeção de fechamento (no ritmo atual)</p>
           <p className={`mt-1 text-xl font-black ${tone.text}`}>{currency.format(pace.projectedMonthEnd)}</p>
           <p className="text-xs font-medium text-[var(--text-muted)]">
@@ -1333,29 +1339,29 @@ function ProjectionPanel({ projection: p }: { projection: RevenueProjection }) {
       <CardContent className="p-5">
         <PanelHeader icon={TrendingUp} title="Projeção de receita" />
         <div className="mt-5 space-y-4">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+          <div className="analytics-tile bg-[var(--bg-subtle)] p-4">
             <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Média diária (dias com movimento)</p>
             <p className="mt-1 text-2xl font-black text-[var(--text-primary)]">{currency.format(p.avgPerDay)}</p>
             <p className="text-xs font-medium text-[var(--text-muted)]">{p.daysWorked} dia{p.daysWorked !== 1 ? "s" : ""} com vendas</p>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-center">
+            <div className="analytics-tile p-3 text-center">
               <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Pessimista</p>
               <p className="mt-1 text-sm font-black text-red-600">{currency.format(p.pessimistic)}</p>
             </div>
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center">
+            <div data-tone="success" className="analytics-tile p-3 text-center">
               <p className="text-[10px] font-bold uppercase text-emerald-600">Projetado</p>
               <p className="mt-1 text-sm font-black text-emerald-600">{currency.format(p.projectedTotal)}</p>
             </div>
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-center">
+            <div className="analytics-tile p-3 text-center">
               <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Otimista</p>
               <p className="mt-1 text-sm font-black text-blue-600">{currency.format(p.optimistic)}</p>
             </div>
           </div>
 
           {p.isMonthly && p.daysRemainingInMonth > 0 && (
-            <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-4">
+            <div className="analytics-tile border-blue-500/30 bg-blue-500/10 p-4">
               <p className="text-[11px] font-bold uppercase tracking-wide text-blue-600">Projeção de fechamento do mês</p>
               <p className="mt-1 text-xl font-black text-blue-600">{currency.format(p.projectedMonthEnd)}</p>
               <p className="text-xs font-medium text-blue-600">
@@ -1544,18 +1550,18 @@ function MarginPanel({ report }: { report: CashReportResponse }) {
           </p>
         )}
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4">
+          <div className="analytics-tile bg-[var(--bg-subtle)] p-4">
             <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Recebido</p>
             <p className="mt-1 text-xl font-black text-[var(--text-primary)] tabular-nums">{currency.format(received)}</p>
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+          <div className="analytics-tile p-4">
             <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Custo dos produtos</p>
             <p className="mt-1 text-xl font-black text-red-600 tabular-nums">-{currency.format(cogs)}</p>
             <p className="analytics-detail mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">
               Σ (qtd × custo congelado) — só pedidos pagos
             </p>
           </div>
-          <div className={`rounded-2xl border p-4 ${gross_margin >= 0 ? "border-emerald-500/30 bg-emerald-500/10" : "border-red-500/30 bg-red-500/10"}`}>
+          <div data-tone={gross_margin >= 0 ? "success" : undefined} className={`analytics-tile p-4 ${gross_margin >= 0 ? "text-emerald-700" : "border-red-500/30 bg-red-500/10"}`}>
             <p className={`text-[11px] font-bold uppercase tracking-wide ${gross_margin >= 0 ? "text-emerald-700" : "text-red-700"}`}>
               Margem bruta
             </p>
@@ -1595,7 +1601,7 @@ function DeliveryFinancePanel({ report }: { report: CashReportResponse }) {
 
 function DeliveryValue({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+    <div className="analytics-tile p-3">
       <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
       <p className={`mt-1 text-base font-black tabular-nums ${tone}`}>{currency.format(value)}</p>
     </div>
@@ -1887,7 +1893,7 @@ function AuditTile({ icon: Icon, label, total, count, tone }: {
   const tones = { red: "bg-red-500/10 text-red-600", violet: "bg-violet-500/10 text-violet-600", zinc: "bg-[var(--bg-subtle)] text-[var(--text-secondary)]" };
   const textTones = { red: "text-red-600", violet: "text-violet-600", zinc: "text-[var(--text-primary)]" };
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
+    <div className="analytics-tile p-4">
       <div className={`mb-3 inline-flex rounded-xl p-2 ${tones[tone]}`}><Icon className="h-4 w-4" /></div>
       <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
       <p className={`mt-1 text-xl font-black ${textTones[tone]}`}>{currency.format(total)}</p>
@@ -2146,7 +2152,7 @@ function DeliveryOperationPanel({ report }: { report: CashReportResponse }) {
 
 function OperationValue({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3">
+    <div className="analytics-tile bg-[var(--bg-subtle)] p-3">
       <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
       <p className={`mt-1 text-lg font-black tabular-nums ${warn ? "text-amber-700" : "text-[var(--text-primary)]"}`}>{value}</p>
     </div>
@@ -2315,7 +2321,7 @@ function PipelinePanel({ report }: { report: CashReportResponse }) {
             return (
               <div
                 key={s.key}
-                className={`rounded-2xl border p-4 ${
+                className={`analytics-tile p-4 ${
                   isWorst
                     ? "border-amber-500/30 bg-amber-500/10"
                     : "border-[var(--border)] bg-[var(--bg-surface)]"
@@ -2438,7 +2444,7 @@ function HourlyPanel({ report }: { report: CashReportResponse }) {
             { label: "Hora de pico", value: peakHour?.range ?? "—" },
             { label: "Maior receita", value: revenuePeakHour ? currency.format(revenuePeakHour.received) : "—" },
           ].map((s) => (
-            <div key={s.label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3 text-center">
+            <div key={s.label} className="analytics-tile bg-[var(--bg-subtle)] p-3 text-center">
               <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">{s.label}</p>
               <p className="mt-1 text-sm font-black text-[var(--text-primary)]">{s.value}</p>
             </div>
@@ -2471,7 +2477,7 @@ function WeekdayPanel({ report }: { report: CashReportResponse }) {
             const isBest = day.weekday === best?.weekday;
             const isWorst = day.weekday === worst?.weekday && day.received < best?.received;
             return (
-              <div key={day.weekday} className={`rounded-xl border p-3 ${isBest ? "border-emerald-500/30 bg-emerald-500/10" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
+              <div key={day.weekday} data-tone={isBest ? "success" : undefined} className={`analytics-tile p-3 ${isBest ? "text-emerald-700" : ""}`}>
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className={`text-sm font-black ${isBest ? "text-emerald-600" : "text-[var(--text-primary)]"}`}>{day.weekday}</p>
@@ -2509,17 +2515,17 @@ function CancellationPanel({ report }: { report: CashReportResponse }) {
       <CardContent className="p-5">
         <PanelHeader icon={XCircle} title="Análise de cancelamentos" />
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-center">
+          <div className="analytics-tile border-red-500/30 bg-red-500/10 p-4 text-center">
             <p className="text-[11px] font-bold uppercase text-red-600">Cancelamentos</p>
             <p className="mt-2 text-3xl font-black text-red-600">{fa.canceled_orders}</p>
             <p className="mt-1 text-xs font-medium text-red-600">pedidos no período</p>
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-center">
+          <div className="analytics-tile p-4 text-center">
             <p className="text-[11px] font-bold uppercase text-[var(--text-muted)]">Receita perdida</p>
             <p className="mt-2 text-2xl font-black text-[var(--text-primary)]">{currency.format(fa.canceled_total)}</p>
             <p className="analytics-detail mt-1 text-xs font-medium text-[var(--text-muted)]">valor total cancelado</p>
           </div>
-          <div className={`rounded-2xl border p-4 text-center ${cancelRate > 10 ? "border-amber-500/30 bg-amber-500/10" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
+          <div data-tone={cancelRate > 10 ? "warning" : undefined} className="analytics-tile p-4 text-center">
             <p className={`text-[11px] font-bold uppercase ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-muted)]"}`}>Taxa</p>
             <p className={`mt-2 text-3xl font-black ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-primary)]"}`}>
               {cancelRate.toFixed(1)}%
@@ -2618,7 +2624,7 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
           { label: "Ticket médio",value: currency.format(filtered.filter((o) => o.payment_status === "PAID").length > 0 ? totalReceived / filtered.filter((o) => o.payment_status === "PAID").length : 0) },
           { label: "Desistência", value: publicOrdersCount > 0 ? `${abandonmentRate.toFixed(1)}%` : "—" },
         ].map((s) => (
-          <div key={s.label} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-center shadow-[var(--shadow-sm)]">
+          <div key={s.label} className="analytics-tile p-3 text-center">
             <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{s.label}</p>
             <p className="mt-1 text-lg font-black text-[var(--text-primary)]">{s.value}</p>
           </div>
