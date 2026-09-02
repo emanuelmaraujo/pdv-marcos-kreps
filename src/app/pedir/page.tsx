@@ -537,6 +537,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       return () => window.clearTimeout(timer);
     }
 
+    // Opt-out por padrão: com telefone válido informado, já vem marcado para
+    // salvar (decisão de negócio 2026-08-20 — ataca a causa raiz de baixa
+    // captura de telefone). O cliente pode desmarcar no toggle abaixo.
+    const optOutTimer = window.setTimeout(() => setRememberCheckoutData(true), 0);
+
     const saved = readSavedPublicProfile();
     if (saved?.phone_e164 === normalizedPhone) {
       const timer = window.setTimeout(() => {
@@ -549,7 +554,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setProfileLookupState("found");
         setProfileNotice("Dados salvos neste dispositivo encontrados.");
       }, 0);
-      return () => window.clearTimeout(timer);
+      return () => {
+        window.clearTimeout(optOutTimer);
+        window.clearTimeout(timer);
+      };
     }
 
     if (lastAutofilledPhoneRef.current && lastAutofilledPhoneRef.current !== normalizedPhone) {
@@ -557,7 +565,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setCustomerInfo("", formatWhatsAppInput(normalizedPhone));
       setCustomerEmail("");
       setMarketingOptIn(false);
-      setRememberCheckoutData(false);
       setProfileNotice("");
       setSavedAddresses([]);
       setSelectedAddressId(null);
@@ -602,6 +609,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(optOutTimer);
       window.clearTimeout(timer);
     };
   }, [customerPhone, setCustomerInfo, setOrderType]);
@@ -2214,7 +2222,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       disabled={!checkoutPhone || !customerName.trim()}
                       className="h-4 w-4 accent-brand-red"
                     />
-                    Salvar para próximos pedidos
+                    Salvar para próximos pedidos e contar meus selos de fidelidade
                   </label>
                   {checkoutPhone && (
                     <label className="flex min-h-11 cursor-pointer items-center gap-2.5 py-2 text-xs text-[var(--text-secondary)]">

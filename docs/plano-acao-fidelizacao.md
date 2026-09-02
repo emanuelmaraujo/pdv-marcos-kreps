@@ -185,6 +185,50 @@ só executar o que já foi desenhado:
 - **Nada disso foi aplicado em produção.** Existe só em branch até virar PR revisado e
   decidido explicitamente com o usuário.
 
+### Fase 1 — em andamento (branch `feat/loyalty-fase1-accrual`, não mergeada)
+
+Feito em 2026-09-02:
+- Migration [20260902130000_loyalty_item_level_accrual.sql](../supabase/migrations/20260902130000_loyalty_item_level_accrual.sql):
+  remove a trava `uniq_loyalty_earn_per_order` (1 EARN por pedido) e cria
+  `loyalty_stamp_credits` (PK `order_item_id`) — idempotência por item pago,
+  compatível com pagamento fracionado (múltiplos EARN por pedido).
+- `loyalty-accrue` reescrita: credita por item pago de categoria
+  `counts_for_loyalty=true` (`delta` = soma de `quantity`), não mais 1 selo
+  fixo por pedido. Aceita `order_item_ids` opcional no body (mark-payment manda
+  os itens que acabaram de virar PAID/COURTESY; loyalty-reconcile continua
+  mandando só `order_id`, e a function varre todos os itens pagos ainda não
+  creditados daquele pedido). Emite recompensas em série (loop) se `delta`
+  cruzar o limiar mais de uma vez numa única chamada.
+- `loyalty-revoke` reescrita: estorna por item (usa `loyalty_stamp_credits` +
+  nova coluna `revoked_at`), aceita `order_item_ids` opcional.
+- `mark-payment` agora chama `fireLoyaltyAccrue`/`fireLoyaltyRevoke` (helper
+  `_shared/loyalty-accrue-fire.ts`, atualizado para repassar `order_item_ids`)
+  depois da RPC transacional — **o "fio" que faltava (causa raiz #1) está
+  ligado**. `confirm-order` não precisa chamar (fluxo público só libera depois
+  de já `PAID`, `mark-payment` já cobre).
+- Checkout (`OrderSummarySheet.tsx` presencial e `pedir/page.tsx` público):
+  "lembrar dados" agora vem **opt-out** (marcado por padrão assim que um
+  telefone válido é digitado, decisão de negócio #4), com texto atualizado
+  mencionando fidelidade/consentimento perto do toggle.
+- Validado: `npx tsc --noEmit` e `npx eslint` limpos nos arquivos tocados,
+  `npx supabase db reset` local aplicou a migration sem erro, tabela e policy
+  conferidas via `psql` no banco local.
+
+Falta pra fechar a Fase 1 (não feito ainda, decidir com o usuário antes):
+- `settings.loyalty_public_base_url` continua vazio — precisa do domínio
+  público real de produção pra portal `/fidelidade/[token]` funcionar nas
+  mensagens de WhatsApp (não adivinhado; configurar via admin ou migration
+  explícita quando o domínio for confirmado).
+- Templates de WhatsApp (`fidelidade_selo`, `fidelidade_recompensa_liberada`,
+  `fidelidade_recompensa_vencendo`) precisam existir de verdade na Meta/
+  Evolution API — trabalho de configuração externa, fora do código.
+- Teste ponta a ponta local (pagar item de categoria Krep → selo → WhatsApp →
+  recompensa → resgate) ainda não rodado nesta sessão.
+- PR não aberto, branch não mergeada — merge em `main` dispara deploy real em
+  produção (migration + functions) via CI, confirmar explicitamente antes.
+- Fase 2 (captura de telefone no balcão) e Fase 3 (frontend: portal público,
+  resgate no checkout, indicador de progresso, painel admin) nem começaram.
+
 ### Incidente de deploy em 2026-08-22: migrations com timestamp velho
 
 O PR de Fase 0 (#142) ficou pronto em 2026-08-19/20, mas só foi mergeado em 2026-08-22 —

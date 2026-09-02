@@ -22,6 +22,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { publicCorsHeaders } from "../_shared/public-cors.ts";
+import { fireLoyaltyAccrue, fireLoyaltyRevoke } from "../_shared/loyalty-accrue-fire.ts";
 
 function getCorsHeaders(req: Request) {
   return publicCorsHeaders(req);
@@ -104,6 +105,14 @@ serve(async (req) => {
     if (rpcErr) throw new Error(rpcErr.message);
 
     const targetItemIds: string[] = rpcResult?.target_item_ids ?? [];
+
+    // Fidelidade: credita selo por item pago / estorna selo de item reembolsado.
+    // Nunca bloqueia o caixa — a função de fidelidade nunca lança.
+    if (payment_status === "PAID" || payment_status === "COURTESY") {
+      await fireLoyaltyAccrue(order.id, targetItemIds);
+    } else if (payment_status === "REFUNDED") {
+      await fireLoyaltyRevoke(order.id, targetItemIds);
+    }
 
     // Relê pedido com o relacionamento de branches (a RPC já retorna o
     // pedido, mas sem o join de branches necessário pra montar os tickets).

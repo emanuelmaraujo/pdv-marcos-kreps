@@ -1,20 +1,26 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Edge Function: loyalty-revoke
 //
-// Revoga o selo de um pedido estornado.
+// Estorna o(s) selo(s) de itens de um pedido que foram reembolsados.
+//
+// Fase 1: como o crédito agora é por item pago (loyalty-accrue), o estorno
+// também é por item — reverte só os itens indicados (ou, sem indicação,
+// todos os itens do pedido ainda com selo creditado e não revogado).
 //
 // Auth: x-internal-secret = LOYALTY_INTERNAL_SECRET (chamada por mark-payment)
 //        OU Bearer JWT ADMIN (botão manual no dashboard).
 //
 // Lógica:
-//   1) Acha EARN(order_id). Se não existe → skip.
-//   2) Se gerou uma recompensa AVAILABLE → revoga ela (REVOKED) + tx REVOKE.
-//   3) Se a recompensa já foi REDEEMED ou EXPIRED → NÃO mexe; apenas registra
-//      tx REVOKE simbólico com reason e bloqueia a tentativa, exigindo ADMIN
-//      tomar decisão (force=true).
-//   4) Senão (selo solto), insere REVOKE (delta=-1), decrementa cache.
+//   1) Acha em loyalty_stamp_credits os itens do pedido com crédito ainda não
+//      revogado (filtrando por order_item_ids se informado). Se nenhum → skip.
+//   2) delta = soma de quantity desses itens.
+//   3) Se esse crédito tiver desbloqueado uma recompensa ainda AVAILABLE →
+//      revoga ela (REVOKED) + segue. Se já foi REDEEMED/EXPIRED → bloqueia
+//      (exige ADMIN com force=true).
+//   4) Marca os itens como revoked_at em loyalty_stamp_credits, insere REVOKE(-delta),
+//      decrementa cache (current_stamps clamped em 0, lifetime_stamps ajustado).
 //
-// Input: { order_id, force?: boolean }
+// Input: { order_id, order_item_ids?: string[], force?: boolean }
 // Retorna: { ok, action: 'revoked'|'skipped'|'blocked' }
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -62,28 +68,34 @@ serve(async (req) => {
       actor = { mode: "admin", userId: user.id };
     }
 
-    const { order_id, force } = await req.json().catch(() => ({}));
+    const { order_id, order_item_ids, force } = await req.json().catch(() => ({}));
     if (!order_id) return jsonError(req, "order_id ausente.");
+    const scopedItemIds: string[] | null = Array.isArray(order_item_ids) && order_item_ids.length > 0 ? order_item_ids : null;
 
-    const { data: earn } = await supabaseAdmin
-      .from("loyalty_transactions")
-      .select("id, account_id, balance_after")
-      .eq("kind", "EARN")
+    // Itens do pedido com crédito ainda não revogado.
+    let itemsQuery = supabaseAdmin
+      .from("order_items")
+      .select("id, quantity, loyalty_stamp_credits!inner(account_id, revoked_at)")
       .eq("order_id", order_id)
-      .maybeSingle();
-    if (!earn) return ok(req, { action: "skipped", reason: "no_earn" });
+      .is("loyalty_stamp_credits.revoked_at", null);
+    if (scopedItemIds) itemsQuery = itemsQuery.in("id", scopedItemIds);
+    const { data: creditedItems, error: itemsErr } = await itemsQuery;
+    if (itemsErr) return jsonError(req, `Erro ao ler créditos: ${itemsErr.message}`);
+    if (!creditedItems || creditedItems.length === 0) return ok(req, { action: "skipped", reason: "no_credit" });
 
-    // Recompensa que possivelmente nasceu desse selo: a ADJUST(unlock_reward) imediatamente
-    // após o EARN tem reward_id. Para simplificar, achamos qualquer reward com mesma conta
-    // e issued_at perto do paid_at — heurística suficiente porque rewards são raras.
+    const accountId: string = (creditedItems[0] as any).loyalty_stamp_credits.account_id;
+    const targetItemIds = creditedItems.map((it: any) => it.id);
+    const delta = creditedItems.reduce((sum: number, it: any) => sum + (it.quantity ?? 1), 0);
+
     const { data: account } = await supabaseAdmin
       .from("loyalty_accounts")
       .select("id, current_stamps, lifetime_stamps")
-      .eq("id", earn.account_id)
+      .eq("id", accountId)
       .maybeSingle();
     if (!account) return ok(req, { action: "skipped", reason: "no_account" });
 
-    // ADJUST(unlock_reward) carrega order_id do pedido que desbloqueou — match exato.
+    // Recompensa que possivelmente nasceu desse crédito: a ADJUST(unlock_reward) do
+    // pedido tem reward_id. Heurística suficiente porque rewards são raras.
     const { data: unlockTx } = await supabaseAdmin
       .from("loyalty_transactions")
       .select("id, reward_id")
@@ -110,20 +122,20 @@ serve(async (req) => {
       await supabaseAdmin.from("audit_logs").insert({
         action: "LOYALTY_REVOKE_BLOCKED",
         table_name: "loyalty_transactions",
-        record_id: earn.id,
+        record_id: account.id,
         user_id: actor.mode === "admin" ? actor.userId : null,
-        new_data: { order_id, reason: blockedReason },
+        new_data: { order_id, item_ids: targetItemIds, reason: blockedReason },
       });
       return ok(req, { action: "blocked", reason: blockedReason });
     }
 
-    const newCurrent = Math.max(0, (account.current_stamps ?? 0) - 1);
-    const newLifetime = Math.max(0, (account.lifetime_stamps ?? 0) - 1);
+    const newCurrent = Math.max(0, (account.current_stamps ?? 0) - delta);
+    const newLifetime = Math.max(0, (account.lifetime_stamps ?? 0) - delta);
 
     await supabaseAdmin.from("loyalty_transactions").insert({
       account_id: account.id,
       kind: "REVOKE",
-      delta: -1,
+      delta: -delta,
       balance_after: newCurrent,
       order_id,
       reward_id: linkedRewardId,
@@ -137,12 +149,17 @@ serve(async (req) => {
       last_activity_at: new Date().toISOString(),
     }).eq("id", account.id);
 
+    await supabaseAdmin
+      .from("loyalty_stamp_credits")
+      .update({ revoked_at: new Date().toISOString() })
+      .in("order_item_id", targetItemIds);
+
     await supabaseAdmin.from("audit_logs").insert({
       action: "LOYALTY_REVOKED",
       table_name: "loyalty_transactions",
-      record_id: earn.id,
+      record_id: account.id,
       user_id: actor.mode === "admin" ? actor.userId : null,
-      new_data: { order_id, reward_revoked: !!linkedRewardId, force: !!force },
+      new_data: { order_id, item_ids: targetItemIds, delta, reward_revoked: !!linkedRewardId, force: !!force },
     });
 
     return ok(req, { action: "revoked", current_stamps: newCurrent });
