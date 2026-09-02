@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   Banknote,
   BarChart3,
+  Bike,
   CalendarDays,
   CheckCircle2,
   ChevronDown,
@@ -26,6 +27,7 @@ import {
   RefreshCw,
   Search,
   ShoppingBag,
+  SlidersHorizontal,
   Target,
   TrendingDown,
   TrendingUp,
@@ -57,7 +59,7 @@ import { Card as BaseCard, CardContent } from "@/components/ui/Card";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBranch } from "@/contexts/BranchContext";
 import { SectionCompare } from "./compare";
-import { MetricTile, ReportPanel, ReportSectionHeading } from "./report-primitives";
+import { MetricTile, ReportPanel, ReportSectionHeading, type MetricTone } from "./report-primitives";
 import {
   Period,
   PERIOD_LABELS,
@@ -494,6 +496,7 @@ function ControlPanel({
   // O rascunho só vira filtro ao tocar em "Aplicar". Assim o relatório não
   // recarrega como um único dia depois de escolher a primeira ponta do range.
   const [showRangeSheet, setShowRangeSheet] = useState(false);
+  const [showFiltersSheet, setShowFiltersSheet] = useState(false);
   const [rangeDraft, setRangeDraft] = useState({ start: rangeStart, end: rangeEnd });
 
   const hasActiveFilters =
@@ -509,8 +512,8 @@ function ControlPanel({
 
   return (
     <div className="analytics-toolbar sticky top-14 z-20 border-b border-[var(--border)] print:hidden">
-      {/* Row 1: navigation + refresh */}
-      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 md:px-6 lg:px-8">
+      {/* Cabeçalho compacto: no celular, ação principal e contexto ficam antes dos controles. */}
+      <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 md:gap-3 md:px-6 md:py-3 lg:px-8">
         <button
           onClick={onBack}
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-95"
@@ -519,18 +522,65 @@ function ControlPanel({
           <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
         </button>
 
-        <div className="hidden shrink-0 md:block">
+        <div className="min-w-0 flex-1 md:flex-none">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)]">Gestão</p>
-          <p className="text-sm font-semibold text-[var(--text-primary)]">Relatório de caixa</p>
+          <p className="truncate text-sm font-semibold text-[var(--text-primary)]">Relatório de caixa</p>
         </div>
 
-        {/* Period pills */}
-        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto hide-scrollbar rounded-full bg-[var(--bg-subtle)] p-1">
+        <button
+          onClick={() => setShowFiltersSheet(true)}
+          className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold md:hidden ${
+            hasActiveFilters
+              ? "border-brand-red/25 bg-brand-red/5 text-brand-red"
+              : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)]"
+          }`}
+          aria-label="Refinar filtros"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={1.75} />
+          {activeFilterCount > 0 && <span>{activeFilterCount}</span>}
+        </button>
+
+        <button
+          onClick={onRefresh}
+          disabled={isLoading}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] disabled:opacity-40 active:scale-95"
+          title="Atualizar"
+          aria-label="Atualizar relatório"
+        >
+          {isLoading
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <RefreshCw className="h-4 w-4" strokeWidth={1.75} />}
+        </button>
+        <button
+          onClick={() => window.print()}
+          className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-95 sm:inline-flex"
+          title="Imprimir / salvar PDF da aba atual"
+        >
+          <Printer className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+        <button
+          onClick={onToggleDetails}
+          className={`inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border text-xs font-semibold transition-colors active:scale-95 sm:w-auto sm:px-3 ${
+            showDetails
+              ? "border-brand-red/25 bg-brand-red/5 text-brand-red"
+              : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
+          }`}
+          title={showDetails ? "Ocultar explicações" : "Mostrar explicações"}
+          aria-pressed={showDetails}
+        >
+          {showDetails ? <EyeOff className="h-3.5 w-3.5" strokeWidth={1.75} /> : <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />}
+          <span className="hidden lg:inline">{showDetails ? "Menos texto" : "Detalhes"}</span>
+        </button>
+      </div>
+
+      {/* O seletor de período continua sempre visível; no celular ele rola de forma independente dos filtros. */}
+      <div className="border-t border-[var(--border)]">
+        <div aria-label="Período do relatório" className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 py-2.5 hide-scrollbar md:px-6 lg:px-8">
           {(["today", "yesterday", "last7", "last30", "thisMonth"] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => onPeriodChange(p)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              className={`shrink-0 snap-start rounded-full px-3 py-1.5 text-xs font-semibold ${
                 period === p
                   ? "bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]"
                   : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -577,13 +627,35 @@ function ControlPanel({
             <span className="max-w-[180px] truncate">{period === "range" && rangeStart && rangeEnd ? rangeLabel : "Intervalo"}</span>
           </button>
         </div>
+      </div>
 
-        <BottomSheet isOpen={showRangeSheet} onClose={() => setShowRangeSheet(false)} title="Escolher intervalo">
-          <div className="space-y-4 p-6">
+      <BottomSheet
+        isOpen={showRangeSheet}
+        onClose={() => setShowRangeSheet(false)}
+        title="Escolher intervalo"
+        footer={
+          <div className="flex justify-end gap-2 border-t border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
+            <button
+              onClick={() => { setRangeDraft({ start: "", end: "" }); onRangeChange("", ""); setShowRangeSheet(false); }}
+              className="rounded-xl px-3 py-2 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]"
+            >
+              Limpar
+            </button>
+            <button
+              onClick={() => { onRangeChange(rangeDraft.start, rangeDraft.end); setShowRangeSheet(false); }}
+              disabled={!rangeDraft.start || !rangeDraft.end}
+              className="rounded-xl bg-brand-red px-4 py-2 text-xs font-black text-white disabled:opacity-40"
+            >
+              Aplicar período
+            </button>
+          </div>
+        }
+      >
+          <div className="space-y-4 p-4 sm:p-6">
             <div className="rounded-xl bg-[var(--status-info-bg)] px-3 py-2.5 text-xs font-medium text-[var(--status-info)]">
               Selecione o primeiro e o último dia. O relatório incluirá todos os dias entre eles.
             </div>
-            <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Início do período</label>
                 <input
@@ -609,62 +681,11 @@ function ControlPanel({
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => { setRangeDraft({ start: "", end: "" }); onRangeChange("", ""); setShowRangeSheet(false); }}
-                className="rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]"
-              >
-                Limpar
-              </button>
-              <button
-                onClick={() => {
-                  onRangeChange(rangeDraft.start, rangeDraft.end);
-                  setShowRangeSheet(false);
-                }}
-                disabled={!rangeDraft.start || !rangeDraft.end}
-                className="rounded-lg bg-brand-red px-4 py-2 text-xs font-black text-white disabled:opacity-40"
-              >
-                Aplicar
-              </button>
-            </div>
           </div>
-        </BottomSheet>
+      </BottomSheet>
 
-        <button
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] disabled:opacity-40 active:scale-95"
-          title="Atualizar"
-        >
-          {isLoading
-            ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <RefreshCw className="h-4 w-4" strokeWidth={1.75} />}
-        </button>
-
-        <button
-          onClick={() => window.print()}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] active:scale-95"
-          title="Imprimir / salvar PDF da aba atual"
-        >
-          <Printer className="h-4 w-4" strokeWidth={1.75} />
-        </button>
-        <button
-          onClick={onToggleDetails}
-          className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors active:scale-95 ${
-            showDetails
-              ? "border-brand-red/25 bg-brand-red/5 text-brand-red"
-              : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
-          }`}
-          title={showDetails ? "Ocultar explicações" : "Mostrar explicações"}
-          aria-pressed={showDetails}
-        >
-          {showDetails ? <EyeOff className="h-3.5 w-3.5" strokeWidth={1.75} /> : <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />}
-          <span className="hidden lg:inline">{showDetails ? "Menos texto" : "Detalhes"}</span>
-        </button>
-      </div>
-
-      {/* Row 2: secondary filters */}
-      <div className="border-t border-[var(--border)]">
+      {/* No desktop os filtros ficam expostos; no celular a mesma seleção abre em um sheet legível. */}
+      <div className="hidden border-t border-[var(--border)] md:block">
         <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-4 pb-3 pt-2 hide-scrollbar md:px-6 lg:px-8">
         <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)]">
           <Filter className="h-3 w-3" strokeWidth={1.75} /> Filtros
@@ -728,7 +749,91 @@ function ControlPanel({
         )}
         </div>
       </div>
+
+      <BottomSheet
+        isOpen={showFiltersSheet}
+        onClose={() => setShowFiltersSheet(false)}
+        title="Refinar relatório"
+        footer={
+          <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3">
+            <button
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              className="rounded-xl px-3 py-2 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] disabled:opacity-40"
+            >
+              Limpar tudo
+            </button>
+            <button
+              onClick={() => setShowFiltersSheet(false)}
+              className="rounded-xl bg-brand-red px-4 py-2 text-xs font-black text-white"
+            >
+              Ver relatório
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-5 p-4 sm:p-6">
+          <div className="flex items-start gap-3 rounded-2xl border border-brand-red/15 bg-brand-red/[0.045] p-3.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-red/10 text-brand-red"><SlidersHorizontal className="h-4 w-4" strokeWidth={1.75} /></span>
+            <div>
+              <p className="text-sm font-semibold text-[var(--text-primary)]">Corte os dados que importam</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">As alterações são aplicadas imediatamente. Você pode combinar até quatro recortes.</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <MobileFilterField label="Categoria" value={filters.category_id ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, category_id: value })}>
+              <option value="ALL">Todas as categorias</option>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            </MobileFilterField>
+            <MobileFilterField label="Pagamento" value={filters.payment_method ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, payment_method: value })}>
+              <option value="ALL">Todos os pagamentos</option>
+              <option value="PIX">PIX</option>
+              <option value="CASH">Dinheiro</option>
+              <option value="DEBIT_CARD">Débito</option>
+              <option value="CREDIT_CARD">Crédito</option>
+            </MobileFilterField>
+            <MobileFilterField label="Tipo de pedido" value={filters.order_type ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, order_type: value as CashReportFilters["order_type"] })}>
+              <option value="ALL">Todos os tipos</option>
+              <option value="BALCAO">Balcão</option>
+              <option value="VIAGEM">Retirada</option>
+              <option value="ENTREGA">Entrega</option>
+            </MobileFilterField>
+            <MobileFilterField label="Dia da semana" value={filters.weekday ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, weekday: value as CashReportFilters["weekday"] })}>
+              <option value="ALL">Todos os dias</option>
+              <option value="Segunda">Segundas</option>
+              <option value="Terça">Terças</option>
+              <option value="Quarta">Quartas</option>
+              <option value="Quinta">Quintas</option>
+              <option value="Sexta">Sextas</option>
+              <option value="Sábado">Sábados</option>
+              <option value="Domingo">Domingos</option>
+            </MobileFilterField>
+          </div>
+        </div>
+      </BottomSheet>
     </div>
+  );
+}
+
+function MobileFilterField({
+  label, value, onChange, children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  const active = value !== "ALL";
+  return (
+    <label className={`block rounded-2xl border p-3 transition-colors ${active ? "border-brand-red/25 bg-brand-red/[0.04]" : "border-[var(--border)] bg-[var(--bg-subtle)]"}`}>
+      <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">{label}</span>
+      <span className="relative block">
+        <select value={value} onChange={(event) => onChange(event.target.value)} className={`h-9 w-full appearance-none bg-transparent pr-8 text-sm font-semibold outline-none ${active ? "text-brand-red" : "text-[var(--text-primary)]"}`}>
+          {children}
+        </select>
+        <ChevronDown className={`pointer-events-none absolute right-1 top-1/2 h-4 w-4 -translate-y-1/2 ${active ? "text-brand-red" : "text-[var(--text-muted)]"}`} />
+      </span>
+    </label>
   );
 }
 
@@ -1048,6 +1153,7 @@ function SectionOverview({
   const bestWeekday = [...report.weekday_sales].sort((a, b) => b.received - a.received)[0];
   const peakHour = getPeakHour(report.hourly_sales);
   const deviationAlerts = computeDeviationAlerts(report, prevReport);
+  const decisionSignals = buildDecisionSignals(report);
   const goalPace = projection?.isMonthly && monthlyGoal
     ? computeGoalPace(report.summary.received, monthlyGoal, projection)
     : null;
@@ -1057,6 +1163,7 @@ function SectionOverview({
       <ExecutiveHero report={report} prevReport={prevReport} score={score} />
       {/* Alertas de desvio */}
       {deviationAlerts.length > 0 && <DeviationAlertsPanel alerts={deviationAlerts} />}
+      {decisionSignals.length > 0 && <DecisionSignalsPanel signals={decisionSignals} />}
 
       {/* Ritmo da meta mensal */}
       {goalPace && <GoalPacePanel pace={goalPace} />}
@@ -1079,15 +1186,17 @@ function SectionOverview({
             icon={CreditCard}
             tone="violet"
           />
-          <ScorecardCard
-            label="Cancelamentos"
-            value={currency.format(report.summary.canceled)}
-            prev={prevReport ? currency.format(prevReport.summary.canceled) : null}
-            delta={prevReport ? pctDelta(report.summary.canceled, prevReport.summary.canceled) : null}
-            icon={XCircle}
-            tone="red"
-            invertDelta
-          />
+          <div className="col-span-2 lg:col-span-1">
+            <ScorecardCard
+              label="Cancelamentos"
+              value={currency.format(report.summary.canceled)}
+              prev={prevReport ? currency.format(prevReport.summary.canceled) : null}
+              delta={prevReport ? pctDelta(report.summary.canceled, prevReport.summary.canceled) : null}
+              icon={XCircle}
+              tone="red"
+              invertDelta
+            />
+          </div>
       </div>
 
       <OrderTypeBreakdownPanel entries={report.order_type_breakdown} />
@@ -1188,7 +1297,7 @@ function ExecutiveHero({
   return (
     <section className="relative overflow-hidden rounded-3xl bg-[var(--bg-inverse)] px-5 py-6 text-white shadow-[var(--elevation-2)] md:px-7 md:py-7">
       <div className="pointer-events-none absolute -right-16 -top-20 h-60 w-60 rounded-full bg-brand-red/25 blur-3xl" />
-      <div className="relative grid gap-6 lg:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))] lg:items-end">
+      <div className="relative">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">Receita recebida</p>
           <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums md:text-5xl">{currency.format(report.summary.received)}</p>
@@ -1199,9 +1308,11 @@ function ExecutiveHero({
             </span>
           )}
         </div>
-        <HeroMetric label="Margem" value={`${report.summary.gross_margin_percent.toFixed(1)}%`} emphasis={report.summary.gross_margin_percent >= 30} />
-        <HeroMetric label="Conversão" value={`${conversion.toFixed(0)}%`} emphasis={conversion >= 80} />
-        <HeroMetric label="Operação" value={score ? `${score.total}/100` : "—"} emphasis={Boolean(score && score.total >= 70)} />
+        <div className="mt-5 grid grid-cols-3 divide-x divide-white/10 rounded-2xl border border-white/10 bg-white/[0.035] py-3 lg:mt-6">
+          <HeroMetric label="Margem" value={`${report.summary.gross_margin_percent.toFixed(1)}%`} emphasis={report.summary.gross_margin_percent >= 30} />
+          <HeroMetric label="Conversão" value={`${conversion.toFixed(0)}%`} emphasis={conversion >= 80} />
+          <HeroMetric label="Operação" value={score ? `${score.total}/100` : "—"} emphasis={Boolean(score && score.total >= 70)} />
+        </div>
       </div>
     </section>
   );
@@ -1209,10 +1320,87 @@ function ExecutiveHero({
 
 function HeroMetric({ label, value, emphasis }: { label: string; value: string; emphasis: boolean }) {
   return (
-    <div className="border-l border-white/10 pl-4 lg:pl-5">
-      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">{label}</p>
-      <p className={`mt-1 text-xl font-semibold tabular-nums ${emphasis ? "text-white" : "text-amber-200"}`}>{value}</p>
+    <div className="min-w-0 px-3 text-center sm:px-5">
+      <p className="truncate text-[9px] font-bold uppercase tracking-[0.1em] text-white/50 sm:text-[10px]">{label}</p>
+      <p className={`mt-1 truncate text-base font-semibold tabular-nums sm:text-xl ${emphasis ? "text-white" : "text-amber-200"}`}>{value}</p>
     </div>
+  );
+}
+
+interface DecisionSignal {
+  label: string;
+  value: string;
+  detail: string;
+  tone: MetricTone;
+  icon: React.ElementType;
+}
+
+function buildDecisionSignals(report: CashReportResponse): DecisionSignal[] {
+  const { summary } = report;
+  if (summary.total_orders === 0) return [];
+
+  const conversion = (summary.paid_orders / summary.total_orders) * 100;
+  const pendingConversion = Math.max(0, summary.total_orders - summary.paid_orders);
+  const delivery = report.order_type_breakdown.find((item) => item.type === "ENTREGA");
+  const topProduct = report.top_all_products[0];
+  const signals: DecisionSignal[] = [
+    {
+      label: "Conversão de pedidos",
+      value: `${conversion.toFixed(0)}%`,
+      detail: summary.paid_orders === summary.total_orders
+        ? "Todos os pedidos do recorte foram pagos"
+        : `${pendingConversion} pedido${pendingConversion !== 1 ? "s" : ""} ainda aguardam pagamento`,
+      tone: conversion >= 80 ? "success" : "warning",
+      icon: CheckCircle2,
+    },
+    {
+      label: "Margem bruta",
+      value: `${summary.gross_margin_percent.toFixed(1)}%`,
+      detail: `${currency.format(summary.gross_margin)} depois do custo dos produtos`,
+      tone: summary.gross_margin_percent >= 30 ? "success" : "warning",
+      icon: TrendingUp,
+    },
+  ];
+
+  if (delivery && delivery.orders > 0) {
+    const share = (delivery.orders / summary.total_orders) * 100;
+    signals.push({
+      label: "Peso do delivery",
+      value: `${share.toFixed(0)}%`,
+      detail: `${delivery.orders} pedidos · ticket ${currency.format(delivery.average_ticket)}`,
+      tone: "info",
+      icon: Bike,
+    });
+  } else if (topProduct && summary.received > 0) {
+    const share = (topProduct.revenue / summary.received) * 100;
+    signals.push({
+      label: "Concentração do cardápio",
+      value: `${share.toFixed(0)}%`,
+      detail: `${topProduct.name} concentra essa parcela da receita`,
+      tone: share >= 30 ? "warning" : "neutral",
+      icon: Trophy,
+    });
+  }
+
+  return signals;
+}
+
+function DecisionSignalsPanel({ signals }: { signals: DecisionSignal[] }) {
+  return (
+    <Card className="border-[var(--border)]">
+      <CardContent className="p-4 md:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <Lightbulb className="h-4 w-4 text-brand-red" strokeWidth={1.75} />
+          <div>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">Sinais para decidir</p>
+            <p className="analytics-detail text-[11px] text-[var(--text-muted)]">Indicadores que mostram onde agir neste recorte.</p>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {signals.map((signal) => <MetricTile key={signal.label} label={signal.label} value={signal.value} icon={signal.icon} tone={signal.tone} meta={signal.detail} />)}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
