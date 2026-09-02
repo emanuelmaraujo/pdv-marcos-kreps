@@ -203,6 +203,11 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
   const itemCount = (order.items ?? []).reduce((total, item) => total + Number(item.quantity ?? 0), 0);
   const typeLabel = order.type === "BALCAO" ? "Balcão" : isDelivery ? "Delivery" : "Para viagem";
   const sourceLabel = order.source === "ATTENDANT" ? "Atendente" : order.source === "QR_CODE" ? "QR Code" : order.source === "APP" ? "App" : order.source;
+  const canShowFooterAction = !showPaymentSelection && !showCancelReason && !showChangeMethod && (
+    (hasOutstandingPayment && !isAppAwaitingPayment) ||
+    (!hasOutstandingPayment && ["AGUARDANDO_CONFIRMACAO", "NA_FILA", "SAIU_PARA_ENTREGA"].includes(order.status)) ||
+    (!hasOutstandingPayment && order.status === "PRONTO" && (!isDelivery || !showDispatchForm))
+  );
 
   return (
     <>
@@ -210,8 +215,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
       isOpen={isOpen}
       onClose={onClose}
       title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}
-      footer={
-        <div className="space-y-2 border-t border-[var(--border)] px-4 py-3">
+      footer={canShowFooterAction ? (
+        <div className="border-t border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shadow-[0_-8px_18px_rgba(15,23,42,0.05)]">
           {!showPaymentSelection && !showCancelReason && !showChangeMethod && hasOutstandingPayment && !isAppAwaitingPayment && (
             <Button className="h-12 w-full rounded-2xl bg-brand-red text-sm font-black hover:bg-brand-red/90" onClick={() => setShowPayItems(true)} disabled={isLoading}>
               RECEBER {currency.format(outstandingAmount)}
@@ -239,9 +244,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "SAIU_PARA_ENTREGA" && (
             <Button className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-black hover:bg-emerald-600" onClick={onConfirmDelivery} disabled={isLoading}>CONFIRMAR ENTREGA</Button>
           )}
-          <Button variant="outline" className="h-9 w-full rounded-xl border-0 text-xs font-black text-[var(--text-muted)]" onClick={onClose}>FECHAR</Button>
         </div>
-      }
+      ) : undefined}
     >
       <div className="flex flex-col gap-4 px-4 py-4 pb-8">
 
@@ -353,21 +357,6 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
             <TimeMetric label="Total" value={formatDuration(totalMinutes)} />
           </div>
         ))}
-
-        {hasOutstandingPayment && !isAppAwaitingPayment && (
-          <section className="overflow-hidden rounded-2xl border-2 border-brand-red/20 bg-brand-red/5">
-            <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-red">Pagamento a finalizar</p>
-                <p className="mt-0.5 text-sm font-bold text-[var(--text-primary)]">Itens novos entram automaticamente nesta cobrança.</p>
-              </div>
-              <span className="shrink-0 text-lg font-black tabular-nums text-brand-red">{currency.format(outstandingAmount)}</span>
-            </div>
-            <Button className="h-13 w-full rounded-none bg-brand-red font-black hover:bg-brand-red/90" onClick={() => setShowPayItems(true)} disabled={isLoading}>
-              RECEBER ITENS PENDENTES
-            </Button>
-          </section>
-        )}
 
         {canAddItems && order.paid_at && (
           <button
