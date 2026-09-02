@@ -49,6 +49,7 @@ import {
   HourlyStat,
   OrderTypeStat,
   OrderRecord,
+  ProductPriceHistory,
   ProductStat,
   reportsApi,
 } from "@/lib/api/reports-api";
@@ -2021,6 +2022,7 @@ function SectionSales({
         <CategoryMixPanel report={report} />
         <AbcPanel products={abcProducts} />
       </div>
+      <PriceHistoryPanel history={report.product_price_history ?? []} />
       <CategoryRankingsPanel report={report} />
       <LowSellersPanel report={report} />
     </div>
@@ -2075,8 +2077,6 @@ function CategoryMixPanel({ report }: { report: CashReportResponse }) {
 }
 
 function AbcPanel({ products }: { products: AbcProduct[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? products : products.slice(0, 10);
   const ABC_STYLE = {
     A: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
     B: "bg-blue-500/10 text-blue-600 border-blue-500/30",
@@ -2099,7 +2099,7 @@ function AbcPanel({ products }: { products: AbcProduct[] }) {
         {products.length === 0 ? <EmptyPanel text="Sem produtos para classificar." /> : (
           <>
             <div className="mt-4 space-y-1.5">
-              {shown.map((p, i) => (
+              {products.map((p, i) => (
                 <div key={p.name} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/60 px-3 py-2">
                   <span className="w-5 shrink-0 text-right text-xs font-black text-[var(--text-muted)]">{i + 1}</span>
                   <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-black ${ABC_STYLE[p.cls]}`}>{p.cls}</span>
@@ -2111,17 +2111,75 @@ function AbcPanel({ products }: { products: AbcProduct[] }) {
                 </div>
               ))}
             </div>
-            {products.length > 10 && (
-              <button
-                onClick={() => setExpanded((v) => !v)}
-                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] py-2 text-xs font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
-              >
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
-                {expanded ? "Mostrar menos" : `Ver mais ${products.length - 10} produtos`}
-              </button>
-            )}
           </>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type PriceHistoryRow = ProductPriceHistory["entries"][number] & {
+  productName: string;
+  category: string;
+};
+
+function PriceHistoryPanel({ history }: { history: ProductPriceHistory[] }) {
+  const rows: PriceHistoryRow[] = history.flatMap((product) => product.entries.map((entry) => ({
+    ...entry,
+    productName: product.name,
+    category: product.category,
+  }))).sort((a, b) => a.productName.localeCompare(b.productName, "pt-BR") || a.first_sold_at.localeCompare(b.first_sold_at));
+
+  if (rows.length === 0) return null;
+  const productsWithChanges = history.filter((product) => product.entries.length > 1).length;
+  const exportCSV = () => downloadCSV(
+    `historico-precos-${new Date().toISOString().substring(0, 10)}.csv`,
+    ["Produto", "Categoria", "Preço praticado", "Unidades", "Receita", "Primeira venda", "Última venda"],
+    rows.map((row) => [
+      row.productName,
+      row.category,
+      row.price.toFixed(2).replace(".", ","),
+      row.quantity,
+      row.revenue.toFixed(2).replace(".", ","),
+      longDate.format(new Date(row.first_sold_at)),
+      longDate.format(new Date(row.last_sold_at)),
+    ]),
+  );
+
+  return (
+    <Card className="border-[var(--border)]">
+      <CardContent className="p-4 md:p-5">
+        <PanelHeader icon={Banknote} title="Histórico de preços praticados" action={<ExportCsvButton onClick={exportCSV} />} />
+        <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+          Todos os itens vendidos no período, usando o preço congelado no momento de cada venda.
+          {productsWithChanges > 0 && ` ${productsWithChanges} item${productsWithChanges !== 1 ? "s" : ""} teve${productsWithChanges !== 1 ? "ram" : ""} mais de um preço.`}
+        </p>
+
+        {/* Cartões preservam todas as colunas sem forçar tabela horizontal em celular. */}
+        <div className="mt-4 space-y-2 md:hidden">
+          {rows.map((row) => (
+            <article key={`${row.productName}-${row.price}-${row.first_sold_at}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0"><p className="truncate text-sm font-semibold text-[var(--text-primary)]">{row.productName}</p><p className="text-[11px] text-[var(--text-muted)]">{row.category}</p></div>
+                <p className="shrink-0 text-sm font-black tabular-nums text-brand-red">{currency.format(row.price)}</p>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-2.5 text-[11px]">
+                <div><p className="text-[var(--text-muted)]">Unidades</p><p className="font-bold tabular-nums text-[var(--text-primary)]">{row.quantity}</p></div>
+                <div><p className="text-[var(--text-muted)]">Receita</p><p className="font-bold tabular-nums text-[var(--text-primary)]">{currency.format(row.revenue)}</p></div>
+              </div>
+              <p className="mt-2 text-[10px] text-[var(--text-muted)]">Praticado de {longDate.format(new Date(row.first_sold_at))} até {longDate.format(new Date(row.last_sold_at))}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-4 hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead><tr className="border-b border-[var(--border)] text-left text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]"><th className="pb-2 pr-3">Produto</th><th className="pb-2 pr-3">Categoria</th><th className="pb-2 pr-3 text-right">Preço</th><th className="pb-2 pr-3 text-right">Unidades</th><th className="pb-2 pr-3 text-right">Receita</th><th className="pb-2 pr-3">Primeira venda</th><th className="pb-2">Última venda</th></tr></thead>
+            <tbody>
+              {rows.map((row) => <tr key={`${row.productName}-${row.price}-${row.first_sold_at}`} className="border-b border-[var(--border)]/75 last:border-0"><td className="py-3 pr-3 font-semibold text-[var(--text-primary)]">{row.productName}</td><td className="py-3 pr-3 text-[var(--text-secondary)]">{row.category}</td><td className="py-3 pr-3 text-right font-black tabular-nums text-brand-red">{currency.format(row.price)}</td><td className="py-3 pr-3 text-right tabular-nums text-[var(--text-primary)]">{row.quantity}</td><td className="py-3 pr-3 text-right font-semibold tabular-nums text-[var(--text-primary)]">{currency.format(row.revenue)}</td><td className="py-3 pr-3 text-[var(--text-secondary)]">{longDate.format(new Date(row.first_sold_at))}</td><td className="py-3 text-[var(--text-secondary)]">{longDate.format(new Date(row.last_sold_at))}</td></tr>)}
+            </tbody>
+          </table>
+        </div>
       </CardContent>
     </Card>
   );

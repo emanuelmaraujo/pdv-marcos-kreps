@@ -41,6 +41,20 @@ export interface ProductStat {
   percent?: number;
 }
 
+export interface ProductPriceHistory {
+  product_id: string | null;
+  name: string;
+  category: string;
+  /** Cada preço congelado em uma venda, incluindo quando o mesmo item teve reajuste. */
+  entries: Array<{
+    price: number;
+    quantity: number;
+    revenue: number;
+    first_sold_at: string;
+    last_sold_at: string;
+  }>;
+}
+
 export interface CategoryStat {
   category_name: string;
   quantity: number;
@@ -111,6 +125,8 @@ export interface CashReportResponse {
   }>;
   category_breakdown: CategoryStat[];
   top_all_products: ProductStat[];
+  /** Histórico de todos os preços praticados no intervalo, sem limitar aos produtos líderes. */
+  product_price_history?: ProductPriceHistory[];
   category_rankings: {
     savory_kreps: ProductStat[];
     sweet_kreps: ProductStat[];
