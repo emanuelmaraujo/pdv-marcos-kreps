@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface DialogProps {
@@ -92,9 +93,13 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
     };
   }, [isOpen, sheetRef]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  // A folha pode ser chamada de dentro de barras com `backdrop-filter` ou
+  // `transform`, que criam um contexto de empilhamento e quebram `fixed`.
+  // Portal para o body garante que o backdrop e os selects fiquem clicáveis
+  // acima de qualquer cabeçalho, modal ou navegação da página.
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end justify-center pb-[calc(4rem+env(safe-area-inset-bottom))] sm:items-center sm:pb-0">
       {/* Backdrop - Only covers area above menu */}
       <div
@@ -149,6 +154,7 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
