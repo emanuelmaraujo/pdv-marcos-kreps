@@ -5,7 +5,7 @@ import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { Card as BaseCard } from "@/components/ui/Card";
 
 type PanelTone = "default" | "success" | "warning" | "danger" | "dark";
-type MetricTone = "neutral" | "brand" | "success" | "warning" | "danger" | "info";
+export type MetricTone = "neutral" | "brand" | "success" | "warning" | "danger" | "info";
 
 const panelTone: Record<PanelTone, string> = {
   default: "border-[var(--border)] bg-[var(--bg-surface)]",
@@ -56,7 +56,7 @@ export function MetricTile({
         {Icon && <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${style.icon}`}><Icon className="h-3.5 w-3.5" strokeWidth={1.8} /></span>}
       </div>
       <div className="mt-2 flex items-end gap-2">
-        <p className={`text-xl font-semibold leading-none tracking-tight tabular-nums ${style.value}`}>{value}</p>
+        <p title={value} className={`min-w-0 truncate text-xl font-semibold leading-none tracking-tight tabular-nums ${style.value}`}>{value}</p>
         {trend != null && (
           <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold ${direction === "up" ? "text-emerald-700" : direction === "down" ? "text-red-700" : "text-[var(--text-muted)]"}`}>
             <TrendIcon className="h-3 w-3" />{Math.abs(trend).toFixed(1)}%
