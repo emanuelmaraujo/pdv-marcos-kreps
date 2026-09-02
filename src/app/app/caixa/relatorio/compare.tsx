@@ -48,6 +48,9 @@ interface SectionCompareProps {
   isSingleDay: boolean;
   /** Filial atual (passada às chamadas do report). */
   branchId: string | null;
+  /** Mantém comparação coerente com o filtro principal do relatório. */
+  orderType?: "ALL" | "BALCAO" | "VIAGEM" | "ENTREGA";
+  weekday?: "ALL" | "Domingo" | "Segunda" | "Terça" | "Quarta" | "Quinta" | "Sexta" | "Sábado";
 }
 
 /**
@@ -61,7 +64,7 @@ interface SectionCompareProps {
  * (ex: hoje em curso) — capa o end das duas pontas no horário SP atual para
  * não comparar "8h de hoje" com "dia inteiro de ontem".
  */
-export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionCompareProps) {
+export function SectionCompare({ currentRange, isSingleDay, branchId, orderType = "ALL", weekday = "ALL" }: SectionCompareProps) {
   const [mode, setMode] = useState<CompareMode>("previous");
   const [sameHourCap, setSameHourCap] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -114,6 +117,8 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
         category_id: "ALL",
         payment_method: "ALL",
         ...(branchId ? { branch_id: branchId } : {}),
+        ...(orderType !== "ALL" ? { order_type: orderType } : {}),
+        ...(weekday !== "ALL" ? { weekday } : {}),
       };
       const [curr, cmp] = await Promise.all([
         reportsApi.getCashReport({
@@ -122,7 +127,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
           end_date: cappedCurrent.end.toISOString(),
         }),
         effectiveMode === "sameWeekday"
-          ? loadSameWeekdayAverage(cappedCurrent, branchId)
+          ? loadSameWeekdayAverage(cappedCurrent, branchId, orderType, weekday)
           : reportsApi.getCashReport({
               ...baseFilter,
               start_date: cappedCompare.start.toISOString(),
@@ -136,7 +141,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId }: SectionC
     } finally {
       setIsLoading(false);
     }
-  }, [cappedCurrent, cappedCompare, effectiveMode, branchId]);
+  }, [cappedCurrent, cappedCompare, effectiveMode, branchId, orderType, weekday]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -368,12 +373,16 @@ function buildCompareRange(curr: { start: Date; end: Date; label: string }, mode
 async function loadSameWeekdayAverage(
   curr: { start: Date; end: Date },
   branchId: string | null,
+  orderType: "ALL" | "BALCAO" | "VIAGEM" | "ENTREGA",
+  weekday: "ALL" | "Domingo" | "Segunda" | "Terça" | "Quarta" | "Quinta" | "Sexta" | "Sábado",
 ): Promise<CashReportResponse> {
   const ms = curr.end.getTime() - curr.start.getTime();
   const baseFilter = {
     category_id: "ALL",
     payment_method: "ALL",
     ...(branchId ? { branch_id: branchId } : {}),
+    ...(orderType !== "ALL" ? { order_type: orderType } : {}),
+    ...(weekday !== "ALL" ? { weekday } : {}),
   };
 
   const ranges = Array.from({ length: 4 }, (_, i) => {
@@ -417,6 +426,9 @@ async function loadSameWeekdayAverage(
       cogs: avg("cogs"),
       gross_margin: avg("gross_margin"),
       gross_margin_percent: avg("gross_margin_percent"),
+      delivery_fees: avg("delivery_fees"),
+      courier_reserve: avg("courier_reserve"),
+      store_received: avg("store_received"),
     },
     payment_breakdown: [],
     category_breakdown: [],
@@ -426,6 +438,12 @@ async function loadSameWeekdayAverage(
     weekday_sales: [],
     heatmap: [],
     low_selling_products: [],
+    order_type_breakdown: [],
+    delivery_operation: {
+      total_orders: 0, awaiting_dispatch: 0, on_route: 0, delivered: 0,
+      ready_to_dispatch: { count: 0, median: 0, p90: 0, max: 0, queue_loss_min: 0 },
+      dispatch_to_delivered: { count: 0, median: 0, p90: 0, max: 0, queue_loss_min: 0 },
+    },
     financial_attention: {
       discount_orders: 0, discount_total: avg("discounts"),
       courtesy_orders: 0, courtesy_total: avg("courtesy"),

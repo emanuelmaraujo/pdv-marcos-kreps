@@ -61,6 +61,20 @@ function hourRange(hour: number): string {
   return `${start}h–${end}h`;
 }
 
+/** Quantidade de dias comerciais no intervalo; quando há filtro semanal,
+ * conta apenas as ocorrências daquele dia. Dias sem venda entram na média. */
+function countOccurrences(startDate?: string, endDate?: string, weekday?: string): number | null {
+  if (!startDate || !endDate) return null;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start >= end) return null;
+  let count = 0;
+  for (let cursor = new Date(start); cursor < end; cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000)) {
+    if (!weekday || weekday === 'ALL' || getSpDateParts(cursor.toISOString()).weekday === weekday) count++;
+  }
+  return count;
+}
+
 // PostgREST manda .in() como querystring (order_id=in.(id1,id2,...)) — com
 // muitos pedidos (períodos longos, ex. Intervalo > 30 dias numa loja
 // movimentada) a URL passa do limite aceito pelo proxy e a função falha.
@@ -122,7 +136,7 @@ serve(async (req) => {
     }
 
     // 3. Parse filters
-    const { start_date, end_date, category_id, payment_method, branch_id } = await req.json();
+    const { start_date, end_date, category_id, payment_method, branch_id, order_type, weekday } = await req.json();
 
     // 4. Query Orders
     let query = supabaseAdmin
@@ -134,10 +148,16 @@ serve(async (req) => {
         payment_method,
         status,
         discount_amount,
+        packing_fee,
+        delivery_fee,
+        type,
         created_at,
         confirmed_at,
+        ready_at,
+        dispatched_at,
         paid_at,
         delivered_at,
+        delivery_delivered_at,
         daily_number
       `);
 
@@ -152,6 +172,7 @@ serve(async (req) => {
       if (end_date) query = query.lte('created_at', end_date);
     }
     if (branch_id) query = query.eq('branch_id', branch_id);
+    if (order_type && order_type !== 'ALL') query = query.eq('type', order_type);
     // Nota: filtro payment_method é aplicado depois, via tabela payments (suporte a split-bill)
 
     const { data: rawOrders, error: ordersError } = await query;
@@ -162,7 +183,7 @@ serve(async (req) => {
       const startTime = start_date ? new Date(start_date).getTime() : Number.NEGATIVE_INFINITY;
       const endTime = end_date ? new Date(end_date).getTime() : Number.POSITIVE_INFINITY;
       return saleTime >= startTime && saleTime <= endTime;
-    });
+    }).filter((order: any) => !weekday || weekday === 'ALL' || getSpDateParts(getSaleTimestamp(order)).weekday === weekday);
 
     // 4.1 Query Payments — usada para breakdown correto por método (split-bill pode ter métodos mistos)
     const allOrderIds = (orders || []).map((o: any) => o.id);
@@ -210,7 +231,7 @@ serve(async (req) => {
     });
 
     // 6. Fetch all active products for low-selling analysis
-    const { data: activeProducts, error: activeProductsError } = await supabaseAdmin
+    let activeProductsQuery = supabaseAdmin
       .from('products')
       .select(`
         id,
@@ -221,6 +242,10 @@ serve(async (req) => {
         )
       `)
       .eq('active', true);
+    // Produtos são próprios de cada filial. Sem este filtro, o painel de
+    // "sem saída" mistura cardápios e cria falsos positivos.
+    if (branch_id) activeProductsQuery = activeProductsQuery.eq('branch_id', branch_id);
+    const { data: activeProducts, error: activeProductsError } = await activeProductsQuery;
     if (activeProductsError) throw activeProductsError;
 
     // 7. Aggregate Data
@@ -241,6 +266,9 @@ serve(async (req) => {
       cogs: 0,
       gross_margin: 0,           // received − cogs (R$)
       gross_margin_percent: 0,   // (gross_margin / received) × 100
+      delivery_fees: 0,          // taxa cobrada do cliente (passagem ao motoboy)
+      courier_reserve: 0,        // 100% da taxa de entrega, a repassar
+      store_received: 0,         // received − courier_reserve
     };
 
     const paymentBreakdownMap = new Map();
@@ -251,6 +279,12 @@ serve(async (req) => {
     const productStats = new Map();
     const categoryStats = new Map();
     const soldProductIds = new Set();
+    const orderTypeMap = new Map<string, {
+      type: string; orders: number; paid_orders: number; received: number;
+      product_sales: number; packing_fees: number; delivery_fees: number;
+      courier_reserve: number; store_received: number; cogs: number;
+      gross_margin: number; average_ticket: number;
+    }>();
 
     const WEEKDAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
     const HOURS = Array.from({ length: 24 }, (_, hour) => hourRange(hour));
@@ -281,6 +315,22 @@ serve(async (req) => {
       if (order.status === 'CANCELADO') {
         summary.canceled += orderValue;
       } else {
+        const type = order.type || 'BALCAO';
+        const typeData = orderTypeMap.get(type) || {
+          type, orders: 0, paid_orders: 0, received: 0, product_sales: 0,
+          packing_fees: 0, delivery_fees: 0, courier_reserve: 0,
+          store_received: 0, cogs: 0, gross_margin: 0, average_ticket: 0,
+        };
+        typeData.orders++;
+        // Em recorte de categoria o valor já é somente dos itens; taxas do
+        // pedido inteiro não podem ser subtraídas nem atribuídas à categoria.
+        const deliveryFee = !isFilteredByCategory && type === 'ENTREGA' ? Number(order.delivery_fee || 0) : 0;
+        const packingFee = !isFilteredByCategory ? Number(order.packing_fee || 0) : 0;
+        // total_amount já inclui as taxas. A taxa de entrega não é venda da
+        // loja: é 100% reservada para o motoboy.
+        typeData.product_sales += Math.max(0, orderValue - deliveryFee - packingFee);
+        typeData.packing_fees += packingFee;
+        typeData.delivery_fees += deliveryFee;
         // Cortesia é custo (cliente não pagou) — não entra no faturamento.
         // gross_sales = recebido + pendente apenas.
         if (order.payment_status !== 'COURTESY') {
@@ -291,11 +341,18 @@ serve(async (req) => {
         if (order.payment_status === 'PAID') {
           summary.received += orderValue;
           summary.paid_orders++;
+          typeData.paid_orders++;
+          typeData.received += orderValue;
+          typeData.courier_reserve += deliveryFee;
+          typeData.store_received += orderValue - deliveryFee;
+          summary.delivery_fees += deliveryFee;
+          summary.courier_reserve += deliveryFee;
         } else if (order.payment_status === 'PENDING') {
           summary.pending += orderValue;
         } else if (order.payment_status === 'COURTESY') {
           summary.courtesy += orderValue;
         }
+        orderTypeMap.set(type, typeData);
 
         // Weekday
         const wData = weekdayMap.get(weekday) || { weekday, orders: 0, received: 0 };
@@ -354,10 +411,31 @@ serve(async (req) => {
       const unitCost = Number(item.cost_price_snapshot || 0);
       return sum + qty * unitCost;
     }, 0);
-    summary.gross_margin = summary.received - summary.cogs;
-    summary.gross_margin_percent = summary.received > 0
-      ? (summary.gross_margin / summary.received) * 100
+    summary.store_received = summary.received - summary.courier_reserve;
+    // A taxa de entrega é integralmente do motoboy. Tiramos a reserva antes
+    // de calcular margem para não apresentar dinheiro de passagem como lucro.
+    summary.gross_margin = summary.store_received - summary.cogs;
+    summary.gross_margin_percent = summary.store_received > 0
+      ? (summary.gross_margin / summary.store_received) * 100
       : 0;
+
+    const paidOrderById = new Map(filteredOrders
+      .filter((o: any) => o.payment_status === 'PAID' && o.status !== 'CANCELADO')
+      .map((o: any) => [o.id, o]));
+    (items || []).forEach((item: any) => {
+      const order = paidOrderById.get(item.order_id);
+      if (!order) return;
+      const typeData = orderTypeMap.get(order.type || 'BALCAO');
+      if (!typeData) return;
+      typeData.cogs += Number(item.quantity || 0) * Number(item.cost_price_snapshot || 0);
+    });
+    const order_type_breakdown = Array.from(orderTypeMap.values())
+      .map((entry) => ({
+        ...entry,
+        gross_margin: entry.store_received - entry.cogs,
+        average_ticket: entry.paid_orders > 0 ? entry.received / entry.paid_orders : 0,
+      }))
+      .sort((a, b) => b.received - a.received);
 
     // ── Pipeline / gargalo por etapa ───────────────────────────────────────
     // Calcula tempo em minutos por etapa, apenas para pedidos não-cancelados
@@ -418,6 +496,24 @@ serve(async (req) => {
       acceptance: summarizeStage(acceptanceTimes),
       delivery:   summarizeStage(deliveryTimes),
       payment:    summarizeStage(paymentTimes),
+    };
+
+    // Entrega tem etapas próprias. Mantemos estas métricas fora do pipeline
+    // presencial para que a cozinha não seja responsabilizada pelo trânsito.
+    const deliveryOrders = filteredOrders.filter((o: any) => o.type === 'ENTREGA' && o.status !== 'CANCELADO');
+    const dispatchTimes = deliveryOrders
+      .map((o: any) => diffMin(o.ready_at, o.dispatched_at))
+      .filter((value: number | null): value is number => value !== null);
+    const courierTimes = deliveryOrders
+      .map((o: any) => diffMin(o.dispatched_at, o.delivery_delivered_at))
+      .filter((value: number | null): value is number => value !== null);
+    const delivery_operation = {
+      total_orders: deliveryOrders.length,
+      awaiting_dispatch: deliveryOrders.filter((o: any) => o.status === 'PRONTO').length,
+      on_route: deliveryOrders.filter((o: any) => o.status === 'SAIU_PARA_ENTREGA').length,
+      delivered: deliveryOrders.filter((o: any) => o.status === 'ENTREGUE' || o.delivery_delivered_at).length,
+      ready_to_dispatch: summarizeStage(dispatchTimes),
+      dispatch_to_delivered: summarizeStage(courierTimes),
     };
 
     // 7.3 Items & Rankings
@@ -622,12 +718,19 @@ serve(async (req) => {
       weekday_sales: weekdaySales,
       heatmap,
       low_selling_products: lowSellingProducts,
+      order_type_breakdown,
+      delivery_operation,
       financial_attention,
       pipeline_stages,
       insights,
       metadata: {
         is_filtered_by_category: isFilteredByCategory,
-        note: isFilteredByCategory ? "Valores por produto usam preço histórico e não rateiam descontos do pedido." : null
+        selected_order_type: order_type || 'ALL',
+        selected_weekday: weekday || 'ALL',
+        occurrence_count: countOccurrences(start_date, end_date, weekday),
+        note: isFilteredByCategory
+          ? "Valores por produto usam preço histórico e não rateiam descontos do pedido."
+          : "Taxas de entrega são 100% reservadas ao motoboy e não compõem a margem da loja."
       }
     }), {
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },

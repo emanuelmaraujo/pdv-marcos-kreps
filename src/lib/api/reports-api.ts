@@ -9,6 +9,28 @@ export interface CashReportFilters {
   category_id?: string;
   payment_method?: string;
   branch_id?: string | null;
+  /** Todos, balcão, retirada ou entrega. */
+  order_type?: "ALL" | "BALCAO" | "VIAGEM" | "ENTREGA";
+  weekday?: "ALL" | "Domingo" | "Segunda" | "Terça" | "Quarta" | "Quinta" | "Sexta" | "Sábado";
+}
+
+export type ReportOrderType = "BALCAO" | "VIAGEM" | "ENTREGA";
+
+export interface OrderTypeStat {
+  type: ReportOrderType;
+  orders: number;
+  paid_orders: number;
+  received: number;
+  product_sales: number;
+  packing_fees: number;
+  delivery_fees: number;
+  /** Valor da taxa de entrega reservado integralmente ao motoboy. */
+  courier_reserve: number;
+  /** Recebimento que permanece na loja após separar a taxa do motoboy. */
+  store_received: number;
+  cogs: number;
+  gross_margin: number;
+  average_ticket: number;
 }
 
 export interface ProductStat {
@@ -77,6 +99,9 @@ export interface CashReportResponse {
     cogs: number;                 // custo total dos itens vendidos (PAID)
     gross_margin: number;         // received − cogs (R$)
     gross_margin_percent: number; // % sobre received
+    delivery_fees: number;
+    courier_reserve: number;
+    store_received: number;
   };
   payment_breakdown: Array<{
     method: string;
@@ -105,6 +130,15 @@ export interface CashReportResponse {
     quantity: number;
     revenue: number;
   }>;
+  order_type_breakdown: OrderTypeStat[];
+  delivery_operation: {
+    total_orders: number;
+    awaiting_dispatch: number;
+    on_route: number;
+    delivered: number;
+    ready_to_dispatch: PipelineStageStat;
+    dispatch_to_delivered: PipelineStageStat;
+  };
   financial_attention: {
     discount_orders: number;
     discount_total: number;
@@ -121,6 +155,10 @@ export interface CashReportResponse {
   insights: Insight[];
   metadata: {
     is_filtered_by_category: boolean;
+    selected_order_type?: CashReportFilters["order_type"];
+    selected_weekday?: CashReportFilters["weekday"];
+    /** Dias comerciais considerados nas médias, incluindo os sem pedido. */
+    occurrence_count?: number | null;
     note: string | null;
   };
 }
@@ -132,6 +170,7 @@ export interface OrderRecord {
   payment_status: string;
   payment_method: string;
   source: string;
+  type: ReportOrderType;
   total_amount: number;
   discount_amount: number | null;
   packing_fee: number | null;
@@ -167,10 +206,10 @@ export const reportsApi = {
     return data;
   },
 
-  async getOrdersForDateRange(startISO: string, endISO: string, branchId?: string | null): Promise<OrderRecord[]> {
+  async getOrdersForDateRange(startISO: string, endISO: string, branchId?: string | null, orderType?: CashReportFilters["order_type"], weekday?: CashReportFilters["weekday"]): Promise<OrderRecord[]> {
     let query = supabase
       .from("orders")
-      .select("id, daily_number, status, payment_status, payment_method, source, total_amount, discount_amount, packing_fee, created_at, confirmed_at, paid_at")
+      .select("id, daily_number, status, payment_status, payment_method, source, type, total_amount, discount_amount, packing_fee, created_at, confirmed_at, paid_at")
       .or([
         `and(paid_at.not.is.null,paid_at.gte.${startISO},paid_at.lte.${endISO})`,
         `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${startISO},confirmed_at.lte.${endISO})`,
@@ -178,13 +217,19 @@ export const reportsApi = {
       ].join(","))
       .order("created_at", { ascending: false });
     if (branchId) query = query.eq("branch_id", branchId);
+    if (orderType && orderType !== "ALL") query = query.eq("type", orderType);
     const { data, error } = await query;
     if (error) throw error;
     const start = new Date(startISO).getTime();
     const end = new Date(endISO).getTime();
     return (data ?? []).filter((row) => {
       const saleTime = new Date(row.paid_at ?? row.confirmed_at ?? row.created_at).getTime();
-      return saleTime >= start && saleTime <= end;
+      if (saleTime < start || saleTime > end) return false;
+      if (!weekday || weekday === "ALL") return true;
+      const label = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long" })
+        .format(new Date(row.paid_at ?? row.confirmed_at ?? row.created_at))
+        .replace("-feira", "");
+      return label.charAt(0).toUpperCase() + label.slice(1) === weekday;
     }).map((row) => ({
       ...row,
       total_amount: Number(row.total_amount ?? 0),
