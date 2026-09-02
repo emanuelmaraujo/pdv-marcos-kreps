@@ -347,10 +347,10 @@ export default function CaixaPage() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-[var(--bg-base)]">
+    <div className="cash-workspace flex h-full flex-col bg-[var(--bg-base)]">
       {/* Header */}
-      <header className="border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 md:px-6">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+      <header className="sticky top-14 z-20 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--bg-surface)_92%,transparent)] px-4 py-3 backdrop-blur-md md:px-6">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)] sm:text-lg flex items-center gap-2 flex-wrap">
               Caixa
@@ -485,7 +485,7 @@ export default function CaixaPage() {
 
       {/* Main */}
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-5xl space-y-4 px-4 pb-28 pt-5 md:px-6 md:pt-6">
+        <div className="mx-auto max-w-5xl space-y-5 px-4 pb-28 pt-6 md:px-6 md:pt-7">
           {isLoading && !data ? (
             <div className="space-y-4">
               <Skeleton className="h-56 w-full rounded-3xl" />
@@ -540,7 +540,7 @@ function DayHero({ data, prevData }: { data: CaixaData; prevData: CaixaData | nu
     : `Valor retido em ${formatBusinessDate(data.businessDayLabel)}`;
 
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-[var(--bg-inverse)] shadow-[var(--shadow-lg)]">
+    <section aria-label="Resumo financeiro do dia" className="cash-hero relative overflow-hidden rounded-3xl bg-[var(--bg-inverse)] shadow-[var(--shadow-lg)]">
       <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-brand-red/15 blur-3xl" />
 
       <div className="relative px-6 py-7 md:px-8 md:py-9">
@@ -612,7 +612,7 @@ function DayHero({ data, prevData }: { data: CaixaData; prevData: CaixaData | nu
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -663,7 +663,7 @@ function StatusStrip({ data, prevData }: { data: CaixaData; prevData: CaixaData 
   };
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div aria-label="Status dos pedidos" className="cash-status-strip grid grid-cols-2 gap-3 sm:grid-cols-4">
       {tiles.map((t) => {
         const m = toneMap[t.tone];
         return (
@@ -694,7 +694,7 @@ function OrderTypeDailyPanel({ data }: { data: CaixaData }) {
   } as const;
   const byType = new Map(data.orderTypeBreakdown.map((entry) => [entry.type, entry]));
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+    <section className="cash-panel rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-[var(--text-primary)]">Resultado por tipo</p>
@@ -769,7 +769,7 @@ function DayMetricsPanel({ data, prevData }: { data: CaixaData; prevData: CaixaD
   const topThree = topProducts.slice(0, 3);
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="cash-metrics grid grid-cols-2 gap-3 sm:grid-cols-4">
       <MetricCard
         icon={ShoppingBag}
         label="Crepes vendidos"

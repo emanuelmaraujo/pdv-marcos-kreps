@@ -24,7 +24,7 @@ const dateLabelFmt = new Intl.DateTimeFormat("pt-BR", {
   weekday: "short",
 });
 
-type CompareMode = "previous" | "sameWeekday";
+type CompareMode = "previous" | "sameWeekday" | "custom";
 
 interface CompareRange {
   label: string;
@@ -66,18 +66,32 @@ interface SectionCompareProps {
  */
 export function SectionCompare({ currentRange, isSingleDay, branchId, orderType = "ALL", weekday = "ALL" }: SectionCompareProps) {
   const [mode, setMode] = useState<CompareMode>("previous");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
   const [sameHourCap, setSameHourCap] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [currReport, setCurrReport] = useState<CashReportResponse | null>(null);
   const [compareReport, setCompareReport] = useState<CashReportResponse | null>(null);
 
+  const customRange = useMemo<CompareRange | null>(() => {
+    if (!customStart || !customEnd) return null;
+    return buildCustomCompareRange(customStart, customEnd);
+  }, [customStart, customEnd]);
+
   // Se modo "mesmo dia da semana" só faz sentido para 1 dia, força fallback.
-  const effectiveMode: CompareMode = isSingleDay ? mode : "previous";
+  // O modo custom só passa a consultar quando as duas pontas foram escolhidas.
+  const effectiveMode: CompareMode = mode === "custom" && customRange
+    ? "custom"
+    : isSingleDay && mode === "sameWeekday"
+    ? "sameWeekday"
+    : "previous";
 
   const compareRange = useMemo<CompareRange>(() => {
-    return buildCompareRange(currentRange, effectiveMode);
-  }, [currentRange, effectiveMode]);
+    return effectiveMode === "custom" && customRange
+      ? customRange
+      : buildCompareRange(currentRange, effectiveMode);
+  }, [currentRange, effectiveMode, customRange]);
 
   // "Até a mesma hora": cap end nos dois ranges no momento atual (SP).
   // Só faz sentido se end > now.
@@ -90,8 +104,9 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
   // de fetch — por isso `now` fica memoizado, não recalculado sempre.
   // Deps abaixo são a chave de invalidação intencional (recalcula "now"
   // quando o range ou o toggle mudam), não valores lidos dentro do callback.
+  const comparisonClockKey = `${currentRange.start.getTime()}-${currentRange.end.getTime()}-${sameHourCap}-${effectiveMode}`;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const now = useMemo(() => new Date(), [currentRange, sameHourCap]);
+  const now = useMemo(() => new Date(), [comparisonClockKey]);
   const isOngoing = currentRange.end.getTime() > now.getTime();
   const showHourCap = isOngoing;
   const applyHourCap = showHourCap && sameHourCap;
@@ -102,14 +117,18 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
   }, [applyHourCap, currentRange, now]);
 
   const cappedCompare = useMemo(() => {
-    if (!applyHourCap) return compareRange;
+    if (!applyHourCap || effectiveMode === "custom") return compareRange;
     // Cap end do range de comparação na mesma "duração relativa" do atual.
     const elapsedMs = now.getTime() - currentRange.start.getTime();
     const cappedEnd = new Date(compareRange.start.getTime() + elapsedMs);
     return { ...compareRange, end: cappedEnd };
-  }, [applyHourCap, compareRange, currentRange, now]);
+  }, [applyHourCap, compareRange, currentRange, now, effectiveMode]);
 
   const load = useCallback(async () => {
+    if (mode === "custom" && !customRange) {
+      setError("Selecione o início e o fim do período de comparação.");
+      return;
+    }
     setIsLoading(true);
     setError("");
     try {
@@ -141,7 +160,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
     } finally {
       setIsLoading(false);
     }
-  }, [cappedCurrent, cappedCompare, effectiveMode, branchId, orderType, weekday]);
+  }, [cappedCurrent, cappedCompare, effectiveMode, branchId, orderType, weekday, mode, customRange]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -185,6 +204,12 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
                 disabled={!isSingleDay}
                 hint={!isSingleDay ? "Escolha um único dia no painel para usar este modo" : undefined}
               />
+              <ModeButton
+                active={mode === "custom"}
+                onClick={() => setMode("custom")}
+                icon={CalendarDays}
+                label="Outro período"
+              />
             </div>
             {showHourCap && (
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)]">
@@ -210,6 +235,43 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
             </button>
           </div>
 
+          {mode === "custom" && (
+            <div className="mt-4 rounded-2xl border border-brand-red/20 bg-brand-red/[0.04] p-3.5">
+              <div className="flex flex-wrap items-baseline justify-between gap-1.5">
+                <div>
+                  <p className="text-xs font-black text-[var(--text-primary)]">Período B — referência</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">Escolha o intervalo que será comparado ao período selecionado no topo.</p>
+                </div>
+                <span className="rounded-full bg-[var(--bg-surface)] px-2.5 py-1 text-[10px] font-bold text-[var(--text-secondary)]">Período A: {cappedCurrent.label}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Início do período B</span>
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setCustomStart(value);
+                      if (customEnd && value > customEnd) setCustomEnd(value);
+                    }}
+                    className="mt-1.5 h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-sm font-semibold text-[var(--text-primary)] outline-none focus:border-brand-red focus:ring-2 focus:ring-brand-red/10"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Fim do período B</span>
+                  <input
+                    type="date"
+                    min={customStart || undefined}
+                    value={customEnd}
+                    onChange={(event) => setCustomEnd(event.target.value)}
+                    className="mt-1.5 h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-sm font-semibold text-[var(--text-primary)] outline-none focus:border-brand-red focus:ring-2 focus:ring-brand-red/10"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="mt-3 grid grid-cols-1 gap-2 text-[11px] font-medium text-[var(--text-muted)] sm:grid-cols-2">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2">
               <p className="text-[10px] font-black uppercase tracking-wide">Atual</p>
@@ -217,7 +279,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
             </div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2">
               <p className="text-[10px] font-black uppercase tracking-wide">
-                {effectiveMode === "sameWeekday" ? "Média das últimas 4 ocorrências" : "Período anterior"}
+                {effectiveMode === "sameWeekday" ? "Média das últimas 4 ocorrências" : effectiveMode === "custom" ? "Período B" : "Período anterior"}
               </p>
               <p className="mt-0.5 text-xs font-bold text-[var(--text-primary)]">{compareRange.label}</p>
             </div>
@@ -245,7 +307,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
                     <th className="px-4 py-3 text-left text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Indicador</th>
                     <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Atual</th>
                     <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">
-                      {effectiveMode === "sameWeekday" ? "Média" : "Anterior"}
+                      {effectiveMode === "sameWeekday" ? "Média" : effectiveMode === "custom" ? "Período B" : "Anterior"}
                     </th>
                     <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Δ abs</th>
                     <th className="px-4 py-3 text-right text-[11px] font-black uppercase tracking-wide text-[var(--text-muted)]">Δ %</th>
@@ -363,6 +425,17 @@ function buildCompareRange(curr: { start: Date; end: Date; label: string }, mode
   return {
     start, end,
     label: `${dateLabelFmt.format(start)} → ${dateLabelFmt.format(new Date(end.getTime() - 1))}`,
+  };
+}
+
+function buildCustomCompareRange(startKey: string, endKey: string): CompareRange {
+  // Meio-dia local evita que o parser de YYYY-MM-DD retroceda um dia por fuso.
+  const startDay = getBusinessDayRange(new Date(`${startKey}T12:00:00`));
+  const endDay = getBusinessDayRange(new Date(`${endKey}T12:00:00`));
+  return {
+    start: startDay.start,
+    end: endDay.end,
+    label: `${dateLabelFmt.format(startDay.start)} → ${dateLabelFmt.format(new Date(endDay.end.getTime() - 1))}`,
   };
 }
 
