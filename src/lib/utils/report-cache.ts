@@ -9,7 +9,9 @@ import { CashReportResponse, OrderRecord } from "@/lib/api/reports-api";
 // se um pedido antigo for corrigido manualmente depois do fechamento do dia,
 // o botão "Atualizar" (force: true em loadReport) ignora e re-grava o cache.
 
-const PREFIX = "pdv:cash-report:v1:";
+// v2 adiciona o histórico de preços por item; dados de sessões antigas não
+// possuem esse campo e não devem mascarar a nova análise.
+const PREFIX = "pdv:cash-report:v2:";
 
 export interface CachedReportBundle {
   report: CashReportResponse;

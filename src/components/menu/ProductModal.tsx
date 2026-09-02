@@ -55,8 +55,8 @@ export function ProductModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/40 animate-in fade-in duration-200">
-      <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-t-[32px] p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom-full duration-300">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto bg-black/40 animate-in fade-in duration-200 sm:items-center sm:p-4">
+      <div className="max-h-[calc(100dvh-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[32px] bg-[var(--bg-surface)] p-4 pb-[calc(2.5rem+env(safe-area-inset-bottom))] shadow-2xl animate-in slide-in-from-bottom-full duration-300 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[28px] sm:p-6">
         <div className="flex justify-between items-center mb-6 gap-2">
           <h2 className="text-xl font-bold text-[var(--text-primary)]">
             {product ? "Editar Produto" : "Novo Produto"}

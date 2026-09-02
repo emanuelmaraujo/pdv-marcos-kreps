@@ -334,8 +334,12 @@ body {
   border-color: var(--border-strong);
 }
 
-.report-workspace.report-focus .analytics-detail {
-  display: none;
+/* No celular, texto complementar nunca some: a pessoa deve poder rolar e ler
+   todos os dados. A redução de densidade só é aplicada em telas maiores. */
+@media (min-width: 768px) {
+  .report-workspace.report-focus .analytics-detail {
+    display: none;
+  }
 }
 
 .report-workspace .analytics-kpi {

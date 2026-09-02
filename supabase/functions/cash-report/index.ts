@@ -290,6 +290,14 @@ serve(async (req) => {
     // Heatmap dia × hora: chave "weekday|hour" → { orders, received }
     const heatmapMap = new Map<string, { orders: number; received: number }>();
     const productStats = new Map();
+    // Preço é congelado no item do pedido. Guardar cada valor praticado evita
+    // que uma alteração posterior no cardápio reescreva o histórico gerencial.
+    const productPriceHistoryMap = new Map<string, {
+      product_id: string | null;
+      name: string;
+      category: string;
+      entries: Map<number, { price: number; quantity: number; revenue: number; first_sold_at: string; last_sold_at: string }>;
+    }>();
     const categoryStats = new Map();
     const soldProductIds = new Set();
     const orderTypeMap = new Map<string, {
@@ -539,6 +547,8 @@ serve(async (req) => {
       const rev = Number(item.total_price || 0);
       const categoryName = item.products?.categories?.name || 'Sem Categoria';
       const group = classifyProductGroup(name, categoryName);
+      const price = Number(item.product_price_snapshot || 0);
+      const soldAt = getSaleTimestamp(order);
       
       soldProductIds.add(item.product_id);
 
@@ -547,6 +557,29 @@ serve(async (req) => {
       pStat.quantity += qty;
       pStat.revenue += rev;
       productStats.set(name, pStat);
+
+      // Histórico completo por item e preço praticado no período. A chave usa
+      // o produto quando disponível e cai no nome congelado para registros antigos.
+      const productKey = item.product_id || `snapshot:${name}`;
+      const priceHistory = productPriceHistoryMap.get(productKey) || {
+        product_id: item.product_id || null,
+        name,
+        category: group,
+        entries: new Map(),
+      };
+      const snapshot = priceHistory.entries.get(price) || {
+        price,
+        quantity: 0,
+        revenue: 0,
+        first_sold_at: soldAt,
+        last_sold_at: soldAt,
+      };
+      snapshot.quantity += qty;
+      snapshot.revenue += rev;
+      if (soldAt < snapshot.first_sold_at) snapshot.first_sold_at = soldAt;
+      if (soldAt > snapshot.last_sold_at) snapshot.last_sold_at = soldAt;
+      priceHistory.entries.set(price, snapshot);
+      productPriceHistoryMap.set(productKey, priceHistory);
 
       // Category stats (breakdown)
       const cStat = categoryStats.get(group) || { category_name: group, quantity: 0, revenue: 0, orders_count: new Set() };
@@ -568,6 +601,17 @@ serve(async (req) => {
     const topAllProducts = Array.from(productStats.values())
       .sort((a, b) => b.quantity - a.quantity)
       .map(p => ({ ...p, percent: summary.gross_sales > 0 ? (p.revenue / summary.gross_sales) * 100 : 0 }));
+
+    const productPriceHistory = Array.from(productPriceHistoryMap.values())
+      .map((product) => ({
+        product_id: product.product_id,
+        name: product.name,
+        category: product.category,
+        entries: Array.from(product.entries.values()).sort((a, b) =>
+          a.first_sold_at.localeCompare(b.first_sold_at) || a.price - b.price,
+        ),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
     const categoryBreakdown = Array.from(categoryStats.values()).map(c => ({
       category_name: c.category_name,
@@ -612,11 +656,29 @@ serve(async (req) => {
         category: classifyProductGroup(p.name, p.categories?.name || 'Sem Categoria'),
         quantity: 0,
         revenue: 0
-      }))
-      .slice(0, 10);
+      }));
 
     // 8. Strategic Insights
     const insights = [];
+
+    // 8.0 Preço e desconto: dois cenários que mudam margem sem aparecerem
+    // necessariamente no volume de pedidos.
+    const repricedProducts = productPriceHistory.filter((product) => product.entries.length > 1);
+    if (repricedProducts.length > 0) {
+      insights.push({
+        title: 'Variação de Preço',
+        description: `${repricedProducts.length} item${repricedProducts.length !== 1 ? 's tiveram' : ' teve'} mais de um preço praticado no período. Confira se os reajustes preservaram a margem.`,
+        severity: 'info',
+      });
+    }
+    const discountRate = summary.gross_sales > 0 ? (summary.discounts / summary.gross_sales) * 100 : 0;
+    if (discountRate >= 5) {
+      insights.push({
+        title: 'Pressão de Descontos',
+        description: `${discountRate.toFixed(1)}% do faturamento bruto foi concedido em descontos (${summary.discounts.toFixed(2)}).`,
+        severity: 'warning',
+      });
+    }
     
     // 8.1 Peak Hour
     const peak = hourlySales.reduce((best, hour) => {
@@ -725,7 +787,8 @@ serve(async (req) => {
       summary,
       payment_breakdown: paymentBreakdown,
       category_breakdown: categoryBreakdown,
-      top_all_products: topAllProducts.slice(0, 15),
+      top_all_products: topAllProducts,
+      product_price_history: productPriceHistory,
       category_rankings: categoryRankings,
       hourly_sales: hourlySales,
       weekday_sales: weekdaySales,
