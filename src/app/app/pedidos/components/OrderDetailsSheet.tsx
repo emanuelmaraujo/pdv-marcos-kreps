@@ -358,21 +358,6 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           </div>
         ))}
 
-        {hasOutstandingPayment && !isAppAwaitingPayment && (
-          <section className="overflow-hidden rounded-2xl border-2 border-brand-red/20 bg-brand-red/5">
-            <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-red">Pagamento a finalizar</p>
-                <p className="mt-0.5 text-sm font-bold text-[var(--text-primary)]">Itens novos entram automaticamente nesta cobrança.</p>
-              </div>
-              <span className="shrink-0 text-lg font-black tabular-nums text-brand-red">{currency.format(outstandingAmount)}</span>
-            </div>
-            <Button className="h-13 w-full rounded-none bg-brand-red font-black hover:bg-brand-red/90" onClick={() => setShowPayItems(true)} disabled={isLoading}>
-              RECEBER ITENS PENDENTES
-            </Button>
-          </section>
-        )}
-
         {canAddItems && order.paid_at && (
           <button
             type="button"
