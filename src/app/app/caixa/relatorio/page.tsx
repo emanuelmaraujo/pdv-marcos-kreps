@@ -37,6 +37,8 @@ import {
   Percent,
   Wallet,
   Download,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -51,7 +53,7 @@ import {
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { LoadingState } from "@/components/feedback/LoadingState";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Card as BaseCard, CardContent } from "@/components/ui/Card";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBranch } from "@/contexts/BranchContext";
 import { SectionCompare } from "./compare";
@@ -122,13 +124,19 @@ const SECTIONS: { id: Section; label: string; short: string; icon: React.Element
 ];
 
 const SECTION_DESCRIPTIONS: Record<Section, string> = {
-  overview: "Leia os sinais que exigem atenção e a saúde do período em poucos segundos.",
-  financial: "Separe receita, custos e exceções para decidir com números que fecham.",
-  sales: "Descubra quais produtos sustentam o resultado e quais precisam de ação.",
-  patterns: "Use volume, horários e tempos para ajustar escala e operação.",
-  compare: "Compare períodos equivalentes sem perder o contexto dos filtros ativos.",
-  orders: "Audite os pedidos que formam os indicadores antes de tomar uma decisão.",
+  overview: "Indicadores essenciais do período.",
+  financial: "Receita, margem e perdas.",
+  sales: "Produtos, categorias e oportunidades.",
+  patterns: "Demanda, tempo e capacidade.",
+  compare: "Diferenças entre períodos.",
+  orders: "Auditoria dos registros.",
 };
+
+// Todo painel do relatório passa por este primitive. Ele concentra raio,
+// borda e elevação para a página não parecer uma coleção de widgets soltos.
+function Card({ className = "", ...props }: React.ComponentProps<typeof BaseCard>) {
+  return <BaseCard {...props} className={`analytics-card ${className}`} />;
+}
 
 // ── Computation helpers ───────────────────────────────────────────────────────
 
@@ -244,6 +252,7 @@ export default function RelatorioPage() {
   const [rangeStart, setRangeStart] = useState<string>(""); // YYYY-MM-DD
   const [rangeEnd, setRangeEnd] = useState<string>("");     // YYYY-MM-DD
   const [activeSection, setActiveSection] = useState<Section>("overview");
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -369,7 +378,7 @@ export default function RelatorioPage() {
   const printPeriodLabel = currentRangeForCompare?.label ?? PERIOD_LABELS[period];
 
   return (
-    <div className="report-workspace flex h-full flex-col bg-[var(--bg-base)] print:block print:h-auto">
+    <div className={`report-workspace ${showDetails ? "report-show-details" : "report-focus"} flex h-full flex-col bg-[var(--bg-base)] print:block print:h-auto`}>
       {/* ── Control panel ── */}
       <ControlPanel
         period={period}
@@ -399,6 +408,8 @@ export default function RelatorioPage() {
         onFilterChange={setFilters}
         onBack={() => router.push("/app/caixa")}
         onRefresh={() => loadReport({ force: true })}
+        showDetails={showDetails}
+        onToggleDetails={() => setShowDetails((current) => !current)}
       />
 
       {/* ── Section navigation ── */}
@@ -452,7 +463,7 @@ export default function RelatorioPage() {
 
 function ControlPanel({
   period, customDate, rangeStart, rangeEnd, filters, categories, isLoading,
-  onPeriodChange, onCustomDateChange, onRangeChange, onFilterChange, onBack, onRefresh,
+  onPeriodChange, onCustomDateChange, onRangeChange, onFilterChange, onBack, onRefresh, showDetails, onToggleDetails,
 }: {
   period: Period;
   customDate: string;
@@ -467,6 +478,8 @@ function ControlPanel({
   onFilterChange: (f: CashReportFilters) => void;
   onBack: () => void;
   onRefresh: () => void;
+  showDetails: boolean;
+  onToggleDetails: () => void;
 }) {
   const todayKey = reportDateKeyFmt.format(new Date());
   const customLabel = customDate
@@ -629,6 +642,19 @@ function ControlPanel({
           title="Imprimir / salvar PDF da aba atual"
         >
           <Printer className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+        <button
+          onClick={onToggleDetails}
+          className={`inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors active:scale-95 ${
+            showDetails
+              ? "border-brand-red/25 bg-brand-red/5 text-brand-red"
+              : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
+          }`}
+          title={showDetails ? "Ocultar explicações" : "Mostrar explicações"}
+          aria-pressed={showDetails}
+        >
+          {showDetails ? <EyeOff className="h-3.5 w-3.5" strokeWidth={1.75} /> : <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />}
+          <span className="hidden lg:inline">{showDetails ? "Menos texto" : "Detalhes"}</span>
         </button>
       </div>
 
@@ -1020,25 +1046,16 @@ function SectionOverview({
     : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      <ExecutiveHero report={report} prevReport={prevReport} score={score} />
       {/* Alertas de desvio */}
       {deviationAlerts.length > 0 && <DeviationAlertsPanel alerts={deviationAlerts} />}
 
       {/* Ritmo da meta mensal */}
       {goalPace && <GoalPacePanel pace={goalPace} />}
 
-      {/* Scorecard */}
-      <div>
-        <SectionLabel>Resumo do período</SectionLabel>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <ScorecardCard
-            label="Recebido"
-            value={currency.format(report.summary.received)}
-            prev={prevReport ? currency.format(prevReport.summary.received) : null}
-            delta={prevReport ? pctDelta(report.summary.received, prevReport.summary.received) : null}
-            icon={TrendingUp}
-            tone="emerald"
-          />
+      {/* Métricas de decisão */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
           <ScorecardCard
             label="Pedidos"
             value={String(report.summary.total_orders)}
@@ -1064,16 +1081,13 @@ function SectionOverview({
             tone="red"
             invertDelta
           />
-        </div>
       </div>
 
       <OrderTypeBreakdownPanel entries={report.order_type_breakdown} />
       <PeriodAveragePanel report={report} />
 
-      {/* Highlights */}
-      <div>
-        <SectionLabel>Destaques</SectionLabel>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Sinais rápidos */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {report.top_all_products[0] && (
             <HighlightTile
               icon={Trophy}
@@ -1110,7 +1124,6 @@ function SectionOverview({
               tone="violet"
             />
           )}
-        </div>
       </div>
 
       {/* Score + Projection */}
@@ -1142,7 +1155,7 @@ function SectionOverview({
                   <Icon className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-xs font-black uppercase tracking-wide">{ins.title}</p>
-                    <p className="mt-0.5 text-sm font-medium leading-snug opacity-90">{ins.description}</p>
+                    <p className="analytics-detail mt-0.5 text-sm font-medium leading-snug opacity-90">{ins.description}</p>
                   </div>
                 </div>
               );
@@ -1150,6 +1163,48 @@ function SectionOverview({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ExecutiveHero({
+  report, prevReport, score,
+}: {
+  report: CashReportResponse;
+  prevReport: CashReportResponse | null;
+  score: OperationalScore | null;
+}) {
+  const receivedDelta = prevReport ? pctDelta(report.summary.received, prevReport.summary.received) : null;
+  const conversion = report.summary.total_orders > 0
+    ? (report.summary.paid_orders / report.summary.total_orders) * 100
+    : 0;
+  return (
+    <section className="relative overflow-hidden rounded-3xl bg-[var(--bg-inverse)] px-5 py-6 text-white shadow-[var(--elevation-2)] md:px-7 md:py-7">
+      <div className="pointer-events-none absolute -right-16 -top-20 h-60 w-60 rounded-full bg-brand-red/25 blur-3xl" />
+      <div className="relative grid gap-6 lg:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))] lg:items-end">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">Receita recebida</p>
+          <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums md:text-5xl">{currency.format(report.summary.received)}</p>
+          {receivedDelta != null && (
+            <span className={`mt-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${receivedDelta >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-red-400/15 text-red-200"}`}>
+              {receivedDelta >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+              {Math.abs(receivedDelta).toFixed(1)}% vs. período anterior
+            </span>
+          )}
+        </div>
+        <HeroMetric label="Margem" value={`${report.summary.gross_margin_percent.toFixed(1)}%`} emphasis={report.summary.gross_margin_percent >= 30} />
+        <HeroMetric label="Conversão" value={`${conversion.toFixed(0)}%`} emphasis={conversion >= 80} />
+        <HeroMetric label="Operação" value={score ? `${score.total}/100` : "—"} emphasis={Boolean(score && score.total >= 70)} />
+      </div>
+    </section>
+  );
+}
+
+function HeroMetric({ label, value, emphasis }: { label: string; value: string; emphasis: boolean }) {
+  return (
+    <div className="border-l border-white/10 pl-4 lg:pl-5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/50">{label}</p>
+      <p className={`mt-1 text-xl font-semibold tabular-nums ${emphasis ? "text-white" : "text-amber-200"}`}>{value}</p>
     </div>
   );
 }
@@ -1330,24 +1385,24 @@ function ScorecardCard({
   };
   const isPositive = delta == null ? null : (invertDelta ? delta <= 0 : delta >= 0);
   return (
-    <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
-      <CardContent className="p-4">
+    <Card className="analytics-kpi">
+      <CardContent className="p-4 md:p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
           <span className={`rounded-xl p-2 ${tones[tone]}`}><Icon className="h-3.5 w-3.5" /></span>
         </div>
-        <p className="text-2xl font-black leading-tight text-[var(--text-primary)]">{value}</p>
+        <p className="text-2xl font-semibold leading-tight text-[var(--text-primary)] tabular-nums">{value}</p>
         {delta != null && prev != null && (
           <div className="mt-2 flex items-center gap-1.5">
             <span className={`inline-flex items-center gap-0.5 text-xs font-black ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
               {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
               {Math.abs(delta).toFixed(1)}%
             </span>
-            <span className="text-[11px] text-[var(--text-muted)]">vs anterior ({prev})</span>
+            <span className="analytics-detail text-[11px] text-[var(--text-muted)]">vs anterior ({prev})</span>
           </div>
         )}
         {delta == null && (
-          <p className="mt-2 text-[11px] text-[var(--text-muted)]">Sem dados do período anterior</p>
+          <p className="analytics-detail mt-2 text-[11px] text-[var(--text-muted)]">Sem dados do período anterior</p>
         )}
       </CardContent>
     </Card>
@@ -1367,11 +1422,11 @@ function HighlightTile({
     violet:  "from-violet-500/15 border-violet-500/30 text-violet-600",
   };
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br to-[var(--bg-surface)] p-4 ${tones[tone]}`}>
-      <Icon className="mb-3 h-5 w-5" />
+    <div className={`analytics-kpi bg-gradient-to-br to-[var(--bg-surface)] p-4 ${tones[tone]}`}>
+      <span className="mb-3 inline-flex rounded-xl bg-[var(--bg-surface)]/70 p-2"><Icon className="h-4 w-4" /></span>
       <p className="text-[10px] font-bold uppercase tracking-wide opacity-70">{label}</p>
       <p className="mt-1 truncate text-sm font-black text-current">{primary}</p>
-      <p className="mt-0.5 text-xs font-medium opacity-80">{secondary}</p>
+      <p className="analytics-detail mt-0.5 text-xs font-medium opacity-80">{secondary}</p>
     </div>
   );
 }
@@ -1398,12 +1453,12 @@ function OrderTypeBreakdownPanel({ entries }: { entries: OrderTypeStat[] }) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-black text-[var(--text-primary)]">{meta.label}</p>
-                    <p className="text-[10px] font-medium text-[var(--text-muted)]">{meta.detail}</p>
+                    <p className="analytics-detail text-[10px] font-medium text-[var(--text-muted)]">{meta.detail}</p>
                   </div>
                   <span className="rounded-full bg-[var(--bg-surface)] px-2 py-0.5 text-[10px] font-black text-[var(--text-secondary)]">{item?.orders ?? 0} pedidos</span>
                 </div>
                 <p className="mt-4 text-xl font-black tabular-nums text-[var(--text-primary)]">{currency.format(item?.received ?? 0)}</p>
-                <p className="mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">recebido · ticket {currency.format(item?.average_ticket ?? 0)}</p>
+                <p className="analytics-detail mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">recebido · ticket {currency.format(item?.average_ticket ?? 0)}</p>
                 {type === "ENTREGA" && (
                   <div className="mt-3 grid grid-cols-2 gap-2 border-t border-amber-500/20 pt-3 text-[11px]">
                     <div><p className="text-[var(--text-muted)]">Taxa / motoboy</p><p className="font-black tabular-nums text-amber-700">{currency.format(item?.courier_reserve ?? 0)}</p></div>
@@ -1428,7 +1483,7 @@ function PeriodAveragePanel({ report }: { report: CashReportResponse }) {
   return (
     <Card className="border-[var(--border)] bg-[var(--bg-subtle)] shadow-[var(--shadow-sm)]">
       <CardContent className="flex flex-wrap items-center gap-x-7 gap-y-3 p-4">
-        <div><p className="text-xs font-black text-[var(--text-primary)]">Médias do período</p><p className="text-[11px] text-[var(--text-muted)]">{occurrences} ocorrências · dias sem venda contam como zero</p></div>
+        <div><p className="text-xs font-black text-[var(--text-primary)]">Médias do período</p><p className="analytics-detail text-[11px] text-[var(--text-muted)]">{occurrences} ocorrências · dias sem venda contam como zero</p></div>
         <AverageMetric label={`Recebido ${weekday}`} value={currency.format(report.summary.received / occurrences)} />
         <AverageMetric label={`Pedidos ${weekday}`} value={(report.summary.total_orders / occurrences).toFixed(1)} />
         <AverageMetric label={`Margem ${weekday}`} value={currency.format(report.summary.gross_margin / occurrences)} />
@@ -1496,7 +1551,7 @@ function MarginPanel({ report }: { report: CashReportResponse }) {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4">
             <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Custo dos produtos</p>
             <p className="mt-1 text-xl font-black text-red-600 tabular-nums">-{currency.format(cogs)}</p>
-            <p className="mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">
+            <p className="analytics-detail mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">
               Σ (qtd × custo congelado) — só pedidos pagos
             </p>
           </div>
@@ -1522,7 +1577,7 @@ function DeliveryFinancePanel({ report }: { report: CashReportResponse }) {
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <PanelHeader icon={Wallet} title="Financeiro do delivery" />
-            <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">A taxa de entrega é dinheiro de passagem: 100% fica reservado ao motoboy.</p>
+            <p className="analytics-detail mt-1 text-xs font-medium text-[var(--text-muted)]">A taxa de entrega é dinheiro de passagem: 100% fica reservado ao motoboy.</p>
           </div>
           <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-black text-amber-700">{delivery.orders} pedidos</span>
         </div>
@@ -1580,7 +1635,7 @@ function WaterfallPanel({ report }: { report: CashReportResponse }) {
               {currency.format(summary.gross_sales)}
             </p>
           </div>
-          <p className="mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">
+          <p className="analytics-detail mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">
             Pedidos não-cancelados (descontos já aplicados)
           </p>
           {/* Barra empilhada: received | pending | courtesy proporcionais a gross_sales */}
@@ -2022,7 +2077,7 @@ function LowSellersPanel({ report }: { report: CashReportResponse }) {
     <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={AlertCircle} title="Produtos sem saída no período" />
-        <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">
+        <p className="analytics-detail mt-1 text-xs font-medium text-[var(--text-muted)]">
           Esses produtos estão ativos no cardápio mas não tiveram vendas. Considere removê-los ou reposicioná-los.
         </p>
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -2075,7 +2130,7 @@ function DeliveryOperationPanel({ report }: { report: CashReportResponse }) {
     <Card className="border-amber-500/30 shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
         <PanelHeader icon={Clock} title="Operação de entrega" />
-        <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">Tempos do motoboy são medidos após o pedido estar pronto, separados da cozinha.</p>
+        <p className="analytics-detail mt-1 text-xs font-medium text-[var(--text-muted)]">Tempos do motoboy são medidos após o pedido estar pronto, separados da cozinha.</p>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
           <OperationValue label="Entregas" value={String(op.total_orders)} />
           <OperationValue label="A despachar" value={String(op.awaiting_dispatch)} warn={op.awaiting_dispatch > 0} />
@@ -2154,7 +2209,7 @@ function HeatmapPanel({ report }: { report: CashReportResponse }) {
             </button>
           </div>
         </div>
-        <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">
+        <p className="analytics-detail mt-1 text-xs font-medium text-[var(--text-muted)]">
           Cada célula é {metric === "orders" ? "pedidos" : "receita recebida"} no dia × hora. Top 3 hotspots destacados.
         </p>
         <div className="mt-4 overflow-x-auto hide-scrollbar">
@@ -2250,7 +2305,7 @@ function PipelinePanel({ report }: { report: CashReportResponse }) {
             </span>
           )}
         </div>
-        <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">
+        <p className="analytics-detail mt-1 text-xs font-medium text-[var(--text-muted)]">
           Quanto tempo cada etapa do pedido leva — mediana = caso típico, p90 = quase pior caso, fila = capacidade perdida.
         </p>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -2267,7 +2322,7 @@ function PipelinePanel({ report }: { report: CashReportResponse }) {
                 }`}
               >
                 <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{s.label}</p>
-                <p className="mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">{s.hint}</p>
+                <p className="analytics-detail mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">{s.hint}</p>
                 {stat.count === 0 ? (
                   <p className="mt-3 text-xs font-medium text-[var(--text-muted)]">Sem dados no período</p>
                 ) : (
@@ -2462,7 +2517,7 @@ function CancellationPanel({ report }: { report: CashReportResponse }) {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-center">
             <p className="text-[11px] font-bold uppercase text-[var(--text-muted)]">Receita perdida</p>
             <p className="mt-2 text-2xl font-black text-[var(--text-primary)]">{currency.format(fa.canceled_total)}</p>
-            <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">valor total cancelado</p>
+            <p className="analytics-detail mt-1 text-xs font-medium text-[var(--text-muted)]">valor total cancelado</p>
           </div>
           <div className={`rounded-2xl border p-4 text-center ${cancelRate > 10 ? "border-amber-500/30 bg-amber-500/10" : "border-[var(--border)] bg-[var(--bg-surface)]"}`}>
             <p className={`text-[11px] font-bold uppercase ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-muted)]"}`}>Taxa</p>
@@ -2681,16 +2736,21 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-3 text-[11px] font-black uppercase tracking-widest text-[var(--text-muted)]">{children}</p>
+    <div className="mb-3 flex items-center gap-3">
+      <p className="shrink-0 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)]">{children}</p>
+      <span className="h-px flex-1 bg-[var(--border)]" />
+    </div>
   );
 }
 
 function PanelHeader({ icon: Icon, title, action }: { icon: React.ElementType; title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-brand-red" />
-        <h2 className="text-sm font-black text-[var(--text-primary)]">{title}</h2>
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-red/10 text-brand-red">
+          <Icon className="h-4 w-4" strokeWidth={1.75} />
+        </span>
+        <h2 className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">{title}</h2>
       </div>
       {action}
     </div>
@@ -2711,5 +2771,5 @@ function ExportCsvButton({ onClick }: { onClick: () => void }) {
 }
 
 function EmptyPanel({ text }: { text: string }) {
-  return <p className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-4 text-sm font-medium text-[var(--text-muted)]">{text}</p>;
+  return <p className="mt-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-subtle)] p-4 text-center text-sm font-medium text-[var(--text-muted)]">{text}</p>;
 }

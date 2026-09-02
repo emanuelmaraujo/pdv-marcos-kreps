@@ -322,6 +322,26 @@ body {
   box-shadow: var(--elevation-1);
 }
 
+/* Relatório: linguagem visual única para indicadores, gráficos e tabelas. */
+.report-workspace .analytics-card {
+  border-radius: var(--radius-xl);
+  box-shadow: none;
+}
+
+.report-workspace .analytics-card:hover {
+  border-color: var(--border-strong);
+}
+
+.report-workspace.report-focus .analytics-detail {
+  display: none;
+}
+
+.report-workspace .analytics-kpi {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
 /* Transições padrão — 150ms ease-out para hover/active */
 @layer base {
   button,
