@@ -57,6 +57,7 @@ import { Card as BaseCard, CardContent } from "@/components/ui/Card";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBranch } from "@/contexts/BranchContext";
 import { SectionCompare } from "./compare";
+import { MetricTile, ReportPanel, ReportSectionHeading } from "./report-primitives";
 import {
   Period,
   PERIOD_LABELS,
@@ -132,10 +133,10 @@ const SECTION_DESCRIPTIONS: Record<Section, string> = {
   orders: "Auditoria dos registros.",
 };
 
-// Todo painel do relatório passa por este primitive. Ele concentra raio,
-// borda e elevação para a página não parecer uma coleção de widgets soltos.
+// Todo painel do relatório passa pelo mesmo primitive: cor, borda, raio e
+// elevação deixam de ser decisões de cada aba.
 function Card({ className = "", ...props }: React.ComponentProps<typeof BaseCard>) {
-  return <BaseCard {...props} className={`analytics-card ${className}`} />;
+  return <ReportPanel {...props} className={className} />;
 }
 
 // ── Computation helpers ───────────────────────────────────────────────────────
@@ -1319,15 +1320,16 @@ function GoalPacePanel({ pace }: { pace: GoalPace }) {
         </div>
         <p className="mt-1 text-[11px] font-bold text-[var(--text-muted)]">{pace.progressPct.toFixed(0)}% da meta recebido até agora</p>
 
-        <div className="analytics-tile mt-4 bg-[var(--bg-subtle)] p-4">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Projeção de fechamento (no ritmo atual)</p>
-          <p className={`mt-1 text-xl font-black ${tone.text}`}>{currency.format(pace.projectedMonthEnd)}</p>
-          <p className="text-xs font-medium text-[var(--text-muted)]">
-            {pace.onTrack
-              ? `${currency.format(pace.projectedMonthEnd - pace.goal)} acima da meta se o ritmo continuar`
-              : `Faltam ${currency.format(pace.gap)} pra bater a meta · ${pace.daysRemaining} dia${pace.daysRemaining !== 1 ? "s" : ""} restantes no mês`}
-          </p>
-        </div>
+        <MetricTile
+          className="mt-4"
+          label="Projeção de fechamento"
+          value={currency.format(pace.projectedMonthEnd)}
+          icon={TrendingUp}
+          tone={pace.onTrack ? "success" : "danger"}
+          meta={pace.onTrack
+            ? `${currency.format(pace.projectedMonthEnd - pace.goal)} acima da meta se o ritmo continuar`
+            : `Faltam ${currency.format(pace.gap)} para a meta · ${pace.daysRemaining} dia${pace.daysRemaining !== 1 ? "s" : ""} restantes`}
+        />
       </CardContent>
     </Card>
   );
@@ -1339,35 +1341,16 @@ function ProjectionPanel({ projection: p }: { projection: RevenueProjection }) {
       <CardContent className="p-5">
         <PanelHeader icon={TrendingUp} title="Projeção de receita" />
         <div className="mt-5 space-y-4">
-          <div className="analytics-tile bg-[var(--bg-subtle)] p-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Média diária (dias com movimento)</p>
-            <p className="mt-1 text-2xl font-black text-[var(--text-primary)]">{currency.format(p.avgPerDay)}</p>
-            <p className="text-xs font-medium text-[var(--text-muted)]">{p.daysWorked} dia{p.daysWorked !== 1 ? "s" : ""} com vendas</p>
-          </div>
+          <MetricTile label="Média diária" value={currency.format(p.avgPerDay)} icon={CalendarDays} tone="neutral" meta={`${p.daysWorked} dia${p.daysWorked !== 1 ? "s" : ""} com vendas`} />
 
           <div className="grid grid-cols-3 gap-2">
-            <div className="analytics-tile p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Pessimista</p>
-              <p className="mt-1 text-sm font-black text-red-600">{currency.format(p.pessimistic)}</p>
-            </div>
-            <div data-tone="success" className="analytics-tile p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-emerald-600">Projetado</p>
-              <p className="mt-1 text-sm font-black text-emerald-600">{currency.format(p.projectedTotal)}</p>
-            </div>
-            <div className="analytics-tile p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Otimista</p>
-              <p className="mt-1 text-sm font-black text-blue-600">{currency.format(p.optimistic)}</p>
-            </div>
+            <MetricTile label="Pessimista" value={currency.format(p.pessimistic)} tone="danger" />
+            <MetricTile label="Projetado" value={currency.format(p.projectedTotal)} tone="success" />
+            <MetricTile label="Otimista" value={currency.format(p.optimistic)} tone="info" />
           </div>
 
           {p.isMonthly && p.daysRemainingInMonth > 0 && (
-            <div className="analytics-tile border-blue-500/30 bg-blue-500/10 p-4">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-blue-600">Projeção de fechamento do mês</p>
-              <p className="mt-1 text-xl font-black text-blue-600">{currency.format(p.projectedMonthEnd)}</p>
-              <p className="text-xs font-medium text-blue-600">
-                Com base nos últimos {p.daysWorked} dias · faltam {p.daysRemainingInMonth} dias
-              </p>
-            </div>
+            <MetricTile label="Fechamento do mês" value={currency.format(p.projectedMonthEnd)} icon={CalendarDays} tone="info" meta={`Base: ${p.daysWorked} dias · faltam ${p.daysRemainingInMonth} dias`} />
           )}
         </div>
       </CardContent>
@@ -1382,37 +1365,10 @@ function ScorecardCard({
   icon: React.ElementType; tone: "emerald" | "blue" | "violet" | "red" | "amber";
   invertDelta?: boolean;
 }) {
-  const tones = {
-    emerald: "bg-emerald-500/10 text-emerald-600",
-    blue:    "bg-blue-500/10 text-blue-600",
-    violet:  "bg-violet-500/10 text-violet-600",
-    red:     "bg-red-500/10 text-red-600",
-    amber:   "bg-amber-500/10 text-amber-600",
-  };
   const isPositive = delta == null ? null : (invertDelta ? delta <= 0 : delta >= 0);
-  return (
-    <Card className="analytics-kpi">
-      <CardContent className="p-4 md:p-5">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
-          <span className={`rounded-xl p-2 ${tones[tone]}`}><Icon className="h-3.5 w-3.5" /></span>
-        </div>
-        <p className="text-2xl font-semibold leading-tight text-[var(--text-primary)] tabular-nums">{value}</p>
-        {delta != null && prev != null && (
-          <div className="mt-2 flex items-center gap-1.5">
-            <span className={`inline-flex items-center gap-0.5 text-xs font-black ${isPositive ? "text-emerald-600" : "text-red-600"}`}>
-              {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {Math.abs(delta).toFixed(1)}%
-            </span>
-            <span className="analytics-detail text-[11px] text-[var(--text-muted)]">vs anterior ({prev})</span>
-          </div>
-        )}
-        {delta == null && (
-          <p className="analytics-detail mt-2 text-[11px] text-[var(--text-muted)]">Sem dados do período anterior</p>
-        )}
-      </CardContent>
-    </Card>
-  );
+  const normalizedTrend = delta == null ? null : isPositive ? Math.abs(delta) : -Math.abs(delta);
+  const metricTone = tone === "emerald" ? "success" : tone === "blue" ? "info" : tone === "red" ? "danger" : tone === "amber" ? "warning" : "brand";
+  return <MetricTile label={label} value={value} icon={Icon} tone={metricTone} trend={normalizedTrend} meta={prev ? `vs. período anterior: ${prev}` : "Sem histórico comparável"} />;
 }
 
 function HighlightTile({
@@ -1421,20 +1377,8 @@ function HighlightTile({
   icon: React.ElementType; label: string; primary: string; secondary: string;
   tone: "amber" | "teal" | "emerald" | "violet";
 }) {
-  const tones = {
-    amber:   "from-amber-500/15 border-amber-500/30 text-amber-600",
-    teal:    "from-teal-500/15 border-teal-500/30 text-teal-600",
-    emerald: "from-emerald-500/15 border-emerald-500/30 text-emerald-600",
-    violet:  "from-violet-500/15 border-violet-500/30 text-violet-600",
-  };
-  return (
-    <div className={`analytics-kpi bg-gradient-to-br to-[var(--bg-surface)] p-4 ${tones[tone]}`}>
-      <span className="mb-3 inline-flex rounded-xl bg-[var(--bg-surface)]/70 p-2"><Icon className="h-4 w-4" /></span>
-      <p className="text-[10px] font-bold uppercase tracking-wide opacity-70">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-current">{primary}</p>
-      <p className="analytics-detail mt-0.5 text-xs font-medium opacity-80">{secondary}</p>
-    </div>
-  );
+  const metricTone = tone === "emerald" ? "success" : tone === "amber" ? "warning" : tone === "teal" ? "info" : "brand";
+  return <MetricTile label={label} value={primary} icon={Icon} tone={metricTone} meta={secondary} />;
 }
 
 const ORDER_TYPE_META: Record<OrderTypeStat["type"], { label: string; detail: string; tone: string }> = {
@@ -1487,19 +1431,21 @@ function PeriodAveragePanel({ report }: { report: CashReportResponse }) {
     ? `por ${report.metadata.selected_weekday.toLowerCase()}`
     : "por dia comercial";
   return (
-    <Card className="border-[var(--border)] bg-[var(--bg-subtle)] shadow-[var(--shadow-sm)]">
-      <CardContent className="flex flex-wrap items-center gap-x-7 gap-y-3 p-4">
-        <div><p className="text-xs font-black text-[var(--text-primary)]">Médias do período</p><p className="analytics-detail text-[11px] text-[var(--text-muted)]">{occurrences} ocorrências · dias sem venda contam como zero</p></div>
-        <AverageMetric label={`Recebido ${weekday}`} value={currency.format(report.summary.received / occurrences)} />
-        <AverageMetric label={`Pedidos ${weekday}`} value={(report.summary.total_orders / occurrences).toFixed(1)} />
-        <AverageMetric label={`Margem ${weekday}`} value={currency.format(report.summary.gross_margin / occurrences)} />
+    <Card className="border-[var(--border)] bg-[var(--bg-subtle)]">
+      <CardContent className="p-4">
+        <div className="mb-3"><p className="text-xs font-black text-[var(--text-primary)]">Médias do período</p><p className="analytics-detail text-[11px] text-[var(--text-muted)]">{occurrences} ocorrências · dias sem venda contam como zero</p></div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <AverageMetric label={`Recebido ${weekday}`} value={currency.format(report.summary.received / occurrences)} icon={Banknote} tone="success" />
+          <AverageMetric label={`Pedidos ${weekday}`} value={(report.summary.total_orders / occurrences).toFixed(1)} icon={ListOrdered} tone="info" />
+          <AverageMetric label={`Margem ${weekday}`} value={currency.format(report.summary.gross_margin / occurrences)} icon={TrendingUp} tone="brand" />
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function AverageMetric({ label, value }: { label: string; value: string }) {
-  return <div><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p><p className="mt-0.5 text-sm font-black tabular-nums text-[var(--text-primary)]">{value}</p></div>;
+function AverageMetric({ label, value, icon, tone }: { label: string; value: string; icon: React.ElementType; tone: "success" | "info" | "brand" }) {
+  return <MetricTile label={label} value={value} icon={icon} tone={tone} />;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1514,6 +1460,7 @@ function SectionFinancial({
 }) {
   return (
     <div className="space-y-5">
+      <ReportSectionHeading eyebrow="Financeiro" title="O que entra, o que custa e o que sobra" />
       <MarginPanel report={report} />
       <DeliveryFinancePanel report={report} />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -1534,11 +1481,6 @@ function MarginPanel({ report }: { report: CashReportResponse }) {
   if (received <= 0) return null;
 
   const hasCost = cogs > 0;
-  const marginColor =
-    gross_margin_percent >= 50 ? "text-emerald-600"
-    : gross_margin_percent >= 30 ? "text-amber-600"
-    : "text-red-600";
-
   return (
     <Card className="border-[var(--border)] shadow-[var(--shadow-sm)]">
       <CardContent className="p-5">
@@ -1550,24 +1492,9 @@ function MarginPanel({ report }: { report: CashReportResponse }) {
           </p>
         )}
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="analytics-tile bg-[var(--bg-subtle)] p-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Recebido</p>
-            <p className="mt-1 text-xl font-black text-[var(--text-primary)] tabular-nums">{currency.format(received)}</p>
-          </div>
-          <div className="analytics-tile p-4">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">Custo dos produtos</p>
-            <p className="mt-1 text-xl font-black text-red-600 tabular-nums">-{currency.format(cogs)}</p>
-            <p className="analytics-detail mt-0.5 text-[10px] font-medium text-[var(--text-muted)]">
-              Σ (qtd × custo congelado) — só pedidos pagos
-            </p>
-          </div>
-          <div data-tone={gross_margin >= 0 ? "success" : undefined} className={`analytics-tile p-4 ${gross_margin >= 0 ? "text-emerald-700" : "border-red-500/30 bg-red-500/10"}`}>
-            <p className={`text-[11px] font-bold uppercase tracking-wide ${gross_margin >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-              Margem bruta
-            </p>
-            <p className={`mt-1 text-xl font-black tabular-nums ${marginColor}`}>{currency.format(gross_margin)}</p>
-            <p className={`mt-0.5 text-xs font-black ${marginColor}`}>{gross_margin_percent.toFixed(1)}%</p>
-          </div>
+          <MetricTile label="Recebido" value={currency.format(received)} icon={Banknote} tone="neutral" />
+          <MetricTile label="Custo dos produtos" value={`-${currency.format(cogs)}`} icon={TrendingDown} tone="danger" meta="Somente pedidos pagos" />
+          <MetricTile label="Margem bruta" value={currency.format(gross_margin)} icon={TrendingUp} tone={gross_margin >= 0 ? "success" : "danger"} meta={`${gross_margin_percent.toFixed(1)}% de margem`} />
         </div>
       </CardContent>
     </Card>
@@ -1588,24 +1515,19 @@ function DeliveryFinancePanel({ report }: { report: CashReportResponse }) {
           <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-black text-amber-700">{delivery.orders} pedidos</span>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
-          <DeliveryValue label="Produtos" value={delivery.product_sales} tone="text-[var(--text-primary)]" />
-          <DeliveryValue label="Embalagem" value={delivery.packing_fees} tone="text-[var(--text-primary)]" />
-          <DeliveryValue label="Taxa cobrada" value={delivery.delivery_fees} tone="text-amber-700" />
-          <DeliveryValue label="Reserva motoboy" value={-delivery.courier_reserve} tone="text-red-600" />
-          <DeliveryValue label="Fica na loja" value={delivery.store_received} tone="text-emerald-700" />
+          <DeliveryValue label="Produtos" value={delivery.product_sales} tone="neutral" />
+          <DeliveryValue label="Embalagem" value={delivery.packing_fees} tone="neutral" />
+          <DeliveryValue label="Taxa cobrada" value={delivery.delivery_fees} tone="warning" />
+          <DeliveryValue label="Reserva motoboy" value={-delivery.courier_reserve} tone="danger" />
+          <DeliveryValue label="Fica na loja" value={delivery.store_received} tone="success" />
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function DeliveryValue({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div className="analytics-tile p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
-      <p className={`mt-1 text-base font-black tabular-nums ${tone}`}>{currency.format(value)}</p>
-    </div>
-  );
+function DeliveryValue({ label, value, tone }: { label: string; value: number; tone: "neutral" | "success" | "warning" | "danger" }) {
+  return <MetricTile label={label} value={currency.format(value)} tone={tone} />;
 }
 
 // Decomposição honesta do faturamento.
@@ -1890,16 +1812,8 @@ function AuditTile({ icon: Icon, label, total, count, tone }: {
   icon: React.ElementType; label: string; total: number; count: number;
   tone: "red" | "violet" | "zinc";
 }) {
-  const tones = { red: "bg-red-500/10 text-red-600", violet: "bg-violet-500/10 text-violet-600", zinc: "bg-[var(--bg-subtle)] text-[var(--text-secondary)]" };
-  const textTones = { red: "text-red-600", violet: "text-violet-600", zinc: "text-[var(--text-primary)]" };
-  return (
-    <div className="analytics-tile p-4">
-      <div className={`mb-3 inline-flex rounded-xl p-2 ${tones[tone]}`}><Icon className="h-4 w-4" /></div>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
-      <p className={`mt-1 text-xl font-black ${textTones[tone]}`}>{currency.format(total)}</p>
-      <p className="mt-0.5 text-xs font-medium text-[var(--text-muted)]">{count} registro{count !== 1 ? "s" : ""}</p>
-    </div>
-  );
+  const metricTone = tone === "red" ? "danger" : tone === "violet" ? "brand" : "neutral";
+  return <MetricTile label={label} value={currency.format(total)} icon={Icon} tone={metricTone} meta={`${count} registro${count !== 1 ? "s" : ""}`} />;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1914,6 +1828,7 @@ function SectionSales({
 }) {
   return (
     <div className="space-y-5">
+      <ReportSectionHeading eyebrow="Vendas" title="Mix, giro e oportunidades do cardápio" />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <CategoryMixPanel report={report} />
         <AbcPanel products={abcProducts} />
@@ -2117,6 +2032,7 @@ function LowSellersPanel({ report }: { report: CashReportResponse }) {
 function SectionPatterns({ report }: { report: CashReportResponse }) {
   return (
     <div className="space-y-5">
+      <ReportSectionHeading eyebrow="Operação" title="Quando vender e onde a operação perde ritmo" />
       <DeliveryOperationPanel report={report} />
       <PipelinePanel report={report} />
       <HeatmapPanel report={report} />
@@ -2151,12 +2067,7 @@ function DeliveryOperationPanel({ report }: { report: CashReportResponse }) {
 }
 
 function OperationValue({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
-  return (
-    <div className="analytics-tile bg-[var(--bg-subtle)] p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
-      <p className={`mt-1 text-lg font-black tabular-nums ${warn ? "text-amber-700" : "text-[var(--text-primary)]"}`}>{value}</p>
-    </div>
-  );
+  return <MetricTile label={label} value={value} tone={warn ? "warning" : "neutral"} />;
 }
 
 /**
@@ -2440,14 +2351,11 @@ function HourlyPanel({ report }: { report: CashReportResponse }) {
         </div>
         <div className="mt-4 grid grid-cols-3 gap-3">
           {[
-            { label: "Total pedidos", value: String(report.hourly_sales.reduce((s, h) => s + h.orders, 0)) },
-            { label: "Hora de pico", value: peakHour?.range ?? "—" },
-            { label: "Maior receita", value: revenuePeakHour ? currency.format(revenuePeakHour.received) : "—" },
+            { label: "Total pedidos", value: String(report.hourly_sales.reduce((s, h) => s + h.orders, 0)), icon: ListOrdered, tone: "neutral" as const },
+            { label: "Hora de pico", value: peakHour?.range ?? "—", icon: Clock, tone: "warning" as const },
+            { label: "Maior receita", value: revenuePeakHour ? currency.format(revenuePeakHour.received) : "—", icon: Banknote, tone: "success" as const },
           ].map((s) => (
-            <div key={s.label} className="analytics-tile bg-[var(--bg-subtle)] p-3 text-center">
-              <p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">{s.label}</p>
-              <p className="mt-1 text-sm font-black text-[var(--text-primary)]">{s.value}</p>
-            </div>
+            <MetricTile key={s.label} label={s.label} value={s.value} icon={s.icon} tone={s.tone} />
           ))}
         </div>
       </CardContent>
@@ -2515,25 +2423,9 @@ function CancellationPanel({ report }: { report: CashReportResponse }) {
       <CardContent className="p-5">
         <PanelHeader icon={XCircle} title="Análise de cancelamentos" />
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="analytics-tile border-red-500/30 bg-red-500/10 p-4 text-center">
-            <p className="text-[11px] font-bold uppercase text-red-600">Cancelamentos</p>
-            <p className="mt-2 text-3xl font-black text-red-600">{fa.canceled_orders}</p>
-            <p className="mt-1 text-xs font-medium text-red-600">pedidos no período</p>
-          </div>
-          <div className="analytics-tile p-4 text-center">
-            <p className="text-[11px] font-bold uppercase text-[var(--text-muted)]">Receita perdida</p>
-            <p className="mt-2 text-2xl font-black text-[var(--text-primary)]">{currency.format(fa.canceled_total)}</p>
-            <p className="analytics-detail mt-1 text-xs font-medium text-[var(--text-muted)]">valor total cancelado</p>
-          </div>
-          <div data-tone={cancelRate > 10 ? "warning" : undefined} className="analytics-tile p-4 text-center">
-            <p className={`text-[11px] font-bold uppercase ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-muted)]"}`}>Taxa</p>
-            <p className={`mt-2 text-3xl font-black ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-primary)]"}`}>
-              {cancelRate.toFixed(1)}%
-            </p>
-            <p className={`mt-1 text-xs font-medium ${cancelRate > 10 ? "text-amber-600" : "text-[var(--text-muted)]"}`}>
-              {cancelRate > 10 ? "acima do ideal (< 10%)" : "dentro do aceitável"}
-            </p>
-          </div>
+          <MetricTile label="Cancelamentos" value={String(fa.canceled_orders)} icon={XCircle} tone="danger" meta="Pedidos cancelados no período" />
+          <MetricTile label="Receita perdida" value={currency.format(fa.canceled_total)} icon={TrendingDown} tone="danger" meta="Valor total cancelado" />
+          <MetricTile label="Taxa de cancelamento" value={`${cancelRate.toFixed(1)}%`} icon={AlertCircle} tone={cancelRate > 10 ? "warning" : "neutral"} meta={cancelRate > 10 ? "Acima do ideal: 10%" : "Dentro da faixa esperada"} />
         </div>
       </CardContent>
     </Card>
@@ -2615,19 +2507,17 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
 
   return (
     <div className="space-y-4">
+      <ReportSectionHeading eyebrow="Pedidos" title="Rastreie a origem de cada indicador" />
       {/* Summary strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {[
-          { label: "Filtrados",   value: String(filtered.length) },
-          { label: "Total",       value: String(orders.length) },
-          { label: "Recebido",    value: currency.format(totalReceived) },
-          { label: "Ticket médio",value: currency.format(filtered.filter((o) => o.payment_status === "PAID").length > 0 ? totalReceived / filtered.filter((o) => o.payment_status === "PAID").length : 0) },
-          { label: "Desistência", value: publicOrdersCount > 0 ? `${abandonmentRate.toFixed(1)}%` : "—" },
+          { label: "Filtrados",   value: String(filtered.length), icon: Filter, tone: "info" as const },
+          { label: "Total",       value: String(orders.length), icon: ListOrdered, tone: "neutral" as const },
+          { label: "Recebido",    value: currency.format(totalReceived), icon: Banknote, tone: "success" as const },
+          { label: "Ticket médio",value: currency.format(filtered.filter((o) => o.payment_status === "PAID").length > 0 ? totalReceived / filtered.filter((o) => o.payment_status === "PAID").length : 0), icon: CreditCard, tone: "brand" as const },
+          { label: "Desistência", value: publicOrdersCount > 0 ? `${abandonmentRate.toFixed(1)}%` : "—", icon: XCircle, tone: abandonmentRate > 0 ? "warning" as const : "neutral" as const },
         ].map((s) => (
-          <div key={s.label} className="analytics-tile p-3 text-center">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{s.label}</p>
-            <p className="mt-1 text-lg font-black text-[var(--text-primary)]">{s.value}</p>
-          </div>
+          <MetricTile key={s.label} label={s.label} value={s.value} icon={s.icon} tone={s.tone} />
         ))}
       </div>
 

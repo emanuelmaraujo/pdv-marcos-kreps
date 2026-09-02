@@ -705,7 +705,7 @@ function OrderTypeDailyPanel({ data }: { data: CaixaData }) {
         {(["BALCAO", "VIAGEM", "ENTREGA"] as const).map((type) => {
           const item = byType.get(type);
           return (
-            <div key={type} className={`rounded-xl border p-3 ${type === "ENTREGA" ? "border-amber-500/30 bg-amber-500/5" : "border-[var(--border)] bg-[var(--bg-subtle)]"}`}>
+            <div key={type} className={`cash-metric p-3 ${type === "ENTREGA" ? "border-amber-500/30 bg-amber-500/5" : "bg-[var(--bg-subtle)]"}`}>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-black text-[var(--text-primary)]">{labels[type]}</p>
                 <span className="text-[10px] font-bold text-[var(--text-muted)]">{item?.orders ?? 0} pedidos</span>
@@ -814,13 +814,17 @@ function MetricCard({ icon: Icon, label, value, color, delta: deltaBadge }: {
 }) {
   return (
     <div className="cash-metric p-4">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <Icon className={`h-3.5 w-3.5 ${color}`} strokeWidth={1.75} />
-        <p className="text-[11px] font-medium text-[var(--text-muted)]">{label}</p>
-      </div>
-      <div className="flex items-end gap-2">
-        <p className="text-2xl font-semibold text-[var(--text-primary)] tabular-nums">{value}</p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--bg-subtle)]">
+            <Icon className={`h-3.5 w-3.5 ${color}`} strokeWidth={1.75} />
+          </span>
+          <p className="text-[11px] font-medium text-[var(--text-muted)]">{label}</p>
+        </div>
         {deltaBadge}
+      </div>
+      <div className="mt-3 flex items-end gap-2">
+        <p className="text-2xl font-semibold text-[var(--text-primary)] tabular-nums">{value}</p>
       </div>
     </div>
   );

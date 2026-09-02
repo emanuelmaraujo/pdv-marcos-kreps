@@ -323,12 +323,14 @@ body {
 }
 
 /* Relatório: linguagem visual única para indicadores, gráficos e tabelas. */
-.report-workspace .analytics-card {
+.report-workspace .analytics-card,
+.report-workspace .report-panel {
   border-radius: var(--radius-xl);
   box-shadow: none;
 }
 
-.report-workspace .analytics-card:hover {
+.report-workspace .analytics-card:hover,
+.report-workspace .report-panel:hover {
   border-color: var(--border-strong);
 }
 
@@ -357,6 +359,18 @@ body {
 .report-workspace .analytics-tile[data-tone="warning"] {
   border-color: color-mix(in srgb, var(--status-warning) 28%, var(--border));
   background: var(--status-warning-bg);
+}
+
+.report-workspace .metric-tile {
+  min-height: 108px;
+  border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 48%, transparent);
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.report-workspace .metric-tile:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 
 .cash-workspace .cash-panel,

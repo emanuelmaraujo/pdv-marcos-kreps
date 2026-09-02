@@ -15,6 +15,7 @@ import { Card as BaseCard, CardContent } from "@/components/ui/Card";
 import { CashReportResponse, reportsApi } from "@/lib/api/reports-api";
 import { getBusinessDayRange } from "@/lib/utils/business-day";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { ReportPanel, ReportSectionHeading } from "./report-primitives";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dateLabelFmt = new Intl.DateTimeFormat("pt-BR", {
@@ -25,7 +26,7 @@ const dateLabelFmt = new Intl.DateTimeFormat("pt-BR", {
 });
 
 function CompareCard({ className = "", ...props }: React.ComponentProps<typeof BaseCard>) {
-  return <BaseCard {...props} className={`analytics-card ${className}`} />;
+  return <ReportPanel {...props} className={className} />;
 }
 
 type CompareMode = "previous" | "sameWeekday" | "custom";
@@ -189,6 +190,7 @@ export function SectionCompare({ currentRange, isSingleDay, branchId, orderType 
 
   return (
     <div className="space-y-5">
+      <ReportSectionHeading eyebrow="Comparação" title="Entenda a diferença, não apenas o total" />
       {/* Controles */}
       <CompareCard className="border-[var(--border)] shadow-[var(--shadow-sm)]">
         <CardContent className="p-4 md:p-5">
