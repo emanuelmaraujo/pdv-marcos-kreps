@@ -782,33 +782,33 @@ function ControlPanel({
             </div>
           </div>
           <div className="space-y-3">
-            <MobileFilterField label="Categoria" value={filters.category_id ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, category_id: value })}>
-              <option value="ALL">Todas as categorias</option>
-              {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-            </MobileFilterField>
-            <MobileFilterField label="Pagamento" value={filters.payment_method ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, payment_method: value })}>
-              <option value="ALL">Todos os pagamentos</option>
-              <option value="PIX">PIX</option>
-              <option value="CASH">Dinheiro</option>
-              <option value="DEBIT_CARD">Débito</option>
-              <option value="CREDIT_CARD">Crédito</option>
-            </MobileFilterField>
-            <MobileFilterField label="Tipo de pedido" value={filters.order_type ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, order_type: value as CashReportFilters["order_type"] })}>
-              <option value="ALL">Todos os tipos</option>
-              <option value="BALCAO">Balcão</option>
-              <option value="VIAGEM">Retirada</option>
-              <option value="ENTREGA">Entrega</option>
-            </MobileFilterField>
-            <MobileFilterField label="Dia da semana" value={filters.weekday ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, weekday: value as CashReportFilters["weekday"] })}>
-              <option value="ALL">Todos os dias</option>
-              <option value="Segunda">Segundas</option>
-              <option value="Terça">Terças</option>
-              <option value="Quarta">Quartas</option>
-              <option value="Quinta">Quintas</option>
-              <option value="Sexta">Sextas</option>
-              <option value="Sábado">Sábados</option>
-              <option value="Domingo">Domingos</option>
-            </MobileFilterField>
+            <MobileFilterChoiceGroup label="Categoria" value={filters.category_id ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, category_id: value })} options={[
+              { value: "ALL", label: "Todas as categorias" },
+              ...categories.map((category) => ({ value: category.id, label: category.name })),
+            ]} />
+            <MobileFilterChoiceGroup label="Pagamento" value={filters.payment_method ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, payment_method: value })} options={[
+              { value: "ALL", label: "Todos os pagamentos" },
+              { value: "PIX", label: "PIX" },
+              { value: "CASH", label: "Dinheiro" },
+              { value: "DEBIT_CARD", label: "Débito" },
+              { value: "CREDIT_CARD", label: "Crédito" },
+            ]} />
+            <MobileFilterChoiceGroup label="Tipo de pedido" value={filters.order_type ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, order_type: value as CashReportFilters["order_type"] })} options={[
+              { value: "ALL", label: "Todos os tipos" },
+              { value: "BALCAO", label: "Balcão" },
+              { value: "VIAGEM", label: "Retirada" },
+              { value: "ENTREGA", label: "Entrega" },
+            ]} />
+            <MobileFilterChoiceGroup label="Dia da semana" value={filters.weekday ?? "ALL"} onChange={(value) => onFilterChange({ ...filters, weekday: value as CashReportFilters["weekday"] })} options={[
+              { value: "ALL", label: "Todos os dias" },
+              { value: "Segunda", label: "Segundas" },
+              { value: "Terça", label: "Terças" },
+              { value: "Quarta", label: "Quartas" },
+              { value: "Quinta", label: "Quintas" },
+              { value: "Sexta", label: "Sextas" },
+              { value: "Sábado", label: "Sábados" },
+              { value: "Domingo", label: "Domingos" },
+            ]} />
           </div>
         </div>
       </BottomSheet>
@@ -816,25 +816,42 @@ function ControlPanel({
   );
 }
 
-function MobileFilterField({
-  label, value, onChange, children,
+function MobileFilterChoiceGroup({
+  label, value, onChange, options,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  children: React.ReactNode;
+  options: Array<{ value: string; label: string }>;
 }) {
-  const active = value !== "ALL";
+  const selected = options.find((option) => option.value === value)?.label ?? "Todos";
   return (
-    <label className={`block rounded-2xl border p-3 transition-colors ${active ? "border-brand-red/25 bg-brand-red/[0.04]" : "border-[var(--border)] bg-[var(--bg-subtle)]"}`}>
-      <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">{label}</span>
-      <span className="relative block">
-        <select value={value} onChange={(event) => onChange(event.target.value)} className={`h-9 w-full appearance-none bg-transparent pr-8 text-sm font-semibold outline-none ${active ? "text-brand-red" : "text-[var(--text-primary)]"}`}>
-          {children}
-        </select>
-        <ChevronDown className={`pointer-events-none absolute right-1 top-1/2 h-4 w-4 -translate-y-1/2 ${active ? "text-brand-red" : "text-[var(--text-muted)]"}`} />
-      </span>
-    </label>
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3" aria-label={label}>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">{label}</p>
+        <p className={`truncate text-[11px] font-semibold ${value === "ALL" ? "text-[var(--text-muted)]" : "text-brand-red"}`}>{selected}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((option, index) => {
+          const active = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              aria-pressed={active}
+              className={`min-h-10 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors ${index === 0 ? "col-span-2" : ""} ${
+                active
+                  ? "border-brand-red bg-brand-red text-white shadow-[var(--shadow-sm)]"
+                  : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-brand-red/30 hover:text-brand-red"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
