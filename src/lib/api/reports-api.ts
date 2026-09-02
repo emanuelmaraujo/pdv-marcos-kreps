@@ -207,22 +207,34 @@ export const reportsApi = {
   },
 
   async getOrdersForDateRange(startISO: string, endISO: string, branchId?: string | null, orderType?: CashReportFilters["order_type"], weekday?: CashReportFilters["weekday"]): Promise<OrderRecord[]> {
-    let query = supabase
-      .from("orders")
-      .select("id, daily_number, status, payment_status, payment_method, source, type, total_amount, discount_amount, packing_fee, created_at, confirmed_at, paid_at")
-      .or([
-        `and(paid_at.not.is.null,paid_at.gte.${startISO},paid_at.lte.${endISO})`,
-        `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${startISO},confirmed_at.lte.${endISO})`,
-        `and(paid_at.is.null,confirmed_at.is.null,created_at.gte.${startISO},created_at.lte.${endISO})`,
-      ].join(","))
-      .order("created_at", { ascending: false });
-    if (branchId) query = query.eq("branch_id", branchId);
-    if (orderType && orderType !== "ALL") query = query.eq("type", orderType);
-    const { data, error } = await query;
-    if (error) throw error;
+    // O PostgREST impõe um máximo por resposta (normalmente 1.000 linhas).
+    // Reconstruir a query em cada página impede que relatórios longos exibam
+    // só o primeiro bloco de pedidos enquanto os filtros parecem corretos.
+    const buildQuery = () => {
+      let query = supabase
+        .from("orders")
+        .select("id, daily_number, status, payment_status, payment_method, source, type, total_amount, discount_amount, packing_fee, created_at, confirmed_at, paid_at")
+        .or([
+          `and(paid_at.not.is.null,paid_at.gte.${startISO},paid_at.lte.${endISO})`,
+          `and(paid_at.is.null,confirmed_at.not.is.null,confirmed_at.gte.${startISO},confirmed_at.lte.${endISO})`,
+          `and(paid_at.is.null,confirmed_at.is.null,created_at.gte.${startISO},created_at.lte.${endISO})`,
+        ].join(","))
+        .order("created_at", { ascending: false });
+      if (branchId) query = query.eq("branch_id", branchId);
+      if (orderType && orderType !== "ALL") query = query.eq("type", orderType);
+      return query;
+    };
+    const PAGE_SIZE = 1000;
+    const data: OrderRecord[] = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: page, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+      if (error) throw error;
+      data.push(...((page ?? []) as OrderRecord[]));
+      if ((page?.length ?? 0) < PAGE_SIZE) break;
+    }
     const start = new Date(startISO).getTime();
     const end = new Date(endISO).getTime();
-    return (data ?? []).filter((row) => {
+    return data.filter((row) => {
       const saleTime = new Date(row.paid_at ?? row.confirmed_at ?? row.created_at).getTime();
       if (saleTime < start || saleTime > end) return false;
       if (!weekday || weekday === "ALL") return true;
