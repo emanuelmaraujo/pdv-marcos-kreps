@@ -226,6 +226,11 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
       return () => window.clearTimeout(idleTimer);
     }
 
+    // Opt-out por padrão: com telefone válido informado, já vem marcado para
+    // salvar (decisão de negócio 2026-08-20 — ataca a causa raiz de baixa
+    // captura de telefone). O cliente pode desmarcar no toggle abaixo.
+    const optOutTimer = window.setTimeout(() => setRememberCustomerData(true), 0);
+
     // Clear stale auto-fill if phone changed since last fill
     const phoneChanged =
       lastAutofilledPhoneRef.current && lastAutofilledPhoneRef.current !== normalizedPhone;
@@ -236,7 +241,6 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
         lastAutofilledPhoneRef.current = null;
         setCustomerInfo("", formatWhatsAppInput(normalizedPhone));
         setProfileNotice("");
-        setRememberCustomerData(false);
       }
       try {
         setProfileLookupState("checking");
@@ -269,6 +273,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
 
     return () => {
       cancelled = true;
+      window.clearTimeout(optOutTimer);
       window.clearTimeout(timer);
     };
   }, [customerPhone, isOpen, profileLookupRetry, setCustomerInfo]);
@@ -909,7 +914,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                       Salvar dados deste cliente
                     </span>
                     <span className={`mt-0.5 block text-[10px] font-medium leading-relaxed ${rememberCustomerData ? "text-emerald-600" : "text-[var(--text-muted)]"}`}>
-                      Da próxima vez que ele digitar o WhatsApp, o nome aparece sozinho.
+                      Reconhece o cliente da próxima vez e conta os selos de fidelidade dele. Desmarque se ele não quiser.
                     </span>
                   </span>
                   <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${rememberCustomerData ? "bg-emerald-500" : "bg-[var(--border-strong)]"}`}>
