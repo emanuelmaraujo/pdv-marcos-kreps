@@ -43,6 +43,7 @@ import {
   CashReportFilters,
   CashReportResponse,
   HourlyStat,
+  OrderTypeStat,
   OrderRecord,
   ProductStat,
   reportsApi,
@@ -227,7 +228,7 @@ export default function RelatorioPage() {
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState<CashReportFilters>({
-    payment_method: "ALL", category_id: "ALL", start_date: "", end_date: "",
+    payment_method: "ALL", category_id: "ALL", order_type: "ALL", weekday: "ALL", start_date: "", end_date: "",
   });
   const [period, setPeriod] = useState<Period>("today");
   const [customDate, setCustomDate] = useState<string>(""); // YYYY-MM-DD
@@ -280,7 +281,7 @@ export default function RelatorioPage() {
       const closed = isClosedRange({ start, end });
       const cacheKey = buildReportCacheKey({
         start: bf.start_date, end: bf.end_date, prevStart: bpf.start_date, prevEnd: bpf.end_date,
-        categoryId: filters.category_id, paymentMethod: filters.payment_method, branchId: currentBranchId ?? null,
+        categoryId: filters.category_id, paymentMethod: filters.payment_method, orderType: filters.order_type, weekday: filters.weekday, branchId: currentBranchId ?? null,
       });
 
       if (closed && !opts?.force) {
@@ -297,7 +298,7 @@ export default function RelatorioPage() {
       const [cur, prev, ord] = await Promise.all([
         reportsApi.getCashReport(bf),
         reportsApi.getCashReport(bpf).catch(() => null),
-        reportsApi.getOrdersForDateRange(start.toISOString(), end.toISOString(), currentBranchId),
+        reportsApi.getOrdersForDateRange(start.toISOString(), end.toISOString(), currentBranchId, filters.order_type, filters.weekday),
       ]);
       setReport(cur);
       setPrevReport(prev);
@@ -420,6 +421,8 @@ export default function RelatorioPage() {
                 currentRange={{ start: currentRangeForCompare.start, end: currentRangeForCompare.end, label: currentRangeForCompare.label }}
                 isSingleDay={currentRangeForCompare.isSingleDay}
                 branchId={currentBranchId ?? null}
+                orderType={filters.order_type ?? "ALL"}
+                weekday={filters.weekday ?? "ALL"}
               />
             )}
             {activeSection === "orders"    && <SectionOrders    orders={orders} />}
@@ -468,10 +471,12 @@ function ControlPanel({
 
   const hasActiveFilters =
     (filters.category_id && filters.category_id !== "ALL") ||
-    (filters.payment_method && filters.payment_method !== "ALL");
+    (filters.payment_method && filters.payment_method !== "ALL") ||
+    (filters.order_type && filters.order_type !== "ALL") ||
+    (filters.weekday && filters.weekday !== "ALL");
 
   const clearFilters = () =>
-    onFilterChange({ ...filters, category_id: "ALL", payment_method: "ALL" });
+    onFilterChange({ ...filters, category_id: "ALL", payment_method: "ALL", order_type: "ALL", weekday: "ALL" });
 
   return (
     <div className="border-b border-[var(--border)] bg-[var(--bg-surface)] print:hidden">
@@ -624,6 +629,30 @@ function ControlPanel({
           <option value="CASH">Dinheiro</option>
           <option value="DEBIT_CARD">Débito</option>
           <option value="CREDIT_CARD">Crédito</option>
+        </FilterChip>
+
+        <FilterChip
+          value={filters.order_type ?? "ALL"}
+          onChange={(v) => onFilterChange({ ...filters, order_type: v as CashReportFilters["order_type"] })}
+        >
+          <option value="ALL">Todos os tipos</option>
+          <option value="BALCAO">Balcão</option>
+          <option value="VIAGEM">Retirada</option>
+          <option value="ENTREGA">Entrega</option>
+        </FilterChip>
+
+        <FilterChip
+          value={filters.weekday ?? "ALL"}
+          onChange={(v) => onFilterChange({ ...filters, weekday: v as CashReportFilters["weekday"] })}
+        >
+          <option value="ALL">Todos os dias</option>
+          <option value="Segunda">Segundas</option>
+          <option value="Terça">Terças</option>
+          <option value="Quarta">Quartas</option>
+          <option value="Quinta">Quintas</option>
+          <option value="Sexta">Sextas</option>
+          <option value="Sábado">Sábados</option>
+          <option value="Domingo">Domingos</option>
         </FilterChip>
 
         {/* Clear filters */}
@@ -968,6 +997,9 @@ function SectionOverview({
         </div>
       </div>
 
+      <OrderTypeBreakdownPanel entries={report.order_type_breakdown} />
+      <PeriodAveragePanel report={report} />
+
       {/* Highlights */}
       <div>
         <SectionLabel>Destaques</SectionLabel>
@@ -1274,6 +1306,71 @@ function HighlightTile({
   );
 }
 
+const ORDER_TYPE_META: Record<OrderTypeStat["type"], { label: string; detail: string; tone: string }> = {
+  BALCAO: { label: "Balcão", detail: "consumo presencial", tone: "border-blue-500/25 bg-blue-500/5" },
+  VIAGEM: { label: "Retirada", detail: "pedido para viagem", tone: "border-violet-500/25 bg-violet-500/5" },
+  ENTREGA: { label: "Entrega", detail: "delivery próprio", tone: "border-amber-500/30 bg-amber-500/10" },
+};
+
+function OrderTypeBreakdownPanel({ entries }: { entries: OrderTypeStat[] }) {
+  if (!entries?.length) return null;
+  const byType = new Map(entries.map((entry) => [entry.type, entry]));
+  return (
+    <div>
+      <SectionLabel>Resultado por tipo de pedido</SectionLabel>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {(["BALCAO", "VIAGEM", "ENTREGA"] as const).map((type) => {
+          const item = byType.get(type);
+          const meta = ORDER_TYPE_META[type];
+          return (
+            <Card key={type} className={`border ${meta.tone}`}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black text-[var(--text-primary)]">{meta.label}</p>
+                    <p className="text-[10px] font-medium text-[var(--text-muted)]">{meta.detail}</p>
+                  </div>
+                  <span className="rounded-full bg-[var(--bg-surface)] px-2 py-0.5 text-[10px] font-black text-[var(--text-secondary)]">{item?.orders ?? 0} pedidos</span>
+                </div>
+                <p className="mt-4 text-xl font-black tabular-nums text-[var(--text-primary)]">{currency.format(item?.received ?? 0)}</p>
+                <p className="mt-0.5 text-[11px] font-medium text-[var(--text-muted)]">recebido · ticket {currency.format(item?.average_ticket ?? 0)}</p>
+                {type === "ENTREGA" && (
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-amber-500/20 pt-3 text-[11px]">
+                    <div><p className="text-[var(--text-muted)]">Taxa / motoboy</p><p className="font-black tabular-nums text-amber-700">{currency.format(item?.courier_reserve ?? 0)}</p></div>
+                    <div><p className="text-[var(--text-muted)]">Fica na loja</p><p className="font-black tabular-nums text-emerald-700">{currency.format(item?.store_received ?? 0)}</p></div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PeriodAveragePanel({ report }: { report: CashReportResponse }) {
+  const occurrences = report.metadata.occurrence_count ?? 0;
+  if (occurrences <= 1) return null;
+  const weekday = report.metadata.selected_weekday && report.metadata.selected_weekday !== "ALL"
+    ? `por ${report.metadata.selected_weekday.toLowerCase()}`
+    : "por dia comercial";
+  return (
+    <Card className="border-[var(--border)] bg-[var(--bg-subtle)] shadow-[var(--shadow-sm)]">
+      <CardContent className="flex flex-wrap items-center gap-x-7 gap-y-3 p-4">
+        <div><p className="text-xs font-black text-[var(--text-primary)]">Médias do período</p><p className="text-[11px] text-[var(--text-muted)]">{occurrences} ocorrências · dias sem venda contam como zero</p></div>
+        <AverageMetric label={`Recebido ${weekday}`} value={currency.format(report.summary.received / occurrences)} />
+        <AverageMetric label={`Pedidos ${weekday}`} value={(report.summary.total_orders / occurrences).toFixed(1)} />
+        <AverageMetric label={`Margem ${weekday}`} value={currency.format(report.summary.gross_margin / occurrences)} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function AverageMetric({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p><p className="mt-0.5 text-sm font-black tabular-nums text-[var(--text-primary)]">{value}</p></div>;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // SECTION 2 — FINANCEIRO
 // ════════════════════════════════════════════════════════════════════════════
@@ -1287,6 +1384,7 @@ function SectionFinancial({
   return (
     <div className="space-y-5">
       <MarginPanel report={report} />
+      <DeliveryFinancePanel report={report} />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <WaterfallPanel report={report} />
         <PaymentPanel report={report} />
@@ -1342,6 +1440,40 @@ function MarginPanel({ report }: { report: CashReportResponse }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function DeliveryFinancePanel({ report }: { report: CashReportResponse }) {
+  const delivery = report.order_type_breakdown.find((entry) => entry.type === "ENTREGA");
+  if (!delivery || delivery.orders === 0) return null;
+  return (
+    <Card className="border-amber-500/30 bg-amber-500/[0.03] shadow-[var(--shadow-sm)]">
+      <CardContent className="p-5">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <PanelHeader icon={Wallet} title="Financeiro do delivery" />
+            <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">A taxa de entrega é dinheiro de passagem: 100% fica reservado ao motoboy.</p>
+          </div>
+          <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-black text-amber-700">{delivery.orders} pedidos</span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <DeliveryValue label="Produtos" value={delivery.product_sales} tone="text-[var(--text-primary)]" />
+          <DeliveryValue label="Embalagem" value={delivery.packing_fees} tone="text-[var(--text-primary)]" />
+          <DeliveryValue label="Taxa cobrada" value={delivery.delivery_fees} tone="text-amber-700" />
+          <DeliveryValue label="Reserva motoboy" value={-delivery.courier_reserve} tone="text-red-600" />
+          <DeliveryValue label="Fica na loja" value={delivery.store_received} tone="text-emerald-700" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DeliveryValue({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
+      <p className={`mt-1 text-base font-black tabular-nums ${tone}`}>{currency.format(value)}</p>
+    </div>
   );
 }
 
@@ -1854,6 +1986,7 @@ function LowSellersPanel({ report }: { report: CashReportResponse }) {
 function SectionPatterns({ report }: { report: CashReportResponse }) {
   return (
     <div className="space-y-5">
+      <DeliveryOperationPanel report={report} />
       <PipelinePanel report={report} />
       <HeatmapPanel report={report} />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -1861,6 +1994,36 @@ function SectionPatterns({ report }: { report: CashReportResponse }) {
         <WeekdayPanel report={report} />
       </div>
       <CancellationPanel report={report} />
+    </div>
+  );
+}
+
+function DeliveryOperationPanel({ report }: { report: CashReportResponse }) {
+  const op = report.delivery_operation;
+  if (!op || op.total_orders === 0) return null;
+  return (
+    <Card className="border-amber-500/30 shadow-[var(--shadow-sm)]">
+      <CardContent className="p-5">
+        <PanelHeader icon={Clock} title="Operação de entrega" />
+        <p className="mt-1 text-xs font-medium text-[var(--text-muted)]">Tempos do motoboy são medidos após o pedido estar pronto, separados da cozinha.</p>
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
+          <OperationValue label="Entregas" value={String(op.total_orders)} />
+          <OperationValue label="A despachar" value={String(op.awaiting_dispatch)} warn={op.awaiting_dispatch > 0} />
+          <OperationValue label="Em rota" value={String(op.on_route)} warn={op.on_route > 0} />
+          <OperationValue label="Concluídas" value={String(op.delivered)} />
+          <OperationValue label="Pronto → despacho" value={op.ready_to_dispatch.count ? `${op.ready_to_dispatch.median} min` : "—"} />
+          <OperationValue label="Despacho → entrega" value={op.dispatch_to_delivered.count ? `${op.dispatch_to_delivered.median} min` : "—"} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OperationValue({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--text-muted)]">{label}</p>
+      <p className={`mt-1 text-lg font-black tabular-nums ${warn ? "text-amber-700" : "text-[var(--text-primary)]"}`}>{value}</p>
     </div>
   );
 }
@@ -2303,6 +2466,7 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
       const d = getSaleDate(o);
       return [
         `#${String(o.daily_number).padStart(3, "0")}`,
+        o.type,
         o.status,
         o.payment_method,
         o.total_amount.toFixed(2).replace(".", ","),
@@ -2313,7 +2477,7 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
     });
     downloadCSV(
       `pedidos-${new Date().toISOString().substring(0, 10)}.csv`,
-      ["Número", "Status", "Pagamento", "Valor", "Desconto", "Data", "Hora"],
+      ["Número", "Tipo", "Status", "Pagamento", "Valor", "Desconto", "Data", "Hora"],
       rows,
     );
   };
@@ -2399,6 +2563,13 @@ function SectionOrders({ orders }: { orders: OrderRecord[] }) {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${st.cls}`}>{st.label}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                          order.type === "ENTREGA" ? "bg-amber-500/10 text-amber-700" :
+                          order.type === "VIAGEM" ? "bg-violet-500/10 text-violet-700" :
+                          "bg-blue-500/10 text-blue-700"
+                        }`}>
+                          {order.type === "ENTREGA" ? "Entrega" : order.type === "VIAGEM" ? "Retirada" : "Balcão"}
+                        </span>
                         {hasDiscount && (
                           <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-black text-red-600">
                             -{currency.format(order.discount_amount!)}

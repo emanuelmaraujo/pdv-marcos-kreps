@@ -28,6 +28,8 @@ export function buildReportCacheKey(params: {
   prevEnd: string;
   categoryId?: string;
   paymentMethod?: string;
+  orderType?: string;
+  weekday?: string;
   branchId?: string | null;
 }): string {
   return PREFIX + [
@@ -37,6 +39,8 @@ export function buildReportCacheKey(params: {
     params.prevEnd,
     params.categoryId ?? "ALL",
     params.paymentMethod ?? "ALL",
+    params.orderType ?? "ALL",
+    params.weekday ?? "ALL",
     params.branchId ?? "ALL",
   ].join("|");
 }

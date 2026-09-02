@@ -1,5 +1,5 @@
 import { createClient } from "../supabase/client";
-import { OrderStatus, PaymentMethod, PaymentStatus, UserRole } from "@/types/pdv";
+import { OrderStatus, PaymentMethod, PaymentStatus, UserRole, OrderType } from "@/types/pdv";
 import { getBusinessDayRange, getSpHour } from "../utils/business-day";
 
 interface CashOrderRow {
@@ -10,6 +10,8 @@ interface CashOrderRow {
   payment_method: PaymentMethod;
   discount_amount: number | string | null;
   packing_fee: number | string | null;
+  delivery_fee: number | string | null;
+  type: OrderType;
   total_amount: number | string | null;
   created_at: string;
   confirmed_at: string | null;
@@ -49,6 +51,9 @@ export interface DaySummary {
   totalCancelado: number;
   totalDescontos: number;
   totalEmbalagem: number;
+  totalTaxaEntrega: number;
+  reservaMotoboy: number;
+  totalRetidoLoja: number;
   ticketMedio: number;
   totalPedidos: number;
   pedidosPagos: number;
@@ -89,6 +94,17 @@ export interface TopProduct {
   revenue: number;
 }
 
+export interface DailyOrderTypeStat {
+  type: OrderType;
+  orders: number;
+  paidOrders: number;
+  received: number;
+  deliveryFees: number;
+  courierReserve: number;
+  storeReceived: number;
+  averageTicket: number;
+}
+
 export interface CaixaData {
   role: UserRole | null;
   orders: CashOrderRow[];
@@ -97,6 +113,7 @@ export interface CaixaData {
   statusBreakdown: StatusBreakdown[];
   pendingOrders: PendingOrder[];
   topProducts: TopProduct[];
+  orderTypeBreakdown: DailyOrderTypeStat[];
   generatedAt: string;
   businessDayLabel: string;         // "2025-01-15" — dia de negócio dos dados
 }
@@ -168,7 +185,7 @@ function friendlyError(message: string): Error {
 }
 
 export const cashApi = {
-  getDaySummary: async (branchId?: string | null, date?: Date): Promise<CaixaData> => {
+  getDaySummary: async (branchId?: string | null, date?: Date, orderType?: OrderType | "ALL"): Promise<CaixaData> => {
     const supabase = createClient();
 
     const { start: startOfDay, end: endOfDay, label: businessDayLabel } = getBusinessDayRange(date);
@@ -205,7 +222,7 @@ export const cashApi = {
     let ordersQuery = supabase
       .from("orders")
       .select(
-        "id, daily_number, status, payment_status, payment_method, discount_amount, packing_fee, total_amount, created_at, confirmed_at, paid_at, delivered_at, cancelled_at"
+        "id, daily_number, status, payment_status, payment_method, discount_amount, packing_fee, delivery_fee, type, total_amount, created_at, confirmed_at, paid_at, delivered_at, cancelled_at"
       )
       .or([
         `and(paid_at.not.is.null,paid_at.gte.${startIso},paid_at.lt.${endIso})`,
@@ -215,6 +232,7 @@ export const cashApi = {
       .order("created_at", { ascending: false });
 
     if (branchId) ordersQuery = ordersQuery.eq("branch_id", branchId);
+    if (orderType && orderType !== "ALL") ordersQuery = ordersQuery.eq("type", orderType);
 
     const { data: rawOrders, error: ordersError } = await ordersQuery;
 
@@ -241,6 +259,30 @@ export const cashApi = {
       (order) => order.payment_status === "COURTESY" && order.status !== "CANCELADO"
     );
     const cancelled = orders.filter((order) => order.status === "CANCELADO");
+
+    const orderTypeMap = new Map<OrderType, DailyOrderTypeStat>();
+    for (const order of nonCancelled) {
+      const type = order.type ?? "BALCAO";
+      const current = orderTypeMap.get(type) ?? {
+        type, orders: 0, paidOrders: 0, received: 0, deliveryFees: 0,
+        courierReserve: 0, storeReceived: 0, averageTicket: 0,
+      };
+      current.orders++;
+      if (order.payment_status === "PAID") {
+        const total = money(order.total_amount);
+        const fee = type === "ENTREGA" ? money(order.delivery_fee) : 0;
+        current.paidOrders++;
+        current.received += total;
+        current.deliveryFees += fee;
+        current.courierReserve += fee;
+        current.storeReceived += total - fee;
+      }
+      orderTypeMap.set(type, current);
+    }
+    const orderTypeBreakdown = Array.from(orderTypeMap.values()).map((entry) => ({
+      ...entry,
+      averageTicket: entry.paidOrders > 0 ? entry.received / entry.paidOrders : 0,
+    }));
 
     const totalRecebido = sumOrders(paid);
 
@@ -290,6 +332,9 @@ export const cashApi = {
         (total, order) => total + money(order.packing_fee),
         0
       ),
+      totalTaxaEntrega: paid.reduce((total, order) => total + (order.type === "ENTREGA" ? money(order.delivery_fee) : 0), 0),
+      reservaMotoboy: paid.reduce((total, order) => total + (order.type === "ENTREGA" ? money(order.delivery_fee) : 0), 0),
+      totalRetidoLoja: 0,
       ticketMedio: paid.length > 0 ? totalRecebido / paid.length : 0,
       totalPedidos: orders.length,
       pedidosPagos: paid.length,
@@ -330,6 +375,7 @@ export const cashApi = {
     }
     // Líquido = recebido − cortesia (cortesia é custo: cliente não pagou).
     summary.totalLiquido = summary.totalRecebido - summary.totalCortesia;
+    summary.totalRetidoLoja = summary.totalRecebido - summary.reservaMotoboy;
 
     summary.totalIFood = realPayments
       .filter((p) => p.payment_method === "IFOOD" && p.payment_status === "PAID")
@@ -428,6 +474,7 @@ export const cashApi = {
       statusBreakdown,
       pendingOrders,
       topProducts,
+      orderTypeBreakdown,
       generatedAt: new Date().toISOString(),
       businessDayLabel,
     };

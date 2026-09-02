@@ -200,6 +200,7 @@ export default function CaixaPage() {
   const [error, setError] = useState("");
   const [isLive, setIsLive] = useState(false);
   const [selectedDayLabel, setSelectedDayLabel] = useState<string>(todayLabel);
+  const [selectedOrderType, setSelectedOrderType] = useState<"ALL" | "BALCAO" | "VIAGEM" | "ENTREGA">("ALL");
   const [showComparison, setShowComparison] = useState(false);
   const [isCompLoading, setIsCompLoading] = useState(false);
   const [, setShowDatePicker] = useState(false);
@@ -232,14 +233,14 @@ export default function CaixaPage() {
     setError("");
     try {
       const date = dayLabel !== todayLabel() ? labelToDate(dayLabel) : undefined;
-      setData(await cashApi.getDaySummary(currentBranchId, date));
+      setData(await cashApi.getDaySummary(currentBranchId, date, selectedOrderType));
     } catch (err: unknown) {
       setError(getFriendlyErrorMessage(err, "Não conseguimos carregar o caixa agora."));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [canViewCash, currentBranchId, selectedDayLabel, labelToDate]);
+  }, [canViewCash, currentBranchId, selectedDayLabel, selectedOrderType, labelToDate]);
 
   const loadComparison = useCallback(async (dayLabel: string) => {
     if (!canViewCash) return;
@@ -247,20 +248,20 @@ export default function CaixaPage() {
     try {
       const refDate = labelToDate(dayLabel);
       const prevDate = previousDayDate(refDate);
-      setPrevData(await cashApi.getDaySummary(currentBranchId, prevDate));
+      setPrevData(await cashApi.getDaySummary(currentBranchId, prevDate, selectedOrderType));
     } catch {
       setPrevData(null);
     } finally {
       setIsCompLoading(false);
     }
-  }, [canViewCash, currentBranchId, labelToDate]);
+  }, [canViewCash, currentBranchId, selectedOrderType, labelToDate]);
 
   // Carrega quando muda dia ou filial
   useEffect(() => {
     if (!canViewCash) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCash(false, selectedDayLabel);
-  }, [canViewCash, selectedDayLabel, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canViewCash, selectedDayLabel, selectedOrderType, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!canViewCash) return;
@@ -270,7 +271,7 @@ export default function CaixaPage() {
     } else {
       setPrevData(null);
     }
-  }, [canViewCash, showComparison, selectedDayLabel, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canViewCash, showComparison, selectedDayLabel, selectedOrderType, currentBranchId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-refresh a cada 60s só quando está no dia de hoje
   useEffect(() => {
@@ -448,6 +449,18 @@ export default function CaixaPage() {
               <span className="hidden sm:inline">Comparar</span>
             </button>
 
+            <select
+              value={selectedOrderType}
+              onChange={(event) => setSelectedOrderType(event.target.value as typeof selectedOrderType)}
+              className="h-9 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-2 text-xs font-semibold text-[var(--text-secondary)] outline-none hover:bg-[var(--bg-subtle)]"
+              aria-label="Filtrar tipo de pedido"
+            >
+              <option value="ALL">Todos os tipos</option>
+              <option value="BALCAO">Balcão</option>
+              <option value="VIAGEM">Retirada</option>
+              <option value="ENTREGA">Entrega</option>
+            </select>
+
             {data?.role === "ADMIN" && (
               <Link href="/app/caixa/relatorio">
                 <span className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-brand-charcoal px-3 text-xs font-semibold text-white hover:bg-brand-black active:scale-[0.97] sm:px-4">
@@ -499,6 +512,7 @@ export default function CaixaPage() {
             <>
               <DayHero data={data} prevData={showComparison ? prevData : null} />
               <StatusStrip data={data} prevData={showComparison ? prevData : null} />
+              <OrderTypeDailyPanel data={data} />
               <DayMetricsPanel data={data} prevData={showComparison ? prevData : null} />
               {insights.length > 0 && <InsightsSection insights={insights} />}
               <PaymentsCard items={data.paymentBreakdown} received={data.summary.totalRecebido} />
@@ -522,8 +536,8 @@ function DayHero({ data, prevData }: { data: CaixaData; prevData: CaixaData | nu
   // anterior") — parecia que o valor de ontem tinha "virado" o de hoje.
   // Usa o dia real dos dados (businessDayLabel), não o relógio do navegador.
   const heroLabel = data.businessDayLabel === todayLabel()
-    ? "Líquido recebido hoje"
-    : `Líquido recebido em ${formatBusinessDate(data.businessDayLabel)}`;
+    ? "Valor retido pela loja hoje"
+    : `Valor retido em ${formatBusinessDate(data.businessDayLabel)}`;
 
   return (
     <div className="relative overflow-hidden rounded-3xl bg-[var(--bg-inverse)] shadow-[var(--shadow-lg)]">
@@ -535,10 +549,10 @@ function DayHero({ data, prevData }: { data: CaixaData; prevData: CaixaData | nu
         <div className="mt-2 flex items-end gap-3 flex-wrap">
           <p className="text-5xl font-semibold tracking-tight text-white md:text-6xl tabular-nums">
             <span className="text-2xl text-zinc-400 mr-1 font-medium">R$</span>
-            {currency.format(summary.totalLiquido).replace("R$", "").trim()}
+            {currency.format(summary.totalRetidoLoja).replace("R$", "").trim()}
           </p>
           {prevData && (
-            <DeltaBadge current={summary.totalLiquido} previous={prevData.summary.totalLiquido} />
+            <DeltaBadge current={summary.totalRetidoLoja} previous={prevData.summary.totalRetidoLoja} />
           )}
         </div>
 
@@ -547,6 +561,9 @@ function DayHero({ data, prevData }: { data: CaixaData; prevData: CaixaData | nu
             líquido de desconto; "Bruto" sugeria valor pré-desconto e iludia. */}
         <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <Stat label="Recebido" value={currency.format(summary.totalRecebido)} />
+          {summary.reservaMotoboy > 0 && (
+            <Stat label="Reserva motoboy" value={`-${currency.format(summary.reservaMotoboy)}`} warn />
+          )}
           {summary.pedidosPendentes > 0 && (
             <Stat label="Pendente" value={currency.format(summary.totalPendente)} warn />
           )}
@@ -665,6 +682,44 @@ function StatusStrip({ data, prevData }: { data: CaixaData; prevData: CaixaData 
         );
       })}
     </div>
+  );
+}
+
+function OrderTypeDailyPanel({ data }: { data: CaixaData }) {
+  if (!data.orderTypeBreakdown.length) return null;
+  const labels = {
+    BALCAO: "Balcão",
+    VIAGEM: "Retirada",
+    ENTREGA: "Entrega",
+  } as const;
+  const byType = new Map(data.orderTypeBreakdown.map((entry) => [entry.type, entry]));
+  return (
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-[var(--text-primary)]">Resultado por tipo</p>
+          <p className="text-[11px] text-[var(--text-muted)]">A taxa de entrega é reservada integralmente ao motoboy.</p>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {(["BALCAO", "VIAGEM", "ENTREGA"] as const).map((type) => {
+          const item = byType.get(type);
+          return (
+            <div key={type} className={`rounded-xl border p-3 ${type === "ENTREGA" ? "border-amber-500/30 bg-amber-500/5" : "border-[var(--border)] bg-[var(--bg-subtle)]"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black text-[var(--text-primary)]">{labels[type]}</p>
+                <span className="text-[10px] font-bold text-[var(--text-muted)]">{item?.orders ?? 0} pedidos</span>
+              </div>
+              <p className="mt-2 text-lg font-black tabular-nums text-[var(--text-primary)]">{currency.format(item?.received ?? 0)}</p>
+              <p className="text-[11px] font-medium text-[var(--text-muted)]">ticket {currency.format(item?.averageTicket ?? 0)}</p>
+              {type === "ENTREGA" && item && (
+                <p className="mt-2 border-t border-amber-500/20 pt-2 text-[11px] font-semibold text-amber-700">Motoboy: {currency.format(item.courierReserve)} · Loja: {currency.format(item.storeReceived)}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
