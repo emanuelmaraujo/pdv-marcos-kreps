@@ -7,6 +7,8 @@ import {
   normalizeProductImageUrl,
 } from "./product-image";
 
+const ID = "1AbCdEfGhIjK_LmNoPqRsTuVwXyZ0123";
+
 describe("getSafeProductImageUrl", () => {
   it("aceita URLs web absolutas para visualizar a imagem", () => {
     expect(getSafeProductImageUrl(" https://cdn.example.com/krep.jpg ")).toBe("https://cdn.example.com/krep.jpg");

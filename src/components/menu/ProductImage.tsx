@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState, type ReactNode } from "react";
-import { buildImageCandidates } from "@/lib/utils/productImage";
+import { buildImageCandidates } from "@/lib/utils/product-image";
 
 interface ProductImageProps {
   /** URL guardada no produto (link do Drive, link externo ou caminho local). */
