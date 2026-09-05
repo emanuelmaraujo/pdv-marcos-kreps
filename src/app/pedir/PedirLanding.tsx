@@ -1,15 +1,15 @@
 "use client";
 
 /**
- * Landing pública de /pedir (sem slug).
+ * Página pública de filiais: /pedir/filiais.
  *
- * Mostrado quando o cliente acessa /pedir sem escolher uma filial.
  * Tem duas ações primárias:
  *   1. Escolher uma filial para pedir
  *   2. Acompanhar um pedido existente (cola o link/token)
  *
- * Esta página é o "hub" da marca — facilita divulgar uma URL única
- * (/pedir) e deixar o cliente decidir.
+ * Já foi a landing de /pedir (sem slug). Hoje /pedir abre direto no
+ * cardápio da filial principal — o material divulgado (QR Code) aponta
+ * pra lá — e esta tela é o "hub" pra quem quer ver as outras unidades.
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -167,10 +167,10 @@ export function PedirLanding() {
             priority
           />
           <h1 className="text-2xl font-bold leading-tight tracking-tight md:text-3xl">
-            Bem-vindo ao Marcos Krep&apos;s
+            Filiais Marcos Krep&apos;s
           </h1>
           <p className="text-sm text-white/70 max-w-sm">
-            Escolha onde pedir ou acompanhe um pedido em andamento.
+            Escolha a unidade onde quer pedir ou acompanhe um pedido em andamento.
           </p>
         </div>
       </section>
@@ -272,7 +272,7 @@ export function PedirLanding() {
         {/* ── Lista de filiais ───────────────────────────────────── */}
         <section className="space-y-2">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Onde quer pedir?</h2>
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Filiais</h2>
             {branches.length > 0 && (
               <span className="text-xs text-[var(--text-muted)] tabular-nums">
                 {branches.length} {branches.length === 1 ? "unidade" : "unidades"}
