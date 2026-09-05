@@ -535,8 +535,10 @@ export default function CardapioPage() {
               addToast("success", "Produto criado!");
             }
             loadMenu();
-          } catch {
-            addToast("error", "Erro ao salvar produto");
+          } catch (err: unknown) {
+            // Mostra o motivo real (coluna faltando, permissão, etc.) — o toast
+            // genérico deixava o admin sem saber o que tinha dado errado.
+            addToast("error", err instanceof Error ? err.message : "Erro ao salvar produto");
           }
         }}
       />
