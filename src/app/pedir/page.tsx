@@ -34,7 +34,6 @@ import {
 import { Button } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
-import { PedirLanding } from "./PedirLanding";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { Addon, CustomerAddress, DeliveryZone, Ingredient, OrderStatus, Product } from "@/types/pdv";
@@ -51,6 +50,7 @@ import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
 import { getCurrentPosition } from "@/lib/utils/geolocation";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { rememberLastBranchSlug } from "@/lib/utils/lastBranch";
+import { BRANCHES_PAGE_PATH, DEFAULT_BRANCH_SLUG } from "@/lib/constants/branches";
 import {
   ALL_FILTER,
   buildMenuIndexes,
@@ -253,13 +253,11 @@ export default function PedirPublicPage() {
   // Guarda contra a string literal "undefined" que pode aparecer.
   const branchSlug = (_rawBranch && _rawBranch !== "undefined") ? _rawBranch : undefined;
 
-  // Sem slug → renderiza a landing pública (picker de filial + tracking).
-  // Esse caminho é o "hub" pra divulgar /pedir e deixar o cliente escolher.
-  if (!branchSlug) {
-    return <PedirLanding />;
-  }
-
-  return <PedirBranchPage branchSlug={branchSlug} />;
+  // Sem slug → abre direto na filial principal (Núcleo Bandeirante).
+  // O QR Code divulgado aponta pra /pedir "seco"; mandar o cliente pra um
+  // picker antes do cardápio custava um toque a mais e confundia. A lista
+  // de filiais continua disponível em /pedir/filiais.
+  return <PedirBranchPage branchSlug={branchSlug ?? DEFAULT_BRANCH_SLUG} />;
 }
 
 function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
@@ -1299,7 +1297,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             {/* Primária: voltar ao landing pra escolher outra filial ou acompanhar pedido */}
             <button
               type="button"
-              onClick={() => router.push("/pedir")}
+              onClick={() => router.push(BRANCHES_PAGE_PATH)}
               className="flex items-center justify-center gap-2 rounded-full bg-brand-red px-4 text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
               style={{ height: 48 }}
             >
