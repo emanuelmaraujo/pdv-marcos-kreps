@@ -18,6 +18,7 @@ import {
   Minus,
   Package,
   PackageX,
+  Pencil,
   Plus,
   QrCode,
   RefreshCw,
@@ -45,7 +46,6 @@ import {
 } from "@/lib/utils/delivery";
 import { MercadoPagoBrick } from "./_components/MercadoPagoBrick";
 import { PixCheckout } from "./_components/PixCheckout";
-import { PixResult } from "./_components/PixResult";
 import { ProgressSteps } from "./_components/ProgressSteps";
 import { FloatingInput } from "./_components/FloatingInput";
 import { TimelineStep } from "./_components/TimelineStep";
@@ -326,7 +326,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [addonsExpanded, setAddonsExpanded] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderData, setOrderData] = useState<CreatePublicOrderResponse["order"] | null>(null);
-  const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
   const { toasts, addToast, removeToast } = useToast();
@@ -523,7 +522,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
           clearSavedPublicOrderSession();
           setOrderData(null);
-          setPaymentResult(null);
           setStep("MENU");
         })
         .catch(() => {
@@ -1101,7 +1099,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
    * de retomar, já está concluído). */
   const handleDiscardPendingOrder = useCallback(() => {
     setOrderData(null);
-    setPaymentResult(null);
     clearSavedPublicOrderSession();
     setStep("MENU");
   }, []);
@@ -1236,7 +1233,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
       }
       savePublicOrderSession(response.order, customerEmail, branchSlug);
-      setPaymentResult(null);
       setPaymentMode("PIX");
       setStep("PAYMENT");
     } catch (err) {
@@ -1905,7 +1901,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       onClick={() => openCustomization(item.product, item)}
                       aria-label="Editar item"
                     >
-                      <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
                     </button>
                     <button
                       type="button"
@@ -2056,7 +2052,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </div>
             )}
 
-            <>
                 {profileNotice && (
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium text-[var(--status-success)]">{profileNotice}</p>
@@ -2302,7 +2297,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     </label>
                   )}
                 </div>
-            </>
           </section>
 
           {/* Barra fixa no rodapé — resumo + CTA sempre na zona do polegar,
@@ -2434,10 +2428,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <PixCheckout
               order={orderData}
               payerEmail={customerEmail}
-              onPayerEmailChange={(email) => {
-                setCustomerEmail(email);
-                savePublicOrderSession(orderData, email, branchSlug);
-              }}
+              // Só o estado muda a cada tecla; a gravação em sessionStorage
+              // (que serializa o pedido inteiro) acontece no blur do campo.
+              onPayerEmailChange={setCustomerEmail}
+              onPayerEmailCommit={(email) => savePublicOrderSession(orderData, email, branchSlug)}
               onPaid={() => {
                 clearCart();
                 clearSavedPublicOrderSession();
@@ -2447,7 +2441,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           ) : (
             <MercadoPagoBrick
               order={orderData}
-              onResult={setPaymentResult}
               onPaid={() => {
                 clearCart();
                 clearSavedPublicOrderSession();
@@ -2456,7 +2449,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             />
           )}
 
-          {paymentMode === "CARD" && paymentResult && <PixResult payment={paymentResult} />}
+          {/* PixResult era renderizado aqui pro resultado do cartão. Ele é uma
+             tela de Pix — QR Code e contagem regressiva de 5 min — e no cartão
+             saía com o contador congelado quando havia ticket_url. O retorno do
+             cartão agora é comunicado pelo próprio MercadoPagoBrick (aprovado,
+             em análise ou recusado com o motivo). */}
         </main>
       )}
 

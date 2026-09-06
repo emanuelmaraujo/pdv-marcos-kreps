@@ -85,14 +85,19 @@ export function PedirLanding() {
 
   useEffect(() => {
     let cancelled = false;
-    pdvApi.getPublicBranches().then((res) => {
-      if (cancelled) return;
-      const loadedBranches = res.branches ?? [];
-      setBranches(loadedBranches);
-      setLoading(false);
-      // Prefetch das rotas de filial — ao tocar, a navegação já está pronta.
-      loadedBranches.forEach((branch) => router.prefetch(`/pedir/${branch.slug}`));
-    });
+    pdvApi.getPublicBranches()
+      .then((res) => {
+        if (cancelled) return;
+        const loadedBranches = res.branches ?? [];
+        setBranches(loadedBranches);
+        // Prefetch das rotas de filial — ao tocar, a navegação já está pronta.
+        loadedBranches.forEach((branch) => router.prefetch(`/pedir/${branch.slug}`));
+      })
+      // `getPublicBranches` já trata os erros que conhece e devolve lista
+      // vazia; este catch é a garantia de que o skeleton não fica pra sempre
+      // se ela um dia passar a propagar alguma falha.
+      .catch(() => { if (!cancelled) setBranches([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -137,6 +142,10 @@ export function PedirLanding() {
         }
         // 2+ pedidos → mostra picker
         setTrackingMatches(res.orders);
+      } catch {
+        // Idem: a pdvApi já converte falha em `success: false`, mas sem este
+        // catch uma exceção inesperada deixaria o botão sem resposta nenhuma.
+        setTrackingError("Não conseguimos buscar agora. Tente de novo em instantes.");
       } finally {
         setTrackingLoading(false);
       }

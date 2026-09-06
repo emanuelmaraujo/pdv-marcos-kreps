@@ -12,11 +12,15 @@ export function PixCheckout({
   order,
   payerEmail,
   onPayerEmailChange,
+  onPayerEmailCommit,
   onPaid,
 }: {
   order: CreatePublicOrderResponse["order"];
   payerEmail: string;
   onPayerEmailChange: (email: string) => void;
+  /** Chamado quando o cliente termina de digitar (blur) — é o momento de
+   * persistir, em vez de a cada tecla. */
+  onPayerEmailCommit?: (email: string) => void;
   onPaid: () => void;
 }) {
   const [payment, setPayment] = useState<MercadoPagoPaymentResponse | null>(null);
@@ -103,6 +107,7 @@ export function PixCheckout({
       <input
         value={payerEmail}
         onChange={(event) => onPayerEmailChange(event.target.value)}
+        onBlur={(event) => onPayerEmailCommit?.(event.target.value)}
         placeholder="E-mail exigido pelo Mercado Pago para Pix"
         type="email"
         disabled={!!payment}

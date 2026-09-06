@@ -2,17 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Clock, Loader2, ShieldCheck } from "lucide-react";
-import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
+import { pdvApi, CreatePublicOrderResponse } from "@/lib/api/pdv-api";
 import { PAYMENT_METHOD_CODE, loadMercadoPagoScript, mapMercadoPagoStatus } from "./payment-helpers";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 
 export function MercadoPagoBrick({
   order,
-  onResult,
   onPaid,
 }: {
   order: CreatePublicOrderResponse["order"];
-  onResult: (result: MercadoPagoPaymentResponse) => void;
   onPaid: () => void;
 }) {
   const [isReady, setIsReady] = useState(false);
@@ -26,9 +24,7 @@ export function MercadoPagoBrick({
   // (`/pedir`) passa arrow functions inline, recriadas a cada render dele. Se
   // entrassem nas deps, qualquer re-render do pai remontava o Brick inteiro,
   // apagando os dados de cartão que o cliente já tinha digitado no iframe.
-  const onResultRef = useRef(onResult);
   const onPaidRef = useRef(onPaid);
-  useEffect(() => { onResultRef.current = onResult; }, [onResult]);
   useEffect(() => { onPaidRef.current = onPaid; }, [onPaid]);
 
   useEffect(() => {
@@ -68,7 +64,6 @@ export function MercadoPagoBrick({
                   idempotency_key: idempotencyKey,
                 })
                   .then((response) => {
-                    onResultRef.current(response);
                     setNotice("");
                     if (!response.success) {
                       setError(response.error || "Nao foi possivel processar o pagamento.");
