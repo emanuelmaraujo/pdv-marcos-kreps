@@ -48,6 +48,45 @@ Você verá os logs de inicialização e o worker começará a escutar os evento
 2. Certifique-se de que a linha gerada na tabela `printer_jobs` está com status `PENDING`.
 3. Verifique o terminal deste projeto. Ele acusará o evento recebido e imprimirá o papel correspondente.
 
+## Atualizar somente o worker
+
+O worker roda a partir de `dist/`, não do TypeScript. **`git pull` sozinho não
+muda nada** — sem `npm run build` o pm2 continua executando o build antigo, e é
+fácil achar que atualizou quando não atualizou.
+
+```bash
+cd ~/pdv-marcos-kreps
+git fetch origin
+git checkout <branch>          # ex.: main
+git pull origin <branch>
+
+cd print-worker
+npm install                    # devDependencies incluídas: o build precisa do tsc
+npm run build                  # regenera dist/ — passo que não pode ser pulado
+pm2 restart pdv-print-worker
+pm2 logs pdv-print-worker --lines 30
+```
+
+Se `ecosystem.config.js` mudou (restart, backoff, cwd), `pm2 restart` **não**
+aplica: ele reusa a configuração salva no pm2. Nesse caso:
+
+```bash
+pm2 delete pdv-print-worker
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+Conferir que subiu de verdade, do lado do banco:
+
+```sql
+SELECT value AS ultimo_heartbeat, now() - updated_at AS silencio
+  FROM settings WHERE key = 'print_worker_last_seen_at';
+```
+
+Silêncio abaixo de 15s = worker novo no ar. Nos logs do Supabase, o worker
+atualizado aparece chamando `/rest/v1/rpc/claim_printer_jobs`; se ainda aparecer
+`GET /rest/v1/printer_jobs` a cada 3s, o `dist/` não foi regenerado.
+
 ## Quando parar de imprimir (runbook)
 
 O sintoma "a impressora parou" quase sempre é **o worker fora do ar**, não a
