@@ -38,7 +38,11 @@ import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { Addon, CustomerAddress, DeliveryZone, Ingredient, OrderStatus, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
-import { normalizeNeighborhood } from "@/lib/utils/delivery";
+import {
+  isOrderTypeAvailableForBranch,
+  normalizeNeighborhood,
+  resolveAvailableOrderType,
+} from "@/lib/utils/delivery";
 import { MercadoPagoBrick } from "./_components/MercadoPagoBrick";
 import { PixCheckout } from "./_components/PixCheckout";
 import { PixResult } from "./_components/PixResult";
@@ -278,6 +282,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [error, setError] = useState("");
   /** Slug da URL não corresponde a nenhuma filial — ver o guard em loadMenu. */
   const [branchNotFound, setBranchNotFound] = useState(false);
+  /** A config desta filial já respondeu (ver `isOrderTypeAvailable`). */
+  const [branchConfigLoaded, setBranchConfigLoaded] = useState(false);
   const [onlineOrderingEnabled, setOnlineOrderingEnabled] = useState(true);
   const [orderingClosedReason, setOrderingClosedReason] = useState("");
   const [packagingFee, setPackagingFee] = useState(0);
@@ -330,6 +336,23 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   // sem isso, digitar o telefone DEPOIS de escolher "Entrega" silenciosamente
   // trocava de volta pro último tipo de pedido salvo (ex: "Para levar").
   const hasManuallySelectedOrderTypeRef = useRef(false);
+  /** Regras em `@/lib/utils/delivery` (com teste). Lido via ref pra não entrar
+   * nas deps do efeito de perfil: mudar as deps dispararia de novo o lookup
+   * debounced no servidor toda vez que a config da filial carregasse. */
+  const branchDeliveryState = useMemo(
+    () => ({ branchConfigLoaded, deliveryEnabled }),
+    [branchConfigLoaded, deliveryEnabled],
+  );
+  const branchDeliveryStateRef = useRef(branchDeliveryState);
+  useEffect(() => { branchDeliveryStateRef.current = branchDeliveryState; }, [branchDeliveryState]);
+
+  // Corrige a modalidade assim que a config da filial confirma que ela não
+  // entrega — o `orderType` vem do localStorage e pode ser de outra unidade.
+  useEffect(() => {
+    const available = resolveAvailableOrderType(orderType, branchDeliveryState);
+    if (available !== orderType) setOrderType(available);
+  }, [branchDeliveryState, orderType, setOrderType]);
+
   // Latest customerName captured for use inside the debounced profile lookup;
   // keeps the autofill effect from re-running on every keystroke in the name field.
   const customerNameRef = useRef(customerName);
@@ -380,6 +403,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     async function loadMenu() {
       try {
         setLoading(true);
+        setBranchConfigLoaded(false);
         const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
         if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
 
@@ -400,6 +424,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setBranchId(resolvedBranchId);
         setDeliveryEnabled(config.branch.delivery_enabled === true);
         setDefaultDeliveryFee(Number(config.branch.default_delivery_fee ?? 0));
+        setBranchConfigLoaded(true);
         const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
@@ -543,7 +568,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setCustomerEmail(saved.email ?? "");
         setMarketingOptIn(saved.marketing_opt_in);
         setRememberCheckoutData(true);
-        if (!hasManuallySelectedOrderTypeRef.current) setOrderType(saved.order_type);
+        // Mesmo filtro que o lookup do servidor já aplica: só reaproveita a
+        // modalidade se ela existir nesta filial. ENTREGA vinda de outra
+        // unidade abriria um formulário de endereço que o servidor recusa.
+        if (
+          !hasManuallySelectedOrderTypeRef.current &&
+          isOrderTypeAvailableForBranch(saved.order_type, branchDeliveryStateRef.current)
+        ) {
+          setOrderType(saved.order_type);
+        }
         lastAutofilledPhoneRef.current = saved.phone_e164;
         setProfileLookupState("found");
         setProfileNotice("Dados salvos neste dispositivo encontrados.");
