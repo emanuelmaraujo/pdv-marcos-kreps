@@ -334,6 +334,35 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
 
   if (order.payment_status !== "PAID") {
     const nowIso = new Date().toISOString();
+
+    // Marcar os ITENS é obrigatório, nao cosmetico. A tela de pagamento do PDV
+    // trabalha por item, e orders.payment_status é recalculado a partir dos
+    // itens por trigger (recompute_order_payment_status_from_items). Sem isto,
+    // o pedido pago no cartao aparecia com o valor dos itens ainda em aberto —
+    // o atendente cobrava de novo no balcao — e a primeira mudanca de status de
+    // item jogava orders.payment_status de volta pra PENDING.
+    // Os outros dois caminhos de pagamento online (mercado-pago-webhook e
+    // get-public-order-status) ja faziam isso; este ficou de fora.
+    const { data: payableItems, error: payableItemsErr } = await supabaseAdmin
+      .from("order_items")
+      .select("id")
+      .eq("order_id", order.id)
+      .neq("status", "CANCELLED");
+    if (payableItemsErr) throw new Error("Erro ao carregar itens do pedido pago.");
+
+    const orderItemIds = (payableItems ?? []).map((item: any) => item.id);
+    if (orderItemIds.length > 0) {
+      const { error: itemsPaymentErr } = await supabaseAdmin
+        .from("order_items")
+        .update({
+          payment_status: "PAID",
+          payment_method: internalMethod,
+          paid_at: nowIso,
+        })
+        .in("id", orderItemIds);
+      if (itemsPaymentErr) throw new Error("Erro ao marcar itens como pagos.");
+    }
+
     const { error: updateErr } = await supabaseAdmin
       .from("orders")
       .update({
@@ -355,6 +384,12 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
     .maybeSingle();
 
   if (!existingPayment) {
+    const { data: paymentItems } = await supabaseAdmin
+      .from("order_items")
+      .select("id")
+      .eq("order_id", order.id)
+      .neq("status", "CANCELLED");
+
     const { error: paymentErr } = await supabaseAdmin
       .from("payments")
       .insert({
@@ -363,6 +398,7 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
         payment_method: internalMethod,
         payment_status: "PAID",
         notes: `Mercado Pago payment ${payment?.id ?? ""}`.trim(),
+        order_item_ids: (paymentItems ?? []).map((item: any) => item.id),
       });
 
     if (paymentErr) throw new Error("Erro ao registrar pagamento.");
