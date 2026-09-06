@@ -3,14 +3,21 @@ import { pollPendingJobs, subscribeToJobs, subscribeToSettingsChanges } from './
 import { config } from './config';
 import { startWorkerHeartbeat } from './status';
 
+// Exceção não tratada pode ter deixado estado inconsistente: aí sim vale sair
+// e deixar o pm2 subir um processo limpo (ecosystem.config.js tem orçamento de
+// restart alto + backoff exponencial justamente pra isso).
 process.on('uncaughtException', (err) => {
   console.error('[SYSTEM] Excecao nao tratada — reiniciando em 3s:', err);
   setTimeout(() => process.exit(1), 3000);
 });
 
+// Promise rejeitada sem tratamento NAO derruba mais o worker. A origem quase
+// sempre é o socket do Supabase Realtime numa oscilação de rede — e derrubar o
+// processo por causa disso transformava um blip de Wi-Fi em impressora parada
+// até alguém reiniciar o serviço na mão. O poll periódico é independente do
+// Realtime e continua reivindicando os jobs, então seguir rodando é seguro.
 process.on('unhandledRejection', (reason) => {
-  console.error('[SYSTEM] Promise rejeitada sem tratamento — reiniciando em 3s:', reason);
-  setTimeout(() => process.exit(1), 3000);
+  console.error('[SYSTEM] Promise rejeitada sem tratamento — worker segue rodando:', reason);
 });
 
 async function main() {
