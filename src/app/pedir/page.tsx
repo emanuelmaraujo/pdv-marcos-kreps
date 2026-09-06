@@ -18,6 +18,7 @@ import {
   Minus,
   Package,
   PackageX,
+  Pencil,
   Plus,
   QrCode,
   RefreshCw,
@@ -38,15 +39,23 @@ import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { Addon, CustomerAddress, DeliveryZone, Ingredient, OrderStatus, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
-import { normalizeNeighborhood } from "@/lib/utils/delivery";
+import {
+  isOrderTypeAvailableForBranch,
+  normalizeNeighborhood,
+  resolveAvailableOrderType,
+} from "@/lib/utils/delivery";
 import { MercadoPagoBrick } from "./_components/MercadoPagoBrick";
 import { PixCheckout } from "./_components/PixCheckout";
-import { PixResult } from "./_components/PixResult";
 import { ProgressSteps } from "./_components/ProgressSteps";
 import { FloatingInput } from "./_components/FloatingInput";
 import { TimelineStep } from "./_components/TimelineStep";
 import { PAYMENT_METHOD_CODE, isValidEmail } from "./_components/payment-helpers";
 import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
+// Cópias locais destas duas viviam neste arquivo e ficaram pra trás quando a
+// versão compartilhada foi corrigida: elas cortavam o "55" inicial de qualquer
+// número, então um celular com DDD 55 (RS) era rejeitado como inválido e o
+// cliente não conseguia informar o WhatsApp — nem pedir entrega, que exige.
+import { formatWhatsAppInput, normalizeBrazilPhone } from "@/lib/utils/phone";
 import { getCurrentPosition } from "@/lib/utils/geolocation";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { rememberLastBranchSlug } from "@/lib/utils/lastBranch";
@@ -57,6 +66,7 @@ import {
   getCategoryKind,
   getProductSummary,
   getProductTags,
+  resolveInitialCategoryId,
   splitProductName,
 } from "@/lib/menu/productTags";
 
@@ -153,27 +163,6 @@ function useHorizontalDragScroll() {
     onMouseMove,
     onClickCapture,
   };
-}
-
-function normalizeBrazilPhone(value: string) {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("55")) digits = digits.slice(2);
-  digits = digits.replace(/^0+/, "");
-  if (digits.length !== 10 && digits.length !== 11) return null;
-  const ddd = Number(digits.slice(0, 2));
-  if (ddd < 11 || ddd > 99) return null;
-  if (digits.length === 11 && digits[2] !== "9") return null;
-  return `+55${digits}`;
-}
-
-function formatWhatsAppInput(value: string) {
-  const normalized = normalizeBrazilPhone(value);
-  const digits = (normalized ? normalized.replace(/^\+55/, "") : value.replace(/\D/g, "").replace(/^55/, "")).slice(0, 11);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
 const SAVED_PROFILE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias — dispositivo compartilhado não guarda autofill pra sempre.
@@ -291,6 +280,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     topByCategory: {},
   });
   const [error, setError] = useState("");
+  /** Slug da URL não corresponde a nenhuma filial — ver o guard em loadMenu. */
+  const [branchNotFound, setBranchNotFound] = useState(false);
+  /** A config desta filial já respondeu (ver `isOrderTypeAvailable`). */
+  const [branchConfigLoaded, setBranchConfigLoaded] = useState(false);
   const [onlineOrderingEnabled, setOnlineOrderingEnabled] = useState(true);
   const [orderingClosedReason, setOrderingClosedReason] = useState("");
   const [packagingFee, setPackagingFee] = useState(0);
@@ -333,7 +326,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [addonsExpanded, setAddonsExpanded] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderData, setOrderData] = useState<CreatePublicOrderResponse["order"] | null>(null);
-  const [paymentResult, setPaymentResult] = useState<MercadoPagoPaymentResponse | null>(null);
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
   const { toasts, addToast, removeToast } = useToast();
@@ -343,6 +335,23 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   // sem isso, digitar o telefone DEPOIS de escolher "Entrega" silenciosamente
   // trocava de volta pro último tipo de pedido salvo (ex: "Para levar").
   const hasManuallySelectedOrderTypeRef = useRef(false);
+  /** Regras em `@/lib/utils/delivery` (com teste). Lido via ref pra não entrar
+   * nas deps do efeito de perfil: mudar as deps dispararia de novo o lookup
+   * debounced no servidor toda vez que a config da filial carregasse. */
+  const branchDeliveryState = useMemo(
+    () => ({ branchConfigLoaded, deliveryEnabled }),
+    [branchConfigLoaded, deliveryEnabled],
+  );
+  const branchDeliveryStateRef = useRef(branchDeliveryState);
+  useEffect(() => { branchDeliveryStateRef.current = branchDeliveryState; }, [branchDeliveryState]);
+
+  // Corrige a modalidade assim que a config da filial confirma que ela não
+  // entrega — o `orderType` vem do localStorage e pode ser de outra unidade.
+  useEffect(() => {
+    const available = resolveAvailableOrderType(orderType, branchDeliveryState);
+    if (available !== orderType) setOrderType(available);
+  }, [branchDeliveryState, orderType, setOrderType]);
+
   // Latest customerName captured for use inside the debounced profile lookup;
   // keeps the autofill effect from re-running on every keystroke in the name field.
   const customerNameRef = useRef(customerName);
@@ -390,20 +399,31 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   }, [branchSlug, clearCart, setCartBranchSlug]);
 
   useEffect(() => {
-    rememberLastBranchSlug(branchSlug);
-  }, [branchSlug]);
-
-  useEffect(() => {
     async function loadMenu() {
       try {
         setLoading(true);
+        setBranchConfigLoaded(false);
         const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
         if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
-        const resolvedBranchId = config.branch?.id ?? null;
-        setBranchName(config.branch?.name ?? null);
+
+        // Slug que não existe (QR antigo, link com typo): a config volta global,
+        // e `getMenuData(null)` não filtraria por filial — o cliente veria o
+        // catálogo de todas as unidades misturado e só descobriria o problema no
+        // create-public-order, com o pedido inteiro montado. Para aqui.
+        if (config.branch_not_found || !config.branch?.id) {
+          setBranchNotFound(true);
+          return;
+        }
+        setBranchNotFound(false);
+        // Só depois de confirmar que a filial existe — senão um slug inválido
+        // viraria o fallback de "fazer novo pedido" em /pedido/[token].
+        rememberLastBranchSlug(branchSlug);
+        const resolvedBranchId = config.branch.id;
+        setBranchName(config.branch.name ?? null);
         setBranchId(resolvedBranchId);
-        setDeliveryEnabled(config.branch?.delivery_enabled === true);
-        setDefaultDeliveryFee(Number(config.branch?.default_delivery_fee ?? 0));
+        setDeliveryEnabled(config.branch.delivery_enabled === true);
+        setDefaultDeliveryFee(Number(config.branch.default_delivery_fee ?? 0));
+        setBranchConfigLoaded(true);
         const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
@@ -418,7 +438,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         if (!isEnabled) clearCart();
         const data = await menuApi.getMenuData(resolvedBranchId);
         setMenuData(data);
-        setSelectedCategoryId(data.categories[0]?.id ?? null);
+        setSelectedCategoryId(resolveInitialCategoryId(data.categories, data.products));
       } catch (err) {
         setError(getFriendlyErrorMessage(err, "Não conseguimos carregar o cardápio. Tente novamente."));
       } finally {
@@ -502,7 +522,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
           clearSavedPublicOrderSession();
           setOrderData(null);
-          setPaymentResult(null);
           setStep("MENU");
         })
         .catch(() => {
@@ -547,7 +566,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setCustomerEmail(saved.email ?? "");
         setMarketingOptIn(saved.marketing_opt_in);
         setRememberCheckoutData(true);
-        if (!hasManuallySelectedOrderTypeRef.current) setOrderType(saved.order_type);
+        // Mesmo filtro que o lookup do servidor já aplica: só reaproveita a
+        // modalidade se ela existir nesta filial. ENTREGA vinda de outra
+        // unidade abriria um formulário de endereço que o servidor recusa.
+        if (
+          !hasManuallySelectedOrderTypeRef.current &&
+          isOrderTypeAvailableForBranch(saved.order_type, branchDeliveryStateRef.current)
+        ) {
+          setOrderType(saved.order_type);
+        }
         lastAutofilledPhoneRef.current = saved.phone_e164;
         setProfileLookupState("found");
         setProfileNotice("Dados salvos neste dispositivo encontrados.");
@@ -715,6 +742,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     }
     return map;
   }, [menuData]);
+
+  /** Categorias que realmente viram section no cardápio. Tabs e sections usam
+   * esta mesma lista: antes as tabs vinham de `categories` inteiro enquanto as
+   * sections pulavam as vazias, então tocar numa aba de categoria sem produto
+   * não fazia nada (não existia âncora pra rolar até). */
+  const visibleCategories = useMemo(
+    () => (menuData?.categories ?? []).filter((c) => (productsByCategory[c.id]?.length ?? 0) > 0),
+    [menuData, productsByCategory],
+  );
 
   // Filtros por categoria — só faz sentido mostrar quando há 2+ tags
   const filtersByCategory = useMemo(() => {
@@ -1063,7 +1099,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
    * de retomar, já está concluído). */
   const handleDiscardPendingOrder = useCallback(() => {
     setOrderData(null);
-    setPaymentResult(null);
     clearSavedPublicOrderSession();
     setStep("MENU");
   }, []);
@@ -1080,8 +1115,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
     // Revalida o horario no momento exato do clique para garantir que o cliente
     // nao consiga submeter um pedido quando o atendimento ja encerrou ou foi pausado.
+    // Precisa passar a filial: sem ela a resposta é a config GLOBAL, então uma
+    // filial pausada (ou fora do horário dela) passava por aqui e só era barrada
+    // pelo servidor — e o catch de OrderingClosedError apaga o carrinho.
     try {
-      const config = await pdvApi.getPublicCheckoutConfig();
+      const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
       if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
       const settings = config.settings;
       const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
@@ -1195,7 +1233,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
       }
       savePublicOrderSession(response.order, customerEmail, branchSlug);
-      setPaymentResult(null);
       setPaymentMode("PIX");
       setStep("PAYMENT");
     } catch (err) {
@@ -1228,6 +1265,34 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <div key={i} className="skeleton h-44 w-full rounded-2xl" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  // Antes de `error` porque não é falha nossa nem do cliente: o link é que
+  // aponta pra uma unidade que não existe. A saída útil é a lista de filiais.
+  if (branchNotFound) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center" style={{ backgroundColor: "var(--bg-base)" }}>
+        <div
+          className="flex h-16 w-16 items-center justify-center rounded-2xl"
+          style={{ backgroundColor: "var(--status-warning-bg)", color: "var(--status-warning)" }}
+        >
+          <PackageX className="h-8 w-8" strokeWidth={1.5} />
+        </div>
+        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Unidade não encontrada</h1>
+        <p className="max-w-xs text-sm leading-relaxed text-[var(--text-secondary)]">
+          O link que você abriu aponta para uma unidade que não existe mais. Escolha uma das unidades disponíveis para fazer seu pedido.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push(BRANCHES_PAGE_PATH)}
+          className="flex items-center justify-center gap-2 rounded-full bg-brand-red px-6 text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
+          style={{ height: 48 }}
+        >
+          Ver unidades disponíveis
+          <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
+        </button>
       </div>
     );
   }
@@ -1428,7 +1493,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Você tem um pedido em aberto em outra unidade</p>
                   <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                    Pra pedir aqui em {branchName ?? "esta unidade"}, comece um novo pedido — o carrinho da outra unidade some.
+                    Pra pedir aqui {branchName ? `em ${branchName}` : "nesta unidade"}, comece um novo pedido — o carrinho da outra unidade some.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
@@ -1522,7 +1587,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               {...categoryDragScroll}
               className="flex cursor-grab select-none gap-1.5 overflow-x-auto hide-scrollbar"
             >
-              {menuData?.categories.map((category) => {
+              {visibleCategories.map((category) => {
                 const isActive = selectedCategoryId === category.id;
                 return (
                   <button
@@ -1552,10 +1617,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             </div>
           ) : (
           <>
-          {/* Render TODAS as categorias como sections — usuário rola entre elas */}
-          {menuData?.categories.map((category) => {
+          {/* Uma section por categoria com produto — usuário rola entre elas */}
+          {visibleCategories.map((category) => {
             const categoryProducts = productsByCategory[category.id] ?? [];
-            if (categoryProducts.length === 0) return null;
             const filters = filtersByCategory[category.id] ?? [];
             const activeFilter = filterByCategory[category.id] ?? ALL_FILTER;
             const visibleProducts = filters.length === 0 || activeFilter === ALL_FILTER
@@ -1837,7 +1901,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       onClick={() => openCustomization(item.product, item)}
                       aria-label="Editar item"
                     >
-                      <Plus className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
                     </button>
                     <button
                       type="button"
@@ -1988,7 +2052,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </div>
             )}
 
-            <>
                 {profileNotice && (
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium text-[var(--status-success)]">{profileNotice}</p>
@@ -2234,7 +2297,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     </label>
                   )}
                 </div>
-            </>
           </section>
 
           {/* Barra fixa no rodapé — resumo + CTA sempre na zona do polegar,
@@ -2366,10 +2428,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <PixCheckout
               order={orderData}
               payerEmail={customerEmail}
-              onPayerEmailChange={(email) => {
-                setCustomerEmail(email);
-                savePublicOrderSession(orderData, email, branchSlug);
-              }}
+              // Só o estado muda a cada tecla; a gravação em sessionStorage
+              // (que serializa o pedido inteiro) acontece no blur do campo.
+              onPayerEmailChange={setCustomerEmail}
+              onPayerEmailCommit={(email) => savePublicOrderSession(orderData, email, branchSlug)}
               onPaid={() => {
                 clearCart();
                 clearSavedPublicOrderSession();
@@ -2379,7 +2441,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           ) : (
             <MercadoPagoBrick
               order={orderData}
-              onResult={setPaymentResult}
               onPaid={() => {
                 clearCart();
                 clearSavedPublicOrderSession();
@@ -2388,7 +2449,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             />
           )}
 
-          {paymentMode === "CARD" && paymentResult && <PixResult payment={paymentResult} />}
+          {/* PixResult era renderizado aqui pro resultado do cartão. Ele é uma
+             tela de Pix — QR Code e contagem regressiva de 5 min — e no cartão
+             saía com o contador congelado quando havia ticket_url. O retorno do
+             cartão agora é comunicado pelo próprio MercadoPagoBrick (aprovado,
+             em análise ou recusado com o motivo). */}
         </main>
       )}
 

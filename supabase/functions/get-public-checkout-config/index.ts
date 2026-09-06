@@ -99,6 +99,7 @@ serve(async (req) => {
     }
 
     let branch: any = null;
+    let branchNotFound = false;
     if (branchSlug) {
       const { data } = await supabaseAdmin
         .from("branches")
@@ -107,10 +108,13 @@ serve(async (req) => {
         .maybeSingle();
       branch = data;
 
-      // Filial não encontrada: fallback silencioso para config global.
-      // Evita 404 que quebra a página — o cliente verá o cardápio sem contexto de filial.
+      // Filial não encontrada: mantém o 200 com config global (um 404 aqui
+      // quebraria a página), mas sinaliza com `branch_not_found` para o cliente
+      // poder mostrar "unidade não encontrada" em vez de um cardápio sem dono.
+      // Campo aditivo: cliente que não o conhece se comporta como antes.
       if (!branch) {
         console.warn(`[get-public-checkout-config] branch_slug="${branchSlug}" not found, falling back to global config`);
+        branchNotFound = true;
         branch = null; // continua com config global
       } else if (!branch.active) {
         // Filial existe mas está inativa: retorna 200 com ordering_disabled para o frontend
@@ -160,6 +164,7 @@ serve(async (req) => {
 
     return jsonResponse(req, {
       success: true,
+      branch_not_found: branchNotFound,
       branch: branch ? {
         id: branch.id,
         code: branch.code,
