@@ -1,4 +1,4 @@
-import { Addon, Ingredient, Product } from "@/types/pdv";
+import { Addon, Category, Ingredient, Product } from "@/types/pdv";
 import type { MenuData } from "@/lib/api/menu-api";
 
 /**
@@ -102,6 +102,23 @@ export function getProductSummary(product: Product, categoryName: string | undef
   if (getCategoryKind(categoryName) === "DRINK") return "Bebida preparada para acompanhar seu pedido.";
   if (getCategoryKind(categoryName) === "POTATO") return "Porcao para dividir ou acompanhar seu krep.";
   return "Item do cardapio Marcos Krep's.";
+}
+
+/**
+ * Primeira categoria que de fato tem produto, na ordem em que vieram.
+ *
+ * O cardápio só renderiza section pra categoria com produto, mas a categoria
+ * inicial era `categories[0]` sem essa checagem — se a primeira estivesse
+ * vazia, a aba nascia marcada apontando pra uma section inexistente.
+ * Devolve `null` quando nenhuma categoria tem produto (a tela cai no estado
+ * de cardápio indisponível, onde não há aba pra marcar).
+ */
+export function resolveInitialCategoryId(
+  categories: Pick<Category, "id">[],
+  products: Pick<Product, "category_id">[],
+): string | null {
+  const categoryIdsWithProduct = new Set(products.map((product) => product.category_id));
+  return categories.find((category) => categoryIdsWithProduct.has(category.id))?.id ?? null;
 }
 
 export function buildMenuIndexes(menuData: MenuData | null): MenuIndexes | null {
