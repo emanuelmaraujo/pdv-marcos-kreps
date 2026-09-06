@@ -4,25 +4,34 @@ Este documento consolida os problemas encontrados na auditoria do fluxo público
 
 ## Status de implementação
 
-_Atualizado em 2026-09-05. Auditoria feita na branch `analise/pedir-review` (somente leitura, nenhum arquivo alterado)._
+_Atualizado em 2026-09-05. Auditoria e correções na branch `analise/pedir-review`. Todas as fases implementadas e validadas em dev; **nada foi mergeado nem deployado ainda**._
 
-| Fase | Item | Status | PR |
+| Fase | Item | Status | Commit |
 |---|---|---|---|
-| F0 | Rede de segurança (helpers puros + testes vitest) | ⬜ Não iniciado | — |
-| F1.1 | Revalidação de horário sem filial (`P2`) | ⬜ Não iniciado | — |
-| F1.2 | Copy "em esta unidade" (`P5`) | ⬜ Não iniciado | — |
-| F1.3 | Tabs de categoria vazia são mortas (`P6`) | ⬜ Não iniciado | — |
-| F1.4 | Vazamento do Brick do Mercado Pago (`P7`) | ⬜ Não iniciado | — |
-| F2 | Cartão recusado sem feedback (`P3`) | ⬜ Não iniciado | — |
-| F3 | Filial inexistente → cardápio fantasma (`P1`) | ⬜ Não iniciado | — |
-| F4 | Modalidade ENTREGA órfã (`P4`) | ⬜ Não iniciado | — |
-| F5 | Higiene (`P8`–`P12`) | ⬜ Não iniciado | — |
+| F0 | Rede de segurança (helpers puros + testes vitest) | ✅ Implementado | `bc249f4` |
+| F1.0 | Telefone com DDD 55 rejeitado (`P13`) | ✅ Implementado | `3fa8f0f` |
+| F1.1 | Revalidação de horário sem filial (`P2`) | ✅ Implementado | `3fa8f0f` |
+| F1.2 | Copy "em esta unidade" (`P5`) | ✅ Implementado | `3fa8f0f` |
+| F1.3 | Tabs de categoria vazia são mortas (`P6`) | ✅ Implementado | `3fa8f0f` |
+| F1.4 | Vazamento do Brick do Mercado Pago (`P7`) | ✅ Implementado | `3fa8f0f` |
+| F2 | Cartão recusado sem feedback (`P3`) | ✅ Implementado | `53117a8` |
+| F3 | Filial inexistente → cardápio fantasma (`P1`) | ✅ Implementado | `13a1d18` |
+| F4 | Modalidade ENTREGA órfã (`P4`) | ✅ Implementado | `055c138` |
+| F5 | Higiene (`P8`–`P12`) | ✅ Implementado | `d770d49` |
 
-**Verificações que já passam hoje (baseline a não regredir):**
-- `npx tsc --noEmit` — limpo.
-- `npx eslint src/app/pedir` — limpo.
-- `npm test` (vitest, 8 arquivos) — deve continuar verde.
-- `/pedir`, `/pedir/filiais` e o bottom sheet de personalização carregam e renderizam corretamente em dev.
+**Baseline no fim das fases:** `npx tsc --noEmit` limpo · `npx eslint src/app/pedir src/lib` limpo · `npm test` 127 testes em 15 arquivos (eram 116 em 14 antes da F4; 8 arquivos antes da F0).
+
+**O que falta antes de considerar isto entregue:**
+- Abrir o PR e mergear (nenhuma fase foi para produção).
+- **Deploy da Edge Function `get-public-checkout-config` ANTES do frontend** — é a única mudança de backend, e é retrocompatível (campo aditivo). Depois do merge: `gh run list --workflow=deploy-functions.yml --limit 1`.
+- **F2 precisa de teste com cartão de sandbox do Mercado Pago** — a lógica está coberta por teste unitário, mas o comportamento do Brick após `reject()` (formulário reaberto para nova tentativa) não dá para exercitar em localhost, porque as Edge Functions restringem origem e o checkout não roda aqui. É o único item da lista sem validação ponta a ponta.
+- Reavaliar `PIX_WAIT_MINUTES` e o restante do fluxo de Pix, que não foi auditado a fundo.
+
+**Notas de validação (o que foi realmente exercitado em dev):**
+- `P13`: número com DDD 55 digitado na tela de dados é aceito e formatado como `(55) 99999-8888`; antes `normalizeBrazilPhone` devolvia `null` e o checkout recusava. Comparação lado a lado das duas implementações registrada no commit.
+- `P1`: `/pedir/slug-que-nao-existe` mostra "Unidade não encontrada" e o botão leva a `/pedir/filiais`; `/pedir` e `/pedir/nb` seguem normais e `pdv-last-branch-slug` não guarda o slug inválido. Validado pelo caminho de fallback do `pdv-api` (Edge Function bloqueada por CORS em localhost), que é o mais difícil de acertar.
+- `P4`: numa filial que entrega, escolher Entrega continua funcionando e o formulário de endereço aparece — este era o risco de regressão da fase. A correção em si (filial que não entrega força "Para levar") está coberta pelos 11 testes de `delivery.test.ts`; a simulação equivalente no browser não se mostrou confiável e foi trocada pelo teste, que é prova mais forte e permanente.
+- Fluxo completo cardápio → item → carrinho → dados percorrido depois da F5, sem erro novo no console (só os de CORS das Edge Functions, que são pré-existentes em localhost).
 
 ---
 
@@ -32,6 +41,7 @@ Severidade: **P0** = perde pedido ou dinheiro · **P1** = quebra o fluxo do clie
 
 | ID | Sev. | Problema | Onde |
 |---|---|---|---|
+| P13 | P0 | Cópia local desatualizada de `normalizeBrazilPhone` rejeitava celular com **DDD 55** (RS) — cliente não conseguia informar WhatsApp nem pedir entrega | [page.tsx](../src/app/pedir/page.tsx) vs [utils/phone.ts](../src/lib/utils/phone.ts) |
 | P1 | P0 | Slug de filial inexistente renderiza cardápio de **todas** as filiais misturadas; pedido só é recusado no fim | [page.tsx:400](../src/app/pedir/page.tsx#L400), [page.tsx:419](../src/app/pedir/page.tsx#L419), [get-public-checkout-config/index.ts:111](../supabase/functions/get-public-checkout-config/index.ts#L111) |
 | P2 | P0 | Revalidação de horário no clique de "Continuar para pagamento" ignora a filial | [page.tsx:1084](../src/app/pedir/page.tsx#L1084) |
 | P3 | P0 | Cartão recusado pelo Mercado Pago não mostra mensagem nenhuma | [MercadoPagoBrick.tsx:69-77](../src/app/pedir/_components/MercadoPagoBrick.tsx#L69) |
@@ -46,6 +56,8 @@ Severidade: **P0** = perde pedido ou dinheiro · **P1** = quebra o fluxo do clie
 | P12 | P3 | Botão "Editar item" da REVIEW usa ícone `Plus` | `page.tsx` (lista de itens da REVIEW) |
 
 ### Detalhamento dos P0
+
+**P13 — DDD 55 bloqueado.** Encontrado durante a execução da F0, não na leitura inicial. `/pedir` tinha cópias locais de `normalizeBrazilPhone`/`formatWhatsAppInput` que ficaram para trás quando a versão de `@/lib/utils/phone` foi corrigida: elas cortam o `55` inicial de **qualquer** número, sem checar o tamanho. Um celular de Santa Maria/Uruguaiana (`(55) 9xxxx-xxxx`, 11 dígitos) vira 9 dígitos e é rejeitado como inválido. Efeito: o cliente não consegue informar o WhatsApp, não recebe aviso de pedido pronto, não acumula fidelidade e **não consegue pedir entrega**, que exige telefone. O `/app` do atendente já usava a versão corrigida — só o fluxo público estava para trás. Serve de alerta: a duplicação por cópia é o que fez a correção não chegar aos dois lados.
 
 **P1 — cardápio fantasma.** Reproduzido em dev: `/pedir/slug-que-nao-existe` renderiza o cardápio normalmente. A edge function faz fallback silencioso pra config global quando não acha o slug, `config.branch` volta `null`, e `menuApi.getMenuData(null)` não filtra por `branch_id` — então vêm categorias de todas as filiais e do legado juntas ("Kreps Salgados" + "Crepes Salgados" + "Bebidas" + "Bebidas / Combustíveis"…), com o horário global (23:59) em vez do da filial (23:30). O cliente monta o pedido inteiro e só descobre no `create-public-order`, que lança `"Filial inexistente."` ([create-public-order/index.ts:323](../supabase/functions/create-public-order/index.ts#L323)). Um QR Code impresso errado, um link velho ou um typo levam a isso.
 
