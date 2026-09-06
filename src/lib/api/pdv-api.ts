@@ -371,6 +371,11 @@ export type PublicBranchStatsResponse = {
 export type PublicCheckoutConfigResponse = {
   success: boolean;
   error?: string;
+  /** `true` quando um `branch_slug` foi informado e não corresponde a nenhuma
+   * filial. A resposta ainda traz a config global (um erro aqui quebraria a
+   * página), mas o cardápio NÃO pode ser exibido: sem filial ele viria sem
+   * filtro, misturando o catálogo de todas as unidades. */
+  branch_not_found?: boolean;
   branch?: {
     id: string; code: string; name: string; slug: string;
     delivery_enabled?: boolean; default_delivery_fee?: number;
@@ -555,6 +560,8 @@ export const pdvApi = {
 
       return {
         success: true,
+        // Mesma sinalização da Edge Function: slug pedido que não existe.
+        branch_not_found: !!branchSlug && !branch,
         branch: branch ? {
           id: branch.id, code: branch.code, name: branch.name, slug: branch.slug,
           delivery_enabled: branch.delivery_enabled === true,

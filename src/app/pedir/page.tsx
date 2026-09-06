@@ -276,6 +276,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     topByCategory: {},
   });
   const [error, setError] = useState("");
+  /** Slug da URL não corresponde a nenhuma filial — ver o guard em loadMenu. */
+  const [branchNotFound, setBranchNotFound] = useState(false);
   const [onlineOrderingEnabled, setOnlineOrderingEnabled] = useState(true);
   const [orderingClosedReason, setOrderingClosedReason] = useState("");
   const [packagingFee, setPackagingFee] = useState(0);
@@ -375,20 +377,29 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   }, [branchSlug, clearCart, setCartBranchSlug]);
 
   useEffect(() => {
-    rememberLastBranchSlug(branchSlug);
-  }, [branchSlug]);
-
-  useEffect(() => {
     async function loadMenu() {
       try {
         setLoading(true);
         const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
         if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
-        const resolvedBranchId = config.branch?.id ?? null;
-        setBranchName(config.branch?.name ?? null);
+
+        // Slug que não existe (QR antigo, link com typo): a config volta global,
+        // e `getMenuData(null)` não filtraria por filial — o cliente veria o
+        // catálogo de todas as unidades misturado e só descobriria o problema no
+        // create-public-order, com o pedido inteiro montado. Para aqui.
+        if (config.branch_not_found || !config.branch?.id) {
+          setBranchNotFound(true);
+          return;
+        }
+        setBranchNotFound(false);
+        // Só depois de confirmar que a filial existe — senão um slug inválido
+        // viraria o fallback de "fazer novo pedido" em /pedido/[token].
+        rememberLastBranchSlug(branchSlug);
+        const resolvedBranchId = config.branch.id;
+        setBranchName(config.branch.name ?? null);
         setBranchId(resolvedBranchId);
-        setDeliveryEnabled(config.branch?.delivery_enabled === true);
-        setDefaultDeliveryFee(Number(config.branch?.default_delivery_fee ?? 0));
+        setDeliveryEnabled(config.branch.delivery_enabled === true);
+        setDefaultDeliveryFee(Number(config.branch.default_delivery_fee ?? 0));
         const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
@@ -1225,6 +1236,34 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <div key={i} className="skeleton h-44 w-full rounded-2xl" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  // Antes de `error` porque não é falha nossa nem do cliente: o link é que
+  // aponta pra uma unidade que não existe. A saída útil é a lista de filiais.
+  if (branchNotFound) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center" style={{ backgroundColor: "var(--bg-base)" }}>
+        <div
+          className="flex h-16 w-16 items-center justify-center rounded-2xl"
+          style={{ backgroundColor: "var(--status-warning-bg)", color: "var(--status-warning)" }}
+        >
+          <PackageX className="h-8 w-8" strokeWidth={1.5} />
+        </div>
+        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Unidade não encontrada</h1>
+        <p className="max-w-xs text-sm leading-relaxed text-[var(--text-secondary)]">
+          O link que você abriu aponta para uma unidade que não existe mais. Escolha uma das unidades disponíveis para fazer seu pedido.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push(BRANCHES_PAGE_PATH)}
+          className="flex items-center justify-center gap-2 rounded-full bg-brand-red px-6 text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
+          style={{ height: 48 }}
+        >
+          Ver unidades disponíveis
+          <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
+        </button>
       </div>
     );
   }
