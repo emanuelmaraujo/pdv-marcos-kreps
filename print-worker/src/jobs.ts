@@ -2,6 +2,11 @@ import os from 'os';
 import { supabase } from './supabase';
 import { printWithConfig } from './printer';
 import { config } from './config';
+import { decideRetry, nextAttemptAt } from './retry-policy';
+
+// Quando a impressão está pausada no painel, o job não é uma falha — ele só
+// precisa esperar. Reagenda em 30s sem consumir tentativa.
+const PAUSED_RETRY_MS = 30_000;
 
 // Estável por processo — usado pra reivindicar jobs via claim_printer_jobs
 // (SELECT ... FOR UPDATE SKIP LOCKED) e saber quem está com cada job travado.
@@ -161,8 +166,19 @@ export async function processJob(job: any) {
   try {
     const remoteConfig = await getRemoteConfig();
 
+    // Impressão pausada não é falha do job: se marcássemos FAILED, todo ticket
+    // criado durante a pausa seria perdido pra sempre — religar a impressão no
+    // painel não reimprime nada. Devolve pra fila e zera a contagem de
+    // tentativas, porque nenhuma tentativa de impressão chegou a acontecer.
     if (!remoteConfig.printingEnabled) {
-      throw new Error('Impressao desativada no painel administrativo');
+      const reason = 'Impressao desativada no painel administrativo';
+      console.log(`[JOBS] Job ${job.id} adiado: ${reason}`);
+      await updateJobStatus(job.id, 'PENDING', {
+        error_message: reason,
+        attempt_count: 0,
+        next_attempt_at: nextAttemptAt(PAUSED_RETRY_MS),
+      });
+      return;
     }
 
     const override = await resolveBranchOverride(job, remoteConfig);
@@ -185,23 +201,19 @@ export async function processJob(job: any) {
     console.error(`[JOBS] Erro ao processar job ${job.id}:`, err);
 
     const errorMsg = err.message || String(err);
-    const shouldRetry = [
-      'offline',
-      'inalcancavel',
-      'unreachable',
-      'econnrefused',
-      'ehostunreach',
-      'etimedout',
-      'timeout',
-      'connect',
-    ].some((part) => errorMsg.toLowerCase().includes(part));
+    const decision = decideRetry(errorMsg, Number(job.attempt_count ?? 1));
 
     try {
-      if (shouldRetry) {
-        await updateJobStatus(job.id, 'PENDING', { error_message: errorMsg });
-        console.warn(`[JOBS] Job ${job.id} permanece PENDING para retry quando a impressora voltar.`);
+      if (decision.status === 'PENDING') {
+        // O atraso é o que impede a fila de travar: sem ele, claim_printer_jobs
+        // reivindicaria estes mesmos jobs a cada 3s e nunca chegaria nos novos.
+        await updateJobStatus(job.id, 'PENDING', {
+          error_message: decision.errorMessage,
+          next_attempt_at: nextAttemptAt(decision.delayMs),
+        });
+        console.warn(`[JOBS] Job ${job.id} volta pra fila em ${Math.round(decision.delayMs / 1000)}s (tentativa ${job.attempt_count ?? 1}).`);
       } else {
-        await updateJobStatus(job.id, 'FAILED', { error_message: errorMsg });
+        await updateJobStatus(job.id, 'FAILED', { error_message: decision.errorMessage });
       }
     } catch (failedError) {
       console.error(`[JOBS] Erro fatal: nao foi possivel marcar o job ${job.id} como FAILED:`, failedError);
