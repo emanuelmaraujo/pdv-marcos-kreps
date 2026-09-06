@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300" role="img">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBF7F3"/>
+      <stop offset="1" stop-color="#EDE4DA"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.45" r="0.5">
+      <stop offset="0" stop-color="#FFB13C" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#FFB13C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#bg)"/>
+  <circle cx="200" cy="140" r="150" fill="url(#halo)"/>
+  <defs>
+    <linearGradient id="liq" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB13C"/><stop offset="0.52" stop-color="#FF7E7E"/><stop offset="1" stop-color="#DC2A4C"/></linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="0.35" stop-color="#FFFFFF" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.55"/>
+    </linearGradient>
+    <clipPath id="cup"><path d="M150 74 L250 74 L238 246 C 237 256 228 262 200 262 C 172 262 163 256 162 246 Z"/></clipPath>
+  </defs>
+  <g transform="translate(200,150) scale(1.18) translate(-200,-150)"><ellipse cx="200" cy="266" rx="74" ry="12" fill="#3A2A1E" opacity="0.16"/>
+  <!-- canudo -->
+  <path d="M214 46 L236 44 L244 66 L226 68 Z" fill="#E4573D" opacity="0.9"/>
+  <path d="M214 46 L204 150" stroke="#E4573D" stroke-width="11" stroke-linecap="round"/>
+  <path d="M150 74 L250 74 L238 246 C 237 256 228 262 200 262 C 172 262 163 256 162 246 Z" fill="#FFFFFF" opacity="0.55"/>
+  <g clip-path="url(#cup)">
+    <rect x="150" y="104" width="100" height="160" fill="url(#liq)"/>
+    <ellipse cx="200" cy="105" rx="50" ry="9" fill="#FFFFFF" opacity="0.35"/>
+    <rect x="150" y="74" width="100" height="188" fill="url(#glass)"/>
+    <path d="M166 118 L176 118 L172 238 L162 238 Z" fill="#FFFFFF" opacity="0.45"/>
+  </g>
+  <path d="M150 74 L250 74 L238 246 C 237 256 228 262 200 262 C 172 262 163 256 162 246 Z" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-opacity="0.9"/>
+  <ellipse cx="200" cy="74" rx="50" ry="10" fill="#FFFFFF" opacity="0.9"/>
+  <g transform="translate(246,86)">
+      <circle r="24" fill="#FFF6E2" stroke="#DC2A4C" stroke-width="4"/>
+      <circle r="17" fill="#FFB13C"/>
+      <g stroke="#FFF6E2" stroke-width="2.4" stroke-linecap="round">
+        <path d="M0 0 L0 -16"/><path d="M0 0 L14 -8"/><path d="M0 0 L14 8"/>
+        <path d="M0 0 L0 16"/><path d="M0 0 L-14 8"/><path d="M0 0 L-14 -8"/>
+      </g>
+    </g></g>
+</svg>
