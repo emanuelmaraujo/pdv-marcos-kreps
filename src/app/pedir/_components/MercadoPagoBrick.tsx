@@ -41,7 +41,7 @@ export function MercadoPagoBrick({
 
         const mercadoPago = new window.MercadoPago(publicKey, { locale: "pt-BR" });
         const bricksBuilder = mercadoPago.bricks();
-        controller = await bricksBuilder.create("payment", "public-payment-brick", {
+        const created = await bricksBuilder.create("payment", "public-payment-brick", {
           initialization: {
             amount: Number(order.total_amount),
           },
@@ -88,6 +88,15 @@ export function MercadoPagoBrick({
             },
           },
         });
+
+        // O cleanup pode ter rodado enquanto o create() estava pendente — nesse
+        // caso `controller` ainda era null quando ele checou, e sem isto o brick
+        // recém-criado ficaria no DOM sem ninguém pra desmontar.
+        if (cancelled) {
+          created.unmount();
+          return;
+        }
+        controller = created;
       } catch (err) {
         setError(getFriendlyErrorMessage(err, "Não conseguimos iniciar o Mercado Pago."));
       }

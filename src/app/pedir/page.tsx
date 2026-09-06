@@ -47,6 +47,11 @@ import { FloatingInput } from "./_components/FloatingInput";
 import { TimelineStep } from "./_components/TimelineStep";
 import { PAYMENT_METHOD_CODE, isValidEmail } from "./_components/payment-helpers";
 import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
+// Cópias locais destas duas viviam neste arquivo e ficaram pra trás quando a
+// versão compartilhada foi corrigida: elas cortavam o "55" inicial de qualquer
+// número, então um celular com DDD 55 (RS) era rejeitado como inválido e o
+// cliente não conseguia informar o WhatsApp — nem pedir entrega, que exige.
+import { formatWhatsAppInput, normalizeBrazilPhone } from "@/lib/utils/phone";
 import { getCurrentPosition } from "@/lib/utils/geolocation";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { rememberLastBranchSlug } from "@/lib/utils/lastBranch";
@@ -57,6 +62,7 @@ import {
   getCategoryKind,
   getProductSummary,
   getProductTags,
+  resolveInitialCategoryId,
   splitProductName,
 } from "@/lib/menu/productTags";
 
@@ -153,27 +159,6 @@ function useHorizontalDragScroll() {
     onMouseMove,
     onClickCapture,
   };
-}
-
-function normalizeBrazilPhone(value: string) {
-  let digits = value.replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("55")) digits = digits.slice(2);
-  digits = digits.replace(/^0+/, "");
-  if (digits.length !== 10 && digits.length !== 11) return null;
-  const ddd = Number(digits.slice(0, 2));
-  if (ddd < 11 || ddd > 99) return null;
-  if (digits.length === 11 && digits[2] !== "9") return null;
-  return `+55${digits}`;
-}
-
-function formatWhatsAppInput(value: string) {
-  const normalized = normalizeBrazilPhone(value);
-  const digits = (normalized ? normalized.replace(/^\+55/, "") : value.replace(/\D/g, "").replace(/^55/, "")).slice(0, 11);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
 const SAVED_PROFILE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias — dispositivo compartilhado não guarda autofill pra sempre.
@@ -418,7 +403,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         if (!isEnabled) clearCart();
         const data = await menuApi.getMenuData(resolvedBranchId);
         setMenuData(data);
-        setSelectedCategoryId(data.categories[0]?.id ?? null);
+        setSelectedCategoryId(resolveInitialCategoryId(data.categories, data.products));
       } catch (err) {
         setError(getFriendlyErrorMessage(err, "Não conseguimos carregar o cardápio. Tente novamente."));
       } finally {
@@ -715,6 +700,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     }
     return map;
   }, [menuData]);
+
+  /** Categorias que realmente viram section no cardápio. Tabs e sections usam
+   * esta mesma lista: antes as tabs vinham de `categories` inteiro enquanto as
+   * sections pulavam as vazias, então tocar numa aba de categoria sem produto
+   * não fazia nada (não existia âncora pra rolar até). */
+  const visibleCategories = useMemo(
+    () => (menuData?.categories ?? []).filter((c) => (productsByCategory[c.id]?.length ?? 0) > 0),
+    [menuData, productsByCategory],
+  );
 
   // Filtros por categoria — só faz sentido mostrar quando há 2+ tags
   const filtersByCategory = useMemo(() => {
@@ -1080,8 +1074,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
     // Revalida o horario no momento exato do clique para garantir que o cliente
     // nao consiga submeter um pedido quando o atendimento ja encerrou ou foi pausado.
+    // Precisa passar a filial: sem ela a resposta é a config GLOBAL, então uma
+    // filial pausada (ou fora do horário dela) passava por aqui e só era barrada
+    // pelo servidor — e o catch de OrderingClosedError apaga o carrinho.
     try {
-      const config = await pdvApi.getPublicCheckoutConfig();
+      const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
       if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
       const settings = config.settings;
       const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
@@ -1428,7 +1425,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-[var(--text-primary)]">Você tem um pedido em aberto em outra unidade</p>
                   <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                    Pra pedir aqui em {branchName ?? "esta unidade"}, comece um novo pedido — o carrinho da outra unidade some.
+                    Pra pedir aqui {branchName ? `em ${branchName}` : "nesta unidade"}, comece um novo pedido — o carrinho da outra unidade some.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
@@ -1522,7 +1519,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               {...categoryDragScroll}
               className="flex cursor-grab select-none gap-1.5 overflow-x-auto hide-scrollbar"
             >
-              {menuData?.categories.map((category) => {
+              {visibleCategories.map((category) => {
                 const isActive = selectedCategoryId === category.id;
                 return (
                   <button
@@ -1552,10 +1549,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             </div>
           ) : (
           <>
-          {/* Render TODAS as categorias como sections — usuário rola entre elas */}
-          {menuData?.categories.map((category) => {
+          {/* Uma section por categoria com produto — usuário rola entre elas */}
+          {visibleCategories.map((category) => {
             const categoryProducts = productsByCategory[category.id] ?? [];
-            if (categoryProducts.length === 0) return null;
             const filters = filtersByCategory[category.id] ?? [];
             const activeFilter = filterByCategory[category.id] ?? ALL_FILTER;
             const visibleProducts = filters.length === 0 || activeFilter === ALL_FILTER
