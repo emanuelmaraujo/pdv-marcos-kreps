@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Clock, Loader2, ShieldCheck } from "lucide-react";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
-import { PAYMENT_METHOD_CODE, loadMercadoPagoScript } from "./payment-helpers";
+import { PAYMENT_METHOD_CODE, loadMercadoPagoScript, mapMercadoPagoStatus } from "./payment-helpers";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 
 export function MercadoPagoBrick({
@@ -17,6 +17,9 @@ export function MercadoPagoBrick({
 }) {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState("");
+  /** Pagamento aceito mas em análise (pending/in_process) — não é erro, mas o
+   * cliente precisa saber que deve continuar esperando nesta tela. */
+  const [notice, setNotice] = useState("");
   const publicKey = process.env.NEXT_PUBLIC_MERCADO_PAGO_PUBLIC_KEY;
 
   // Callbacks acessados via ref (não entram nas deps do efeito abaixo): o pai
@@ -66,17 +69,48 @@ export function MercadoPagoBrick({
                 })
                   .then((response) => {
                     onResultRef.current(response);
+                    setNotice("");
                     if (!response.success) {
                       setError(response.error || "Nao foi possivel processar o pagamento.");
                       reject();
                       return;
                     }
-                    if (response.payment?.status === "approved" || response.already_paid) {
+                    if (response.already_paid) {
+                      setError("");
                       onPaidRef.current();
+                      resolve();
+                      return;
                     }
-                    resolve();
+
+                    // Recusa por risco volta como HTTP 200 + status "rejected",
+                    // ou seja success: true. Sem ler o status aqui, a recusa
+                    // mais comum não gerava nenhuma mensagem na tela.
+                    const result = mapMercadoPagoStatus(
+                      response.payment?.status,
+                      response.payment?.status_detail,
+                    );
+                    if (result.kind === "approved") {
+                      setError("");
+                      onPaidRef.current();
+                      resolve();
+                      return;
+                    }
+                    if (result.kind === "pending") {
+                      // Pedido segue válido; o polling da tela de pagamento leva
+                      // pra confirmação quando o Mercado Pago aprovar.
+                      setError("");
+                      setNotice(result.message);
+                      resolve();
+                      return;
+                    }
+                    // reject() mantém o formulário do Brick preenchido pra nova
+                    // tentativa — e cada submit gera um idempotency_key novo,
+                    // então não há risco de reaproveitar a tentativa recusada.
+                    setError(result.message);
+                    reject();
                   })
                   .catch((err) => {
+                    setNotice("");
                     setError(getFriendlyErrorMessage(err, "Não conseguimos processar o pagamento."));
                     reject();
                   });
@@ -136,8 +170,22 @@ export function MercadoPagoBrick({
         </div>
       )}
       {error && (
-        <div className="rounded-2xl border p-4 text-sm font-bold" style={{ borderColor: "var(--status-danger)", backgroundColor: "var(--status-danger-bg)", color: "var(--status-danger)" }}>
+        <div
+          role="alert"
+          className="rounded-2xl border p-4 text-sm font-bold"
+          style={{ borderColor: "var(--status-danger)", backgroundColor: "var(--status-danger-bg)", color: "var(--status-danger)" }}
+        >
           {error}
+        </div>
+      )}
+      {notice && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-2xl border p-4 text-sm font-bold"
+          style={{ borderColor: "var(--status-info)", backgroundColor: "var(--status-info-bg)", color: "var(--status-info)" }}
+        >
+          <Clock className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
+          {notice}
         </div>
       )}
       <div id="public-payment-brick" className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3" />
