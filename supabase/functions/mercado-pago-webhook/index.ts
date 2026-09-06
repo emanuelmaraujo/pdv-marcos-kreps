@@ -188,7 +188,10 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   }
 
   if (printerJobsToInsert.length > 0) {
-    await supabaseAdmin.from("printer_jobs").insert(printerJobsToInsert);
+    const { error: jobsErr } = await supabaseAdmin.from("printer_jobs").insert(printerJobsToInsert);
+    if (jobsErr) {
+      console.error("[mercado-pago-webhook] Falha ao enfileirar impressao:", jobsErr.message);
+    }
   }
 
   const nowIso = new Date().toISOString();
@@ -208,6 +211,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   // WhatsApp: notify "novo_pedido" once payment is approved and order entered the queue (non-blocking)
   await enqueueWhatsAppMessage(supabaseAdmin, {
     orderId,
+    branchId: order.branch_id,
     eventType: "order_received",
     phone: order.customer_phone,
     customerName: order.customer_name,
