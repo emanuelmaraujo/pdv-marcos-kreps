@@ -188,7 +188,10 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   }
 
   if (printerJobsToInsert.length > 0) {
-    await supabaseAdmin.from("printer_jobs").insert(printerJobsToInsert);
+    const { error: jobsErr } = await supabaseAdmin.from("printer_jobs").insert(printerJobsToInsert);
+    if (jobsErr) {
+      console.error("[mercado-pago-webhook] Falha ao enfileirar impressao:", jobsErr.message);
+    }
   }
 
   const nowIso = new Date().toISOString();
@@ -208,6 +211,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   // WhatsApp: notify "novo_pedido" once payment is approved and order entered the queue (non-blocking)
   await enqueueWhatsAppMessage(supabaseAdmin, {
     orderId,
+    branchId: order.branch_id,
     eventType: "order_received",
     phone: order.customer_phone,
     customerName: order.customer_name,
@@ -262,7 +266,7 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
     // já marca por item; aqui replicamos o mesmo padrão pro pagamento online.
     const { error: itemsUpdateErr } = await supabaseAdmin
       .from("order_items")
-      .update({ payment_status: "PAID", paid_at: nowIso })
+      .update({ payment_status: "PAID", payment_method: internalMethod, paid_at: nowIso })
       .eq("order_id", order.id)
       .not("payment_status", "in", "(PAID,COURTESY)");
 
@@ -277,6 +281,12 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
     .maybeSingle();
 
   if (!existingPayment) {
+    const { data: paymentItems } = await supabaseAdmin
+      .from("order_items")
+      .select("id")
+      .eq("order_id", order.id)
+      .neq("status", "CANCELLED");
+
     const { error: paymentErr } = await supabaseAdmin
       .from("payments")
       .insert({
@@ -285,6 +295,7 @@ async function consolidateApprovedPayment(supabaseAdmin: any, order: any, paymen
         payment_method: internalMethod,
         payment_status: "PAID",
         notes: `Mercado Pago payment ${payment?.id ?? ""}`.trim(),
+        order_item_ids: (paymentItems ?? []).map((item: any) => item.id),
       });
 
     if (paymentErr) throw new Error("Erro ao registrar pagamento consolidado.");

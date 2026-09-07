@@ -89,6 +89,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   if (items.some((item: any) => resolveProductionSector(item) === "KITCHEN") && shouldPrintKitchen && !existingSectors.has("KITCHEN")) {
     printerJobsToInsert.push({
       order_id: orderId,
+      branch_id: order.branch_id,
       sector: "KITCHEN",
       content: {
         text: buildProductionReceipt({ ...order, source: "APP" }, items, "KITCHEN", {
@@ -103,6 +104,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   if (items.some((item: any) => resolveProductionSector(item) === "JUICE_POTATO") && shouldPrintJuice && !existingSectors.has("JUICE_POTATO")) {
     printerJobsToInsert.push({
       order_id: orderId,
+      branch_id: order.branch_id,
       sector: "JUICE_POTATO",
       content: {
         text: buildProductionReceipt({ ...order, source: "APP" }, items, "JUICE_POTATO", {
@@ -115,7 +117,13 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   }
 
   if (printerJobsToInsert.length > 0) {
-    await supabaseAdmin.from("printer_jobs").insert(printerJobsToInsert);
+    // O erro precisa ser lido: printer_jobs.branch_id e NOT NULL desde a
+    // migration de multi-filial, e um insert rejeitado aqui passava batido —
+    // o pedido seguia pra NA_FILA e a cozinha nunca recebia a comanda.
+    const { error: jobsErr } = await supabaseAdmin.from("printer_jobs").insert(printerJobsToInsert);
+    if (jobsErr) {
+      console.error("[get-public-order-status] Falha ao enfileirar impressao:", jobsErr.message);
+    }
   }
 
   const nowIso = new Date().toISOString();

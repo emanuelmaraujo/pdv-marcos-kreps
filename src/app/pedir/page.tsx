@@ -300,6 +300,27 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "resolved" | "error">("idle");
   const [cepError, setCepError] = useState("");
   const cepRequestIdRef = useRef(0);
+  // Chave de idempotência do checkout: mantida entre tentativas do MESMO carrinho
+  // para que um retry (erro de rede, duplo toque, "voltar") devolva o pedido já
+  // criado em vez de gerar um gêmeo. Zerada quando o pedido sai ou o carrinho muda.
+  const orderIdempotencyKeyRef = useRef<string | null>(null);
+  // Assinatura do carrinho: mexeu no que vai ser comprado, a tentativa anterior
+  // deixou de valer — senão um retry depois de editar o carrinho devolveria o
+  // pedido antigo, com os itens errados.
+  const cartSignature = useMemo(
+    () => items.map((item) => [
+      item.product.id,
+      item.quantity,
+      item.is_takeout ? "v" : "",
+      (item.removed_ingredients ?? []).join(","),
+      (item.addons ?? []).map((addon) => `${addon.addon_id}x${addon.quantity}`).join(","),
+      item.notes ?? "",
+    ].join(":")).join("|"),
+    [items],
+  );
+  useEffect(() => {
+    orderIdempotencyKeyRef.current = null;
+  }, [cartSignature]);
   const [locationStatus, setLocationStatus] = useState<"idle" | "loading" | "resolved" | "error">("idle");
   const [locationError, setLocationError] = useState("");
   const [orderingSchedule, setOrderingSchedule] = useState({
@@ -1181,6 +1202,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     setIsSubmittingOrder(true);
     try {
       const publicOrderType: "BALCAO" | "VIAGEM" | "ENTREGA" = orderType;
+      if (!orderIdempotencyKeyRef.current) {
+        orderIdempotencyKeyRef.current = crypto.randomUUID();
+      }
       const response = await pdvApi.createPublicOrder({
         order_type: publicOrderType,
         customer_name: customerName.trim() || undefined,
@@ -1218,8 +1242,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             ? `[VIAGEM] ${item.notes || ""}`.trim()
             : item.notes,
         })),
-      });
+      }, orderIdempotencyKeyRef.current);
 
+      // Pedido saiu: a próxima compra é outro pedido, logo outra chave.
+      orderIdempotencyKeyRef.current = null;
       setOrderData(response.order);
       if (rememberCheckoutData && normalizedPhone && customerName.trim()) {
         savePublicProfile({

@@ -404,12 +404,20 @@ export const pdvApi = {
     return data as Order;
   },
 
-  createPublicOrder: async (payload: CreatePublicOrderPayload): Promise<CreatePublicOrderResponse> => {
+  // idempotencyKey: mesma chave = mesmo pedido. Um retry depois de erro de rede
+  // devolve o pedido já criado em vez de gerar um gêmeo (ver #21/#23 de 05/09).
+  createPublicOrder: async (
+    payload: CreatePublicOrderPayload,
+    idempotencyKey?: string,
+  ): Promise<CreatePublicOrderResponse> => {
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     const { data, error } = await supabase.functions.invoke('create-public-order', {
       body: payload,
-      headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
+      headers: {
+        ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        ...(idempotencyKey ? { 'x-idempotency-key': idempotencyKey } : {}),
+      },
     });
 
     if (error) {

@@ -624,11 +624,59 @@ serve(async (req) => {
       }),
     };
 
+    // ── Idempotência do checkout ────────────────────────────────────────────
+    // Sem isto, cada submit criava um pedido novo: duplo toque, "voltar" no
+    // navegador ou retry de pagamento geravam pedidos gêmeos que ficavam
+    // ocupando número do dia e a fila até expirar (caso real: #21 EXPIRADO e
+    // #23 PAGO, mesma cliente, mesmos itens, 53s de diferença).
+    // Regra de ouro: esta camada NUNCA pode impedir uma venda. Qualquer falha
+    // na consulta é logada e o fluxo segue criando o pedido normalmente.
+    const idempotencyKey = cleanText(req.headers.get("x-idempotency-key"), 100) || null;
+
+    if (idempotencyKey) {
+      const { data: previous, error: previousErr } = await supabaseAdmin
+        .from("orders")
+        .select("id, daily_number, public_token, total_amount, status, payment_status")
+        .eq("public_idempotency_key", idempotencyKey)
+        .maybeSingle();
+
+      if (previousErr) {
+        logDbError("idempotency lookup failed (non-blocking)", previousErr);
+      } else if (previous) {
+        console.log(`[create-public-order] Submit repetido (chave ${idempotencyKey}): devolvendo pedido ${previous.id} em vez de duplicar.`);
+        return jsonResponse(req, {
+          success: true,
+          order: {
+            order_id: previous.id,
+            daily_number: previous.daily_number,
+            public_token: previous.public_token,
+            total_amount: Number(previous.total_amount),
+            status: previous.status,
+            payment_status: previous.payment_status,
+            payment_method_code: paymentMethodCode,
+          },
+        });
+      }
+    }
+
     const { data: rpcResult, error: rpcErr } = await supabaseAdmin.rpc(
       "create_public_order_transactional",
       { p_payload: orderPayload },
     );
     if (rpcErr) throw new Error("Erro ao criar pedido.");
+
+    // Carimba a chave no pedido recém-criado. Se dois submits correram juntos,
+    // o índice único rejeita o segundo (23505) — o pedido já existe e está
+    // criado, então só registramos; nunca falhamos a resposta por causa disto.
+    if (idempotencyKey) {
+      const { error: stampErr } = await supabaseAdmin
+        .from("orders")
+        .update({ public_idempotency_key: idempotencyKey })
+        .eq("id", rpcResult.order_id);
+      if (stampErr) {
+        logDbError("idempotency stamp failed (non-blocking)", stampErr);
+      }
+    }
 
     // Salva o endereço digitado como novo endereço reutilizável do cliente,
     // só quando ele marcou explicitamente a opção — nunca por padrão. Endereço

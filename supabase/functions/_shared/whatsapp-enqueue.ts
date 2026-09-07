@@ -164,6 +164,22 @@ async function resolveTemplate(
   return { enabled, templateName };
 }
 
+/**
+ * Descobre a filial pelo pedido. Existe porque whatsapp_messages.branch_id e
+ * NOT NULL e nem todo chamador passa branchId — sem isso, o insert falha e a
+ * notificacao some sem ninguem perceber.
+ */
+async function resolveBranchIdFromOrder(supabaseAdmin: any, orderId: string | null | undefined): Promise<string | null> {
+  if (!orderId) return null;
+  const { data, error } = await supabaseAdmin
+    .from("orders")
+    .select("branch_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.branch_id ?? null;
+}
+
 export async function enqueueWhatsAppMessage(
   supabaseAdmin: any,
   payload: EnqueuePayload,
@@ -179,10 +195,19 @@ export async function enqueueWhatsAppMessage(
       return { enqueued: false, reason: "invalid_phone" };
     }
 
+    // whatsapp_messages.branch_id e NOT NULL: quem chama sem branchId gerava
+    // insert rejeitado e mensagem perdida em silencio. Como o pedido sempre tem
+    // filial, resolvemos por ele em vez de deixar seguir nulo.
+    const branchId = payload.branchId ?? await resolveBranchIdFromOrder(supabaseAdmin, payload.orderId);
+    if (!branchId) {
+      console.error(`${tag} ERRO: filial nao resolvida para o pedido; mensagem nao enfileirada`);
+      return { enqueued: false, reason: "missing_branch_id" };
+    }
+
     // Resolução de template/enabled com override por filial.
     const { enabled, templateName } = await resolveTemplate(
       supabaseAdmin,
-      payload.branchId ?? null,
+      branchId,
       payload.eventType,
     );
     if (!enabled) {
@@ -211,7 +236,7 @@ export async function enqueueWhatsAppMessage(
         .from("whatsapp_messages")
         .insert({
           order_id:        payload.orderId,
-          branch_id:       payload.branchId ?? null,
+          branch_id:       branchId,
           phone,
           event_type:      payload.eventType,
           message_type:    payload.eventType,
@@ -233,7 +258,7 @@ export async function enqueueWhatsAppMessage(
       .from("whatsapp_messages")
       .insert({
         order_id:        payload.orderId,
-        branch_id:       payload.branchId ?? null,
+        branch_id:       branchId,
         phone,
         event_type:      payload.eventType,
         message_type:    payload.eventType,
@@ -273,9 +298,17 @@ export async function enqueueLoyaltyWhatsAppMessage(
       return { enqueued: false, reason: "invalid_phone" };
     }
 
+    // Mesma regra do enqueue transacional: branch_id e NOT NULL, entao a filial
+    // vem do pedido quando o chamador nao informa.
+    const loyaltyBranchId = input.branchId ?? await resolveBranchIdFromOrder(supabaseAdmin, input.orderId);
+    if (!loyaltyBranchId) {
+      console.error(`${tag} ERRO: filial nao resolvida para o pedido; mensagem nao enfileirada`);
+      return { enqueued: false, reason: "missing_branch_id" };
+    }
+
     const { enabled, templateName } = await resolveTemplate(
       supabaseAdmin,
-      input.branchId ?? null,
+      loyaltyBranchId,
       input.eventType,
     );
     if (!enabled) {
@@ -300,7 +333,7 @@ export async function enqueueLoyaltyWhatsAppMessage(
 
     const baseRow = {
       order_id:        input.orderId ?? null,
-      branch_id:       input.branchId ?? null,
+      branch_id:       loyaltyBranchId,
       phone,
       event_type:      input.eventType,
       message_type:    input.eventType,
