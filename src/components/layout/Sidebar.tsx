@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navItems, isNavItemVisible } from "@/lib/nav-items";
+import { navItems, isNavItemActive, isNavItemVisible } from "@/lib/nav-items";
 import { useUser } from "@/contexts/UserContext";
 
 interface SidebarProps {
@@ -40,10 +40,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Nav items */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1" role="navigation">
           {visibleItems.map((item) => {
-            const isActive =
-              item.href === "/app"
-                ? pathname === "/app"
-                : pathname.startsWith(item.href);
+            const isActive = isNavItemActive(item, pathname);
             const Icon = item.icon;
 
             return (

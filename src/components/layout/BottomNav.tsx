@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { navItems, isNavItemVisible } from "@/lib/nav-items";
+import { navItems, isNavItemActive, isNavItemVisible } from "@/lib/nav-items";
 import { useUser } from "@/contexts/UserContext";
 import { useNavBadges } from "@/lib/nav-badges";
 
@@ -23,10 +23,7 @@ export function BottomNav() {
     >
       <div className="flex h-16 items-stretch px-1">
         {visibleItems.map((item) => {
-          const isActive =
-            item.href === "/app"
-              ? pathname === "/app"
-              : pathname.startsWith(item.href);
+          const isActive = isNavItemActive(item, pathname);
           const Icon = item.icon;
           const count = badges[item.href] ?? 0;
 

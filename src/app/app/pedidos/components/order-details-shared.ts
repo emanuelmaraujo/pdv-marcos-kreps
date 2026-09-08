@@ -188,7 +188,13 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
     setCourierIdInput("");
     setShowDispatchForm(true);
     try {
-      setRegisteredCouriers(await couriersApi.listByBranch(order.branch_id));
+      const couriers = await couriersApi.listByBranch(order.branch_id);
+      setRegisteredCouriers(couriers);
+      // Re-despacho: já vem com o entregador cadastrado marcado, para não
+      // cair no modo avulso sem querer (avulso não recebe o pedido no app).
+      if (order.courier_id && couriers.some((c) => c.id === order.courier_id && c.active)) {
+        setCourierIdInput(order.courier_id);
+      }
     } catch {
       setRegisteredCouriers([]);
     }
