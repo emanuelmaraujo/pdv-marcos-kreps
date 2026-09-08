@@ -19,9 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Versão fixa de propósito. Com `latest` a action resolve a release pela
+      # API do GitHub sem token, e o deploy morre em "Failed to resolve latest
+      # Supabase CLI release: rate limit exceeded" — foi o que derrubou o run
+      # #123. Com versão explícita ela baixa direto da release, sem chamada de
+      # API, então não tem limite pra estourar.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.117.0
 
       - name: Validate project ref
         run: |
