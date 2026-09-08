@@ -1,6 +1,12 @@
 -- Migration: zona de entrega "Riacho Fundo I" no Núcleo Bandeirante
 -- Date: 2026-09-08
 --
+-- A versão do arquivo (20260908023912) é a mesma que ficou gravada em
+-- supabase_migrations.schema_migrations quando esta migration foi aplicada
+-- direto no banco, pra liberar a entrega na hora. Renomear quebra o
+-- `supabase db push` do deploy ("Remote migration versions not found in
+-- local migrations directory").
+--
 -- Problema: o NB já tinha a zona "Riacho Fundo", mas nenhum pedido do Riacho
 -- Fundo passava. O match de zona (supabase/functions/_shared/delivery.ts) é
 -- feito contra o bairro que o ViaCEP devolve, nunca contra o texto digitado —
