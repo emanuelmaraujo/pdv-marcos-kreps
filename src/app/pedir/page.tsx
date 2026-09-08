@@ -45,6 +45,7 @@ import {
   normalizeNeighborhood,
   resolveAvailableOrderType,
 } from "@/lib/utils/delivery";
+import { AcompanharPedido } from "./_components/AcompanharPedido";
 import { MercadoPagoBrick } from "./_components/MercadoPagoBrick";
 import { PixCheckout } from "./_components/PixCheckout";
 import { ProgressSteps } from "./_components/ProgressSteps";
@@ -1602,6 +1603,12 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               )}
             </div>
           </section>
+
+          {/* Acompanhar pedido — recolhido pra não competir com o cardápio.
+             Precisa existir aqui, e não só no hub /pedir/filiais: o QR Code
+             leva direto pra esta tela, então quem perdeu o link do pedido
+             não tinha por onde voltar sem sair da filial. */}
+          <AcompanharPedido variant="collapsed" />
 
           {/* Tabs sticky — colado abaixo do header do /pedir.
              Header h-11 logo + py-3 = ~68px no mobile, sm:h-12 = ~72px no sm+.
