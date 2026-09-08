@@ -118,7 +118,7 @@ serve(async (req) => {
     // pedido, mas sem o join de branches necessário pra montar os tickets).
     const { data: orderAfter } = await supabaseAdmin
       .from("orders")
-      .select("id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at, branch_id, branches(code, name, printer_config)")
+      .select("id, daily_number, status, type, source, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at, branch_id, branches(code, name, printer_config)")
       .eq("id", order.id)
       .single();
 
@@ -159,17 +159,17 @@ serve(async (req) => {
       if (printingEnabled && items) {
         const kitchen = items.filter((i: any) => i.production_sector === "KITCHEN");
         const juice = items.filter((i: any) => i.production_sector === "JUICE_POTATO");
-        if (kitchen.length > 0 && shouldPrint(settingBoolFn(find("print_kitchen_copy"), true), branchCfg, "kitchen")) {
+        if (kitchen.length > 0 && shouldPrint(settingBoolFn(find("print_kitchen_copy"), true), branchCfg, "kitchen", orderAfter.type, orderAfter.source)) {
           const { buildProductionReceipt } = await import("../_shared/print-format.ts");
           const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes };
           printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "KITCHEN", content: { text: buildProductionReceipt(orderObj, items, "KITCHEN", { timestamp: ts, title: "KREPS", branchCode, branchName }) } });
         }
-        if (juice.length > 0 && shouldPrint(settingBoolFn(find("print_juice_potato_copy"), true), branchCfg, "juice")) {
+        if (juice.length > 0 && shouldPrint(settingBoolFn(find("print_juice_potato_copy"), true), branchCfg, "juice", orderAfter.type, orderAfter.source)) {
           const { buildProductionReceipt } = await import("../_shared/print-format.ts");
           const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes };
           printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "JUICE_POTATO", content: { text: buildProductionReceipt(orderObj, items, "JUICE_POTATO", { timestamp: ts, title: "COZINHA", branchCode, branchName }) } });
         }
-        if (shouldPrint(settingBoolFn(find("print_customer_copy")), branchCfg, "customer")) {
+        if (shouldPrint(settingBoolFn(find("print_customer_copy")), branchCfg, "customer", orderAfter.type, orderAfter.source)) {
           const { buildCustomerReceipt } = await import("../_shared/print-format.ts");
           const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes, packing_fee: order.packing_fee, discount_amount: order.discount_amount, total_amount: order.total_amount, payment_status: order.payment_status, payment_method: payment_method };
           printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "CUSTOMER", content: { text: buildCustomerReceipt(orderObj, items, { timestamp: ts, branchCode, branchName }) } });

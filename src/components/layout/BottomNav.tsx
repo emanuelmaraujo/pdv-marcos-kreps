@@ -10,7 +10,7 @@ export function BottomNav() {
   const pathname = usePathname();
   const { user } = useUser();
   const badges = useNavBadges();
-  const visibleItems = navItems.filter((item) => isNavItemVisible(item, user?.role));
+  const visibleItems = navItems.filter((item) => item.showInBottomNav && isNavItemVisible(item, user?.role));
 
   return (
     <nav

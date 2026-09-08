@@ -42,8 +42,8 @@ function PasswordResetForm({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password.length < 6) {
-      setError("A senha deve ter pelo menos 6 caracteres.");
+    if (password.length < 8) {
+      setError("A senha deve ter pelo menos 8 caracteres.");
       return;
     }
     if (password !== confirm) {
@@ -66,7 +66,7 @@ function PasswordResetForm({
           <Input
             required
             type="password"
-            placeholder="Mínimo 6 caracteres"
+            placeholder="Mínimo 8 caracteres"
             className="h-14 pl-12 bg-[var(--bg-subtle)] border-[var(--border)] rounded-2xl focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-brand-red/5 transition-all text-base font-medium"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

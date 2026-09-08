@@ -64,13 +64,13 @@ serve(async (req) => {
     if (!items || items.length === 0) throw new Error('A lista de novos itens está vazia.');
 
     // 3. Buscar e validar pedido original
-    const { data: order, error: orderErr } = await supabaseAdmin
+    const { data: order, error: orderErr } = await supabaseClientAuth
       .from('orders')
-      .select('id, daily_number, status, payment_status, paid_at, total_amount, type, customer_name, customer_phone, notes, branch_id, branches ( code, name, printer_config )')
+      .select('id, daily_number, status, payment_status, paid_at, total_amount, type, source, customer_name, customer_phone, notes, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
-    if (orderErr || !order) throw new Error('Pedido não encontrado.');
+    if (orderErr || !order) throw new Error('Pedido não encontrado ou fora das filiais autorizadas.');
 
     // Regras de bloqueio obrigatórias
     const allowedStatuses = ['AGUARDANDO_PAGAMENTO', 'NA_FILA', 'PRONTO_PARCIAL', 'PRONTO', 'ENTREGUE'];
@@ -270,8 +270,8 @@ serve(async (req) => {
     // 8. Fila de Impressão (Apenas novos itens) — respeita override por filial
     const printingEnabled = settingBool(settings['printing_enabled'], true);
     const branchCfg = parseBranchPrinterConfig((order as any).branches?.printer_config);
-    const shouldPrintKitchen = shouldPrint(printingEnabled && settingBool(settings['print_kitchen_copy']), branchCfg, 'kitchen');
-    const shouldPrintJuice   = shouldPrint(printingEnabled && settingBool(settings['print_juice_potato_copy']), branchCfg, 'juice');
+    const shouldPrintKitchen = shouldPrint(printingEnabled && settingBool(settings['print_kitchen_copy']), branchCfg, 'kitchen', order.type, order.source);
+    const shouldPrintJuice   = shouldPrint(printingEnabled && settingBool(settings['print_juice_potato_copy']), branchCfg, 'juice', order.type, order.source);
 
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');

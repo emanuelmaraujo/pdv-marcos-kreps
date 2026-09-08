@@ -3,7 +3,8 @@ import { BranchInput } from "@/lib/api/branches-admin-api";
 import { InheritedFieldIndicator } from "@/components/ui/InheritedFieldIndicator";
 import { resolveEffectiveWhatsAppTemplate, type WhatsAppEventType } from "@/lib/config/effective-branch-config";
 import { Field, FieldGroup, SwitchKnob, Toggle } from "../FormPrimitives";
-import { INPUT_CLS, WA_EVENTS, type WaTemplates } from "../../utils";
+import { INPUT_CLS, ORDER_SOURCE_OPTIONS, ORDER_TYPE_OPTIONS, WA_EVENTS, type WaTemplates } from "../../utils";
+import { OrderContextSelector } from "./OrderContextSelector";
 
 export function WhatsAppTab({
   editing,
@@ -40,6 +41,8 @@ export function WhatsAppTab({
               ev.key as WhatsAppEventType,
             );
             const enabled = waCfg[ev.key]?.enabled !== false;
+            const orderTypes = waCfg[ev.key]?.order_types ?? ORDER_TYPE_OPTIONS.map((option) => option.value);
+            const orderSources = waCfg[ev.key]?.order_sources ?? ORDER_SOURCE_OPTIONS.map((option) => option.value);
             return (
               <FieldGroup
                 key={ev.key}
@@ -67,27 +70,35 @@ export function WhatsAppTab({
                 />
 
                 {enabled && (
-                  <div className="grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-3">
-                    <div className="col-span-2">
-                      <Field label="Nome do template">
+                  <div className="space-y-3">
+                    <OrderContextSelector
+                      orderTypes={orderTypes}
+                      orderSources={orderSources}
+                      onOrderTypesChange={(next) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], order_types: next } }))}
+                      onOrderSourcesChange={(next) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], order_sources: next } }))}
+                    />
+                    <div className="grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-3">
+                      <div className="col-span-2">
+                        <Field label="Nome do template">
+                          <input
+                            type="text"
+                            value={waCfg[ev.key]?.template_name ?? ''}
+                            onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], template_name: e.target.value } }))}
+                            className={`${INPUT_CLS} font-mono text-xs`}
+                            placeholder={`Padrão: ${effective.templateName}`}
+                          />
+                        </Field>
+                      </div>
+                      <Field label="Idioma">
                         <input
                           type="text"
-                          value={waCfg[ev.key]?.template_name ?? ''}
-                          onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], template_name: e.target.value } }))}
+                          value={waCfg[ev.key]?.language ?? 'pt_BR'}
+                          onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], language: e.target.value } }))}
                           className={`${INPUT_CLS} font-mono text-xs`}
-                          placeholder={`Padrão: ${effective.templateName}`}
+                          placeholder="pt_BR"
                         />
                       </Field>
                     </div>
-                    <Field label="Idioma">
-                      <input
-                        type="text"
-                        value={waCfg[ev.key]?.language ?? 'pt_BR'}
-                        onChange={(e) => setWaCfg((p) => ({ ...p, [ev.key]: { ...p[ev.key], language: e.target.value } }))}
-                        className={`${INPUT_CLS} font-mono text-xs`}
-                        placeholder="pt_BR"
-                      />
-                    </Field>
                   </div>
                 )}
               </FieldGroup>

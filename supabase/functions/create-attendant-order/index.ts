@@ -453,9 +453,9 @@ serve(async (req) => {
     // split_bill: NÃO imprime agora — mark-payment dispara a impressão quando tudo for pago
     const printingEnabled = !isSplitBill && settingBool(settings['printing_enabled'], true);
     const branchCfg = parseBranchPrinterConfig((branch as any).printer_config);
-    const shouldPrintCustomer = shouldPrint(printingEnabled && settingBool(settings['print_customer_copy']), branchCfg, 'customer');
-    const shouldPrintKitchen  = shouldPrint(printingEnabled && settingBool(settings['print_kitchen_copy']), branchCfg, 'kitchen');
-    const shouldPrintJuice    = shouldPrint(printingEnabled && settingBool(settings['print_juice_potato_copy']), branchCfg, 'juice');
+    const shouldPrintCustomer = shouldPrint(printingEnabled && settingBool(settings['print_customer_copy']), branchCfg, 'customer', order_type, 'ATTENDANT');
+    const shouldPrintKitchen  = shouldPrint(printingEnabled && settingBool(settings['print_kitchen_copy']), branchCfg, 'kitchen', order_type, 'ATTENDANT');
+    const shouldPrintJuice    = shouldPrint(printingEnabled && settingBool(settings['print_juice_potato_copy']), branchCfg, 'juice', order_type, 'ATTENDANT');
 
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');

@@ -7,7 +7,8 @@ export const branchesApi = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('branches')
-      .select('*')
+      .select('id, code, slug, name, type, active, address, phone, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time, whatsapp_enabled, delivery_enabled, default_delivery_fee, monthly_revenue_goal, created_at, updated_at')
+      .eq('active', true)
       .order('name');
     if (error) throw error;
     return (data ?? []) as Branch[];
@@ -30,10 +31,9 @@ export const branchesApi = {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Não autenticado.');
-    const { error } = await supabase
-      .from('profiles')
-      .update({ home_branch_id: branchId })
-      .eq('id', user.id);
+    const { error } = await supabase.rpc('set_my_home_branch', {
+      p_branch_id: branchId,
+    });
     if (error) throw error;
   },
 };

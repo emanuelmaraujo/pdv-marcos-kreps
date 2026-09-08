@@ -53,7 +53,7 @@ export function UserCard({
                 variant={user.role === "ADMIN" ? "brand" : user.role === "COURIER" ? "info" : "secondary"}
                 className="text-[10px] py-0.5 px-2 font-black uppercase tracking-wider rounded-lg"
               >
-                {user.role === "ADMIN" ? "Admin" : user.role === "COURIER" ? "Motoboy" : "Equipe"}
+                {user.is_global_admin ? "Admin global" : user.role === "ADMIN" ? "Admin filial" : user.role === "COURIER" ? "Motoboy" : "Atendente"}
               </Badge>
               {user.role === "ADMIN" && <ShieldCheck size={14} className="text-amber-500" strokeWidth={3} />}
             </div>
@@ -79,15 +79,15 @@ export function UserCard({
               <span className="text-[11px] font-bold">Digital</span>
             </button>
           )}
-          <button
+          {user.can_manage && <button
             onClick={onOpenPasswordReset}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-secondary)] active:scale-95 transition-all"
             title="Redefinir senha"
           >
             <KeyRound className="w-4 h-4" />
             <span className="text-[11px] font-bold">Senha</span>
-          </button>
-          <button
+          </button>}
+          {user.can_manage && <button
             onClick={onToggleStatus}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all border ${
               user.active
@@ -98,16 +98,16 @@ export function UserCard({
           >
             {user.active ? <UserMinus className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
             <span className="text-[11px] font-bold">{user.active ? "Desativar" : "Ativar"}</span>
-          </button>
-          <button
+          </button>}
+          {user.can_manage && <button
             onClick={onEdit}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-primary)] active:scale-95 transition-all"
             title="Editar"
           >
             <UserCog className="w-4 h-4" />
             <span className="text-[11px] font-bold">Editar</span>
-          </button>
-          {user.id !== currentUserId && (
+          </button>}
+          {user.can_manage && user.id !== currentUserId && (
             <button
               onClick={onDelete}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--status-danger-bg)] border border-[var(--status-danger)]/20 text-[var(--status-danger)] active:scale-95 transition-all"

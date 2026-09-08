@@ -50,7 +50,7 @@ const shortcuts: Shortcut[] = [
 ];
 
 const adminShortcuts: Shortcut[] = [
-  { title: "Usuários",      href: "/app/usuarios",                 icon: Users,              tone: "info" },
+  { title: "Usuários",      href: "/app/configuracoes/usuarios",   icon: Users,              tone: "info" },
   { title: "Filiais",       href: "/app/configuracoes/filiais",    icon: Building2,          tone: "neutral" },
   { title: "Configurações", href: "/app/configuracoes",            icon: SlidersHorizontal,  tone: "neutral" },
 ];

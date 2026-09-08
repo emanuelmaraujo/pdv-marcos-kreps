@@ -2,7 +2,8 @@ import { Printer } from "lucide-react";
 import { InheritedFieldIndicator } from "@/components/ui/InheritedFieldIndicator";
 import { resolveEffectivePrinterSector, type SectorKey } from "@/lib/config/effective-branch-config";
 import { Field, FieldGroup, SwitchKnob } from "../FormPrimitives";
-import { INPUT_CLS, PRINTER_SECTORS, type PrinterConfig } from "../../utils";
+import { INPUT_CLS, ORDER_SOURCE_OPTIONS, ORDER_TYPE_OPTIONS, PRINTER_SECTORS, type PrinterConfig } from "../../utils";
+import { OrderContextSelector } from "./OrderContextSelector";
 
 export function ImpressaoTab({
   printerCfg,
@@ -18,6 +19,8 @@ export function ImpressaoTab({
       {PRINTER_SECTORS.map((s) => {
         const effective = resolveEffectivePrinterSector(globalSettings, { printer_config: printerCfg }, s.key as SectorKey);
         const enabled = printerCfg[s.key]?.enabled !== false;
+        const orderTypes = printerCfg[s.key]?.order_types ?? ORDER_TYPE_OPTIONS.map((option) => option.value);
+        const orderSources = printerCfg[s.key]?.order_sources ?? ORDER_SOURCE_OPTIONS.map((option) => option.value);
         return (
           <FieldGroup
             key={s.key}
@@ -45,27 +48,35 @@ export function ImpressaoTab({
             />
 
             {enabled && (
-              <div className="grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-3">
-                <div className="col-span-2">
-                  <Field label="IP da impressora">
+              <div className="space-y-3">
+                <OrderContextSelector
+                  orderTypes={orderTypes}
+                  orderSources={orderSources}
+                  onOrderTypesChange={(next) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], order_types: next } }))}
+                  onOrderSourcesChange={(next) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], order_sources: next } }))}
+                />
+                <div className="grid grid-cols-3 gap-2 border-t border-[var(--border)] pt-3">
+                  <div className="col-span-2">
+                    <Field label="IP da impressora">
+                      <input
+                        type="text"
+                        value={printerCfg[s.key]?.ip ?? ''}
+                        onChange={(e) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], ip: e.target.value } }))}
+                        className={`${INPUT_CLS} font-mono`}
+                        placeholder={`Padrão: ${effective.ip ?? "não definido"}`}
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Porta">
                     <input
-                      type="text"
-                      value={printerCfg[s.key]?.ip ?? ''}
-                      onChange={(e) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], ip: e.target.value } }))}
+                      type="number"
+                      value={printerCfg[s.key]?.port ?? ''}
+                      onChange={(e) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], port: Number(e.target.value) } }))}
                       className={`${INPUT_CLS} font-mono`}
-                      placeholder={`Padrão: ${effective.ip ?? "não definido"}`}
+                      placeholder={String(effective.port ?? 9100)}
                     />
                   </Field>
                 </div>
-                <Field label="Porta">
-                  <input
-                    type="number"
-                    value={printerCfg[s.key]?.port ?? ''}
-                    onChange={(e) => setPrinterCfg((p) => ({ ...p, [s.key]: { ...p[s.key], port: Number(e.target.value) } }))}
-                    className={`${INPUT_CLS} font-mono`}
-                    placeholder={String(effective.port ?? 9100)}
-                  />
-                </Field>
               </div>
             )}
           </FieldGroup>

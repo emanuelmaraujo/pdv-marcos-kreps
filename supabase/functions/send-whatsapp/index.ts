@@ -157,12 +157,12 @@ async function authorize(req: Request, supabaseAdmin: any): Promise<
 
   const { data: profile } = await supabaseAdmin
     .from("profiles")
-    .select("role, active")
+    .select("role, active, is_global_admin")
     .eq("id", user.id)
     .single();
 
-  if (!profile?.active || profile?.role !== "ADMIN") {
-    return { error: "Apenas administradores podem operar WhatsApp.", status: 403 };
+  if (!profile?.active || profile?.role !== "ADMIN" || !profile?.is_global_admin) {
+    return { error: "Apenas o administrador global pode operar a fila geral do WhatsApp.", status: 403 };
   }
 
   return { mode: "admin", userId: user.id };

@@ -5,7 +5,7 @@ import {
   Banknote,
   Printer,
   BookOpen,
-  Building2,
+  Settings,
   Bike,
   Wallet,
 } from "lucide-react";
@@ -24,20 +24,22 @@ export type NavItem = {
    * os dois acendem ao mesmo tempo.
    */
   exact?: boolean;
+  /** Mantém a barra inferior enxuta (máximo de cinco destinos). */
+  showInBottomNav?: boolean;
 };
 
 const STAFF_ROLES: UserRole[] = ["ADMIN", "ATTENDANT"];
 
 export const navItems: NavItem[] = [
-  { name: "Início",    href: "/app",                         icon: Home },
-  { name: "Pedidos",   href: "/app/pedidos",                 icon: ClipboardList },
-  { name: "Novo",      href: "/app/novo-pedido",             icon: CirclePlus },
-  { name: "Caixa",     href: "/app/caixa",                   icon: Banknote,  adminOnly: true },
+  { name: "Início",    href: "/app",                         icon: Home, showInBottomNav: true },
+  { name: "Pedidos",   href: "/app/pedidos",                 icon: ClipboardList, showInBottomNav: true },
+  { name: "Novo",      href: "/app/novo-pedido",             icon: CirclePlus, showInBottomNav: true },
+  { name: "Caixa",     href: "/app/caixa",                   icon: Banknote,  adminOnly: true, showInBottomNav: true },
   { name: "Impresso",  href: "/app/impressao",               icon: Printer },
   { name: "Cardápio",  href: "/app/cardapio",                icon: BookOpen,  adminOnly: true },
-  { name: "Filiais",   href: "/app/configuracoes/filiais",   icon: Building2, adminOnly: true },
-  { name: "Minhas Entregas", href: "/app/motoboy",           icon: Bike,      roles: ["COURIER"], exact: true },
-  { name: "Histórico", href: "/app/motoboy/historico",       icon: Wallet,    roles: ["COURIER"] },
+  { name: "Configurações", href: "/app/configuracoes",       icon: Settings, adminOnly: true, showInBottomNav: true },
+  { name: "Minhas Entregas", href: "/app/motoboy",           icon: Bike,      roles: ["COURIER"], exact: true, showInBottomNav: true },
+  { name: "Histórico", href: "/app/motoboy/historico",       icon: Wallet,    roles: ["COURIER"], showInBottomNav: true },
 ];
 
 /** Regra única de "item ativo" compartilhada pela sidebar e pela tab bar. */

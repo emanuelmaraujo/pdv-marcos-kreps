@@ -596,7 +596,7 @@ export const pdvApi = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('delivery_zones')
-      .select('*')
+      .select('id, branch_id, neighborhood, neighborhood_normalized, fee, active, created_at, updated_at')
       .eq('branch_id', branchId)
       .eq('active', true)
       .order('neighborhood');
@@ -605,25 +605,18 @@ export const pdvApi = {
   },
 
   // Lista publica de filiais ativas com pedidos online habilitados.
-  // Usado pelo landing /pedir (picker). Se a Edge Function ainda nao estiver
-  // publicada, cai para leitura direta da tabela publica `branches`.
+  // Usado pelo landing /pedir (picker). A Edge Function e a unica fronteira
+  // publica e devolve um DTO allowlist; a tabela administrativa `branches`
+  // nao fica exposta como fallback.
   getPublicBranches: async (): Promise<PublicBranchesResponse> => {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from('branches')
-      .select('id, code, name, slug, type, address, ordering_start_time, ordering_end_time')
-      .eq('active', true)
-      .eq('ordering_enabled', true)
-      .order('name', { ascending: true });
-
-    if (!error && data && data.length > 0) {
-      return { success: true, branches: data as PublicBranch[] };
-    }
-
     try {
       return await invokeEdgeFunction<PublicBranchesResponse>('list-public-branches', {});
-    } catch {
-      return { success: false, error: error?.message, branches: [] };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Nao foi possivel listar as filiais.',
+        branches: [],
+      };
     }
   },
 

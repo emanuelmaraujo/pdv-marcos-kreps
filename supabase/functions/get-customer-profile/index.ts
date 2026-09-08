@@ -72,7 +72,7 @@ serve(async (req) => {
     );
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("role, active")
+      .select("role, active, is_global_admin")
       .eq("id", user.id)
       .single();
 
@@ -85,6 +85,26 @@ serve(async (req) => {
     const phone = normalizeBrazilPhone(body.customer_phone);
     if (!phone) {
       return jsonResponse(req, { success: true, found: false });
+    }
+
+    if (!profile.is_global_admin) {
+      const { data: memberships, error: membershipsError } = await supabaseAdmin
+        .from("profile_branches")
+        .select("branch_id")
+        .eq("profile_id", user.id);
+      if (membershipsError) throw membershipsError;
+      const allowedBranchIds = (memberships ?? []).map((row: { branch_id: string }) => row.branch_id);
+      const { data: scopedOrder, error: scopedOrderError } = allowedBranchIds.length > 0
+        ? await supabaseAdmin
+          .from("orders")
+          .select("id")
+          .eq("customer_phone", phone)
+          .in("branch_id", allowedBranchIds)
+          .limit(1)
+          .maybeSingle()
+        : { data: null, error: null };
+      if (scopedOrderError) throw scopedOrderError;
+      if (!scopedOrder) return jsonResponse(req, { success: true, found: false });
     }
 
     const { data: customer, error: customerErr } = await supabaseAdmin
