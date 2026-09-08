@@ -50,7 +50,7 @@ function mapTransactionPayload(payment: any) {
 async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const { data: order } = await supabaseAdmin
     .from("orders")
-    .select("id, daily_number, status, type, customer_name, customer_phone, notes, total_amount, payment_status, payment_method, branch_id, branches(printer_config)")
+    .select("id, daily_number, status, type, source, customer_name, customer_phone, notes, total_amount, payment_status, payment_method, branch_id, branches(printer_config)")
     .eq("id", orderId)
     .single();
 
@@ -81,8 +81,8 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const printingEnabled = settingBool(settings?.find((s: any) => s.key === "printing_enabled")?.value, true);
   const { parseBranchPrinterConfig, shouldPrint } = await import("../_shared/branch-print-cfg.ts");
   const branchCfg = parseBranchPrinterConfig((order as any).branches?.printer_config);
-  const shouldPrintKitchen = shouldPrint(printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value, true), branchCfg, "kitchen");
-  const shouldPrintJuice   = shouldPrint(printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value, true), branchCfg, "juice");
+  const shouldPrintKitchen = shouldPrint(printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_kitchen_copy")?.value, true), branchCfg, "kitchen", order.type, order.source);
+  const shouldPrintJuice   = shouldPrint(printingEnabled && settingBool(settings?.find((s: any) => s.key === "print_juice_potato_copy")?.value, true), branchCfg, "juice", order.type, order.source);
   const timestampNow = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const printerJobsToInsert: any[] = [];
 

@@ -1,6 +1,6 @@
 // CRUD de filiais, zonas de entrega, entregadores e vínculos de atendentes — apenas ADMIN.
 import { createClient } from '../supabase/client';
-import { Branch, BranchType, Courier, DeliveryZone } from '@/types/pdv';
+import { Branch, BranchPrinterSlot, BranchType, BranchWhatsAppTemplate, Courier, DeliveryZone } from '@/types/pdv';
 import { normalizeNeighborhood } from '../utils/delivery';
 
 export interface BranchInput {
@@ -16,8 +16,8 @@ export interface BranchInput {
   ordering_start_time?: string;
   ordering_end_time?: string;
   whatsapp_enabled?: boolean;
-  whatsapp_templates?: Record<string, { template_name?: string; language?: string; enabled?: boolean }>;
-  printer_config?: Record<string, unknown>;
+  whatsapp_templates?: Record<string, BranchWhatsAppTemplate>;
+  printer_config?: Record<string, BranchPrinterSlot>;
   delivery_enabled?: boolean;
   default_delivery_fee?: number;
   monthly_revenue_goal?: number | null;

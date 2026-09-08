@@ -60,7 +60,7 @@ serve(async (req) => {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("role, active")
+      .select("role, active, is_global_admin")
       .eq("id", user.id)
       .single();
     if (profileError || !profile || profile.role !== "ADMIN" || !profile.active) {
@@ -71,6 +71,22 @@ serve(async (req) => {
     }
 
     const { start_date, end_date, branch_id } = await req.json();
+    let effectiveBranchId: string | null = branch_id || null;
+    if (!profile.is_global_admin) {
+      const { data: memberships, error: membershipsError } = await supabaseAdmin
+        .from("profile_branches")
+        .select("branch_id")
+        .eq("profile_id", user.id);
+      if (membershipsError) throw membershipsError;
+      const allowedBranchIds = (memberships ?? []).map((row: { branch_id: string }) => row.branch_id);
+      effectiveBranchId = effectiveBranchId || allowedBranchIds[0] || null;
+      if (!effectiveBranchId || !allowedBranchIds.includes(effectiveBranchId)) {
+        return new Response(JSON.stringify({ error: "Filial fora do seu escopo administrativo." }), {
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+          status: 403,
+        });
+      }
+    }
 
     let query = supabaseAdmin
       .from("orders")
@@ -80,7 +96,7 @@ serve(async (req) => {
 
     if (start_date) query = query.gte("delivery_delivered_at", start_date);
     if (end_date) query = query.lte("delivery_delivered_at", end_date);
-    if (branch_id) query = query.eq("branch_id", branch_id);
+    if (effectiveBranchId) query = query.eq("branch_id", effectiveBranchId);
 
     const { data: orders, error: ordersError } = await query;
     if (ordersError) throw ordersError;

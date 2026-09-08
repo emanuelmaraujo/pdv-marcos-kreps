@@ -3,7 +3,7 @@
 import { useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Bike, Building2, Clock, Loader2, MessageSquare, Printer, ShoppingBag, X } from "lucide-react";
+import { Bike, Building2, Clock, CreditCard, Loader2, MessageSquare, Printer, ShoppingBag, X } from "lucide-react";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { TabbedForm, type TabbedFormTab } from "@/components/ui/TabbedForm";
 import { useBranchEditor } from "@/hooks/useBranchEditor";
@@ -128,6 +128,15 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
         <h1 className="min-w-0 flex-1 truncate text-sm font-black text-[var(--text-primary)]">
           {branchId ? `Editar — ${editor.editing.name || "filial"}` : "Nova filial"}
         </h1>
+        {branchId && (
+          <Link
+            href={`/app/configuracoes/pagamentos?branch=${branchId}`}
+            className="flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--bg-subtle)] px-3 text-xs font-black text-[var(--text-secondary)] hover:text-brand-red"
+          >
+            <CreditCard className="h-4 w-4" />
+            <span className="hidden sm:inline">Taxas</span>
+          </Link>
+        )}
         <Link
           href="/app/configuracoes/filiais"
           className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"

@@ -11,9 +11,9 @@ describe("isNavItemActive", () => {
   });
 
   it("item normal acende também nas sub-rotas", () => {
-    const filiais = byHref("/app/configuracoes/filiais");
-    expect(isNavItemActive(filiais, "/app/configuracoes/filiais")).toBe(true);
-    expect(isNavItemActive(filiais, "/app/configuracoes/filiais/123")).toBe(true);
+    const configuracoes = byHref("/app/configuracoes");
+    expect(isNavItemActive(configuracoes, "/app/configuracoes/filiais")).toBe(true);
+    expect(isNavItemActive(configuracoes, "/app/configuracoes/filiais/123")).toBe(true);
   });
 
   it("entregas e histórico do motoboy não acendem juntos", () => {
@@ -28,6 +28,12 @@ describe("isNavItemActive", () => {
 
   it("não acende por prefixo parcial de nome de rota", () => {
     expect(isNavItemActive(byHref("/app/pedidos"), "/app/pedidos-antigos")).toBe(false);
+  });
+
+  it("barra móvel fica limitada a cinco itens para administradores", () => {
+    const visible = navItems.filter((item) => item.showInBottomNav && isNavItemVisible(item, "ADMIN"));
+    expect(visible).toHaveLength(5);
+    expect(visible.at(-1)?.href).toBe("/app/configuracoes");
   });
 });
 

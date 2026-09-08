@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildCustomerReceipt, buildProductionReceipt, resolveProductionSector, settingBool } from "../_shared/print-format.ts";
+import { parseBranchPrinterConfig, shouldPrint } from "../_shared/branch-print-cfg.ts";
 import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
 function getCorsHeaders(req: Request) {
@@ -21,7 +22,8 @@ serve(async (req) => {
     const jwt = authHeader.replace('Bearer ', '');
     const supabaseClientAuth = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
     );
 
     const { data: { user }, error: userErr } = await supabaseClientAuth.auth.getUser(jwt);
@@ -74,18 +76,17 @@ serve(async (req) => {
     const globalPrintCustomer = settingBool(settings?.find((s: any) => s.key === 'print_customer_copy')?.value);
 
     // 4. Buscar Pedido (inclui printer_config da filial para respeitar override por setor)
-    const { data: order, error: orderErr } = await supabaseAdmin
+    const { data: order, error: orderErr } = await supabaseClientAuth
       .from('orders')
       .select('id, daily_number, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
-    if (orderErr || !order) throw new Error('Pedido inexistente.');
+    if (orderErr || !order) throw new Error('Pedido inexistente ou fora das filiais autorizadas.');
 
     // Filtra cópias desabilitadas explicitamente nesta filial (printer_config.<setor>.enabled === false).
     // O setor 'JUICE_POTATO' no enum mapeia para a chave 'juice' no printer_config (alinhado com a UI de filiais).
-    const branchPrinterCfg: Record<string, { enabled?: boolean }> =
-      ((order as any).branches?.printer_config ?? {}) as Record<string, { enabled?: boolean }>;
+    const branchPrinterCfg = parseBranchPrinterConfig((order as any).branches?.printer_config);
     const COPY_TO_CFG_KEY: Record<string, 'kitchen' | 'juice' | 'customer'> = {
       KITCHEN: 'kitchen',
       JUICE_POTATO: 'juice',
@@ -94,11 +95,11 @@ serve(async (req) => {
     copies = copies.filter((c: string) => {
       const key = COPY_TO_CFG_KEY[c];
       if (!key) return true;
-      const disabled = branchPrinterCfg?.[key]?.enabled === false;
-      if (disabled) {
-        console.error(`[reprint-order] Setor ${c} desabilitado na filial — removendo da reimpressão.`);
+      const allowed = shouldPrint(true, branchPrinterCfg, key, order.type, order.source);
+      if (!allowed) {
+        console.error(`[reprint-order] Setor ${c} fora das regras desta filial e contexto — removendo da reimpressão.`);
       }
-      return !disabled;
+      return allowed;
     });
 
     if (copies.length === 0) {
@@ -113,13 +114,8 @@ serve(async (req) => {
       copies = copies.filter((copy: string) => copy !== 'CUSTOMER');
     }
 
-    // Pedidos APP (site público) não têm via do cliente — a menos que seja iFood
-    if (order.source === 'APP' && !isIfood) {
-      copies = copies.filter((copy: string) => copy !== 'CUSTOMER');
-    }
-
     if (copies.length === 0) {
-      copies = ['KITCHEN', 'JUICE_POTATO'];
+      throw new Error('Nenhuma das vias solicitadas está liberada para este tipo e origem de pedido.');
     }
 
     // 4. Buscar Itens

@@ -37,8 +37,11 @@ export const menuApi = {
   getMenuData: async (branchId?: string | null): Promise<MenuData> => {
     const supabase = createClient();
 
-    const buildScoped = (table: string) => {
-      let q = supabase.from(table).select('*');
+    // Esta consulta tambem atende o cardapio publico. As colunas sao uma
+    // allowlist deliberada: `products.cost_price` nunca atravessa a fronteira
+    // anonima, mesmo que uma policy RLS permissiva seja adicionada por engano.
+    const buildScoped = (table: string, columns: string) => {
+      let q = supabase.from(table).select(columns);
       if (branchId) q = q.eq('branch_id', branchId);
       return q;
     };
@@ -51,12 +54,12 @@ export const menuApi = {
       { data: productAddons, error: prodAddonError },
       { data: addons, error: addonError },
     ] = await Promise.all([
-      buildScoped('categories').eq('active', true).order('sort_order', { ascending: true }),
-      buildScoped('products').eq('active', true).order('name', { ascending: true }),
-      buildScoped('ingredients').eq('active', true),
+      buildScoped('categories', 'id, name, active, sort_order, created_at, branch_id, counts_for_loyalty').eq('active', true).order('sort_order', { ascending: true }),
+      buildScoped('products', 'id, category_id, name, description, price, sector, active, created_at, branch_id, image_url').eq('active', true).order('name', { ascending: true }),
+      buildScoped('ingredients', 'id, name, active, created_at, branch_id').eq('active', true),
       supabase.from('product_ingredients').select('*'),
       supabase.from('product_addons').select('*'),
-      buildScoped('addons').eq('active', true),
+      buildScoped('addons', 'id, name, price, active, created_at, branch_id').eq('active', true),
     ]);
 
     if (catError) throw new Error(`Failed to load categories: ${catError.message}`);
@@ -67,12 +70,12 @@ export const menuApi = {
     if (addonError) throw new Error(`Failed to load addons: ${addonError.message}`);
 
     return {
-      categories: categories as Category[],
-      products: products as Product[],
-      ingredients: ingredients as Ingredient[],
+      categories: categories as unknown as Category[],
+      products: products as unknown as Product[],
+      ingredients: ingredients as unknown as Ingredient[],
       productIngredients: productIngredients as ProductIngredient[],
       productAddons: productAddons as ProductAddon[],
-      addons: addons as Addon[],
+      addons: addons as unknown as Addon[],
     };
   },
 

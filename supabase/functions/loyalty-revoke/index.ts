@@ -54,7 +54,7 @@ serve(async (req) => {
 
     const internalSecret = req.headers.get("x-internal-secret");
     const expected = Deno.env.get("LOYALTY_INTERNAL_SECRET") ?? "";
-    let actor: { mode: "internal" } | { mode: "admin"; userId: string };
+    let actor: { mode: "internal" } | { mode: "admin"; userId: string; isGlobalAdmin: boolean };
 
     if (expected && internalSecret === expected) {
       actor = { mode: "internal" };
@@ -63,14 +63,23 @@ serve(async (req) => {
       if (!auth) return jsonError(req, "Não autorizado.", 401);
       const { data: { user } } = await supabaseAdmin.auth.getUser(auth.replace("Bearer ", ""));
       if (!user) return jsonError(req, "Token inválido.", 401);
-      const { data: profile } = await supabaseAdmin.from("profiles").select("role, active").eq("id", user.id).single();
+      const { data: profile } = await supabaseAdmin.from("profiles").select("role, active, is_global_admin").eq("id", user.id).single();
       if (!profile?.active || profile.role !== "ADMIN") return jsonError(req, "Apenas ADMIN.", 403);
-      actor = { mode: "admin", userId: user.id };
+      actor = { mode: "admin", userId: user.id, isGlobalAdmin: profile.is_global_admin === true };
     }
 
     const { order_id, order_item_ids, force } = await req.json().catch(() => ({}));
     if (!order_id) return jsonError(req, "order_id ausente.");
     const scopedItemIds: string[] | null = Array.isArray(order_item_ids) && order_item_ids.length > 0 ? order_item_ids : null;
+
+    if (actor.mode === "admin" && !actor.isGlobalAdmin) {
+      const [{ data: order }, { data: memberships }] = await Promise.all([
+        supabaseAdmin.from("orders").select("branch_id").eq("id", order_id).maybeSingle(),
+        supabaseAdmin.from("profile_branches").select("branch_id").eq("profile_id", actor.userId),
+      ]);
+      const allowed = (memberships ?? []).some((row: { branch_id: string }) => row.branch_id === order?.branch_id);
+      if (!order || !allowed) return jsonError(req, "Pedido fora do escopo da sua filial.", 403);
+    }
 
     // Itens do pedido com crédito ainda não revogado.
     let itemsQuery = supabaseAdmin

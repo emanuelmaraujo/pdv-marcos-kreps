@@ -1,4 +1,4 @@
-import { BranchType } from "@/types/pdv";
+import { BranchPrinterSlot, BranchType, BranchWhatsAppTemplate, OrderSource, OrderType } from "@/types/pdv";
 import { BranchInput } from "@/lib/api/branches-admin-api";
 
 export const TYPE_OPTIONS: { value: BranchType; label: string; desc: string }[] = [
@@ -11,6 +11,7 @@ export const WA_EVENTS = [
   { key: 'order_received',      label: 'Pedido recebido',     hint: 'Dispara quando o pedido entra na fila' },
   { key: 'order_partial_ready', label: 'Primeiro item pronto', hint: 'Dispara quando PRONTO_PARCIAL (1ª vez)' },
   { key: 'order_ready',         label: 'Pedido completo',      hint: 'Dispara quando todos os itens ficam prontos' },
+  { key: 'order_out_for_delivery', label: 'Saiu para entrega', hint: 'Dispara quando o entregador inicia a rota' },
 ] as const;
 
 export const PRINTER_SECTORS = [
@@ -19,15 +20,28 @@ export const PRINTER_SECTORS = [
   { key: 'customer', label: 'Via do Cliente',    sector: 'CUSTOMER' },
 ] as const;
 
-export type PrinterConfig = { [key: string]: { ip?: string; port?: number; enabled?: boolean } };
-export type WaTemplates = { [key: string]: { template_name?: string; language?: string; enabled?: boolean } };
+export const ORDER_TYPE_OPTIONS: { value: OrderType; label: string }[] = [
+  { value: 'BALCAO', label: 'No local' },
+  { value: 'VIAGEM', label: 'Viagem / retirada' },
+  { value: 'ENTREGA', label: 'Entrega' },
+];
+
+export const ORDER_SOURCE_OPTIONS: { value: OrderSource; label: string }[] = [
+  { value: 'ATTENDANT', label: 'Atendente / maquininha' },
+  { value: 'APP', label: 'App / site' },
+  { value: 'QR_CODE', label: 'QR Code' },
+  { value: 'WHATSAPP', label: 'WhatsApp' },
+];
+
+export type PrinterConfig = Record<string, BranchPrinterSlot>;
+export type WaTemplates = Record<string, BranchWhatsAppTemplate>;
 
 export function parseConfig(raw?: Record<string, unknown> | null): PrinterConfig {
   if (!raw || typeof raw !== 'object') return {};
   return raw as PrinterConfig;
 }
 
-export function parseTemplates(raw?: Record<string, { template_name?: string; language?: string; enabled?: boolean }> | null): WaTemplates {
+export function parseTemplates(raw?: Record<string, BranchWhatsAppTemplate> | null): WaTemplates {
   if (!raw || typeof raw !== 'object') return {};
   return raw as WaTemplates;
 }

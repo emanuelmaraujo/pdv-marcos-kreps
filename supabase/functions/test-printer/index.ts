@@ -27,12 +27,12 @@ serve(async (req) => {
 
     const { data: profile, error: profileErr } = await supabaseAdmin
       .from('profiles')
-      .select('role, active')
+      .select('role, active, is_global_admin')
       .eq('id', user.id)
       .single();
 
     if (profileErr || !profile) throw new Error('Perfil nao encontrado.');
-    if (profile.role !== 'ADMIN') throw new Error('Acesso negado. Apenas administradores podem testar a impressora.');
+    if (profile.role !== 'ADMIN' || !profile.is_global_admin) throw new Error('Acesso negado. Apenas o administrador global pode testar a impressora padrão.');
     if (!profile.active) throw new Error('Usuario inativo.');
 
     const { data: latestOrder, error: latestOrderErr } = await supabaseAdmin

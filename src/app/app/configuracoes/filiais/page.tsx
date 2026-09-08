@@ -10,12 +10,14 @@ import { ToastContainer, useToast } from '@/components/ui/Toast';
 import { Loader2, Plus } from 'lucide-react';
 import { BranchListItem } from './components/BranchListItem';
 import { getFriendlyErrorMessage } from '@/lib/errors/messages';
+import { useUser } from '@/contexts/UserContext';
 
 export default function FiliaisPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const { currentBranchId, refresh: refreshCtx } = useBranch();
   const { toasts, addToast, removeToast } = useToast();
+  const { isGlobalAdmin } = useUser();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,11 +57,11 @@ export default function FiliaisPage() {
             Senha exibida como <strong className="text-[var(--text-primary)]">P-042-1</strong>.
           </p>
         </div>
-        <Link href="/app/configuracoes/filiais/novo" className="sm:shrink-0">
+        {isGlobalAdmin && <Link href="/app/configuracoes/filiais/novo" className="sm:shrink-0">
           <Button className="w-full gap-2 sm:w-auto">
             <Plus className="h-4 w-4" strokeWidth={2} /> Nova filial
           </Button>
-        </Link>
+        </Link>}
       </header>
 
       {loading ? (

@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildCustomerReceipt, buildProductionReceipt, settingBool } from "../_shared/print-format.ts";
+import { parseBranchPrinterConfig, shouldPrint } from "../_shared/branch-print-cfg.ts";
 import { enqueueWhatsAppMessage } from "../_shared/whatsapp-enqueue.ts";
 import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
@@ -24,7 +25,8 @@ serve(async (req) => {
     const jwt = authHeader.replace('Bearer ', '');
     const supabaseClientAuth = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
     );
 
     const { data: { user }, error: userErr } = await supabaseClientAuth.auth.getUser(jwt);
@@ -57,13 +59,13 @@ serve(async (req) => {
     if (!order_id) throw new Error('order_id não fornecido no payload.');
 
     // 3. Busca o Pedido (inclui printer_config da filial para override por setor)
-    const { data: order, error: orderErr } = await supabaseAdmin
+    const { data: order, error: orderErr } = await supabaseClientAuth
       .from('orders')
-      .select('id, daily_number, status, type, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name, printer_config )')
+      .select('id, daily_number, status, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
-    if (orderErr || !order) throw new Error('Pedido inexistente.');
+    if (orderErr || !order) throw new Error('Pedido inexistente ou fora das filiais autorizadas.');
 
     // Regras de negócio do status
     if (order.status === 'CANCELADO') throw new Error('Pedido cancelado.');
@@ -112,16 +114,13 @@ serve(async (req) => {
     // Override por filial — branches.printer_config.<setor>.enabled
     // Quando explicitamente false, NUNCA imprime aquele setor, mesmo que o global esteja ligado.
     // Quando ausente/undefined, segue o comportamento global.
-    const branchPrinterCfg: Record<string, { enabled?: boolean; ip?: string; port?: number }> =
-      ((order as any).branches?.printer_config ?? {}) as Record<string, { enabled?: boolean; ip?: string; port?: number }>;
-    const sectorEnabled = (key: 'kitchen' | 'juice' | 'customer'): boolean =>
-      branchPrinterCfg?.[key]?.enabled !== false;
+    const branchPrinterCfg = parseBranchPrinterConfig((order as any).branches?.printer_config);
 
     // iFood sempre imprime via do cliente — pedidos de entrega precisam do recibo na sacola
     const isIfood = (order as any).payment_method === 'IFOOD';
-    const shouldPrintCustomer = printingEnabled && sectorEnabled('customer') && (globalPrintCustomer || isIfood);
-    const shouldPrintKitchen  = printingEnabled && globalPrintKitchen  && sectorEnabled('kitchen');
-    const shouldPrintJuice    = printingEnabled && globalPrintJuice    && sectorEnabled('juice');
+    const shouldPrintCustomer = shouldPrint(printingEnabled && (globalPrintCustomer || isIfood), branchPrinterCfg, 'customer', order.type, order.source);
+    const shouldPrintKitchen  = shouldPrint(printingEnabled && globalPrintKitchen, branchPrinterCfg, 'kitchen', order.type, order.source);
+    const shouldPrintJuice    = shouldPrint(printingEnabled && globalPrintJuice, branchPrinterCfg, 'juice', order.type, order.source);
 
     // 4. Separa os itens por setor
     const kitchenItems = items.filter(i => i.production_sector === 'KITCHEN');

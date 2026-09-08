@@ -114,6 +114,17 @@ function firstName(name: string | null | undefined): string {
   return trimmed.slice(0, 30);
 }
 
+export function matchesOrderContext(
+  override: { order_types?: unknown; order_sources?: unknown } | null | undefined,
+  orderType?: string | null,
+  orderSource?: string | null,
+): boolean {
+  if (!override) return true;
+  if (Array.isArray(override.order_types) && (!orderType || !override.order_types.includes(orderType))) return false;
+  if (Array.isArray(override.order_sources) && (!orderSource || !override.order_sources.includes(orderSource))) return false;
+  return true;
+}
+
 /**
  * Resolve template + enabled state combinando branches.whatsapp_templates com
  * as settings globais. Retorna `null` se o evento estiver desabilitado.
@@ -122,6 +133,8 @@ async function resolveTemplate(
   supabaseAdmin: any,
   branchId: string | null | undefined,
   eventType: WhatsAppEventType | LoyaltyEventType,
+  orderType?: string | null,
+  orderSource?: string | null,
 ): Promise<{ enabled: boolean; templateName: string }> {
   // 1) Settings globais — fallback
   const settingKey = SETTING_TEMPLATE[eventType];
@@ -154,6 +167,7 @@ async function resolveTemplate(
       const override = branch.whatsapp_templates?.[eventType];
       if (override && typeof override === "object") {
         if (override.enabled === false) enabled = false;
+        if (!matchesOrderContext(override, orderType, orderSource)) enabled = false;
         if (typeof override.template_name === "string" && override.template_name.trim()) {
           templateName = override.template_name.trim();
         }
@@ -169,15 +183,22 @@ async function resolveTemplate(
  * NOT NULL e nem todo chamador passa branchId — sem isso, o insert falha e a
  * notificacao some sem ninguem perceber.
  */
-async function resolveBranchIdFromOrder(supabaseAdmin: any, orderId: string | null | undefined): Promise<string | null> {
-  if (!orderId) return null;
+async function resolveOrderContext(
+  supabaseAdmin: any,
+  orderId: string | null | undefined,
+): Promise<{ branchId: string | null; orderType: string | null; orderSource: string | null }> {
+  if (!orderId) return { branchId: null, orderType: null, orderSource: null };
   const { data, error } = await supabaseAdmin
     .from("orders")
-    .select("branch_id")
+    .select("branch_id, type, source")
     .eq("id", orderId)
     .maybeSingle();
-  if (error || !data) return null;
-  return data.branch_id ?? null;
+  if (error || !data) return { branchId: null, orderType: null, orderSource: null };
+  return {
+    branchId: data.branch_id ?? null,
+    orderType: data.type ?? null,
+    orderSource: data.source ?? null,
+  };
 }
 
 export async function enqueueWhatsAppMessage(
@@ -198,7 +219,8 @@ export async function enqueueWhatsAppMessage(
     // whatsapp_messages.branch_id e NOT NULL: quem chama sem branchId gerava
     // insert rejeitado e mensagem perdida em silencio. Como o pedido sempre tem
     // filial, resolvemos por ele em vez de deixar seguir nulo.
-    const branchId = payload.branchId ?? await resolveBranchIdFromOrder(supabaseAdmin, payload.orderId);
+    const orderContext = await resolveOrderContext(supabaseAdmin, payload.orderId);
+    const branchId = payload.branchId ?? orderContext.branchId;
     if (!branchId) {
       console.error(`${tag} ERRO: filial nao resolvida para o pedido; mensagem nao enfileirada`);
       return { enqueued: false, reason: "missing_branch_id" };
@@ -209,6 +231,8 @@ export async function enqueueWhatsAppMessage(
       supabaseAdmin,
       branchId,
       payload.eventType,
+      orderContext.orderType,
+      orderContext.orderSource,
     );
     if (!enabled) {
       console.log(`${tag} SKIP: whatsapp desabilitado (global ou na filial)`);
@@ -300,7 +324,8 @@ export async function enqueueLoyaltyWhatsAppMessage(
 
     // Mesma regra do enqueue transacional: branch_id e NOT NULL, entao a filial
     // vem do pedido quando o chamador nao informa.
-    const loyaltyBranchId = input.branchId ?? await resolveBranchIdFromOrder(supabaseAdmin, input.orderId);
+    const orderContext = await resolveOrderContext(supabaseAdmin, input.orderId);
+    const loyaltyBranchId = input.branchId ?? orderContext.branchId;
     if (!loyaltyBranchId) {
       console.error(`${tag} ERRO: filial nao resolvida para o pedido; mensagem nao enfileirada`);
       return { enqueued: false, reason: "missing_branch_id" };
@@ -310,6 +335,8 @@ export async function enqueueLoyaltyWhatsAppMessage(
       supabaseAdmin,
       loyaltyBranchId,
       input.eventType,
+      orderContext.orderType,
+      orderContext.orderSource,
     );
     if (!enabled) {
       console.log(`${tag} SKIP: whatsapp desabilitado (global ou na filial)`);

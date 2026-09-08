@@ -17,6 +17,7 @@ interface UserProfile {
   name: string;
   role: UserRole;
   active: boolean;
+  is_global_admin: boolean;
 }
 
 interface UserContextValue {
@@ -24,6 +25,7 @@ interface UserContextValue {
   isLoading: boolean;
   /** Convenience helpers */
   isAdmin: boolean;
+  isGlobalAdmin: boolean;
   isAttendant: boolean;
   isCourier: boolean;
 }
@@ -32,6 +34,7 @@ const UserContext = createContext<UserContextValue>({
   user: null,
   isLoading: true,
   isAdmin: false,
+  isGlobalAdmin: false,
   isAttendant: false,
   isCourier: false,
 });
@@ -54,7 +57,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         const { data: profile, error } = await supabase
           .from("profiles")
-          .select("id, name, role, active")
+          .select("id, name, role, active, is_global_admin")
           .eq("id", session.user.id)
           .maybeSingle();
 
@@ -67,6 +70,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             name: profile.name,
             role: profile.role as UserRole,
             active: profile.active,
+            is_global_admin: profile.is_global_admin ?? false,
           });
         } else {
           console.error("[UserProvider] Profile lookup failed", error);
@@ -128,6 +132,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAdmin: user?.role === "ADMIN",
+        isGlobalAdmin: user?.role === "ADMIN" && user.is_global_admin,
         isAttendant: user?.role === "ATTENDANT",
         isCourier: user?.role === "COURIER",
       }}

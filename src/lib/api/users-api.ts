@@ -22,8 +22,11 @@ export type UserProfile = {
   active: boolean;
   last_sign_in_at?: string;
   created_at: string;
-  /** Filiais vinculadas — retornado por list_users desde a extensão da Fase 2 (filtro por filial). */
+  is_global_admin: boolean;
+  home_branch_id: string | null;
+  can_manage: boolean;
   branch_ids?: string[];
+  phone?: string | null;
 };
 
 export interface CreateUserData {
@@ -87,6 +90,7 @@ export const usersApi = {
     role: string;
     branch_ids?: string[];
     home_branch_id?: string | null;
+    phone?: string;
   }) {
     return invokeManageUsers<unknown>({ action: 'update_user', data: userData }, 'Falha ao atualizar usuário');
   },

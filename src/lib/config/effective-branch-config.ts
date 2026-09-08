@@ -4,7 +4,7 @@
 // padrão" vs "customizado nesta filial"). A decisão que efetivamente vale
 // para imprimir/disparar mensagem continua sendo resolvida no servidor; se
 // as duas implementações divergirem, a do servidor é a fonte da verdade.
-import { Branch } from "@/types/pdv";
+import { Branch, OrderSource, OrderType } from "@/types/pdv";
 
 export type SectorKey = "kitchen" | "juice" | "customer";
 
@@ -12,6 +12,8 @@ export interface BranchPrinterSlot {
   ip?: string;
   port?: number;
   enabled?: boolean;
+  order_types?: OrderType[];
+  order_sources?: OrderSource[];
 }
 
 export type ConfigSource = "global" | "branch";
@@ -59,7 +61,8 @@ export function resolveEffectivePrinterSector(
   const cfg = (branch.printer_config ?? {}) as Partial<Record<SectorKey, BranchPrinterSlot>>;
   const slot = cfg[sector];
 
-  const hasOverride = slot?.enabled !== undefined || !!slot?.ip || !!slot?.port;
+  const hasOverride = slot?.enabled !== undefined || !!slot?.ip || !!slot?.port ||
+    slot?.order_types !== undefined || slot?.order_sources !== undefined;
   const enabled = globalEnabled && slot?.enabled !== false;
 
   return {
@@ -95,7 +98,13 @@ export function resolveEffectiveWhatsAppTemplate(
     eventType,
     enabled,
     templateName: overrideTemplateName || globalTemplate,
-    source: overrideTemplateName ? "branch" : "global",
+    source: override && (
+      overrideTemplateName !== undefined ||
+      override.language !== undefined ||
+      override.enabled !== undefined ||
+      override.order_types !== undefined ||
+      override.order_sources !== undefined
+    ) ? "branch" : "global",
   };
 }
 

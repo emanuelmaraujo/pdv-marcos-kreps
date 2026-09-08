@@ -2,362 +2,406 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { publicCorsHeaders } from "../_shared/public-cors.ts";
 
+type StaffRole = "ADMIN" | "ATTENDANT" | "COURIER";
+
+type ActorProfile = {
+  role: StaffRole;
+  active: boolean;
+  is_global_admin: boolean;
+};
+
+type TargetAccess = {
+  id: string;
+  name: string;
+  role: StaffRole;
+  active: boolean;
+  is_global_admin: boolean;
+  home_branch_id: string | null;
+  branch_ids: string[];
+  phone: string | null;
+};
+
 function getCorsHeaders(req: Request) {
   return publicCorsHeaders(req);
 }
 
-
 function cleanText(value: unknown, maxLength = 255) {
-  if (typeof value !== 'string') return '';
-  return value.replace(/\s+/g, ' ').trim().slice(0, maxLength);
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
 function cleanEmail(value: unknown) {
   const email = cleanText(value, 254).toLowerCase();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '';
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
 
-function cleanRole(value: unknown) {
-  return value === 'ADMIN' || value === 'ATTENDANT' || value === 'COURIER' ? value : '';
+function cleanRole(value: unknown): StaffRole | "" {
+  return value === "ADMIN" || value === "ATTENDANT" || value === "COURIER" ? value : "";
 }
 
 function uniqueStrings(value: unknown) {
   if (!Array.isArray(value)) return [];
-  return Array.from(new Set(value.filter((item): item is string => typeof item === 'string' && item.length > 0)));
+  return Array.from(new Set(
+    value.filter((item): item is string => typeof item === "string" && /^[0-9a-f-]{36}$/i.test(item)),
+  ));
+}
+
+function validateCardinality(role: StaffRole, branchIds: string[]) {
+  if ((role === "ADMIN" || role === "COURIER") && branchIds.length !== 1) {
+    throw new Error(`${role === "ADMIN" ? "Administrador" : "Entregador"} deve pertencer a exatamente uma filial.`);
+  }
+  if (role === "ATTENDANT" && branchIds.length < 1) {
+    throw new Error("Atendente deve pertencer a pelo menos uma filial.");
+  }
+}
+
+function isSubset(values: string[], allowed: Set<string>) {
+  return values.every((value) => allowed.has(value));
+}
+
+async function loadActorBranches(supabaseAdmin: any, actorId: string): Promise<Set<string>> {
+  const { data, error } = await supabaseAdmin
+    .from("profile_branches")
+    .select("branch_id")
+    .eq("profile_id", actorId);
+  if (error) throw error;
+  return new Set((data ?? []).map((row: { branch_id: string }) => row.branch_id));
+}
+
+async function loadTargetAccess(supabaseAdmin: any, id: string): Promise<TargetAccess> {
+  const [{ data: target, error: targetError }, { data: links, error: linksError }, { data: courier }] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select("id, name, role, active, is_global_admin, home_branch_id")
+      .eq("id", id)
+      .single(),
+    supabaseAdmin.from("profile_branches").select("branch_id").eq("profile_id", id),
+    supabaseAdmin.from("couriers").select("phone").eq("profile_id", id).maybeSingle(),
+  ]);
+  if (targetError || !target) throw new Error("Usuário não encontrado.");
+  if (linksError) throw linksError;
+  return {
+    ...target,
+    branch_ids: (links ?? []).map((row: { branch_id: string }) => row.branch_id),
+    phone: courier?.phone ?? null,
+  } as TargetAccess;
+}
+
+function assertCanManageTarget(actor: ActorProfile, actorBranches: Set<string>, target: TargetAccess) {
+  if (actor.is_global_admin) return;
+  if (target.is_global_admin || target.role === "ADMIN") {
+    throw new Error("Administrador local não pode alterar outro administrador.");
+  }
+  if (!isSubset(target.branch_ids, actorBranches)) {
+    throw new Error("Usuário fora do escopo da sua filial.");
+  }
+}
+
+async function assertRequestedBranches(
+  supabaseAdmin: any,
+  actor: ActorProfile,
+  actorBranches: Set<string>,
+  role: StaffRole,
+  branchIds: string[],
+) {
+  validateCardinality(role, branchIds);
+  if (!actor.is_global_admin && role === "ADMIN") {
+    throw new Error("Somente o administrador global pode criar administradores.");
+  }
+  if (!actor.is_global_admin && !isSubset(branchIds, actorBranches)) {
+    throw new Error("Administrador local só pode usar a própria filial.");
+  }
+
+  const { data: branches, error } = await supabaseAdmin
+    .from("branches")
+    .select("id")
+    .in("id", branchIds)
+    .eq("active", true);
+  if (error) throw error;
+  if ((branches ?? []).length !== branchIds.length) {
+    throw new Error("Uma ou mais filiais não existem ou estão inativas.");
+  }
+}
+
+async function saveUserAccess(
+  supabaseAdmin: any,
+  actorId: string,
+  input: {
+    id: string;
+    name: string;
+    role: StaffRole;
+    active: boolean;
+    branchIds: string[];
+    homeBranchId: string;
+    phone?: string | null;
+  },
+) {
+  const { error } = await supabaseAdmin.rpc("admin_upsert_user_access", {
+    p_actor_id: actorId,
+    p_profile_id: input.id,
+    p_name: input.name,
+    p_role: input.role,
+    p_active: input.active,
+    p_branch_ids: input.branchIds,
+    p_home_branch_id: input.homeBranchId,
+    p_phone: input.phone ?? null,
+  });
+  if (error) throw error;
+}
+
+async function listAllAuthUsers(supabaseAdmin: any) {
+  const users: any[] = [];
+  const perPage = 1000;
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    users.push(...(data.users ?? []));
+    if ((data.users?.length ?? 0) < perPage) break;
+  }
+  return users;
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: getCorsHeaders(req) });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
 
-  let action = 'unknown';
+  let action = "unknown";
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) throw new Error('Authorization header missing');
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Authorization header missing");
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-
-    if (authError || !user) {
-      throw new Error(`Não autorizado: ${authError?.message || 'Token inválido ou expirado'}`);
-    }
+    if (authError || !user) throw new Error("Token inválido ou expirado.");
 
     const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('role, active')
-      .eq('id', user.id)
+      .from("profiles")
+      .select("role, active, is_global_admin")
+      .eq("id", user.id)
       .single();
-
     if (profileError) throw new Error(`Erro ao validar permissões: ${profileError.message}`);
-
-    if (!profile || profile.role !== 'ADMIN' || !profile.active) {
-      throw new Error('Acesso negado: Apenas administradores ativos podem realizar esta ação.');
+    if (!profile || profile.role !== "ADMIN" || !profile.active) {
+      throw new Error("Acesso negado: apenas administradores ativos.");
     }
 
+    const actor = profile as ActorProfile;
+    const actorBranches = await loadActorBranches(supabaseAdmin, user.id);
     const body = await req.json();
-    action = body.action;
-    const data = body.data;
-
-    let responseData: any = {};
+    action = cleanText(body?.action, 40);
+    const data = body?.data ?? {};
+    let responseData: unknown = {};
 
     switch (action) {
-      case 'list_users': {
-        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
-        if (listErr) throw listErr;
-
-        const { data: profiles, error: pErr } = await supabaseAdmin
-          .from('profiles')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (pErr) throw pErr;
-
-        const { data: profileBranches, error: pbErr } = await supabaseAdmin
-          .from('profile_branches')
-          .select('profile_id, branch_id');
-        if (pbErr) throw pbErr;
+      case "list_users": {
+        const [
+          authUsers,
+          { data: profiles, error: profilesError },
+          { data: links, error: linksError },
+          { data: couriers, error: couriersError },
+        ] = await Promise.all([
+          listAllAuthUsers(supabaseAdmin),
+          supabaseAdmin
+            .from("profiles")
+            .select("id, name, role, active, is_global_admin, home_branch_id, created_at")
+            .order("created_at", { ascending: false }),
+          supabaseAdmin.from("profile_branches").select("profile_id, branch_id"),
+          supabaseAdmin.from("couriers").select("profile_id, phone").not("profile_id", "is", null),
+        ]);
+        if (profilesError) throw profilesError;
+        if (linksError) throw linksError;
+        if (couriersError) throw couriersError;
 
         const branchIdsByProfile = new Map<string, string[]>();
-        for (const row of profileBranches ?? []) {
-          const list = branchIdsByProfile.get(row.profile_id) ?? [];
-          list.push(row.branch_id);
-          branchIdsByProfile.set(row.profile_id, list);
+        for (const row of links ?? []) {
+          const values = branchIdsByProfile.get(row.profile_id) ?? [];
+          values.push(row.branch_id);
+          branchIdsByProfile.set(row.profile_id, values);
         }
 
-        responseData = users.map(u => {
-          const profile = profiles.find(p => p.id === u.id);
-          return {
-            id: u.id,
-            email: u.email,
-            last_sign_in_at: u.last_sign_in_at,
-            created_at: u.created_at,
-            name: profile?.name || 'Sem nome',
-            role: profile?.role || 'ATTENDANT',
-            active: profile?.active ?? true,
-            branch_ids: branchIdsByProfile.get(u.id) ?? [],
-          };
+        const profileById = new Map<string, any>((profiles ?? []).map((item: any) => [item.id, item]));
+        const phoneByProfile = new Map<string, string | null>(
+          (couriers ?? []).map((item: { profile_id: string; phone: string | null }) => [item.profile_id, item.phone]),
+        );
+        responseData = authUsers.flatMap((authUser: any) => {
+          const target = profileById.get(authUser.id);
+          if (!target) return [];
+          const branchIds = branchIdsByProfile.get(authUser.id) ?? [];
+          const visible = actor.is_global_admin
+            || (!target.is_global_admin && branchIds.some((id) => actorBranches.has(id)));
+          if (!visible) return [];
+
+          const canManage = actor.is_global_admin
+            ? !target.is_global_admin
+            : target.role !== "ADMIN" && !target.is_global_admin && isSubset(branchIds, actorBranches);
+
+          return [{
+            id: authUser.id,
+            email: authUser.email,
+            last_sign_in_at: authUser.last_sign_in_at,
+            created_at: authUser.created_at,
+            name: target.name || "Sem nome",
+            role: target.role || "ATTENDANT",
+            active: target.active ?? true,
+            is_global_admin: target.is_global_admin ?? false,
+            home_branch_id: target.home_branch_id ?? null,
+            branch_ids: branchIds,
+            phone: phoneByProfile.get(authUser.id) ?? null,
+            can_manage: canManage,
+          }];
         }).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         break;
       }
 
-      case 'create_user': {
-        const email = cleanEmail(data?.email);
-        const password = typeof data?.password === 'string' ? data.password : '';
-        const name = cleanText(data?.name, 120);
-        const role = cleanRole(data?.role);
-        const active = typeof data?.active === 'boolean' ? data.active : true;
-        const branchIds = uniqueStrings(data?.branch_ids);
-        const requestedHomeBranchId = typeof data?.home_branch_id === 'string' ? data.home_branch_id : null;
-        const phone = cleanText(data?.phone, 20);
+      case "create_user": {
+        const email = cleanEmail(data.email);
+        const password = typeof data.password === "string" ? data.password : "";
+        const name = cleanText(data.name, 120);
+        const role = cleanRole(data.role);
+        const active = typeof data.active === "boolean" ? data.active : true;
+        const branchIds = uniqueStrings(data.branch_ids);
+        const requestedHome = typeof data.home_branch_id === "string" ? data.home_branch_id : "";
+        const phone = cleanText(data.phone, 20);
 
-        if (!email || !password || !name || !role) {
-          throw new Error('Campos obrigatórios ausentes ou inválidos (email, senha, nome, perfil).');
+        if (!email || !name || !role) throw new Error("E-mail, nome e papel são obrigatórios.");
+        if (password.length < 8) throw new Error("A senha deve ter pelo menos 8 caracteres.");
+        await assertRequestedBranches(supabaseAdmin, actor, actorBranches, role, branchIds);
+        const homeBranchId = requestedHome && branchIds.includes(requestedHome) ? requestedHome : branchIds[0];
+
+        const allowedDomain = (Deno.env.get("ALLOWED_USER_EMAIL_DOMAIN") || "").trim().toLowerCase();
+        const isLocal = /localhost|127\.0\.0\.1/.test(supabaseUrl);
+        if (allowedDomain && !isLocal && !email.endsWith(`@${allowedDomain}`)) {
+          throw new Error(`Apenas e-mails @${allowedDomain} podem ser cadastrados.`);
         }
 
-        if (role === 'COURIER' && branchIds.length !== 1) {
-          throw new Error('Selecione exatamente uma filial para o motoboy.');
-        }
-
-        if (password.length < 6) {
-          throw new Error('A senha deve ter pelo menos 6 caracteres.');
-        }
-
-        const allowedEmailDomain = (Deno.env.get('ALLOWED_USER_EMAIL_DOMAIN') || '').trim().toLowerCase();
-        const isLocalSupabase = /localhost|127\.0\.0\.1/.test(supabaseUrl);
-        if (allowedEmailDomain && !isLocalSupabase && !email.endsWith(`@${allowedEmailDomain}`)) {
-          throw new Error(`Apenas e-mails @${allowedEmailDomain} podem ser cadastrados.`);
-        }
-
-        if (role === 'ATTENDANT' && branchIds.length === 0) {
-          const { data: defaultBranch, error: branchErr } = await supabaseAdmin
-            .from('branches')
-            .select('id')
-            .eq('active', true)
-            .order('created_at', { ascending: true })
-            .limit(1)
-            .maybeSingle();
-
-          if (branchErr) throw branchErr;
-          if (!defaultBranch?.id) {
-            throw new Error('Selecione pelo menos uma filial para o atendente.');
-          }
-          branchIds.push(defaultBranch.id);
-        }
-
-        const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
           email,
           password,
           email_confirm: true,
-          user_metadata: { name }
+          user_metadata: { name },
         });
-
-        if (createErr) throw createErr;
+        if (createError) throw createError;
 
         try {
-          const homeBranchId = requestedHomeBranchId && branchIds.includes(requestedHomeBranchId)
-            ? requestedHomeBranchId
-            : branchIds[0] ?? null;
-
-          const { error: insErr } = await supabaseAdmin
-            .from('profiles')
-            .upsert({
-              id: newUser.user.id,
-              name,
-              role,
-              active,
-              home_branch_id: homeBranchId,
-            });
-
-          if (insErr) throw insErr;
-
-          if (branchIds.length > 0) {
-            const rows = branchIds.map((bid: string) => ({ profile_id: newUser.user.id, branch_id: bid }));
-            const { error: branchInsertErr } = await supabaseAdmin.from('profile_branches').insert(rows);
-            if (branchInsertErr) throw branchInsertErr;
-          }
-
-          if (role === 'COURIER') {
-            const { error: courierInsertErr } = await supabaseAdmin.from('couriers').insert({
-              branch_id: branchIds[0],
-              name,
-              phone: phone || null,
-              profile_id: newUser.user.id,
-              active,
-            });
-            if (courierInsertErr) throw courierInsertErr;
-          }
-
-          const { error: auditErr } = await supabaseAdmin.from('audit_logs').insert({
-            user_id: user.id,
-            action: 'USER_CREATED',
-            table_name: 'profiles',
-            record_id: newUser.user.id,
-            new_data: { email, name, role, active, branch_ids: branchIds }
+          await saveUserAccess(supabaseAdmin, user.id, {
+            id: created.user.id,
+            name,
+            role,
+            active,
+            branchIds,
+            homeBranchId,
+            phone,
           });
-          if (auditErr) throw auditErr;
-        } catch (err) {
-          await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
-          throw err;
+        } catch (error) {
+          await supabaseAdmin.auth.admin.deleteUser(created.user.id);
+          throw error;
         }
-
-        responseData = { id: newUser.user.id };
+        responseData = { id: created.user.id };
         break;
       }
 
-      case 'update_user': {
-        const { id, name, role, branch_ids, home_branch_id } = data;
-        if (!id || !name || !role) throw new Error('ID, nome e perfil são obrigatórios.');
+      case "update_user": {
+        const id = cleanText(data.id, 36);
+        const name = cleanText(data.name, 120);
+        const role = cleanRole(data.role);
+        const branchIds = uniqueStrings(data.branch_ids);
+        const requestedHome = typeof data.home_branch_id === "string" ? data.home_branch_id : "";
+        const phone = data.phone === undefined ? undefined : cleanText(data.phone, 20);
+        if (!id || !name || !role) throw new Error("ID, nome e papel são obrigatórios.");
 
-        const profileUpdate: Record<string, unknown> = { name, role };
-        if (home_branch_id !== undefined) profileUpdate.home_branch_id = home_branch_id;
+        const target = await loadTargetAccess(supabaseAdmin, id);
+        assertCanManageTarget(actor, actorBranches, target);
+        await assertRequestedBranches(supabaseAdmin, actor, actorBranches, role, branchIds);
+        const homeBranchId = requestedHome && branchIds.includes(requestedHome) ? requestedHome : branchIds[0];
 
-        const { error: updErr } = await supabaseAdmin
-          .from('profiles')
-          .update(profileUpdate)
-          .eq('id', id);
+        await saveUserAccess(supabaseAdmin, user.id, {
+          id,
+          name,
+          role,
+          active: target.active,
+          branchIds,
+          homeBranchId,
+          phone: phone ?? target.phone,
+        });
+        break;
+      }
 
-        if (updErr) throw updErr;
-
-        // Se branch_ids foi enviado, sincroniza profile_branches (delete + insert).
-        if (Array.isArray(branch_ids)) {
-          const { error: delErr } = await supabaseAdmin
-            .from('profile_branches').delete().eq('profile_id', id);
-          if (delErr) throw delErr;
-          if (branch_ids.length > 0) {
-            const rows = branch_ids.map((bid: string) => ({ profile_id: id, branch_id: bid }));
-            const { error: insErr } = await supabaseAdmin.from('profile_branches').insert(rows);
-            if (insErr) throw insErr;
-          }
-        }
-
-        await supabaseAdmin.from('audit_logs').insert({
+      case "reset_password": {
+        const id = cleanText(data.id, 36);
+        const password = typeof data.password === "string" ? data.password : "";
+        if (!id || password.length < 8) throw new Error("Informe uma senha com pelo menos 8 caracteres.");
+        const target = await loadTargetAccess(supabaseAdmin, id);
+        assertCanManageTarget(actor, actorBranches, target);
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(id, { password });
+        if (error) throw error;
+        await supabaseAdmin.from("audit_logs").insert({
           user_id: user.id,
-          action: 'USER_UPDATED',
-          table_name: 'profiles',
+          action: "USER_PASSWORD_RESET",
+          table_name: "profiles",
           record_id: id,
-          new_data: { name, role, branch_ids }
+          branch_id: target.branch_ids.length === 1 ? target.branch_ids[0] : null,
         });
         break;
       }
 
-      case 'reset_password': {
-        const { id, password } = data;
-        if (!id || !password) throw new Error('ID e nova senha são obrigatórios.');
-        if (password.length < 6) throw new Error('A senha deve ter pelo menos 6 caracteres.');
-
-        const { error: resetErr } = await supabaseAdmin.auth.admin.updateUserById(id, { password });
-        if (resetErr) throw resetErr;
-
-        await supabaseAdmin.from('audit_logs').insert({
-          user_id: user.id,
-          action: 'USER_PASSWORD_RESET',
-          table_name: 'profiles',
-          record_id: id
+      case "toggle_user_status": {
+        const id = cleanText(data.id, 36);
+        if (!id || typeof data.active !== "boolean") throw new Error("ID e status são obrigatórios.");
+        if (id === user.id && !data.active) throw new Error("Você não pode desativar a própria conta.");
+        const target = await loadTargetAccess(supabaseAdmin, id);
+        assertCanManageTarget(actor, actorBranches, target);
+        await saveUserAccess(supabaseAdmin, user.id, {
+          id,
+          name: target.name,
+          role: target.role,
+          active: data.active,
+          branchIds: target.branch_ids,
+          homeBranchId: target.home_branch_id ?? target.branch_ids[0],
+          phone: target.phone,
         });
         break;
       }
 
-      case 'toggle_user_status': {
-        const { id, active } = data;
-        if (!id || active === undefined) throw new Error('ID e status são obrigatórios.');
+      case "delete_user": {
+        const id = cleanText(data.id, 36);
+        if (!id) throw new Error("ID do usuário é obrigatório.");
+        if (id === user.id) throw new Error("Você não pode excluir a própria conta.");
+        const target = await loadTargetAccess(supabaseAdmin, id);
+        assertCanManageTarget(actor, actorBranches, target);
+        if (target.is_global_admin) throw new Error("Administrador global não pode ser excluído por este fluxo.");
 
-        if (id === user.id && !active) {
-          const { count, error: countErr } = await supabaseAdmin
-            .from('profiles')
-            .select('*', { count: 'exact', head: true })
-            .eq('role', 'ADMIN')
-            .eq('active', true);
-
-          if (countErr) throw countErr;
-          if (count && count <= 1) {
-            throw new Error('Você é o único administrador ativo. Não pode desativar seu próprio acesso.');
-          }
-        }
-
-        const { error: tglErr } = await supabaseAdmin
-          .from('profiles')
-          .update({ active })
-          .eq('id', id);
-
-        if (tglErr) throw tglErr;
-
-        await supabaseAdmin.from('audit_logs').insert({
+        await supabaseAdmin.from("audit_logs").insert({
           user_id: user.id,
-          action: active ? 'USER_ENABLED' : 'USER_DISABLED',
-          table_name: 'profiles',
-          record_id: id
-        });
-        break;
-      }
-
-      case 'delete_user': {
-        const { id } = data;
-        if (!id) throw new Error('ID do usuário é obrigatório.');
-
-        if (id === user.id) throw new Error('Você não pode excluir sua própria conta.');
-
-        const { count, error: countErr } = await supabaseAdmin
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .eq('role', 'ADMIN')
-          .eq('active', true);
-
-        if (countErr) throw countErr;
-
-        const { data: targetProfile } = await supabaseAdmin
-          .from('profiles')
-          .select('role, active')
-          .eq('id', id)
-          .single();
-
-        if (targetProfile?.role === 'ADMIN' && targetProfile?.active && count && count <= 1) {
-          throw new Error('Não é possível excluir o único administrador ativo.');
-        }
-
-        const { error: delProfileErr } = await supabaseAdmin
-          .from('profiles')
-          .delete()
-          .eq('id', id);
-
-        if (delProfileErr) throw delProfileErr;
-
-        const { error: delAuthErr } = await supabaseAdmin.auth.admin.deleteUser(id);
-        if (delAuthErr) throw delAuthErr;
-
-        await supabaseAdmin.from('audit_logs').insert({
-          user_id: user.id,
-          action: 'USER_DELETED',
-          table_name: 'profiles',
+          action: "USER_DELETED",
+          table_name: "profiles",
           record_id: id,
+          old_data: { name: target.name, role: target.role, branch_ids: target.branch_ids },
+          branch_id: target.branch_ids.length === 1 ? target.branch_ids[0] : null,
         });
+        const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
+        if (error) throw error;
         break;
       }
 
       default:
-        throw new Error('Ação inválida.');
+        throw new Error("Ação inválida.");
     }
 
     return new Response(JSON.stringify({ success: true, data: responseData }), {
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      status: 200
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+      status: 200,
     });
-
   } catch (error: any) {
-    console.error(`[manage-users] Erro na ação ${action}:`, error);
+    console.error(`[manage-users] Erro na ação ${action}:`, error?.message);
     return new Response(JSON.stringify({
       success: false,
-      error: error.message,
-      details: error.details || error.hint || null
+      error: error?.message ?? "Erro desconhecido.",
+      details: error?.details || error?.hint || null,
     }), {
-      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      status: 400
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+      status: /negado|autorizado|escopo/i.test(error?.message ?? "") ? 403 : 400,
     });
   }
 });

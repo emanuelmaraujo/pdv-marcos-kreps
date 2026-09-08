@@ -35,6 +35,7 @@ export function useUsers() {
     role: string;
     branch_ids?: string[];
     home_branch_id?: string | null;
+    phone?: string;
   }) => {
     await usersApi.updateUser(data);
     await reload();

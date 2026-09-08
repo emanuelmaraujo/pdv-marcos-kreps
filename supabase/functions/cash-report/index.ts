@@ -124,7 +124,7 @@ serve(async (req) => {
     // 2. Validate Admin role
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('role, active')
+      .select('role, active, is_global_admin')
       .eq('id', user.id)
       .single();
 
@@ -137,6 +137,23 @@ serve(async (req) => {
 
     // 3. Parse filters
     const { start_date, end_date, category_id, payment_method, branch_id, order_type, weekday } = await req.json();
+    let effectiveBranchId: string | null = branch_id || null;
+
+    if (!profile.is_global_admin) {
+      const { data: memberships, error: membershipsError } = await supabaseAdmin
+        .from('profile_branches')
+        .select('branch_id')
+        .eq('profile_id', user.id);
+      if (membershipsError) throw membershipsError;
+      const allowedBranchIds = (memberships ?? []).map((row: { branch_id: string }) => row.branch_id);
+      effectiveBranchId = effectiveBranchId || allowedBranchIds[0] || null;
+      if (!effectiveBranchId || !allowedBranchIds.includes(effectiveBranchId)) {
+        return new Response(JSON.stringify({ error: 'Filial fora do seu escopo administrativo.' }), {
+          headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+          status: 403,
+        });
+      }
+    }
 
     // 4. Query Orders
     // A API limita cada resposta a um bloco de linhas. Relatórios mensais ou
@@ -176,7 +193,7 @@ serve(async (req) => {
         if (start_date) query = query.gte('created_at', start_date);
         if (end_date) query = query.lte('created_at', end_date);
       }
-      if (branch_id) query = query.eq('branch_id', branch_id);
+      if (effectiveBranchId) query = query.eq('branch_id', effectiveBranchId);
       if (order_type && order_type !== 'ALL') query = query.eq('type', order_type);
       // Nota: filtro payment_method é aplicado depois, via tabela payments (suporte a split-bill)
       return query;
@@ -257,7 +274,7 @@ serve(async (req) => {
       .eq('active', true);
     // Produtos são próprios de cada filial. Sem este filtro, o painel de
     // "sem saída" mistura cardápios e cria falsos positivos.
-    if (branch_id) activeProductsQuery = activeProductsQuery.eq('branch_id', branch_id);
+    if (effectiveBranchId) activeProductsQuery = activeProductsQuery.eq('branch_id', effectiveBranchId);
     const { data: activeProducts, error: activeProductsError } = await activeProductsQuery;
     if (activeProductsError) throw activeProductsError;
 

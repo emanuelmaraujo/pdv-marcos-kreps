@@ -36,6 +36,23 @@ export interface DeliveryAddress {
 }
 export type OrderSource = 'ATTENDANT' | 'QR_CODE' | 'WHATSAPP' | 'APP';
 
+export interface OrderContextFilter {
+  order_types?: OrderType[];
+  order_sources?: OrderSource[];
+}
+
+export interface BranchPrinterSlot extends OrderContextFilter {
+  ip?: string;
+  port?: number;
+  enabled?: boolean;
+}
+
+export interface BranchWhatsAppTemplate extends OrderContextFilter {
+  template_name?: string;
+  language?: string;
+  enabled?: boolean;
+}
+
 // ─── Menu ─────────────────────────────────────────────────────────────────────
 
 export interface Category {
@@ -154,13 +171,13 @@ export interface Branch {
   active: boolean;
   address?: string;
   phone?: string;
-  printer_config?: Record<string, unknown>;
+  printer_config?: Record<string, BranchPrinterSlot>;
   packing_fee: number;
   ordering_enabled: boolean;
   ordering_start_time?: string;
   ordering_end_time?: string;
   whatsapp_enabled: boolean;
-  whatsapp_templates?: Record<string, { template_name?: string; language?: string; enabled?: boolean }>;
+  whatsapp_templates?: Record<string, BranchWhatsAppTemplate>;
   delivery_enabled: boolean;
   default_delivery_fee: number;
   monthly_revenue_goal?: number | null;

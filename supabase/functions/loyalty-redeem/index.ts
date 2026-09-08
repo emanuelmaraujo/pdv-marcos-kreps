@@ -82,8 +82,8 @@ serve(async (req) => {
     // Se order_id foi passado, valida que existe e pega branch_id
     let branchId: string | null = null;
     if (order_id) {
-      const { data: order } = await supabaseAdmin.from("orders").select("id, branch_id").eq("id", order_id).maybeSingle();
-      if (!order) throw new Error("Pedido informado não existe.");
+      const { data: order } = await supabaseClientAuth.from("orders").select("id, branch_id").eq("id", order_id).maybeSingle();
+      if (!order) throw new Error("Pedido informado não existe ou está fora das filiais autorizadas.");
       branchId = order.branch_id ?? null;
     }
 

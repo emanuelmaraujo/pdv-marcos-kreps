@@ -6,11 +6,15 @@
 // Quando ausente/undefined, segue o global.
 
 export type SectorKey = 'kitchen' | 'juice' | 'customer';
+export type OrderTypeKey = 'BALCAO' | 'VIAGEM' | 'ENTREGA';
+export type OrderSourceKey = 'ATTENDANT' | 'QR_CODE' | 'WHATSAPP' | 'APP';
 
 export interface BranchPrinterSlot {
   ip?: string;
   port?: number;
   enabled?: boolean;
+  order_types?: OrderTypeKey[];
+  order_sources?: OrderSourceKey[];
 }
 
 export type BranchPrinterConfig = Partial<Record<SectorKey, BranchPrinterSlot>>;
@@ -31,6 +35,12 @@ export function shouldPrint(
   globalEnabled: boolean,
   branchCfg: BranchPrinterConfig,
   sector: SectorKey,
+  orderType?: string | null,
+  orderSource?: string | null,
 ): boolean {
-  return globalEnabled && sectorEnabledOnBranch(branchCfg, sector);
+  if (!globalEnabled || !sectorEnabledOnBranch(branchCfg, sector)) return false;
+  const slot = branchCfg[sector];
+  if (Array.isArray(slot?.order_types) && (!orderType || !slot.order_types.includes(orderType as OrderTypeKey))) return false;
+  if (Array.isArray(slot?.order_sources) && (!orderSource || !slot.order_sources.includes(orderSource as OrderSourceKey))) return false;
+  return true;
 }

@@ -136,11 +136,27 @@ function getTopBarContext(pathname: string) {
     };
   }
 
-  if (pathname.startsWith("/app/usuarios")) {
+  if (pathname.startsWith("/app/configuracoes/usuarios") || pathname.startsWith("/app/usuarios")) {
     return {
       title: "Usuários",
       subtitle: "Acessos, perfis e operadores",
     };
+  }
+
+  if (pathname.startsWith("/app/configuracoes/filiais")) {
+    return { title: "Filiais", subtitle: "Operação, canais, impressão e regras por unidade" };
+  }
+
+  if (pathname.startsWith("/app/configuracoes/pagamentos")) {
+    return { title: "Taxas de pagamento", subtitle: "Custos de cartão e vigência por filial" };
+  }
+
+  if (pathname.startsWith("/app/configuracoes/auditoria")) {
+    return { title: "Histórico de alterações", subtitle: "Auditoria administrativa por filial" };
+  }
+
+  if (pathname.startsWith("/app/configuracoes/geral")) {
+    return { title: "Configurações gerais", subtitle: "Padrões globais e integrações da rede" };
   }
 
   if (pathname.startsWith("/app/configuracoes")) {
