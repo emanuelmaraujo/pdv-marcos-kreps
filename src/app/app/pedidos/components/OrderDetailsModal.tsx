@@ -496,6 +496,12 @@ export function OrderDetailsModal({ order, isOpen, onClose, onOrderUpdated, cate
                     )}
                     {!courierIdInput && (
                       <>
+                        {registeredCouriers.length > 0 && (
+                          <p className="rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-bg)] p-2.5 text-xs font-semibold text-[var(--status-warning)]">
+                            Entregador avulso não recebe este pedido no app &mdash; escolha um entregador
+                            cadastrado para ele ver a entrega em &ldquo;Minhas Entregas&rdquo;.
+                          </p>
+                        )}
                         <input
                           type="text"
                           className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-2.5 text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-300"
