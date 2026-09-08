@@ -2,6 +2,10 @@
 // zonas de entrega — restringe a escolha a uma lista fechada (em vez de texto
 // livre) pra evitar erro de digitação, que faria o bairro nunca bater com o
 // que o ViaCEP retorna na hora do pedido (ver resolveDeliveryFee).
+//
+// Por isso os nomes aqui são os que os Correios/ViaCEP usam no campo `bairro`,
+// e não os da região administrativa: nos CEPs do Riacho Fundo o retorno é
+// "Riacho Fundo I" / "Riacho Fundo II", com o numeral, nunca "Riacho Fundo".
 export const BRASILIA_NEIGHBORHOODS = [
   "Águas Claras",
   "Arniqueira",
@@ -27,7 +31,7 @@ export const BRASILIA_NEIGHBORHOODS = [
   "Planaltina",
   "Plano Piloto",
   "Recanto das Emas",
-  "Riacho Fundo",
+  "Riacho Fundo I",
   "Riacho Fundo II",
   "Samambaia",
   "Santa Maria",
