@@ -111,10 +111,10 @@ const SECTIONS: Array<{
 
 // Accent colors for section icons (cleaner than gradient headers)
 const SECTION_ACCENT: Record<string, { iconBg: string; iconColor: string; navActive: string }> = {
-  pedido:    { iconBg: "bg-blue-500/10",    iconColor: "text-blue-600",    navActive: "bg-blue-500/20 text-blue-200 border-l-2 border-blue-400" },
-  impressao: { iconBg: "bg-violet-500/10",  iconColor: "text-violet-600",  navActive: "bg-violet-500/20 text-violet-200 border-l-2 border-violet-400" },
-  whatsapp:  { iconBg: "bg-emerald-500/10", iconColor: "text-emerald-600", navActive: "bg-emerald-500/20 text-emerald-200 border-l-2 border-emerald-400" },
-  biometria: { iconBg: "bg-[var(--bg-subtle)]",    iconColor: "text-[var(--text-secondary)]",    navActive: "bg-white/10 text-white border-l-2 border-zinc-400" },
+  pedido:    { iconBg: "bg-[var(--status-info-bg)]", iconColor: "text-[var(--status-info)]", navActive: "" },
+  impressao: { iconBg: "bg-brand-red/10", iconColor: "text-brand-red", navActive: "" },
+  whatsapp:  { iconBg: "bg-[var(--status-success-bg)]", iconColor: "text-[var(--status-success)]", navActive: "" },
+  biometria: { iconBg: "bg-[var(--bg-subtle)]", iconColor: "text-[var(--text-secondary)]", navActive: "" },
 };
 
 function accentFor(id: SectionId): SettingsPanelAccent {
@@ -177,10 +177,6 @@ export default function GeneralSettingsView() {
   const { toasts, addToast, removeToast } = useToast();
   const { currentBranch } = useBranch();
   const { isGlobalAdmin, isLoading: userLoading } = useUser();
-
-  const publicOrderStatus = settings.public_ordering_enabled === "true" ? "Aberto" : "Pausado";
-  const printingStatus = settings.printing_enabled === "true" ? "Ativa" : "Pausada";
-  const whatsappStatus = settings.whatsapp_enabled === "true" ? "Ativo" : "Inativo";
 
   const savePayload = useMemo(() => ({
     ...settings,
@@ -389,109 +385,16 @@ export default function GeneralSettingsView() {
   }
 
   return (
-    <div className="min-h-full bg-[var(--bg-base)]">
+    <main className="mx-auto max-w-6xl space-y-5">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* ── Sidebar fixa (desktop) ──────────────────────────────────── */}
-      {/* Sidebar settings: no md começa na left-0 do conteúdo; no lg precisa offset do sidebar do app (240px = lg:left-60) */}
-      <aside className="fixed left-0 top-14 z-20 hidden h-[calc(100vh-3.5rem)] w-72 flex-col overflow-y-auto bg-[#1C1C1E] md:flex lg:left-60 border-r border-zinc-800/80">
-        {/* Identity */}
-        <div className="px-6 pt-6 pb-4">
-          <p className="text-[9px] font-black uppercase tracking-[0.15em] text-brand-red">Painel de controle</p>
-          <h1 className="mt-1.5 text-xl font-black text-white">Configurações</h1>
-          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-            Pedidos, impressão, notificações e autenticação.
-          </p>
-        </div>
-
-        {/* Branch badge */}
-        {currentBranch && (
-          <div className="mx-4 mb-4 overflow-hidden rounded-2xl bg-zinc-800/60 ring-1 ring-white/8">
-            <div className="flex items-center gap-3 px-4 py-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand-red/15 text-[11px] font-black text-brand-red ring-1 ring-brand-red/20">
-                {currentBranch.code}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-xs font-black text-white">{currentBranch.name}</p>
-                <p className="text-[10px] text-zinc-500">Configurações globais</p>
-              </div>
-            </div>
-            <Link
-              href="/app/configuracoes/filiais"
-              className="flex items-center justify-center border-t border-white/6 px-4 py-2.5 text-[11px] font-bold text-zinc-400 transition-colors hover:bg-white/5 hover:text-white"
-            >
-              Editar filial →
-            </Link>
-          </div>
-        )}
-
-        {/* Navigation */}
-        <nav className="flex-1 px-3 space-y-0.5">
-          {SECTIONS.map((section) => {
-            const Icon = section.icon;
-            const active = activeSection === section.id;
-            const accent = SECTION_ACCENT[section.id] ?? SECTION_ACCENT.pedido;
-            return (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => scrollToSection(section.id)}
-                className={`group flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-all duration-150 ${
-                  active
-                    ? "bg-white/10 shadow-sm ring-1 ring-white/10"
-                    : "hover:bg-white/5"
-                }`}
-              >
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all ${
-                  active ? `${accent.iconBg}` : "bg-zinc-800 group-hover:bg-zinc-700"
-                }`}>
-                  <Icon className={`h-4 w-4 transition-colors ${active ? accent.iconColor : "text-zinc-500 group-hover:text-zinc-400"}`} />
-                </span>
-                <span className="min-w-0">
-                  <span className={`block text-sm font-bold transition-colors ${active ? "text-white" : "text-zinc-300 group-hover:text-white"}`}>
-                    {section.title}
-                  </span>
-                  <span className={`block text-[10px] leading-tight transition-colors ${active ? "text-zinc-400" : "text-zinc-600"}`}>
-                    {section.description}
-                  </span>
-                </span>
-                {active && <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-brand-red" />}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Status */}
-        <div className="mx-4 mt-4 overflow-hidden rounded-2xl bg-zinc-800/40 ring-1 ring-white/6">
-          <p className="border-b border-white/6 px-4 py-2.5 text-[9px] font-black uppercase tracking-widest text-zinc-600">Status do sistema</p>
-          <div className="grid grid-cols-2 gap-px bg-white/6">
-            <StatPill label={`${settings.public_ordering_start_time}–${settings.public_ordering_end_time}`} value={publicOrderStatus} tone={settings.public_ordering_enabled === "true" ? "green" : "red"} />
-            <StatPill label={printWorkerStatus.lastSeen} value={`Impressora ${printWorkerStatus.value}`} tone={printWorkerStatus.tone} />
-            <StatPill label={`${settings.printer_host}:${settings.printer_port}`} value={printingStatus} tone={settings.printing_enabled === "true" ? "green" : "red"} />
-            <StatPill label={`${whatsappStats.pending} pendentes`} value={whatsappStatus} tone={settings.whatsapp_enabled === "true" ? "green" : "neutral"} />
-          </div>
-        </div>
-
-        {/* Save */}
-        <div className="p-4 pt-3">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-red px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-red/25 transition-all hover:bg-brand-red/90 active:scale-[0.98] disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Salvando..." : "Salvar alterações"}
-          </button>
-        </div>
-      </aside>
-
-      {/* ── Mobile header (sticky, dark) ─────────────────────────────── */}
-      <header className="sticky top-14 z-10 border-b border-zinc-800 bg-[#1C1C1E] md:hidden">
+      {/* Cabeçalho e navegação de domínios, compartilhados por mobile e desktop. */}
+      <header className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)]">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div>
             <p className="text-[9px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>
-            <h1 className="text-base font-black text-white">Configurações</h1>
+            <h1 className="text-lg font-bold text-[var(--text-primary)]">Padrões da rede</h1>
+            <p className="mt-0.5 hidden text-xs text-[var(--text-secondary)] sm:block">Pedido online, integrações e autenticação aplicados como padrão global.</p>
           </div>
           <button
             type="button"
@@ -506,14 +409,14 @@ export default function GeneralSettingsView() {
 
         {/* Branch indicator — mobile */}
         {currentBranch && (
-          <div className="flex items-center justify-between gap-2 border-t border-zinc-800 px-4 py-2">
+          <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-4 py-2">
             <div className="flex items-center gap-2">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-red/20 text-[9px] font-black text-brand-red">
                 {currentBranch.code}
               </span>
-              <p className="text-[11px] font-bold text-zinc-300">{currentBranch.name}</p>
+              <p className="text-[11px] font-bold text-[var(--text-secondary)]">{currentBranch.name}</p>
             </div>
-            <Link href="/app/configuracoes/filiais" className="text-[10px] font-bold text-zinc-500 hover:text-zinc-300">
+            <Link href="/app/configuracoes/filiais" className="text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)]">
               Editar →
             </Link>
           </div>
@@ -533,7 +436,7 @@ export default function GeneralSettingsView() {
                 className={`flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-all ${
                   active
                     ? `${accent.iconBg} ${accent.iconColor} ring-1 ring-inset ring-current/20`
-                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
+                    : "bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
                 <Icon className="h-3.5 w-3.5" />
@@ -546,8 +449,8 @@ export default function GeneralSettingsView() {
 
       {/* ── Conteúdo principal (mobile + desktop) ─────────────────────── */}
       {/* No md: sidebar settings tem 288px (w-72), offset o conteúdo */}
-      <div className="md:pl-72">
-        <div className="mx-auto max-w-2xl space-y-4 px-4 py-5 pb-32 md:max-w-none md:px-6 md:py-6 md:pb-8">
+      <div>
+        <div className="space-y-4 pb-24 md:pb-8">
 
         <div className="space-y-4">
           <SettingsPanel
@@ -903,6 +806,6 @@ export default function GeneralSettingsView() {
         </div>{/* end space-y-4 panels */}
         </div>{/* end content wrapper */}
       </div>{/* end md:pl-72 */}
-    </div>
+    </main>
   );
 }

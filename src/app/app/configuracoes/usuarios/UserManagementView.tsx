@@ -20,6 +20,7 @@ import { PasswordResetModal } from "@/app/app/usuarios/components/PasswordResetM
 import { BiometricEnrollModal } from "@/app/app/usuarios/components/BiometricEnrollModal";
 import { getInitials, getAvatarColor, formatLastSignIn } from "@/app/app/usuarios/utils";
 import { Users, UserCheck, ShieldCheck, Activity, Mail, Clock, KeyRound, Fingerprint, UserMinus, UserCog, Trash2 } from "lucide-react";
+import { SettingsBadge, SettingsPageHeader } from "../components/SettingsPageHeader";
 
 const PAGE_SIZE = 10;
 
@@ -224,7 +225,7 @@ export default function GestaoUsuarios() {
               title={hasEnrolledPasskey() ? "Digital vinculada ✓" : "Vincular digital / Face ID"}
               onClick={() => setIsBiometricModalOpen(true)}
               icon={Fingerprint}
-              className="text-indigo-600 hover:bg-indigo-500/10"
+              className="text-[var(--status-info)] hover:bg-[var(--status-info-bg)]"
             />
           )}
           {user.can_manage && <IconAction title="Redefinir senha" onClick={() => { setResetUser(user); setIsPasswordModalOpen(true); }} icon={KeyRound} className="text-[var(--text-secondary)] hover:bg-[var(--border)]" />}
@@ -234,7 +235,7 @@ export default function GestaoUsuarios() {
             icon={user.active ? UserMinus : UserCheck}
             className={user.active ? "text-[var(--text-secondary)] hover:bg-[var(--border)]" : "text-brand-amber hover:bg-brand-amber/10"}
           />}
-          {user.can_manage && <IconAction title="Editar" onClick={() => handleEdit(user)} icon={UserCog} className="text-brand-charcoal hover:bg-[var(--border)]" />}
+          {user.can_manage && <IconAction title="Editar" onClick={() => handleEdit(user)} icon={UserCog} className="text-[var(--text-primary)] hover:bg-[var(--border)]" />}
           {user.can_manage && user.id !== currentUserId && (
             <IconAction title="Excluir usuário" onClick={() => handleDelete(user)} icon={Trash2} className="text-red-500 hover:bg-[var(--status-danger-bg)]" />
           )}
@@ -244,13 +245,27 @@ export default function GestaoUsuarios() {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-subtle)]/50">
+    <main className="mx-auto max-w-6xl space-y-6">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <div className="p-6 space-y-6 flex-1 overflow-y-auto pb-32">
+      <SettingsPageHeader
+        eyebrow="Equipe e permissões"
+        title="Usuários e acessos"
+        description="Gerencie papéis, filiais autorizadas, credenciais e status da equipe com o menor privilégio necessário."
+        icon={Users}
+        meta={
+          <>
+            <SettingsBadge tone="success">{stats.active} ativos</SettingsBadge>
+            <SettingsBadge tone="warning">{stats.admins} administradores</SettingsBadge>
+            <SettingsBadge>{stats.total} usuários</SettingsBadge>
+          </>
+        }
+      />
+
+      <div className="space-y-6">
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
-          <Card className="bg-[var(--bg-surface)]/80 backdrop-blur-md border-[var(--border)] shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+        <section aria-label="Resumo da equipe" className="grid gap-3 sm:grid-cols-3">
+          <Card className="group relative overflow-hidden border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)] transition hover:shadow-[var(--elevation-2)]">
             <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
               <Users size={48} />
             </div>
@@ -263,32 +278,32 @@ export default function GestaoUsuarios() {
             </CardContent>
           </Card>
 
-          <Card className="bg-[var(--bg-surface)]/80 backdrop-blur-md border-[var(--border)] shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+          <Card className="group relative overflow-hidden border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)] transition hover:shadow-[var(--elevation-2)]">
             <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
               <UserCheck size={48} className="text-emerald-500" />
             </div>
             <CardContent className="p-4 flex flex-col items-start">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-3">
-                <UserCheck size={20} className="text-emerald-600" />
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--status-success-bg)]">
+                <UserCheck size={20} className="text-[var(--status-success)]" />
               </div>
-              <span className="text-2xl font-black text-emerald-600 leading-tight">{stats.active}</span>
+              <span className="text-2xl font-black leading-tight text-[var(--status-success)]">{stats.active}</span>
               <span className="text-xs text-[var(--text-muted)] font-bold uppercase tracking-wider">Ativos</span>
             </CardContent>
           </Card>
 
-          <Card className="bg-[var(--bg-surface)]/80 backdrop-blur-md border-[var(--border)] shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+          <Card className="group relative overflow-hidden border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)] transition hover:shadow-[var(--elevation-2)]">
             <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
               <ShieldCheck size={48} className="text-amber-500" />
             </div>
             <CardContent className="p-4 flex flex-col items-start">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center mb-3">
-                <ShieldCheck size={20} className="text-amber-600" />
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--status-warning-bg)]">
+                <ShieldCheck size={20} className="text-[var(--status-warning)]" />
               </div>
-              <span className="text-2xl font-black text-amber-600 leading-tight">{stats.admins}</span>
+              <span className="text-2xl font-black leading-tight text-[var(--status-warning)]">{stats.admins}</span>
               <span className="text-xs text-[var(--text-muted)] font-bold uppercase tracking-wider">Admins</span>
             </CardContent>
           </Card>
-        </div>
+        </section>
 
         <UserFilters
           search={search}
@@ -305,10 +320,10 @@ export default function GestaoUsuarios() {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between px-2">
-            <h3 className="text-sm font-black text-[var(--text-muted)] uppercase tracking-widest flex items-center gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-[var(--text-primary)]">
               <Activity size={14} />
-              Lista de Equipe
-            </h3>
+              Lista da equipe
+            </h2>
             <span className="text-xs text-[var(--text-muted)] font-medium">Exibindo {total} resultado{total === 1 ? "" : "s"}</span>
           </div>
 
@@ -365,7 +380,7 @@ export default function GestaoUsuarios() {
         currentUserEmail={currentUserEmail}
         onError={(message) => addToast("error", message)}
       />
-    </div>
+    </main>
   );
 }
 

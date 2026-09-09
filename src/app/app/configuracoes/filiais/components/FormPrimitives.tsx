@@ -105,7 +105,7 @@ export function FieldGroup({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm transition-shadow hover:shadow-md">
+    <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--elevation-1)] sm:p-5">
       {title && !Icon && <p className="text-[10.5px] font-black uppercase tracking-wider text-[var(--text-muted)]">{title}</p>}
       {title && Icon && (
         <div className="flex items-center justify-between gap-2">

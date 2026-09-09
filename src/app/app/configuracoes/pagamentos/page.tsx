@@ -28,6 +28,7 @@ import {
 } from "@/lib/api/payment-fees-api";
 import { calculatePaymentFees } from "@/lib/payment-fees";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { SettingsBadge, SettingsPageHeader } from "../components/SettingsPageHeader";
 
 type FeeForm = {
   provider: string;
@@ -267,25 +268,27 @@ export default function PaymentFeesPage() {
   }
 
   return (
-    <main className="min-h-full bg-[var(--bg-subtle)]/50 px-4 py-5 pb-28 sm:px-6 md:py-8">
+    <main className="mx-auto max-w-6xl space-y-6">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <div className="mx-auto max-w-6xl space-y-5">
-        <section className="flex flex-col gap-4 rounded-3xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-brand-red">Escopo da filial</p>
-            <h1 className="mt-1 text-2xl font-black text-[var(--text-primary)]">Taxas de cartão</h1>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              {currentBranch ? `Custos internos de ${currentBranch.name}. Não são acréscimos cobrados do cliente.` : "Selecione uma filial."}
-            </p>
-          </div>
-          <Button disabled={!currentBranchId} onClick={() => {
+      <SettingsPageHeader
+        eyebrow="Custos financeiros"
+        title="Pagamentos e taxas"
+        description={currentBranch ? `Configure os custos internos de ${currentBranch.name}. Estas regras não representam acréscimos cobrados do cliente.` : "Selecione uma filial para revisar as regras financeiras."}
+        icon={CreditCard}
+        meta={
+          <>
+            <SettingsBadge tone={defaultFlowComplete ? "success" : "warning"}>{defaultFlowComplete ? "Cobertura completa" : "Revisão necessária"}</SettingsBadge>
+            <SettingsBadge>{activeRules.length} regras ativas</SettingsBadge>
+          </>
+        }
+        action={<Button disabled={!currentBranchId} onClick={() => {
             setShowForm((value) => !value);
             setEditingRule(null);
             setForm(initialForm);
-          }} className="min-h-12 sm:shrink-0">
+          }} className="min-h-11 w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" /> {showForm ? "Fechar formulário" : "Nova regra"}
-          </Button>
-        </section>
+          </Button>}
+      />
 
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-3" aria-label="Cobertura das taxas do atendente e maquininha">
           {defaultCoverage.map((item) => (
@@ -298,50 +301,42 @@ export default function PaymentFeesPage() {
         </section>
 
         {!defaultFlowComplete ? (
-          <div className="flex gap-3 rounded-2xl border border-amber-300/50 bg-amber-50 p-4 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="flex gap-3 rounded-2xl border border-[var(--status-warning)]/25 bg-[var(--status-warning-bg)] p-4 text-[var(--status-warning)]">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
             <p className="text-sm leading-5"><strong>Fluxo padrão incompleto.</strong> Cadastre regras vigentes para MANUAL, presencial e bandeira ANY. Pagamentos sem correspondência serão marcados para revisão, sem inventar um custo.</p>
           </div>
         ) : null}
 
         {showForm && (
-          <form onSubmit={handleCreate} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm sm:p-6">
+          <form onSubmit={handleCreate} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-[var(--elevation-1)] sm:p-6">
             <div className="mb-5">
-              <h2 className="text-lg font-black text-[var(--text-primary)]">{editingRule ? "Editar regra contratual" : "Nova regra contratual"}</h2>
-              <p className="text-sm text-[var(--text-muted)]">Faixas e vigências não podem se sobrepor para a mesma adquirente.</p>
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">{editingRule ? "Editar regra contratual" : "Nova regra contratual"}</h2>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Defina o contexto, a condição financeira e a vigência. Regras equivalentes não podem se sobrepor.</p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Adquirente"><Input value={form.provider} onChange={(e) => setField("provider", e.target.value)} placeholder="Ex.: CIELO" /></Field>
-              <Field label="Canal"><Select value={form.channel} onChange={(e) => setField("channel", e.target.value as FeeForm["channel"])}><option value="IN_PERSON">Presencial</option><option value="ONLINE">Online</option></Select></Field>
-              <Field label="Bandeira"><Input value={form.cardBrand} onChange={(e) => setField("cardBrand", e.target.value)} placeholder="ANY, VISA, ELO..." /></Field>
-              <Field label="Tipo do pedido">
-                <Select value={form.orderType} onChange={(e) => setField("orderType", e.target.value as PaymentRuleOrderType)}>
-                  <option value="ANY">Todos os tipos</option><option value="BALCAO">No local</option><option value="VIAGEM">Viagem/retirada</option><option value="ENTREGA">Entrega</option>
-                </Select>
-              </Field>
-              <Field label="Origem da venda">
-                <Select value={form.orderSource} onChange={(e) => setField("orderSource", e.target.value as PaymentRuleOrderSource)}>
-                  <option value="ANY">Todas as origens</option><option value="ATTENDANT">Atendente / maquininha</option><option value="APP">Aplicativo / site</option><option value="QR_CODE">QR Code</option><option value="WHATSAPP">WhatsApp</option>
-                </Select>
-              </Field>
-              <Field label="Modalidade">
-                <Select value={form.method} onChange={(e) => {
-                  const method = e.target.value as CardPaymentMethod;
-                  setForm((previous) => ({ ...previous, method, installmentsFrom: "1", installmentsTo: "1" }));
-                }}>
-                  <option value="DEBIT_CARD">Débito</option>
-                  <option value="CREDIT_CARD">Crédito</option>
-                </Select>
-              </Field>
-              <Field label="Parcela inicial"><Input type="number" min="1" max="24" disabled={form.method === "DEBIT_CARD"} value={form.installmentsFrom} onChange={(e) => setField("installmentsFrom", e.target.value)} /></Field>
-              <Field label="Parcela final"><Input type="number" min="1" max="24" disabled={form.method === "DEBIT_CARD"} value={form.installmentsTo} onChange={(e) => setField("installmentsTo", e.target.value)} /></Field>
-              <Field label="Taxa percentual (%)"><Input inputMode="decimal" required value={form.percent} onChange={(e) => setField("percent", e.target.value)} placeholder="2,49" /></Field>
-              <Field label="Taxa fixa (R$)"><Input inputMode="decimal" value={form.fixed} onChange={(e) => setField("fixed", e.target.value)} /></Field>
-              <Field label="Antecipação (%)"><Input inputMode="decimal" value={form.anticipation} onChange={(e) => setField("anticipation", e.target.value)} /></Field>
-              <Field label="Recebimento (dias)"><Input type="number" min="0" max="365" required value={form.settlementDays} onChange={(e) => setField("settlementDays", e.target.value)} /></Field>
-              <Field label="Início da vigência"><Input type="date" required value={form.effectiveFrom} onChange={(e) => setField("effectiveFrom", e.target.value)} /></Field>
-              <Field label="Fim da vigência (opcional)"><Input type="date" min={form.effectiveFrom} value={form.effectiveTo} onChange={(e) => setField("effectiveTo", e.target.value)} /></Field>
-              <div className="sm:col-span-2"><Field label="Motivo da alteração"><Input minLength={3} required value={form.reason} onChange={(e) => setField("reason", e.target.value)} /></Field></div>
+            <div className="space-y-4">
+              <FormSection title="1. Contexto da venda" description="Onde e em qual situação esta taxa deve ser aplicada.">
+                <Field label="Adquirente"><Input value={form.provider} onChange={(e) => setField("provider", e.target.value)} placeholder="Ex.: CIELO" /></Field>
+                <Field label="Canal"><Select value={form.channel} onChange={(e) => setField("channel", e.target.value as FeeForm["channel"])}><option value="IN_PERSON">Presencial</option><option value="ONLINE">Online</option></Select></Field>
+                <Field label="Bandeira"><Input value={form.cardBrand} onChange={(e) => setField("cardBrand", e.target.value)} placeholder="ANY, VISA, ELO..." /></Field>
+                <Field label="Tipo do pedido"><Select value={form.orderType} onChange={(e) => setField("orderType", e.target.value as PaymentRuleOrderType)}><option value="ANY">Todos os tipos</option><option value="BALCAO">No local</option><option value="VIAGEM">Viagem/retirada</option><option value="ENTREGA">Entrega</option></Select></Field>
+                <Field label="Origem da venda"><Select value={form.orderSource} onChange={(e) => setField("orderSource", e.target.value as PaymentRuleOrderSource)}><option value="ANY">Todas as origens</option><option value="ATTENDANT">Atendente / maquininha</option><option value="APP">Aplicativo / site</option><option value="QR_CODE">QR Code</option><option value="WHATSAPP">WhatsApp</option></Select></Field>
+                <Field label="Modalidade"><Select value={form.method} onChange={(e) => { const method = e.target.value as CardPaymentMethod; setForm((previous) => ({ ...previous, method, installmentsFrom: "1", installmentsTo: "1" })); }}><option value="DEBIT_CARD">Débito</option><option value="CREDIT_CARD">Crédito</option></Select></Field>
+              </FormSection>
+
+              <FormSection title="2. Condição financeira" description="Informe exatamente o custo contratado com a adquirente.">
+                <Field label="Parcela inicial"><Input type="number" min="1" max="24" disabled={form.method === "DEBIT_CARD"} value={form.installmentsFrom} onChange={(e) => setField("installmentsFrom", e.target.value)} /></Field>
+                <Field label="Parcela final"><Input type="number" min="1" max="24" disabled={form.method === "DEBIT_CARD"} value={form.installmentsTo} onChange={(e) => setField("installmentsTo", e.target.value)} /></Field>
+                <Field label="Taxa percentual (%)"><Input inputMode="decimal" required value={form.percent} onChange={(e) => setField("percent", e.target.value)} placeholder="2,49" /></Field>
+                <Field label="Taxa fixa (R$)"><Input inputMode="decimal" value={form.fixed} onChange={(e) => setField("fixed", e.target.value)} /></Field>
+                <Field label="Antecipação (%)"><Input inputMode="decimal" value={form.anticipation} onChange={(e) => setField("anticipation", e.target.value)} /></Field>
+                <Field label="Recebimento (dias)"><Input type="number" min="0" max="365" required value={form.settlementDays} onChange={(e) => setField("settlementDays", e.target.value)} /></Field>
+              </FormSection>
+
+              <FormSection title="3. Vigência e auditoria" description="Defina quando a regra vale e documente o motivo da alteração.">
+                <Field label="Início da vigência"><Input type="date" required value={form.effectiveFrom} onChange={(e) => setField("effectiveFrom", e.target.value)} /></Field>
+                <Field label="Fim da vigência (opcional)"><Input type="date" min={form.effectiveFrom} value={form.effectiveTo} onChange={(e) => setField("effectiveTo", e.target.value)} /></Field>
+                <div className="sm:col-span-2"><Field label="Motivo da alteração"><Input minLength={3} required value={form.reason} onChange={(e) => setField("reason", e.target.value)} /></Field></div>
+              </FormSection>
             </div>
 
             <div className="mt-5 grid gap-4 rounded-2xl bg-[var(--bg-subtle)] p-4 sm:grid-cols-[1fr_2fr] sm:items-end">
@@ -358,7 +353,7 @@ export default function PaymentFeesPage() {
 
         <section className="space-y-3">
           <div className="flex items-center justify-between px-1">
-            <h2 className="text-lg font-black text-[var(--text-primary)]">Regras cadastradas</h2>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Regras cadastradas</h2>
             <span className="text-xs font-bold text-[var(--text-muted)]">{activeRules.length} ativa(s)</span>
           </div>
           {rules.length === 0 ? (
@@ -373,7 +368,6 @@ export default function PaymentFeesPage() {
             </div>
           )}
         </section>
-      </div>
     </main>
   );
 }
@@ -393,7 +387,7 @@ function RuleCard({ rule, onEdit, onToggle, onRemove }: { rule: PaymentFeeRule; 
     <article className={`rounded-2xl border bg-[var(--bg-surface)] p-5 shadow-sm ${rule.active ? "border-[var(--border)]" : "border-dashed border-[var(--border-strong)] opacity-70"}`}>
       <div className="flex items-start justify-between gap-3">
         <div><p className="text-xs font-black uppercase tracking-wide text-brand-red">{rule.payment_method === "DEBIT_CARD" ? "Débito" : "Crédito"} · {installments}</p><h3 className="mt-1 text-lg font-black text-[var(--text-primary)]">{rule.provider_code}</h3></div>
-        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${rule.active ? "bg-emerald-500/10 text-emerald-600" : "bg-[var(--bg-subtle)] text-[var(--text-muted)]"}`}>{rule.active ? "Ativa" : "Inativa"}</span>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${rule.active ? "bg-[var(--status-success-bg)] text-[var(--status-success)]" : "bg-[var(--bg-subtle)] text-[var(--text-muted)]"}`}>{rule.active ? "Ativa" : "Inativa"}</span>
       </div>
       <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
         <Metric label="Taxa" value={`${formatNumber(rule.fee_percent)}%`} />
@@ -414,8 +408,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block space-y-1.5"><span className="text-xs font-black uppercase tracking-wide text-[var(--text-muted)]">{label}</span>{children}</label>;
 }
 
+function FormSection({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)]/55 p-4">
+      <legend className="sr-only">{title}</legend>
+      <div className="mb-4">
+        <h3 className="text-sm font-bold text-[var(--text-primary)]">{title}</h3>
+        <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{description}</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    </fieldset>
+  );
+}
+
 function PreviewValue({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) {
-  return <div><p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">{label}</p><p className={`mt-1 text-sm font-black ${highlight ? "text-emerald-600" : "text-[var(--text-primary)]"}`}>{formatCurrency(value)}</p></div>;
+  return <div><p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">{label}</p><p className={`mt-1 text-sm font-black ${highlight ? "text-[var(--status-success)]" : "text-[var(--text-primary)]"}`}>{formatCurrency(value)}</p></div>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

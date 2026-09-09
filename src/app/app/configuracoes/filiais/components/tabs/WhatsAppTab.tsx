@@ -49,8 +49,8 @@ export function WhatsAppTab({
                 title={ev.label}
                 description={ev.hint}
                 icon={MessageSquare}
-                iconBg="bg-teal-100"
-                iconColor="text-teal-600"
+                iconBg="bg-[var(--status-success-bg)]"
+                iconColor="text-[var(--status-success)]"
                 action={
                   <SwitchKnob
                     checked={enabled}

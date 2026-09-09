@@ -27,8 +27,8 @@ export function ImpressaoTab({
             title={s.label}
             subtitle={s.sector}
             icon={Printer}
-            iconBg="bg-violet-100"
-            iconColor="text-violet-600"
+            iconBg="bg-brand-red/10"
+            iconColor="text-brand-red"
             action={
               <SwitchKnob
                 checked={enabled}

@@ -17,7 +17,7 @@ export function DadosTab({
 
   return (
     <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
-      <FieldGroup title="Identificação" icon={Building2} iconBg="bg-blue-100" iconColor="text-blue-600">
+      <FieldGroup title="Identificação" icon={Building2} iconBg="bg-[var(--status-info-bg)]" iconColor="text-[var(--status-info)]">
         <Field label="Nome da filial" required>
           <input
             type="text"
@@ -104,7 +104,7 @@ export function DadosTab({
       </FieldGroup>
 
       <div className="space-y-4">
-        <FieldGroup title="Contato" icon={Phone} iconBg="bg-amber-100" iconColor="text-amber-600">
+        <FieldGroup title="Contato" icon={Phone} iconBg="bg-[var(--status-warning-bg)]" iconColor="text-[var(--status-warning)]">
           <Field label="Telefone">
             <input
               type="tel"
@@ -126,7 +126,7 @@ export function DadosTab({
           </Field>
         </FieldGroup>
 
-        <FieldGroup title="Taxas e metas" icon={Wallet} iconBg="bg-emerald-100" iconColor="text-emerald-600">
+        <FieldGroup title="Taxas e metas" icon={Wallet} iconBg="bg-[var(--status-success-bg)]" iconColor="text-[var(--status-success)]">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Taxa de embalagem (R$)">
               <input

@@ -77,7 +77,7 @@ export function EntregaTab({
           </Field>
 
           <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
-          <FieldGroup title="Bairros atendidos" icon={MapPin} iconBg="bg-emerald-100" iconColor="text-emerald-600">
+          <FieldGroup title="Bairros atendidos" icon={MapPin} iconBg="bg-[var(--status-success-bg)]" iconColor="text-[var(--status-success)]">
             <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
               {zones.length > 0
                 ? 'Assim que há bairros cadastrados, entregas fora da lista são bloqueadas — o cliente vê que não atendemos aquele endereço.'
@@ -163,7 +163,7 @@ export function EntregaTab({
             )}
           </FieldGroup>
 
-          <FieldGroup title="Entregadores cadastrados" icon={Bike} iconBg="bg-indigo-100" iconColor="text-indigo-600">
+          <FieldGroup title="Entregadores cadastrados" icon={Bike} iconBg="bg-[var(--status-info-bg)]" iconColor="text-[var(--status-info)]">
             <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
               Opcional — o despacho sempre permite digitar um entregador avulso também.{" "}
               <Link href="/app/relatorios/entregadores" className="font-semibold text-brand-red hover:underline">

@@ -31,31 +31,31 @@ export function UserFilters({
   onAdd: () => void;
 }) {
   return (
-    <div className="sticky top-0 z-10 space-y-3 bg-[var(--bg-subtle)]/80 py-2 backdrop-blur-sm">
-      <div className="flex gap-3">
+    <section aria-label="Filtros de usuários" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--elevation-1)]">
+      <div className="flex gap-2 sm:gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
           <Input
             placeholder="Pesquisar por nome ou e-mail..."
-            className="pl-12 h-14 bg-[var(--bg-surface)] border-[var(--border)] rounded-2xl shadow-sm focus:ring-2 focus:ring-brand-red/20 focus:border-brand-red/50 transition-all text-base"
+            className="h-12 rounded-xl border-[var(--border)] bg-[var(--bg-subtle)] pl-11 text-base transition focus:border-brand-red/50 focus:ring-2 focus:ring-brand-red/20"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
         <Button
           onClick={onAdd}
-          className="h-14 px-6 bg-brand-charcoal hover:bg-zinc-800 text-white rounded-2xl shadow-lg shadow-[var(--border)] active:scale-95 flex items-center gap-2 group transition-all"
+          className="h-12 rounded-xl bg-brand-red px-4 text-white shadow-sm shadow-brand-red/20 active:scale-95 sm:px-5"
         >
           <UserPlus size={22} className="group-hover:scale-110 transition-transform" />
           <span className="font-bold hidden sm:inline">Adicionar</span>
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         <Select
           value={role}
           onChange={(e) => onRoleChange(e.target.value as RoleFilter)}
-          className="h-11 w-auto min-w-[9.5rem] rounded-xl bg-[var(--bg-surface)] text-sm font-bold"
+          className="h-11 w-full rounded-xl bg-[var(--bg-subtle)] text-sm font-semibold sm:w-auto sm:min-w-[9.5rem]"
         >
           <option value="ALL">Todos os papéis</option>
           <option value="ADMIN">Administrador</option>
@@ -65,7 +65,7 @@ export function UserFilters({
         <Select
           value={status}
           onChange={(e) => onStatusChange(e.target.value as StatusFilter)}
-          className="h-11 w-auto min-w-[8.5rem] rounded-xl bg-[var(--bg-surface)] text-sm font-bold"
+          className="h-11 w-full rounded-xl bg-[var(--bg-subtle)] text-sm font-semibold sm:w-auto sm:min-w-[8.5rem]"
         >
           <option value="ALL">Todos os status</option>
           <option value="ACTIVE">Ativos</option>
@@ -75,7 +75,7 @@ export function UserFilters({
           <Select
             value={branchId}
             onChange={(e) => onBranchChange(e.target.value)}
-            className="h-11 w-auto min-w-[9.5rem] rounded-xl bg-[var(--bg-surface)] text-sm font-bold"
+            className="col-span-2 h-11 w-full rounded-xl bg-[var(--bg-subtle)] text-sm font-semibold sm:w-auto sm:min-w-[9.5rem]"
           >
             <option value="ALL">Todas as filiais</option>
             {branches.map((b) => (
@@ -84,6 +84,6 @@ export function UserFilters({
           </Select>
         )}
       </div>
-    </div>
+    </section>
   );
 }

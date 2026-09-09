@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ShieldX } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 import { LoadingState } from "@/components/feedback/LoadingState";
+import { SettingsWorkspace } from "./components/SettingsWorkspace";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { isAdmin, isLoading } = useUser();
@@ -22,5 +23,5 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     );
   }
 
-  return children;
+  return <SettingsWorkspace>{children}</SettingsWorkspace>;
 }

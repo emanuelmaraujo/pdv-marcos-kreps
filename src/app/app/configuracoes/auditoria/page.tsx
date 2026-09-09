@@ -24,6 +24,7 @@ import {
   type AuditEvent,
 } from "@/lib/api/audit-logs-api";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { SettingsBadge, SettingsPageHeader } from "../components/SettingsPageHeader";
 
 const areaOptions: Array<{ value: AuditArea; label: string }> = [
   { value: "all", label: "Todas as áreas" },
@@ -107,23 +108,17 @@ export default function AuditHistoryPage() {
   }
 
   return (
-    <main className="min-h-full bg-[var(--bg-subtle)]/50 px-4 py-5 pb-28 sm:px-6 md:py-8">
-      <div className="mx-auto max-w-5xl space-y-5">
-        <section className="rounded-3xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-sm sm:p-7">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-red">Governança</p>
-              <h1 className="mt-2 text-2xl font-black tracking-tight text-[var(--text-primary)]">Histórico de alterações</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-                Consulte quem alterou acessos, filiais, taxas e configurações. O conteúdo sensível anterior e posterior não é enviado para esta tela.
-              </p>
-            </div>
-            <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 sm:flex">
-              <ShieldCheck className="h-5 w-5" />
-            </span>
-          </div>
+    <main className="mx-auto max-w-6xl space-y-6">
+      <SettingsPageHeader
+        eyebrow="Governança"
+        title="Histórico de alterações"
+        description="Acompanhe quem alterou acessos, filiais, taxas e padrões da rede. Valores sensíveis não são enviados para esta tela."
+        icon={ShieldCheck}
+        meta={<><SettingsBadge tone="info">Somente leitura</SettingsBadge><SettingsBadge>{total} registros encontrados</SettingsBadge></>}
+      />
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+        <section aria-label="Filtros da auditoria" className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--elevation-1)] sm:p-5">
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <label className="space-y-1.5 text-xs font-bold text-[var(--text-muted)]">
               Área
               <Select value={area} onChange={(event) => changeArea(event.target.value)} className="min-h-11">
@@ -166,7 +161,6 @@ export default function AuditHistoryPage() {
             Próxima <ChevronRight className="h-4 w-4" />
           </Button>
         </nav>
-      </div>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </main>
   );
