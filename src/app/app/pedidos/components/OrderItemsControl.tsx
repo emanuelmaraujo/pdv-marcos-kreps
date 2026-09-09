@@ -59,7 +59,7 @@ export function OrderItemsControl({
   const itemGroups = groupOrderItems(items, categoryLookup);
 
   const readyItems = items.filter((i) => i.status === 'READY');
-  const canDeliverReady = readyItems.length > 0;
+  const canDeliverReady = order.type !== 'ENTREGA' && readyItems.length > 0;
 
   const handleAdvance = async (item: OrderItem) => {
     const target = NEXT_QUICK[item.status];
@@ -138,7 +138,9 @@ export function OrderItemsControl({
             <ul className="space-y-2">
         {group.items.map((item) => {
           const meta = STATUS_META[item.status];
-          const next = NEXT_QUICK[item.status];
+          const next = order.type === 'ENTREGA' && item.status === 'READY'
+            ? null
+            : NEXT_QUICK[item.status];
           const isBusy = busyId === item.id;
 
           return (

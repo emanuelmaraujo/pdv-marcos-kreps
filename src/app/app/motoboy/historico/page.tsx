@@ -122,8 +122,7 @@ export default function MotoboyHistoricoPage() {
               Histórico e saldo
             </h1>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              {formatRangeLabel(range)} · todos os pedidos despachados para você, inclusive os
-              confirmados pelo atendente.
+              {formatRangeLabel(range)} · todos os pedidos despachados e confirmados por você.
             </p>
           </div>
           <Button
@@ -213,12 +212,14 @@ export default function MotoboyHistoricoPage() {
         </Card>
         <Card>
           <CardContent className="p-3">
-            <p className="text-xs text-[var(--text-secondary)]">Recebido do cliente</p>
+            <p className="text-xs text-[var(--text-secondary)]">Pagamento a conferir</p>
             <p className="mt-1 text-xl font-bold text-[var(--text-primary)]">
-              {formatCurrency(balance.collectedOnDelivery)}
+              {balance.pendingPaymentOrders}
             </p>
             <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
-              pedidos entregues sem pagamento na loja
+              {balance.pendingPaymentOrders === 1
+                ? "entrega ainda pendente no sistema"
+                : "entregas ainda pendentes no sistema"}
             </p>
           </CardContent>
         </Card>
@@ -275,12 +276,14 @@ export default function MotoboyHistoricoPage() {
                       {day.orders.map((order) => (
                         <FinishedOrderRow key={order.id} order={order} />
                       ))}
-                      {day.balance.collectedOnDelivery > 0 && (
+                      {day.balance.pendingPaymentOrders > 0 && (
                         <p className="pt-1 text-xs text-[var(--text-secondary)]">
-                          Recebido do cliente neste dia:{" "}
                           <strong className="text-[var(--text-primary)]">
-                            {formatCurrency(day.balance.collectedOnDelivery)}
-                          </strong>
+                            {day.balance.pendingPaymentOrders}
+                          </strong>{" "}
+                          {day.balance.pendingPaymentOrders === 1
+                            ? "pedido com pagamento a conferir neste dia"
+                            : "pedidos com pagamento a conferir neste dia"}
                         </p>
                       )}
                     </div>

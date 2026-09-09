@@ -43,8 +43,8 @@ serve(async (req) => {
       .eq("id", user.id)
       .single();
     if (!profile || !profile.active) throw new Error("Usuário sem profile ou inativo.");
-    if (profile.role !== "ADMIN" && profile.role !== "ATTENDANT" && profile.role !== "COURIER") {
-      throw new Error("Role não autorizada.");
+    if (profile.role !== "COURIER") {
+      throw new Error("Somente o motoboy responsável pode confirmar a entrega.");
     }
 
     const { order_id } = await req.json();
@@ -58,15 +58,14 @@ serve(async (req) => {
       .single();
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
 
-    if (profile.role === "COURIER") {
-      const { data: courier } = await supabaseAdmin
-        .from("couriers")
-        .select("id")
-        .eq("profile_id", user.id)
-        .single();
-      if (!courier || order.courier_id !== courier.id) {
-        throw new Error("Pedido não pertence a este entregador.");
-      }
+    const { data: courier } = await supabaseAdmin
+      .from("couriers")
+      .select("id")
+      .eq("profile_id", user.id)
+      .eq("active", true)
+      .single();
+    if (!courier || order.courier_id !== courier.id) {
+      throw new Error("Pedido não pertence a este entregador.");
     }
 
     if (order.type !== "ENTREGA") throw new Error("Só é possível confirmar entrega de pedidos do tipo ENTREGA.");
@@ -74,35 +73,11 @@ serve(async (req) => {
       throw new Error(`Transição inválida ${order.status} -> ENTREGUE. O pedido precisa estar SAIU_PARA_ENTREGA.`);
     }
 
-    const now = new Date().toISOString();
-
-    const { error: itemsErr } = await supabaseAdmin
-      .from("order_items")
-      .update({ status: "DELIVERED", delivered_at: now })
-      .eq("order_id", order.id)
-      .in("status", ["READY", "PENDING", "IN_PREPARATION"]);
-    if (itemsErr) throw new Error(`Erro ao marcar itens como DELIVERED: ${itemsErr.message}`);
-
-    const { error: updateErr } = await supabaseAdmin
-      .from("orders")
-      .update({ status: "ENTREGUE", delivered_at: now, delivery_delivered_at: now })
-      .eq("id", order.id);
-    if (updateErr) throw new Error(`Erro ao confirmar entrega: ${updateErr.message}`);
-
-    await supabaseAdmin.from("audit_logs").insert({
-      action: "ORDER_DELIVERY_CONFIRMED",
-      table_name: "orders",
-      record_id: order.id,
-      user_id: user.id,
-      branch_id: order.branch_id,
-      new_data: { from: "SAIU_PARA_ENTREGA", to: "ENTREGUE" },
-    });
-
-    const { data: orderAfter } = await supabaseAdmin
-      .from("orders")
-      .select("id, daily_number, status, delivered_at, delivery_delivered_at")
-      .eq("id", order.id)
-      .single();
+    const { data: orderAfter, error: confirmationErr } = await supabaseAdmin.rpc(
+      "confirm_courier_delivery_transactional",
+      { p_order_id: order.id, p_actor_id: user.id },
+    );
+    if (confirmationErr) throw new Error(confirmationErr.message);
 
     return new Response(
       JSON.stringify({ success: true, order: orderAfter }),

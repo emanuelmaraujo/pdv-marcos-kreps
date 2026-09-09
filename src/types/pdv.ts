@@ -199,6 +199,7 @@ export interface DeliveryZone {
 export interface Courier {
   id: string;
   branch_id: string;
+  profile_id?: string | null;
   name: string;
   phone?: string;
   active: boolean;

@@ -17,7 +17,7 @@
 //   4. RLS: motoboy só lê o próprio pedido via client direto (não vê o de outro).
 //   5. confirm-delivery: motoboy confirma a própria entrega.
 //   6. confirm-delivery: motoboy é rejeitado ao tentar confirmar entrega alheia.
-//   7. confirm-delivery: ADMIN/ATTENDANT continuam funcionando sem regressão.
+//   7. confirm-delivery: ADMIN/ATTENDANT são rejeitados; só o motoboy atribuído conclui.
 //   8. courier-delivery-report: ADMIN vê as métricas agregadas; COURIER é negado (403).
 //
 // Cria e limpa seus próprios dados de teste (usuários, couriers, pedidos)
@@ -76,7 +76,7 @@ async function createAdmin() {
   const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
   if (error) fail(`Falha ao criar ADMIN de teste: ${error.message}`);
   cleanup.authUserIds.push(data.user.id);
-  const { error: profErr } = await admin.from('profiles').insert({ id: data.user.id, name: 'Admin Teste F4', role: 'ADMIN', active: true });
+  const { error: profErr } = await admin.from('profiles').insert({ id: data.user.id, name: 'Admin Teste F4', role: 'ADMIN', active: true, is_global_admin: true });
   if (profErr) fail(`Falha ao criar profile do ADMIN: ${profErr.message}`);
   return loginAs(email, password);
 }
@@ -121,6 +121,15 @@ async function main() {
   if (!c2Res.data.success) fail(`Falha ao criar motoboy 2: ${c2Res.data.error}`);
   cleanup.authUserIds.push(c2Res.data.data.id);
 
+  const attendantEmail = `atendente.f4.${RUN_ID}@pdv.local`;
+  const attendantRes = await callFunction('manage-users', {
+    action: 'create_user',
+    data: { email: attendantEmail, password, name: 'Atendente Teste', role: 'ATTENDANT', branch_ids: [branch.id] },
+  }, adminJwt);
+  if (!attendantRes.data.success) fail(`Falha ao criar atendente: ${attendantRes.data.error}`);
+  cleanup.authUserIds.push(attendantRes.data.data.id);
+  const { jwt: attendantJwt } = await loginAs(attendantEmail, password);
+
   const { data: courier1Row, error: c1QErr } = await admin.from('couriers').select('id, profile_id').eq('profile_id', c1Res.data.data.id).single();
   if (c1QErr || !courier1Row) fail('couriers não ganhou linha nova com profile_id para o motoboy 1.');
   const { data: courier2Row, error: c2QErr } = await admin.from('couriers').select('id, profile_id').eq('profile_id', c2Res.data.data.id).single();
@@ -155,6 +164,7 @@ async function main() {
 
   // --- 3. RLS: motoboy 1 só enxerga o próprio pedido ---
   const { client: courier1Client, jwt: courier1Jwt } = await loginAs(courier1Email, password);
+  const { jwt: courier2Jwt } = await loginAs(courier2Email, password);
   const { data: visibleOrders, error: visErr } = await courier1Client.from('orders').select('id');
   if (visErr) fail(`Motoboy 1 não conseguiu ler os próprios pedidos: ${visErr.message}`);
   const ids = visibleOrders.map((o) => o.id);
@@ -173,10 +183,15 @@ async function main() {
   if (okConfirm.data.order.status !== 'ENTREGUE') fail(`Status após confirmar não é ENTREGUE: ${okConfirm.data.order.status}`);
   log('Fluxo 5 (confirm-delivery pelo motoboy)', 'Pedido vira ENTREGUE', 'Confirmado com sucesso');
 
-  // --- 6. Regressão: ADMIN ainda confirma entrega normalmente ---
+  // --- 6. Segurança: equipe da loja não conclui a corrida do motoboy ---
   const adminConfirm = await callFunction('confirm-delivery', { order_id: order2.id }, adminJwt);
-  if (!adminConfirm.data.success) fail(`Regressão: ADMIN não conseguiu mais confirmar entrega: ${adminConfirm.data.error}`);
-  log('Fluxo 6 (regressão ADMIN)', 'ADMIN confirma entrega sem regressão', 'Confirmado com sucesso');
+  if (adminConfirm.data.success) fail('ADMIN conseguiu confirmar uma entrega atribuída ao motoboy!');
+  const attendantConfirm = await callFunction('confirm-delivery', { order_id: order2.id }, attendantJwt);
+  if (attendantConfirm.data.success) fail('ATTENDANT conseguiu confirmar uma entrega atribuída ao motoboy!');
+  log('Fluxo 6 (equipe bloqueada)', 'ADMIN e ATTENDANT são rejeitados', 'Ambos rejeitados');
+
+  const courier2Confirm = await callFunction('confirm-delivery', { order_id: order2.id }, courier2Jwt);
+  if (!courier2Confirm.data.success) fail(`Motoboy 2 não conseguiu confirmar a própria entrega: ${courier2Confirm.data.error}`);
 
   // --- 7. courier-delivery-report: ADMIN vê métricas, COURIER é negado ---
   const start = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
