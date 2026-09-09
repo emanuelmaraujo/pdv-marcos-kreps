@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
+  Building2,
   Calculator,
   CheckCircle2,
   CreditCard,
@@ -72,6 +74,8 @@ const initialForm: FeeForm = {
 
 export default function PaymentFeesPage() {
   const { currentBranch, currentBranchId, isLoading: branchLoading, branches, setCurrentBranch } = useBranch();
+  const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { toasts, addToast, removeToast } = useToast();
   const [rules, setRules] = useState<PaymentFeeRule[]>([]);
@@ -136,6 +140,15 @@ export default function PaymentFeesPage() {
 
   function setField<K extends keyof FeeForm>(key: K, value: FeeForm[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
+  }
+
+  function handleBranchChange(branchId: string) {
+    setShowForm(false);
+    setEditingRule(null);
+    setForm(initialForm);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("branch", branchId);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   async function handleCreate(event: React.FormEvent) {
@@ -290,6 +303,31 @@ export default function PaymentFeesPage() {
           </Button>}
       />
 
+        <section className="grid gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--elevation-1)] sm:p-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)] lg:items-end" aria-labelledby="branch-scope-title">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--status-info-bg)] text-[var(--status-info)]">
+              <Building2 className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 id="branch-scope-title" className="text-sm font-bold text-[var(--text-primary)]">Filial destas taxas</h2>
+              <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">Toda regra pertence a uma única filial. Trocar a unidade atualiza a lista e fecha qualquer formulário em andamento.</p>
+              <label className="mt-3 block">
+                <span className="sr-only">Selecionar filial das taxas</span>
+                <Select value={currentBranchId ?? ""} onChange={(event) => handleBranchChange(event.target.value)} className="min-h-11 bg-[var(--bg-subtle)] font-bold">
+                  <option value="" disabled>Selecione uma filial</option>
+                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.code} · {branch.name}</option>)}
+                </Select>
+              </label>
+            </div>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">Vínculo atual</p>
+            <p className="mt-1 truncate text-sm font-bold text-[var(--text-primary)]">{currentBranch ? `${currentBranch.code} · ${currentBranch.name}` : "Nenhuma filial selecionada"}</p>
+            <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">As regras salvas aqui não afetam outras unidades.</p>
+            {currentBranchId ? <Link href={`/app/configuracoes/filiais/${currentBranchId}`} className="mt-2 inline-flex text-xs font-bold text-brand-red hover:underline">Abrir configurações da filial →</Link> : null}
+          </div>
+        </section>
+
         <section className="grid grid-cols-2 gap-3 lg:grid-cols-3" aria-label="Cobertura das taxas do atendente e maquininha">
           {defaultCoverage.map((item) => (
             <StatusCard
@@ -314,13 +352,44 @@ export default function PaymentFeesPage() {
               <p className="mt-1 text-sm text-[var(--text-secondary)]">Defina o contexto, a condição financeira e a vigência. Regras equivalentes não podem se sobrepor.</p>
             </div>
             <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-xl border border-[var(--status-info)]/20 bg-[var(--status-info-bg)] p-3.5 text-[var(--status-info)]">
+                <Building2 className="h-5 w-5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wide opacity-75">Regra vinculada à filial</p>
+                  <p className="truncate text-sm font-bold">{currentBranch ? `${currentBranch.code} · ${currentBranch.name}` : "Selecione uma filial antes de continuar"}</p>
+                </div>
+              </div>
               <FormSection title="1. Contexto da venda" description="Onde e em qual situação esta taxa deve ser aplicada.">
                 <Field label="Adquirente"><Input value={form.provider} onChange={(e) => setField("provider", e.target.value)} placeholder="Ex.: CIELO" /></Field>
                 <Field label="Canal"><Select value={form.channel} onChange={(e) => setField("channel", e.target.value as FeeForm["channel"])}><option value="IN_PERSON">Presencial</option><option value="ONLINE">Online</option></Select></Field>
                 <Field label="Bandeira"><Input value={form.cardBrand} onChange={(e) => setField("cardBrand", e.target.value)} placeholder="ANY, VISA, ELO..." /></Field>
-                <Field label="Tipo do pedido"><Select value={form.orderType} onChange={(e) => setField("orderType", e.target.value as PaymentRuleOrderType)}><option value="ANY">Todos os tipos</option><option value="BALCAO">No local</option><option value="VIAGEM">Viagem/retirada</option><option value="ENTREGA">Entrega</option></Select></Field>
-                <Field label="Origem da venda"><Select value={form.orderSource} onChange={(e) => setField("orderSource", e.target.value as PaymentRuleOrderSource)}><option value="ANY">Todas as origens</option><option value="ATTENDANT">Atendente / maquininha</option><option value="APP">Aplicativo / site</option><option value="QR_CODE">QR Code</option><option value="WHATSAPP">WhatsApp</option></Select></Field>
-                <Field label="Modalidade"><Select value={form.method} onChange={(e) => { const method = e.target.value as CardPaymentMethod; setForm((previous) => ({ ...previous, method, installmentsFrom: "1", installmentsTo: "1" })); }}><option value="DEBIT_CARD">Débito</option><option value="CREDIT_CARD">Crédito</option></Select></Field>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <ChoiceGroup
+                    label="Tipo do pedido"
+                    description="Permite que viagem, entrega e consumo no local tenham taxas diferentes."
+                    value={form.orderType}
+                    options={[{ value: "ANY", label: "Todos" }, { value: "BALCAO", label: "No local" }, { value: "VIAGEM", label: "Viagem" }, { value: "ENTREGA", label: "Entrega" }]}
+                    onChange={(value) => setField("orderType", value as PaymentRuleOrderType)}
+                  />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <ChoiceGroup
+                    label="Origem da cobrança"
+                    description="Escolha Atendente/maquininha quando a taxa física for diferente do pedido feito pelo cliente."
+                    value={form.orderSource}
+                    options={[{ value: "ANY", label: "Todas" }, { value: "ATTENDANT", label: "Atendente / maquininha" }, { value: "APP", label: "App / site" }, { value: "QR_CODE", label: "QR Code" }, { value: "WHATSAPP", label: "WhatsApp" }]}
+                    onChange={(value) => setField("orderSource", value as PaymentRuleOrderSource)}
+                  />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <ChoiceGroup
+                    label="Modalidade"
+                    description="Débito usa uma parcela; crédito permite configurar a faixa de parcelas."
+                    value={form.method}
+                    options={[{ value: "DEBIT_CARD", label: "Débito" }, { value: "CREDIT_CARD", label: "Crédito" }]}
+                    onChange={(value) => { const method = value as CardPaymentMethod; setForm((previous) => ({ ...previous, method, installmentsFrom: "1", installmentsTo: "1" })); }}
+                  />
+                </div>
               </FormSection>
 
               <FormSection title="2. Condição financeira" description="Informe exatamente o custo contratado com a adquirente.">
@@ -417,6 +486,46 @@ function FormSection({ title, description, children }: { title: string; descript
         <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{description}</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    </fieldset>
+  );
+}
+
+function ChoiceGroup({
+  label,
+  description,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="text-xs font-black uppercase tracking-wide text-[var(--text-muted)]">{label}</legend>
+      <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{description}</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {options.map((option) => {
+          const selected = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              aria-pressed={selected}
+              className={`min-h-10 rounded-xl border px-3 text-xs font-bold transition-colors ${selected
+                ? "border-brand-red bg-brand-red/10 text-brand-red ring-1 ring-brand-red/15"
+                : "border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-subtle)]"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
     </fieldset>
   );
 }

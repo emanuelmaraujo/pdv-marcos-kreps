@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bike, Check, ChevronRight, MessageSquare, Power } from "lucide-react";
+import { Bike, Check, ChevronRight, CreditCard, MessageSquare, Power } from "lucide-react";
 import { Branch } from "@/types/pdv";
 import { TYPE_OPTIONS, avatarStyleFor } from "../utils";
 
@@ -43,18 +43,27 @@ export function BranchListItem({
         </span>
         <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform group-hover:translate-x-0.5" />
       </Link>
-      <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--bg-subtle)]/60 px-4 py-2.5">
+      <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--bg-subtle)]/60 px-4 py-2.5">
         <span className="text-[11px] font-medium text-[var(--text-muted)]">
           {branch.ordering_enabled ? 'Aceitando pedidos' : 'Pedidos pausados'}
         </span>
-        <button
-          type="button"
-          onClick={onToggleActive}
-          className={`flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors ${branch.active ? 'text-[var(--status-success)] hover:bg-[var(--status-success-bg)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface)]'}`}
-          aria-label={branch.active ? `Desativar ${branch.name}` : `Reativar ${branch.name}`}
-        >
-          <Power className="h-3.5 w-3.5" /> {branch.active ? 'Desativar' : 'Reativar'}
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            href={`/app/configuracoes/pagamentos?branch=${branch.id}`}
+            className="flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-surface)] hover:text-brand-red"
+            aria-label={`Configurar taxas de ${branch.name}`}
+          >
+            <CreditCard className="h-3.5 w-3.5" /> Taxas
+          </Link>
+          <button
+            type="button"
+            onClick={onToggleActive}
+            className={`flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors ${branch.active ? 'text-[var(--status-success)] hover:bg-[var(--status-success-bg)]' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface)]'}`}
+            aria-label={branch.active ? `Desativar ${branch.name}` : `Reativar ${branch.name}`}
+          >
+            <Power className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{branch.active ? 'Desativar' : 'Reativar'}</span>
+          </button>
+        </div>
       </div>
     </article>
   );

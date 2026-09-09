@@ -24,7 +24,7 @@ export function SettingsPageHeader({
           </span>
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-brand-red">{eyebrow}</p>
-            <h2 className="mt-1 text-xl font-bold tracking-tight text-[var(--text-primary)] sm:text-2xl">{title}</h2>
+            <h1 className="mt-1 text-xl font-bold tracking-tight text-[var(--text-primary)] sm:text-2xl">{title}</h1>
             <p className="mt-1.5 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">{description}</p>
             {meta ? <div className="mt-3 flex flex-wrap gap-2">{meta}</div> : null}
           </div>
