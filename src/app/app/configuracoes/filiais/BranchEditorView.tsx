@@ -3,7 +3,7 @@
 import { useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { Bike, Building2, Clock, CreditCard, Loader2, MessageSquare, Printer, ShoppingBag, X } from "lucide-react";
+import { ArrowLeft, Bike, Building2, Clock, CreditCard, Loader2, MessageSquare, Printer } from "lucide-react";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { TabbedForm, type TabbedFormTab } from "@/components/ui/TabbedForm";
 import { useBranchEditor } from "@/hooks/useBranchEditor";
@@ -13,6 +13,7 @@ import { EntregaTab } from "./components/tabs/EntregaTab";
 import { ImpressaoTab } from "./components/tabs/ImpressaoTab";
 import { WhatsAppTab } from "./components/tabs/WhatsAppTab";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { SettingsBadge, SettingsPageHeader } from "../components/SettingsPageHeader";
 
 const TAB_ORDER = ["dados", "horarios", "entrega", "impressao", "whatsapp"];
 
@@ -99,75 +100,60 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
     );
   }
 
-  const statusPills: { label: string; tone: "success" | "warning" | "info" | "neutral"; icon: typeof Building2 }[] = [
+  const statusPills: { label: string; tone: "success" | "warning" | "info" | "neutral" }[] = [
     editor.editing.active !== false
-      ? { label: "Ativa", tone: "success", icon: Building2 }
-      : { label: "Inativa", tone: "neutral", icon: Building2 },
+      ? { label: "Ativa", tone: "success" }
+      : { label: "Inativa", tone: "neutral" },
     editor.editing.ordering_enabled !== false
-      ? { label: "Pedidos online", tone: "success", icon: ShoppingBag }
-      : { label: "Pedidos offline", tone: "warning", icon: ShoppingBag },
+      ? { label: "Pedidos online", tone: "success" }
+      : { label: "Pedidos offline", tone: "warning" },
     editor.editing.delivery_enabled
-      ? { label: "Entrega ligada", tone: "info", icon: Bike }
-      : { label: "Sem entrega", tone: "neutral", icon: Bike },
+      ? { label: "Entrega ligada", tone: "info" }
+      : { label: "Sem entrega", tone: "neutral" },
     editor.editing.whatsapp_enabled !== false
-      ? { label: "WhatsApp ligado", tone: "success", icon: MessageSquare }
-      : { label: "WhatsApp desligado", tone: "neutral", icon: MessageSquare },
+      ? { label: "WhatsApp ligado", tone: "success" }
+      : { label: "WhatsApp desligado", tone: "neutral" },
   ];
 
-  const PILL_TONE_CLS: Record<string, string> = {
-    success: "bg-[var(--status-success-bg)] text-[var(--status-success)]",
-    warning: "bg-[var(--status-warning-bg)] text-[var(--status-warning)]",
-    info: "bg-[var(--status-info-bg)] text-[var(--status-info)]",
-    neutral: "bg-[var(--status-neutral-bg)] text-[var(--status-neutral)]",
-  };
-
-  const header = (
-    <header className="border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-4 sm:px-5">
-      <div className="flex items-center gap-2">
-        <Building2 className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
-        <h1 className="min-w-0 flex-1 truncate text-sm font-black text-[var(--text-primary)]">
-          {branchId ? `Editar — ${editor.editing.name || "filial"}` : "Nova filial"}
-        </h1>
-        {branchId && (
+  const pageHeader = (
+    <SettingsPageHeader
+      eyebrow={branchId ? "Configuração da unidade" : "Estrutura da operação"}
+      title={branchId ? editor.editing.name || "Editar filial" : "Nova filial"}
+      description={branchId
+        ? "Centralize os dados operacionais desta unidade. As alterações ficam isoladas nesta filial e as integrações podem herdar os padrões da rede."
+        : "Cadastre a identidade da unidade primeiro; depois configure horários, entrega, impressão e WhatsApp no mesmo fluxo."}
+      icon={Building2}
+      meta={branchId ? statusPills.map((pill) => (
+        <SettingsBadge key={pill.label} tone={pill.tone}>{pill.label}</SettingsBadge>
+      )) : <SettingsBadge tone="info">Cadastro guiado em 5 etapas</SettingsBadge>}
+      action={
+        <div className="grid grid-cols-2 gap-2 sm:flex">
           <Link
-            href={`/app/configuracoes/pagamentos?branch=${branchId}`}
-            className="flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--bg-subtle)] px-3 text-xs font-bold text-[var(--text-secondary)] hover:text-brand-red"
+            href="/app/configuracoes/filiais"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
           >
-            <CreditCard className="h-4 w-4" />
-            <span className="hidden sm:inline">Taxas</span>
+            <ArrowLeft className="h-4 w-4" /> Voltar
           </Link>
-        )}
-        <Link
-          href="/app/configuracoes/filiais"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
-          aria-label="Voltar para a lista de filiais"
-        >
-          <X className="h-4 w-4" />
-        </Link>
-      </div>
-      {branchId && (
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {statusPills.map((pill) => (
-            <span
-              key={pill.label}
-              className={`flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold ${PILL_TONE_CLS[pill.tone]}`}
+          {branchId ? (
+            <Link
+              href={`/app/configuracoes/pagamentos?branch=${branchId}`}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand-red px-4 text-sm font-bold text-white transition-colors hover:bg-brand-red/90"
             >
-              <pill.icon className="h-3 w-3" strokeWidth={2} />
-              {pill.label}
-            </span>
-          ))}
+              <CreditCard className="h-4 w-4" /> Taxas da filial
+            </Link>
+          ) : null}
         </div>
-      )}
-    </header>
+      }
+    />
   );
 
   return (
-    <main className="mx-auto max-w-6xl">
+    <main className="mx-auto max-w-6xl space-y-5">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+      {pageHeader}
 
       <TabbedForm
         variant="page"
-        header={header}
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={handleTabChange}

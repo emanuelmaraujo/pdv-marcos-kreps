@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState, type ElementType } from "react";
 import Link from "next/link";
-import { useBranch } from "@/contexts/BranchContext";
 import { useUser } from "@/contexts/UserContext";
 import {
   AlertTriangle,
   Clock,
   Fingerprint,
+  Globe2,
   Info,
   Loader2,
   MessageCircle,
@@ -30,6 +30,7 @@ import { SettingsPanel, type SettingsPanelAccent } from "@/components/ui/Setting
 import { settingsApi } from "@/lib/api/settings-api";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { branchesAdminApi } from "@/lib/api/branches-admin-api";
+import { SettingsBadge, SettingsPageHeader } from "../components/SettingsPageHeader";
 
 type SettingsState = {
   printing_enabled: string;
@@ -175,7 +176,6 @@ export default function GeneralSettingsView() {
   });
   const [branchOverrides, setBranchOverrides] = useState({ printer: 0, whatsapp: 0, total: 0 });
   const { toasts, addToast, removeToast } = useToast();
-  const { currentBranch } = useBranch();
   const { isGlobalAdmin, isLoading: userLoading } = useUser();
 
   const savePayload = useMemo(() => ({
@@ -388,42 +388,29 @@ export default function GeneralSettingsView() {
     <main className="mx-auto max-w-6xl space-y-5">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* Cabeçalho e navegação de domínios, compartilhados por mobile e desktop. */}
-      <header className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)]">
-        <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-widest text-brand-red">Painel de controle</p>
-            <h1 className="text-lg font-bold text-[var(--text-primary)]">Padrões da rede</h1>
-            <p className="mt-0.5 hidden text-xs text-[var(--text-secondary)] sm:block">Pedido online, integrações e autenticação aplicados como padrão global.</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-brand-red px-3.5 py-2 text-xs font-black text-white transition-all active:scale-95 disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Salvar
-          </button>
-        </div>
+      <SettingsPageHeader
+        eyebrow="Administração da rede"
+        title="Configurações gerais"
+        description="Defina os padrões usados por toda a operação. Cada filial pode sobrescrever impressão e WhatsApp sem alterar as demais unidades."
+        icon={Globe2}
+        meta={
+          <>
+            <SettingsBadge tone="info">Escopo global</SettingsBadge>
+            <SettingsBadge>{branchOverrides.total} filial(is)</SettingsBadge>
+            <SettingsBadge tone={branchOverrides.printer + branchOverrides.whatsapp > 0 ? "warning" : "success"}>
+              {branchOverrides.printer + branchOverrides.whatsapp} personalizações locais
+            </SettingsBadge>
+          </>
+        }
+        action={
+          <Button onClick={handleSave} loading={saving} className="min-h-11 w-full gap-2 sm:w-auto">
+            <Save className="h-4 w-4" /> Salvar padrões
+          </Button>
+        }
+      />
 
-        {/* Branch indicator — mobile */}
-        {currentBranch && (
-          <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-4 py-2">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-brand-red/20 text-[9px] font-black text-brand-red">
-                {currentBranch.code}
-              </span>
-              <p className="text-[11px] font-bold text-[var(--text-secondary)]">{currentBranch.name}</p>
-            </div>
-            <Link href="/app/configuracoes/filiais" className="text-[10px] font-bold text-[var(--text-muted)] hover:text-[var(--text-primary)]">
-              Editar →
-            </Link>
-          </div>
-        )}
-
-        {/* Mobile section tabs */}
-        <nav className="-mx-0 flex gap-1.5 overflow-x-auto px-3 pb-3 pt-2">
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-2 shadow-[var(--elevation-1)]" aria-label="Áreas das configurações gerais">
+        <nav className="hide-scrollbar flex gap-2 overflow-x-auto">
           {SECTIONS.map((section) => {
             const Icon = section.icon;
             const active = activeSection === section.id;
@@ -433,19 +420,25 @@ export default function GeneralSettingsView() {
                 key={section.id}
                 type="button"
                 onClick={() => scrollToSection(section.id)}
-                className={`flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold transition-all ${
+                aria-current={active ? "page" : undefined}
+                className={`group flex min-h-14 min-w-[11rem] flex-1 shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
                   active
-                    ? `${accent.iconBg} ${accent.iconColor} ring-1 ring-inset ring-current/20`
-                    : "bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    ? `${accent.iconBg} ${accent.iconColor} ring-1 ring-inset ring-current/15`
+                    : "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
-                <span>{section.title}</span>
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${active ? "bg-[var(--bg-surface)]/80" : "bg-[var(--bg-subtle)]"}`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-bold">{section.title}</span>
+                  <span className={`mt-0.5 block truncate text-[10px] font-medium ${active ? "opacity-75" : "text-[var(--text-muted)]"}`}>{section.description}</span>
+                </span>
               </button>
             );
           })}
         </nav>
-      </header>
+      </section>
 
       {/* ── Conteúdo principal (mobile + desktop) ─────────────────────── */}
       {/* No md: sidebar settings tem 288px (w-72), offset o conteúdo */}
