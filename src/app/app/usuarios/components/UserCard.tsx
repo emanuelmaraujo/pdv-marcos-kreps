@@ -27,7 +27,7 @@ export function UserCard({
 }) {
   return (
     <Card
-      className={`group relative overflow-hidden bg-[var(--bg-surface)] border-[var(--border)] shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 rounded-3xl ${!user.active ? "opacity-80" : ""}`}
+      className={`group relative overflow-hidden rounded-2xl border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)] transition hover:shadow-[var(--elevation-2)] ${!user.active ? "opacity-80" : ""}`}
     >
       {!user.active && <div className="absolute inset-0 bg-[var(--bg-subtle)]/40 pointer-events-none" />}
 
@@ -68,11 +68,11 @@ export function UserCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
+        <div className="grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-3 sm:flex sm:items-center">
           {user.id === currentUserId && webAuthnSupported && (
             <button
               onClick={onOpenBiometric}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 active:scale-95 transition-all"
+              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--status-info)]/20 bg-[var(--status-info-bg)] text-[var(--status-info)] transition active:scale-95"
               title={hasPasskey ? "Digital vinculada ✓" : "Vincular digital / Face ID"}
             >
               <Fingerprint className="w-4 h-4" />
@@ -81,7 +81,7 @@ export function UserCard({
           )}
           {user.can_manage && <button
             onClick={onOpenPasswordReset}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-secondary)] active:scale-95 transition-all"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] transition active:scale-95"
             title="Redefinir senha"
           >
             <KeyRound className="w-4 h-4" />
@@ -89,7 +89,7 @@ export function UserCard({
           </button>}
           {user.can_manage && <button
             onClick={onToggleStatus}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl transition-all border ${
+            className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border transition ${
               user.active
                 ? "bg-[var(--bg-subtle)] border-[var(--border)] text-[var(--text-secondary)] active:scale-95"
                 : "bg-brand-amber/10 border-brand-amber/20 text-brand-amber active:scale-95"
@@ -101,7 +101,7 @@ export function UserCard({
           </button>}
           {user.can_manage && <button
             onClick={onEdit}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)] text-[var(--text-primary)] active:scale-95 transition-all"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-primary)] transition active:scale-95"
             title="Editar"
           >
             <UserCog className="w-4 h-4" />
@@ -110,7 +110,7 @@ export function UserCard({
           {user.can_manage && user.id !== currentUserId && (
             <button
               onClick={onDelete}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--status-danger-bg)] border border-[var(--status-danger)]/20 text-[var(--status-danger)] active:scale-95 transition-all"
+              className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--status-danger)]/20 bg-[var(--status-danger-bg)] text-[var(--status-danger)] transition active:scale-95"
               title="Excluir usuário"
             >
               <Trash2 className="w-4 h-4" />

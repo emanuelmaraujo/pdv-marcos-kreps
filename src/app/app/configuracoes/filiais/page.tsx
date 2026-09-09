@@ -7,10 +7,11 @@ import { branchesAdminApi } from '@/lib/api/branches-admin-api';
 import { useBranch } from '@/contexts/BranchContext';
 import { Button } from '@/components/ui/Button';
 import { ToastContainer, useToast } from '@/components/ui/Toast';
-import { Loader2, Plus } from 'lucide-react';
+import { Building2, Plus } from 'lucide-react';
 import { BranchListItem } from './components/BranchListItem';
 import { getFriendlyErrorMessage } from '@/lib/errors/messages';
 import { useUser } from '@/contexts/UserContext';
+import { SettingsBadge, SettingsPageHeader } from '../components/SettingsPageHeader';
 
 export default function FiliaisPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -18,6 +19,8 @@ export default function FiliaisPage() {
   const { currentBranchId, refresh: refreshCtx } = useBranch();
   const { toasts, addToast, removeToast } = useToast();
   const { isGlobalAdmin } = useUser();
+  const activeCount = branches.filter((branch) => branch.active).length;
+  const deliveryCount = branches.filter((branch) => branch.delivery_enabled).length;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,34 +49,41 @@ export default function FiliaisPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 px-3 py-4 md:px-6">
+    <main className="mx-auto max-w-6xl space-y-6">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">Filiais</h1>
-          <p className="text-xs text-[var(--text-secondary)]">
-            Cada filial tem cardápio, impressoras e numeração próprios.
-            Senha exibida como <strong className="text-[var(--text-primary)]">P-042-1</strong>.
-          </p>
-        </div>
-        {isGlobalAdmin && <Link href="/app/configuracoes/filiais/novo" className="sm:shrink-0">
-          <Button className="w-full gap-2 sm:w-auto">
-            <Plus className="h-4 w-4" strokeWidth={2} /> Nova filial
-          </Button>
-        </Link>}
-      </header>
+      <SettingsPageHeader
+        eyebrow="Estrutura da operação"
+        title="Filiais"
+        description="Gerencie identidade, horários, entrega, impressão e comunicação de cada unidade em um único fluxo."
+        icon={Building2}
+        meta={
+          <>
+            <SettingsBadge tone="success">{activeCount} ativa{activeCount === 1 ? '' : 's'}</SettingsBadge>
+            <SettingsBadge tone="info">{deliveryCount} com entrega</SettingsBadge>
+            <SettingsBadge>{branches.length} no total</SettingsBadge>
+          </>
+        }
+        action={isGlobalAdmin ? (
+          <Link href="/app/configuracoes/filiais/novo" className="block">
+            <Button className="min-h-11 w-full gap-2 sm:w-auto">
+              <Plus className="h-4 w-4" strokeWidth={2} /> Nova filial
+            </Button>
+          </Link>
+        ) : undefined}
+      />
 
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)] py-8 justify-center">
-          <Loader2 className="h-4 w-4 animate-spin" /> Carregando filiais...
+        <div className="grid gap-3 lg:grid-cols-2" aria-label="Carregando filiais">
+          {[0, 1, 2, 3].map((item) => <div key={item} className="h-28 animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)]" />)}
         </div>
       ) : branches.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-10 text-center text-sm text-[var(--text-secondary)]">
-          Nenhuma filial cadastrada ainda.
+        <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--bg-surface)] p-10 text-center">
+          <p className="font-bold text-[var(--text-primary)]">Nenhuma filial cadastrada</p>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">Crie a primeira unidade para começar a configurar a operação.</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <section aria-label="Filiais cadastradas" className="grid gap-3 lg:grid-cols-2">
           {branches.map((b) => (
             <BranchListItem
               key={b.id}
@@ -82,8 +92,8 @@ export default function FiliaisPage() {
               onToggleActive={() => toggleActive(b)}
             />
           ))}
-        </div>
+        </section>
       )}
-    </div>
+    </main>
   );
 }

@@ -27,18 +27,18 @@ export function SettingsPanel({
   return (
     <section
       id={id}
-      className={`scroll-mt-6 overflow-hidden rounded-3xl bg-[var(--bg-surface)] shadow-sm ring-1 ring-[var(--border)] ${className}`}
+      className={`scroll-mt-24 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)] ${className}`}
     >
-      <header className="flex items-center gap-4 px-6 py-5">
-        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm ${accent.iconBg} ring-1 ring-black/5`}>
+      <header className="flex items-center gap-3 px-4 py-4 sm:px-6 sm:py-5">
+        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${accent.iconBg}`}>
           <Icon className={`h-5 w-5 ${accent.iconColor}`} />
         </span>
         <span className="min-w-0 flex-1">
-          <h2 className="text-sm font-black text-[var(--text-primary)]">{title}</h2>
+          <h2 className="text-sm font-bold text-[var(--text-primary)]">{title}</h2>
           <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{description}</p>
         </span>
       </header>
-      <div className="border-t border-[var(--border)] px-6 py-5">{children}</div>
+      <div className="border-t border-[var(--border)] px-4 py-5 sm:px-6">{children}</div>
     </section>
   );
 }

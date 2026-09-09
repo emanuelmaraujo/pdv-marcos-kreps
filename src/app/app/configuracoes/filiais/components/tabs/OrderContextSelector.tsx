@@ -33,7 +33,7 @@ function SelectionGroup<T extends string>({
               type="button"
               aria-pressed={active}
               onClick={() => toggle(option.value)}
-              className={`min-h-11 rounded-xl border px-3 py-2 text-left text-xs font-medium transition-colors ${
+              className={`min-h-11 rounded-xl border px-3 py-2 text-left text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-red/40 ${
                 active
                   ? 'border-brand-red bg-brand-red/10 text-brand-red'
                   : 'border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-secondary)]'

@@ -20,7 +20,7 @@ export interface TabbedFormTab {
   validate?: () => string | null | undefined;
 }
 
-const DEFAULT_ACCENT: TabbedFormAccent = { iconBg: "bg-zinc-100", iconColor: "text-zinc-600" };
+const DEFAULT_ACCENT: TabbedFormAccent = { iconBg: "bg-[var(--bg-subtle)]", iconColor: "text-[var(--text-secondary)]" };
 
 // Sequência de abas com navegação Voltar/Próximo/Salvar e validação por aba
 // — usado tanto dentro de um BottomSheet (Usuários) quanto numa página
@@ -162,7 +162,7 @@ export function TabbedForm({
           >
             <span
               className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                active ? "bg-white/70 shadow-sm" : "bg-[var(--bg-base)]"
+                active ? "bg-[var(--bg-surface)] shadow-sm" : "bg-[var(--bg-base)]"
               }`}
             >
               {done ? (
@@ -275,15 +275,15 @@ export function TabbedForm({
 
   if (isPage) {
     return (
-      <div className="lg:flex lg:items-start lg:gap-6">
-        <div className="sticky top-14 z-10 bg-[var(--bg-base)] lg:w-72 lg:shrink-0 lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:shadow-[var(--elevation-2)]">
+      <div className="lg:flex lg:items-start lg:gap-5">
+        <div className="sticky top-14 z-10 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)] lg:w-72 lg:shrink-0">
           {header}
           <div className="lg:hidden">{mobilePills}</div>
           {sidebarNav}
         </div>
 
         <div className="lg:min-w-0 lg:flex-1">
-          <div className="lg:overflow-hidden lg:rounded-2xl lg:border lg:border-[var(--border-strong)] lg:bg-[var(--bg-subtle)] lg:shadow-[var(--elevation-2)]">
+          <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-[var(--elevation-1)]">
             {content}
           </div>
           {nav}

@@ -66,28 +66,28 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
     {
       id: "dados", label: "Dados", icon: Building2,
       description: "Nome, identificação e disponibilidade da filial.",
-      accent: { iconBg: "bg-blue-100", iconColor: "text-blue-600" },
+      accent: { iconBg: "bg-[var(--status-info-bg)]", iconColor: "text-[var(--status-info)]" },
       validate: () => editor.validateDados(),
     },
     {
       id: "horarios", label: "Horários", icon: Clock,
       description: "Janela de atendimento — deixe em branco para usar o horário global.",
-      accent: { iconBg: "bg-amber-100", iconColor: "text-amber-600" },
+      accent: { iconBg: "bg-[var(--status-warning-bg)]", iconColor: "text-[var(--status-warning)]" },
     },
     {
       id: "entrega", label: "Entrega", icon: Bike,
       description: "Zonas de entrega, taxas por bairro e entregadores cadastrados.",
-      accent: { iconBg: "bg-emerald-100", iconColor: "text-emerald-600" },
+      accent: { iconBg: "bg-[var(--status-success-bg)]", iconColor: "text-[var(--status-success)]" },
     },
     {
       id: "impressao", label: "Impressão", icon: Printer,
       description: "IP e porta por setor — sem customização, usa o padrão da rede.",
-      accent: { iconBg: "bg-violet-100", iconColor: "text-violet-600" },
+      accent: { iconBg: "bg-brand-red/10", iconColor: "text-brand-red" },
     },
     {
       id: "whatsapp", label: "WhatsApp", icon: MessageSquare,
       description: "Templates transacionais por evento — sem customização, usa o padrão da rede.",
-      accent: { iconBg: "bg-teal-100", iconColor: "text-teal-600" },
+      accent: { iconBg: "bg-[var(--status-success-bg)]", iconColor: "text-[var(--status-success)]" },
     },
   ];
 
@@ -122,7 +122,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
   };
 
   const header = (
-    <header className="border-b border-[var(--border)] px-4 py-3 sm:px-6">
+    <header className="border-b border-[var(--border)] bg-[var(--bg-surface)] px-4 py-4 sm:px-5">
       <div className="flex items-center gap-2">
         <Building2 className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
         <h1 className="min-w-0 flex-1 truncate text-sm font-black text-[var(--text-primary)]">
@@ -131,7 +131,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
         {branchId && (
           <Link
             href={`/app/configuracoes/pagamentos?branch=${branchId}`}
-            className="flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--bg-subtle)] px-3 text-xs font-black text-[var(--text-secondary)] hover:text-brand-red"
+            className="flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--bg-subtle)] px-3 text-xs font-bold text-[var(--text-secondary)] hover:text-brand-red"
           >
             <CreditCard className="h-4 w-4" />
             <span className="hidden sm:inline">Taxas</span>
@@ -139,7 +139,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
         )}
         <Link
           href="/app/configuracoes/filiais"
-          className="shrink-0 rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
           aria-label="Voltar para a lista de filiais"
         >
           <X className="h-4 w-4" />
@@ -162,7 +162,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
   );
 
   return (
-    <div className="mx-auto max-w-3xl lg:max-w-5xl">
+    <main className="mx-auto max-w-6xl">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <TabbedForm
@@ -213,6 +213,6 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
             />
           )}
       </TabbedForm>
-    </div>
+    </main>
   );
 }
