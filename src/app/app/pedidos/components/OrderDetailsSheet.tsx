@@ -124,7 +124,7 @@ function OrderActionBrief({
           : order.status === "PRONTO"
             ? { eyebrow: "Aguardando retirada", title: "Confirmar entrega", description: "Finalize quando o cliente retirar o pedido.", tone: "border-emerald-500/25 bg-emerald-500/10 text-emerald-700", Icon: CheckCircle2 }
             : order.status === "SAIU_PARA_ENTREGA"
-              ? { eyebrow: "Entrega em rota", title: "Confirmar chegada", description: "Finalize assim que o pedido for entregue ao cliente.", tone: "border-blue-500/25 bg-blue-500/10 text-blue-700", Icon: Bike }
+              ? { eyebrow: "Entrega em rota", title: `Aguardando ${order.courier_name || "o motoboy"}`, description: "A confirmação final será feita pelo entregador no aplicativo dele.", tone: "border-blue-500/25 bg-blue-500/10 text-blue-700", Icon: Bike }
               : order.status === "ENTREGUE"
                 ? { eyebrow: "Concluído", title: "Pedido entregue", description: "Consulte os itens, pagamento e histórico quando necessário.", tone: "border-emerald-500/20 bg-emerald-500/5 text-emerald-700", Icon: CheckCircle2 }
                 : order.status === "CANCELADO"
@@ -155,9 +155,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
     showPaymentSelection, setShowPaymentSelection, showPayItems, setShowPayItems,
     showChangeMethod, setShowChangeMethod, editingItem, setEditingItem,
     showDispatchForm, setShowDispatchForm,
-    courierNameInput, setCourierNameInput, courierPhoneInput, setCourierPhoneInput,
     courierIdInput, setCourierIdInput, registeredCouriers,
-    onConfirm, onReady, onDeliver, onRevertToQueue, onConfirmDelivery, onCancel,
+    onConfirm, onReady, onDeliver, onCancel,
     onMarkPayment, onChangeMethod, onReprint, onDispatch, openDispatchForm,
   } = useOrderDetailsActions({ order, onClose, onOrderUpdated });
 
@@ -204,9 +203,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
   const typeLabel = order.type === "BALCAO" ? "Balcão" : isDelivery ? "Delivery" : "Para viagem";
   const sourceLabel = order.source === "ATTENDANT" ? "Atendente" : order.source === "QR_CODE" ? "QR Code" : order.source === "APP" ? "App" : order.source;
   const canShowFooterAction = !showPaymentSelection && !showCancelReason && !showChangeMethod && (
-    (hasOutstandingPayment && !isAppAwaitingPayment) ||
-    (!hasOutstandingPayment && ["AGUARDANDO_CONFIRMACAO", "NA_FILA", "SAIU_PARA_ENTREGA"].includes(order.status)) ||
-    (!hasOutstandingPayment && order.status === "PRONTO" && (!isDelivery || !showDispatchForm))
+    ["AGUARDANDO_CONFIRMACAO", "NA_FILA"].includes(order.status) ||
+    (order.status === "PRONTO" && (!isDelivery || !showDispatchForm))
   );
 
   return (
@@ -215,34 +213,24 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
       isOpen={isOpen}
       onClose={onClose}
       title={`Pedido #${String(order.daily_number).padStart(2, "0")}`}
+      maxWidth="xl"
       footer={canShowFooterAction ? (
         <div className="border-t border-[var(--border)] bg-[var(--bg-surface)] px-4 py-3 shadow-[0_-8px_18px_rgba(15,23,42,0.05)]">
-          {!showPaymentSelection && !showCancelReason && !showChangeMethod && hasOutstandingPayment && !isAppAwaitingPayment && (
-            <Button className="h-12 w-full rounded-2xl bg-brand-red text-sm font-black hover:bg-brand-red/90" onClick={() => setShowPayItems(true)} disabled={isLoading}>
-              RECEBER {currency.format(outstandingAmount)}
-            </Button>
-          )}
-          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "AGUARDANDO_CONFIRMACAO" && (
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && order.status === "AGUARDANDO_CONFIRMACAO" && (
             <Button className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-black hover:bg-emerald-600" onClick={onConfirm} disabled={isLoading}>
               CONFIRMAR PEDIDO
             </Button>
           )}
-          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "NA_FILA" && (
-            <div className="flex gap-2">
-              <Button className="h-12 flex-1 rounded-2xl bg-brand-amber text-sm font-black text-brand-charcoal hover:bg-brand-amber/90" onClick={onReady} disabled={isLoading}>
-                MARCAR PRONTO
-              </Button>
-              {!isDelivery && <Button className="h-12 rounded-2xl bg-emerald-500 px-3 text-xs font-black hover:bg-emerald-600" onClick={onDeliver} disabled={isLoading}>ENTREGUE</Button>}
-            </div>
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && order.status === "NA_FILA" && (
+            <Button className="h-12 w-full rounded-2xl bg-brand-amber text-sm font-black text-brand-charcoal hover:bg-brand-amber/90" onClick={onReady} disabled={isLoading}>
+              MARCAR PRONTO
+            </Button>
           )}
-          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "PRONTO" && !isDelivery && (
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && order.status === "PRONTO" && !isDelivery && (
             <Button className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-black hover:bg-emerald-600" onClick={onDeliver} disabled={isLoading}>ENTREGAR</Button>
           )}
-          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "PRONTO" && isDelivery && !showDispatchForm && (
+          {!showPaymentSelection && !showCancelReason && !showChangeMethod && order.status === "PRONTO" && isDelivery && !showDispatchForm && (
             <Button className="h-12 w-full rounded-2xl bg-blue-500 text-sm font-black hover:bg-blue-600" onClick={openDispatchForm} disabled={isLoading}>DESPACHAR ENTREGA</Button>
-          )}
-          {!showPaymentSelection && !showCancelReason && !showChangeMethod && !hasOutstandingPayment && order.status === "SAIU_PARA_ENTREGA" && (
-            <Button className="h-12 w-full rounded-2xl bg-emerald-500 text-sm font-black hover:bg-emerald-600" onClick={onConfirmDelivery} disabled={isLoading}>CONFIRMAR ENTREGA</Button>
           )}
         </div>
       ) : undefined}
@@ -329,7 +317,23 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           </div>
         </section>
 
-        <OrderActionBrief order={order} isDelivery={isDelivery} hasOutstandingPayment={hasOutstandingPayment} outstandingAmount={outstandingAmount} />
+        <OrderActionBrief
+          order={order}
+          isDelivery={isDelivery}
+          hasOutstandingPayment={hasOutstandingPayment && ["AGUARDANDO_PAGAMENTO", "ENTREGUE"].includes(order.status)}
+          outstandingAmount={outstandingAmount}
+        />
+
+        {hasOutstandingPayment && !isAppAwaitingPayment && (
+          <button
+            type="button"
+            onClick={() => setShowPayItems(true)}
+            className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 text-left text-amber-900 transition active:scale-[0.99]"
+          >
+            <span><span className="block text-[10px] font-black uppercase tracking-widest">Pagamento pendente</span><span className="block text-xs font-semibold">Registrar sem interromper o andamento do pedido</span></span>
+            <span className="shrink-0 text-sm font-black">Receber {currency.format(outstandingAmount)}</span>
+          </button>
+        )}
 
         <OrderFulfillmentSummary order={order} />
 
@@ -420,123 +424,33 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           <p className="px-1 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Ajustes e gestão</p>
           {!showPaymentSelection && !showCancelReason && !showChangeMethod && (
             <>
-              {/* Primary status action */}
-              {order.status === "AGUARDANDO_CONFIRMACAO" && (
-                <Button
-                  className="h-14 w-full rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
-                  onClick={onConfirm}
-                  disabled={isLoading}
-                >
-                  <CheckCircle2 size={20} /> CONFIRMAR PEDIDO
-                </Button>
-              )}
-              {order.status === "NA_FILA" && (
-                <div className="flex gap-2">
-                  <Button
-                    className="h-14 flex-1 rounded-2xl bg-brand-amber text-base font-black text-brand-charcoal shadow-lg shadow-brand-amber/20 hover:bg-brand-amber/90 gap-2"
-                    onClick={onReady}
-                    disabled={isLoading}
-                  >
-                    <Package size={20} /> MARCAR PRONTO
-                  </Button>
-                  {!isDelivery && (
-                    <Button
-                      className="h-14 rounded-2xl bg-emerald-500 px-3 text-xs font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-1.5"
-                      onClick={onDeliver}
-                      disabled={isLoading}
-                    >
-                      <CheckCircle2 size={17} /> ENTREGUE AGORA
-                    </Button>
-                  )}
-                </div>
-              )}
-              {order.status === "PRONTO" && !isDelivery && (
-                <div className="flex gap-2">
-                  <Button
-                    className="h-14 flex-1 rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
-                    onClick={onDeliver}
-                    disabled={isLoading}
-                  >
-                    <CheckCircle2 size={20} /> ENTREGAR
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-14 rounded-2xl border-2 border-[var(--border-strong)] text-xs font-black text-[var(--text-muted)] hover:bg-[var(--border)] gap-1 px-3"
-                    onClick={onRevertToQueue}
-                    disabled={isLoading}
-                    title="Voltar para Na Fila"
-                  >
-                    <ArrowLeft size={16} /> NA FILA
-                  </Button>
-                </div>
-              )}
-              {order.status === "PRONTO" && isDelivery && !showDispatchForm && (
-                <div className="flex gap-2">
-                  <Button
-                    className="h-14 flex-1 rounded-2xl bg-blue-500 text-lg font-black shadow-lg shadow-blue-200 hover:bg-blue-600 gap-2"
-                    onClick={openDispatchForm}
-                    disabled={isLoading}
-                  >
-                    <Bike size={20} /> DESPACHAR
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-14 rounded-2xl border-2 border-[var(--border-strong)] text-xs font-black text-[var(--text-muted)] hover:bg-[var(--border)] gap-1 px-3"
-                    onClick={onRevertToQueue}
-                    disabled={isLoading}
-                    title="Voltar para Na Fila"
-                  >
-                    <ArrowLeft size={16} /> NA FILA
-                  </Button>
-                </div>
-              )}
               {order.status === "PRONTO" && isDelivery && showDispatchForm && (
                 <div className="space-y-3 rounded-2xl border-2 border-blue-500/20 bg-blue-500/10 p-4 animate-in fade-in zoom-in-95">
                   <div className="flex items-center gap-2 text-blue-600">
                     <Bike size={18} />
                     <h4 className="text-sm font-black uppercase tracking-widest">Despachar Entrega</h4>
                   </div>
-                  {registeredCouriers.length > 0 && (
-                    <select
-                      className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-3 text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-300"
-                      value={courierIdInput}
-                      onChange={(e) => setCourierIdInput(e.target.value)}
-                    >
-                      <option value="">Digitar entregador avulso...</option>
-                      {registeredCouriers.filter((c) => c.active).map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ""}</option>
-                      ))}
-                    </select>
-                  )}
-                  {!courierIdInput && (
-                    <>
-                      {registeredCouriers.length > 0 && (
-                        <p className="rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-bg)] p-2.5 text-xs font-semibold text-[var(--status-warning)]">
-                          Entregador avulso não recebe este pedido no app &mdash; escolha um entregador
-                          cadastrado para ele ver a entrega em &ldquo;Minhas Entregas&rdquo;.
-                        </p>
-                      )}
-                      <input
-                        type="text"
-                        className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-3 text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        placeholder="Nome do entregador"
-                        value={courierNameInput}
-                        onChange={(e) => setCourierNameInput(e.target.value)}
-                      />
-                      <input
-                        type="text"
-                        className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-3 text-sm font-bold text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-300"
-                        placeholder="Telefone do entregador (opcional)"
-                        value={courierPhoneInput}
-                        onChange={(e) => setCourierPhoneInput(e.target.value)}
-                      />
-                    </>
+                  <select
+                    className="w-full rounded-xl border border-[var(--status-info)]/30 bg-[var(--bg-surface)] p-3 text-sm font-bold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    value={courierIdInput}
+                    onChange={(e) => setCourierIdInput(e.target.value)}
+                    aria-label="Selecionar motoboy"
+                  >
+                    <option value="">Selecione um motoboy cadastrado</option>
+                    {registeredCouriers.filter((c) => c.active && c.profile_id).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}{c.phone ? ` · ${c.phone}` : ""}</option>
+                    ))}
+                  </select>
+                  {registeredCouriers.filter((c) => c.active && c.profile_id).length === 0 && (
+                    <p className="rounded-xl border border-[var(--status-warning)] bg-[var(--status-warning-bg)] p-2.5 text-xs font-semibold text-[var(--status-warning)]">
+                      Nenhum motoboy com login está disponível nesta filial. Cadastre ou ative um motoboy antes de despachar.
+                    </p>
                   )}
                   <div className="flex gap-3">
                     <Button
                       className="flex-1 h-12 rounded-xl bg-blue-500 font-black shadow-lg shadow-blue-200 hover:bg-blue-600"
                       onClick={onDispatch}
-                      disabled={isLoading}
+                      disabled={isLoading || !courierIdInput}
                     >
                       CONFIRMAR DESPACHO
                     </Button>
@@ -552,13 +466,10 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
                 </div>
               )}
               {order.status === "SAIU_PARA_ENTREGA" && (
-                <Button
-                  className="h-14 w-full rounded-2xl bg-emerald-500 text-lg font-black shadow-lg shadow-emerald-200 hover:bg-emerald-600 gap-2"
-                  onClick={onConfirmDelivery}
-                  disabled={isLoading}
-                >
-                  <CheckCircle2 size={20} /> CONFIRMAR ENTREGA
-                </Button>
+                <div className="rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4 text-blue-800">
+                  <p className="flex items-center gap-2 text-sm font-black"><Bike size={18} /> Aguardando confirmação do motoboy</p>
+                  <p className="mt-1 text-xs font-semibold">{order.courier_name || "O entregador responsável"} concluirá a entrega pelo próprio aplicativo.</p>
+                </div>
               )}
 
               {/* Payment pending / partial alert */}

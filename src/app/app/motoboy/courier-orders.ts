@@ -75,8 +75,7 @@ export async function fetchOnRouteOrders(
 
 /**
  * Todos os pedidos despachados para o motoboy dentro do intervalo, em qualquer
- * status final — inclusive os que o ATENDENTE confirmou como entregues, já que
- * a corrida foi feita por ele do mesmo jeito.
+ * status final. A conclusão normal é sempre registrada pelo próprio motoboy.
  */
 export async function fetchCourierOrdersBetween(
   supabase: SupabaseClient,
@@ -142,8 +141,8 @@ export interface CourierBalance {
   averageEarning: number;
   /** Valor dos pedidos entregues (mercadoria + taxas). */
   ordersAmount: number;
-  /** Entregues que não estavam pagos: dinheiro que o motoboy recebeu e repassa. */
-  collectedOnDelivery: number;
+  /** Quantidade de entregas concluídas cujo pagamento ainda precisa ser conferido. */
+  pendingPaymentOrders: number;
 }
 
 const PAID_STATUSES = new Set(["PAID", "COURTESY"]);
@@ -158,7 +157,7 @@ export function summarizeCourierOrders(orders: OrderLike[]): CourierBalance {
     pendingEarnings: 0,
     averageEarning: 0,
     ordersAmount: 0,
-    collectedOnDelivery: 0,
+    pendingPaymentOrders: 0,
   };
 
   for (const order of orders) {
@@ -168,7 +167,7 @@ export function summarizeCourierOrders(orders: OrderLike[]): CourierBalance {
       balance.earnings += fee;
       balance.ordersAmount += toNumber(order.total_amount);
       if (!PAID_STATUSES.has(order.payment_status)) {
-        balance.collectedOnDelivery += toNumber(order.total_amount);
+        balance.pendingPaymentOrders += 1;
       }
     } else if (order.status === ON_ROUTE_STATUS) {
       balance.onRoute += 1;

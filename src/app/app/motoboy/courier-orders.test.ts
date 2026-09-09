@@ -70,7 +70,7 @@ describe("summarizeCourierOrders", () => {
     expect(balance.averageEarning).toBe(10);
   });
 
-  it("conta como valor a repassar apenas o pedido entregue sem pagamento", () => {
+  it("conta pedidos entregues cujo pagamento ainda precisa ser conferido", () => {
     const balance = summarizeCourierOrders([
       makeOrder({ id: "a", payment_status: "PENDING", total_amount: 70 }),
       makeOrder({ id: "b", payment_status: "PARTIAL", total_amount: 30 }),
@@ -79,7 +79,7 @@ describe("summarizeCourierOrders", () => {
       makeOrder({ id: "e", status: "SAIU_PARA_ENTREGA", payment_status: "PENDING", total_amount: 999 }),
     ]);
 
-    expect(balance.collectedOnDelivery).toBe(100);
+    expect(balance.pendingPaymentOrders).toBe(2);
     expect(balance.ordersAmount).toBe(240);
   });
 

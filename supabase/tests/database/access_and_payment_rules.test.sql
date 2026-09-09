@@ -2,7 +2,12 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(32);
+SELECT plan(33);
+
+SELECT ok(
+  has_table_privilege('authenticated', 'public.payment_transactions', 'SELECT'),
+  'quadro autenticado pode ler transacoes de pagamento vinculadas aos pedidos'
+);
 
 SELECT has_column(
   'public', 'profiles', 'is_global_admin',
@@ -196,6 +201,7 @@ SELECT throws_ok(
     )
   $$,
   '42501',
+  NULL,
   'administrador local nao cria taxa em outra filial'
 );
 
@@ -213,6 +219,7 @@ SELECT throws_ok(
     )
   $$,
   '23P01',
+  NULL,
   'duas regras ativas sobrepostas sao rejeitadas'
 );
 
@@ -264,6 +271,7 @@ SELECT throws_ok(
     )
   $$,
   '23P01',
+  NULL,
   'duas taxas ativas do mesmo tipo e origem continuam proibidas'
 );
 
@@ -281,6 +289,7 @@ SELECT throws_ok(
     )
   $$,
   '23514',
+  NULL,
   'debito parcelado e rejeitado pelo banco'
 );
 
@@ -301,6 +310,7 @@ SELECT throws_ok(
     )
   $$,
   'P0001',
+  NULL,
   'atendente sem filial e rejeitado'
 );
 
@@ -318,6 +328,7 @@ SELECT throws_ok(
     )
   $$,
   'P0001',
+  NULL,
   'administrador local com mais de uma filial e rejeitado'
 );
 
@@ -335,6 +346,7 @@ SELECT throws_ok(
     )
   $$,
   'P0001',
+  NULL,
   'entregador com mais de uma filial e rejeitado'
 );
 

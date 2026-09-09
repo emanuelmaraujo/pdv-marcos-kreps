@@ -80,7 +80,7 @@ serve(async (req) => {
       .from("order_items")
       .select(`
         id, order_id, sequence_no, status, product_name_snapshot, total_price,
-        orders!inner ( id, branch_id, status, daily_number,
+        orders!inner ( id, branch_id, status, type, daily_number,
                        customer_phone, customer_name )
       `)
       .eq("id", order_item_id)
@@ -90,6 +90,13 @@ serve(async (req) => {
     const order = (item as any).orders;
     const currentItemStatus = item.status as ItemStatus;
     const orderStatus = order.status as string;
+
+    // Em delivery, READY significa que o item foi entregue ao motoboy, não ao
+    // cliente. Apenas confirm-delivery pode concluir esses itens, depois que o
+    // próprio entregador confirmar a chegada.
+    if (order.type === "ENTREGA" && new_status === "DELIVERED") {
+      throw new Error("Itens de delivery só são concluídos pela confirmação do motoboy.");
+    }
 
     // Pedido em estados pré-fila ou finais não aceita mudanças por item.
     if (["AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "EXPIRADO"].includes(orderStatus)) {

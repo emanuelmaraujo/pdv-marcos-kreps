@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   BellRing,
   Bike,
-  CheckCircle2,
   DollarSign,
   History,
   LocateFixed,
@@ -37,6 +36,7 @@ import {
   type CourierRecord,
 } from "./courier-orders";
 import { FinishedOrderRow } from "./components/FinishedOrderRow";
+import { HoldToConfirmDelivery } from "./components/HoldToConfirmDelivery";
 import {
   formatCurrency,
   formatTime,
@@ -54,6 +54,14 @@ import {
 const POLL_MS = 15_000;
 /** Tick só para o "atualizado há X" não mentir na tela. */
 const CLOCK_TICK_MS = 10_000;
+
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  CASH: "Dinheiro",
+  PIX: "PIX",
+  DEBIT_CARD: "Cartão de débito",
+  CREDIT_CARD: "Cartão de crédito",
+  IFOOD: "iFood",
+};
 
 function formatRelative(from: Date | null, now: number): string {
   if (!from) return "—";
@@ -353,7 +361,7 @@ export default function MotoboyPage() {
         </Card>
         <Card>
           <CardContent className="p-3">
-            <p className="text-xs text-[var(--text-secondary)]">A receber (na rua)</p>
+            <p className="text-xs text-[var(--text-secondary)]">Ganhos em rota</p>
             <p className="mt-1 text-base font-bold text-[var(--text-primary)]">
               {formatCurrency(pendingFees)}
             </p>
@@ -380,6 +388,7 @@ export default function MotoboyPage() {
                 {onRoute.map((order) => {
                   const mapsUrl = mapsDirectionsUrlForOrder(order);
                   const exactCoordinates = getExactCoordinates(order);
+                  const needsCollection = order.payment_status === "PENDING" || order.payment_status === "PARTIAL";
                   return (
                     <Card key={order.id}>
                       <CardContent className="space-y-3 pt-4">
@@ -454,6 +463,20 @@ export default function MotoboyPage() {
                         </div>
                       )}
 
+                      {needsCollection && (
+                        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-amber-900">
+                          <p className="text-[10px] font-black uppercase tracking-widest">Cobrança na entrega</p>
+                          <p className="mt-1 text-base font-black">
+                            {order.payment_status === "PARTIAL"
+                              ? "Pagamento parcial · confira o saldo"
+                              : `Receber ${formatCurrency(order.total_amount)}`}
+                          </p>
+                          <p className="mt-0.5 text-xs font-semibold">
+                            {PAYMENT_METHOD_LABEL[order.payment_method ?? ""] ?? "Forma de pagamento a confirmar"}
+                          </p>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--bg-subtle)] p-3">
                         <div>
                           <p className="text-xs text-[var(--text-secondary)]">Valor do pedido</p>
@@ -472,14 +495,12 @@ export default function MotoboyPage() {
                         </div>
                       </div>
 
-                      <Button
-                        className="w-full"
-                        onClick={() => void handleConfirmDelivery(order.id)}
+                      <HoldToConfirmDelivery
+                        orderNumber={order.daily_number}
                         loading={confirmingId === order.id}
-                      >
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Confirmar entrega
-                      </Button>
+                        disabled={confirmingId !== null && confirmingId !== order.id}
+                        onConfirm={() => handleConfirmDelivery(order.id)}
+                      />
                       </CardContent>
                     </Card>
                   );

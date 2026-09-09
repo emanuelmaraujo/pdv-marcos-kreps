@@ -14,7 +14,6 @@ import { getSelectedOrderSyncCandidate, hasOrderBoardChanged } from "@/lib/utils
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
-import { OrderDetailsModal } from "./components/OrderDetailsModal";
 import { PayItemsModal } from "./components/PayItemsModal";
 import { categoryLookup, CategoryLookup } from "./components/order-item-presentation";
 import {
@@ -42,7 +41,6 @@ const OPTIMISTIC_NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
   AGUARDANDO_CONFIRMACAO: "NA_FILA",
   NA_FILA: "PRONTO",
   PRONTO: "ENTREGUE",
-  SAIU_PARA_ENTREGA: "ENTREGUE",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -148,34 +146,6 @@ const CANCELLED_COLUMN: KanbanColumnConfig = {
   emptyText: "Nenhum cancelado",
   showAvgWait: false,
 };
-
-const DELIVERED_PENDING_COLUMN: KanbanColumnConfig = {
-  status: "ENTREGUE",
-  label: "Entregues com pagamento pendente",
-  topColor: "bg-[var(--status-warning)]",
-  headerBg: "bg-[var(--status-warning-bg)] border-transparent",
-  emptyText: "Nenhum entregue pendente",
-  showAvgWait: false,
-};
-
-const PAYMENT_PENDING_COLUMN: KanbanColumnConfig = {
-  status: "AGUARDANDO_PAGAMENTO",
-  label: "Aguardando pagamento",
-  topColor: "bg-[var(--status-warning)]",
-  headerBg: "bg-[var(--status-warning-bg)] border-transparent",
-  emptyText: "Nenhum pagamento pendente",
-  showAvgWait: false,
-};
-function subscribeMdPlus(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
-  const mediaQuery = window.matchMedia("(min-width: 768px)");
-  mediaQuery.addEventListener("change", callback);
-  return () => mediaQuery.removeEventListener("change", callback);
-}
-
-function getMdPlusSnapshot() {
-  return typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
-}
 
 function subscribeFocusMode(callback: () => void) {
   if (typeof window === "undefined") return () => {};
@@ -298,14 +268,13 @@ function AvgWaitBadge({ minutes }: { minutes: number | null }) {
 // ─── Kanban Column ────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  config, orders, now, onCardClick, onQuickAction, onMarkDelivered, onPay, categoryLookup, searchQuery, isLoading,
+  config, orders, now, onCardClick, onQuickAction, onPay, categoryLookup, searchQuery, isLoading,
 }: {
   config: KanbanColumnConfig;
   orders: Order[];
   now: number;
   onCardClick: (order: Order) => void;
   onQuickAction: (order: Order) => Promise<void>;
-  onMarkDelivered: (order: Order) => Promise<void>;
   onPay: (order: Order) => void;
   categoryLookup: CategoryLookup;
   searchQuery: string;
@@ -361,7 +330,6 @@ function KanbanColumn({
               now={now}
               onClick={onCardClick}
               onQuickAction={config.status === "ENTREGUE" || config.status === "CANCELADO" ? undefined : onQuickAction}
-              onMarkDelivered={onMarkDelivered}
               onPay={onPay}
               categoryLookup={categoryLookup}
             />
@@ -388,7 +356,6 @@ export default function PedidosPage() {
   const [orderCategories, setOrderCategories] = useState<CategoryLookup>({});
   const isFocusMode = useSyncExternalStore(subscribeFocusMode, getFocusModeSnapshot, () => false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
-  const isMdPlus = useSyncExternalStore(subscribeMdPlus, getMdPlusSnapshot, () => false);
   const { currentBranch } = useBranch();
   const { toasts, addToast, removeToast } = useToast();
 
@@ -512,6 +479,12 @@ export default function PedidosPage() {
 
   // Quick action handler (for card buttons — no modal)
   const handleQuickAction = useCallback(async (order: Order): Promise<void> => {
+    if (
+      order.status === "PRONTO" && order.type !== "ENTREGA" &&
+      !window.confirm(`Confirmar que o pedido #${order.daily_number} foi entregue ao cliente?`)
+    ) {
+      return;
+    }
     const optimisticStatus = order.status === "PRONTO" && order.type === "ENTREGA"
       ? undefined
       : OPTIMISTIC_NEXT_STATUS[order.status];
@@ -526,6 +499,10 @@ export default function PedidosPage() {
       } else if (order.status === "NA_FILA") {
         await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" });
       } else if (order.status === "PRONTO_PARCIAL") {
+        if (order.type === "ENTREGA") {
+          setSelectedOrder(order);
+          return;
+        }
         // Entrega só os itens prontos. O trigger derivará o status do pedido.
         const readyItemIds = (order.items ?? [])
           .filter((i) => i.status === "READY")
@@ -539,8 +516,6 @@ export default function PedidosPage() {
         }
       } else if (order.status === "PRONTO" && order.type !== "ENTREGA") {
         await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
-      } else if (order.status === "SAIU_PARA_ENTREGA") {
-        await pdvApi.confirmDelivery({ orderId: order.id });
       }
       await fetchOrders({ showLoading: false });
     } catch (err) {
@@ -549,20 +524,6 @@ export default function PedidosPage() {
         setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: order.status } : o)));
       }
       addToast("error", getFriendlyErrorMessage(err, "Não conseguimos atualizar o status do pedido. Tente novamente."));
-    }
-  }, [fetchOrders, addToast]);
-
-  // Atendimento imediato (balcão/viagem): não exige uma passagem artificial
-  // por PRONTO. É uma operação diferente da entrega por motoboy, que sempre
-  // segue por despacho e confirmação de rota.
-  const handleMarkDelivered = useCallback(async (order: Order): Promise<void> => {
-    setOrders((prev) => prev.map((current) => current.id === order.id ? { ...current, status: "ENTREGUE" } : current));
-    try {
-      await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
-      await fetchOrders({ showLoading: false });
-    } catch (err) {
-      setOrders((prev) => prev.map((current) => current.id === order.id ? { ...current, status: order.status } : current));
-      addToast("error", getFriendlyErrorMessage(err, "Não conseguimos marcar o pedido como entregue. Tente novamente."));
     }
   }, [fetchOrders, addToast]);
 
@@ -578,12 +539,12 @@ export default function PedidosPage() {
     // Acréscimos pagos depois não devem saltar à frente do fluxo que já está
     // em andamento. Continuam visíveis na esteira, porém depois dos pedidos
     // originais que pedem uma ação imediata.
-    if (isReopenedComanda(order)) return 5;
-    if (hasPendingPayment(order)) return 0;
-    if (order.status === "PRONTO" || order.status === "PRONTO_PARCIAL") return 1;
-    if (order.status === "SAIU_PARA_ENTREGA") return 2;
-    if (order.status === "AGUARDANDO_CONFIRMACAO") return 3;
-    if (order.status === "NA_FILA") return 4;
+    if (order.status === "PRONTO" || order.status === "PRONTO_PARCIAL") return 0;
+    if (order.status === "AGUARDANDO_CONFIRMACAO") return 1;
+    if (order.status === "NA_FILA") return 2;
+    if (order.status === "SAIU_PARA_ENTREGA") return 3;
+    if (isReopenedComanda(order)) return 4;
+    if (hasPendingPayment(order)) return 5;
     return 9;
   };
 
@@ -638,24 +599,15 @@ export default function PedidosPage() {
     ? [...KANBAN_COLUMNS, CANCELLED_COLUMN]
     : KANBAN_COLUMNS;
 
-  const desktopSections = kanbanColumns.flatMap((col) => {
-    if (col.status !== "ENTREGUE") {
-      return [{ key: col.status, config: col, orders: orders.filter((o) => o.status === col.status) }];
-    }
-    return [
-      { key: "ENTREGUE_PENDENTE", config: DELIVERED_PENDING_COLUMN, orders: orders.filter(isDeliveredPendingPayment) },
-      { key: "ENTREGUE", config: col, orders: orders.filter((o) => o.status === "ENTREGUE" && !isDeliveredPendingPayment(o)) },
-    ];
-  });
+  const desktopSections = kanbanColumns.map((col) => ({
+    key: col.status,
+    config: col,
+    orders: orders.filter((order) => order.status === col.status),
+  }));
 
-  const visibleDesktopSections = [
-    {
-      key: "PAGAMENTO_PENDENTE",
-      config: PAYMENT_PENDING_COLUMN,
-      orders: orders.filter((o) => hasPendingPayment(o) && !isReopenedComanda(o) && !["CANCELADO", "EXPIRADO"].includes(o.status)),
-    },
-    ...desktopSections,
-  ];
+  // Pagamento é uma dimensão do pedido, não uma segunda posição no quadro.
+  // O badge e a ação "Receber" continuam visíveis sem duplicar cartões.
+  const visibleDesktopSections = desktopSections;
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
@@ -778,7 +730,6 @@ export default function PedidosPage() {
             now={now}
             onCardClick={setSelectedOrder}
             onQuickAction={handleQuickAction}
-            onMarkDelivered={handleMarkDelivered}
             onPay={setPaymentOrder}
             categoryLookup={orderCategories}
             searchQuery={searchQuery}
@@ -819,7 +770,6 @@ export default function PedidosPage() {
                 now={now}
                 onClick={setSelectedOrder}
                 onQuickAction={handleQuickAction}
-                onMarkDelivered={handleMarkDelivered}
                 onPay={setPaymentOrder}
                 categoryLookup={orderCategories}
               />
@@ -828,29 +778,15 @@ export default function PedidosPage() {
         )}
       </div>
 
-      {/* ── Modal (tablet/desktop) ─────────────────────────────── */}
-      {isMdPlus && (
-        <OrderDetailsModal
-          key={selectedOrder?.id ?? "closed"}
-          order={selectedOrder}
-          isOpen={!!selectedOrder}
-          onClose={handleCloseModal}
-          onOrderUpdated={() => fetchOrders({ showLoading: false, syncSelectedOrder: true })}
-          categoryLookup={orderCategories}
-        />
-      )}
-
-      {/* ── BottomSheet (mobile) ───────────────────────────────── */}
-      {!isMdPlus && (
-        <OrderDetailsSheet
-          key={selectedOrder?.id ?? "closed"}
-          order={selectedOrder}
-          isOpen={!!selectedOrder}
-          onClose={handleCloseModal}
-          onOrderUpdated={() => fetchOrders({ showLoading: false, syncSelectedOrder: true })}
-          categoryLookup={orderCategories}
-        />
-      )}
+      {/* Um único detalhe responsivo: bottom sheet no mobile e painel amplo no desktop. */}
+      <OrderDetailsSheet
+        key={selectedOrder?.id ?? "closed"}
+        order={selectedOrder}
+        isOpen={!!selectedOrder}
+        onClose={handleCloseModal}
+        onOrderUpdated={() => fetchOrders({ showLoading: false, syncSelectedOrder: true })}
+        categoryLookup={orderCategories}
+      />
       {paymentOrder && (
         <PayItemsModal
           order={paymentOrder}

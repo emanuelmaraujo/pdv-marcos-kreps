@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -10,6 +10,8 @@ interface DialogProps {
   /** Conteúdo fixo fora da área de rolagem (ex: botão "Adicionar ao carrinho").
    * Fica sempre visível, mesmo com o corpo rolando ou o teclado aberto. */
   footer?: React.ReactNode;
+  /** Mantém o padrão estreito e permite detalhes operacionais mais amplos no desktop. */
+  maxWidth?: 'md' | 'xl';
 }
 
 /** Arrasta pra baixo pra fechar — só no header/handle (não compete com o
@@ -48,8 +50,10 @@ function useDragToClose(onClose: () => void) {
   return { sheetRef, onTouchStart, onTouchMove, onTouchEnd };
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, footer }: DialogProps) {
+export function BottomSheet({ isOpen, onClose, title, children, footer, maxWidth = 'md' }: DialogProps) {
   const { sheetRef, onTouchStart, onTouchMove, onTouchEnd } = useDragToClose(onClose);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (isOpen) {
@@ -61,6 +65,21 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
       document.body.style.overflow = 'unset';
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!isOpen || !sheetRef.current) return;
@@ -100,7 +119,12 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
   // Portal para o body garante que o backdrop e os selects fiquem clicáveis
   // acima de qualquer cabeçalho, modal ou navegação da página.
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-end justify-center pb-[calc(4rem+env(safe-area-inset-bottom))] sm:items-center sm:pb-0">
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center pb-[calc(4rem+env(safe-area-inset-bottom))] sm:items-center sm:pb-0"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
       {/* Backdrop - Only covers area above menu */}
       <div
         className="fixed inset-0 bg-zinc-900/45 transition-opacity"
@@ -112,7 +136,7 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
          (barra de endereço / teclado não empurram o footer pra fora). */}
       <div
         ref={sheetRef}
-        className="relative z-[75] flex w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xl transform-gpu transition-transform will-change-transform animate-in slide-in-from-bottom duration-300 sm:rounded-2xl"
+        className={`relative z-[75] flex w-full ${maxWidth === 'xl' ? 'sm:max-w-2xl' : 'max-w-md'} flex-col overflow-hidden rounded-t-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xl transform-gpu transition-transform will-change-transform animate-in slide-in-from-bottom duration-300 sm:rounded-2xl`}
         style={{
           maxHeight: 'calc(100dvh - 4rem - env(safe-area-inset-bottom) - var(--keyboard-inset, 0px))',
           marginBottom: 'var(--keyboard-inset, 0px)',
@@ -129,8 +153,9 @@ export function BottomSheet({ isOpen, onClose, title, children, footer }: Dialog
             <span className="h-1 w-10 rounded-full bg-[var(--border-strong)]" />
           </div>
           <div className="flex items-center justify-between px-6 py-3">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-[var(--text-primary)]">{title}</h2>
             <button
+              ref={closeButtonRef}
               onClick={onClose}
               aria-label="Fechar"
               className="focus-ring relative -mr-2 rounded-full p-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)] after:absolute after:inset-[-8px] after:content-['']"

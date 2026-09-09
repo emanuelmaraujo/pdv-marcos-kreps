@@ -132,9 +132,13 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
 
   const onConfirm = () => order && handleAction(() => pdvApi.confirmOrder(order.id));
   const onReady = () => order && handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
-  const onDeliver = () => order && handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" }));
+  const onDeliver = () => {
+    if (!order) return;
+    const confirmed = window.confirm(`Confirmar que o pedido #${order.daily_number} foi entregue ao cliente?`);
+    if (!confirmed) return;
+    return handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" }));
+  };
   const onRevertToQueue = () => order && handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "NA_FILA" }));
-  const onConfirmDelivery = () => order && handleAction(() => pdvApi.confirmDelivery({ orderId: order.id }));
   const onCancel = () => {
     if (!order) return;
     if (!cancelReason.trim()) {
@@ -164,14 +168,16 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
   }));
   const onDispatch = async () => {
     if (!order) return;
+    if (!courierIdInput) {
+      setErrorMsg("Selecione um motoboy cadastrado para continuar.");
+      return;
+    }
     setIsLoading(true);
     setErrorMsg("");
     try {
       await pdvApi.dispatchDelivery({
         orderId: order.id,
-        courierId: courierIdInput || undefined,
-        courierName: courierIdInput ? undefined : (courierNameInput.trim() || undefined),
-        courierPhone: courierIdInput ? undefined : (courierPhoneInput.trim() || undefined),
+        courierId: courierIdInput,
       });
       await onOrderUpdated();
       setShowDispatchForm(false);
@@ -190,8 +196,7 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
     try {
       const couriers = await couriersApi.listByBranch(order.branch_id);
       setRegisteredCouriers(couriers);
-      // Re-despacho: já vem com o entregador cadastrado marcado, para não
-      // cair no modo avulso sem querer (avulso não recebe o pedido no app).
+      // Re-despacho: mantém o entregador atual selecionado quando ele continua ativo.
       if (order.courier_id && couriers.some((c) => c.id === order.courier_id && c.active)) {
         setCourierIdInput(order.courier_id);
       }
@@ -238,7 +243,6 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
     onReady,
     onDeliver,
     onRevertToQueue,
-    onConfirmDelivery,
     onCancel,
     onMarkPayment,
     onChangeMethod,

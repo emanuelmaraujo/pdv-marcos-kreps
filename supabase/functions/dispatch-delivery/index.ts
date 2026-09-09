@@ -51,8 +51,11 @@ serve(async (req) => {
       throw new Error("Role não autorizada.");
     }
 
-    const { order_id, courier_id, courier_name, courier_phone } = await req.json();
+    const { order_id, courier_id } = await req.json();
     if (!order_id) throw new Error("order_id ausente.");
+    if (typeof courier_id !== "string" || !courier_id.trim()) {
+      throw new Error("Selecione um motoboy cadastrado para despachar a entrega.");
+    }
 
     // Lê o pedido via JWT — RLS valida filial do user.
     const { data: order, error: orderErr } = await supabaseClientAuth
@@ -67,27 +70,25 @@ serve(async (req) => {
       throw new Error(`Transição inválida ${order.status} -> SAIU_PARA_ENTREGA. O pedido precisa estar PRONTO.`);
     }
 
-    // Entregador cadastrado (courier_id): nunca confia em nome/telefone vindo
-    // do client quando um courier_id é informado — busca no servidor.
-    // Entregador avulso (sem courier_id): usa courier_name/courier_phone
-    // digitados livremente, mesmo comportamento da Fase 1.
-    let courierId: string | null = null;
-    let courierName = typeof courier_name === "string" && courier_name.trim() ? courier_name.trim() : null;
-    let courierPhone = typeof courier_phone === "string" && courier_phone.trim() ? courier_phone.trim() : null;
-
-    if (typeof courier_id === "string" && courier_id.trim()) {
-      const { data: courier, error: courierErr } = await supabaseAdmin
-        .from("couriers")
-        .select("id, name, phone, active, branch_id")
-        .eq("id", courier_id.trim())
-        .single();
-      if (courierErr || !courier || !courier.active || courier.branch_id !== order.branch_id) {
-        throw new Error("Entregador inválido para esta filial.");
-      }
-      courierId = courier.id;
-      courierName = courier.name;
-      courierPhone = courier.phone ?? null;
+    // O motoboy precisa ter login próprio para receber o pedido e confirmar a
+    // chegada. Nome avulso não é mais um destino válido para delivery.
+    const { data: courier, error: courierErr } = await supabaseAdmin
+      .from("couriers")
+      .select("id, name, phone, active, branch_id, profile_id, profiles!inner(active, role)")
+      .eq("id", courier_id.trim())
+      .single();
+    const courierProfile = Array.isArray((courier as any)?.profiles)
+      ? (courier as any).profiles[0]
+      : (courier as any)?.profiles;
+    if (
+      courierErr || !courier || !courier.active || !courier.profile_id ||
+      courier.branch_id !== order.branch_id || !courierProfile?.active || courierProfile.role !== "COURIER"
+    ) {
+      throw new Error("Motoboy inválido, inativo ou sem acesso ao aplicativo.");
     }
+    const courierId = courier.id;
+    const courierName = courier.name;
+    const courierPhone = courier.phone ?? null;
 
     const now = new Date().toISOString();
     const updatePayload: Record<string, unknown> = {
@@ -95,8 +96,8 @@ serve(async (req) => {
       dispatched_at: now,
       courier_id: courierId,
     };
-    if (courierName) updatePayload.courier_name = courierName;
-    if (courierPhone) updatePayload.courier_phone = courierPhone;
+    updatePayload.courier_name = courierName;
+    updatePayload.courier_phone = courierPhone;
 
     const { error: updateErr } = await supabaseAdmin
       .from("orders")
