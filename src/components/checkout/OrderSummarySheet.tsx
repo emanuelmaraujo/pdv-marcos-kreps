@@ -45,6 +45,7 @@ import {
   resolveNameFromLookup,
   toSubmittablePhone,
   validateCustomerIdentity,
+  wasPhoneErased,
   type CustomerNameSource,
 } from "@/lib/utils/customer-identity";
 
@@ -168,6 +169,10 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
   const customerNameRef = useRef(customerName);
   const nameSourceRef = useRef<CustomerNameSource>(nameSource);
   const lastAutofilledPhoneRef = useRef<string | null>(null);
+  /** Dígitos do WhatsApp na passada anterior — distingue "apagou o número que
+   * estava escrito" de "o campo nunca teve número". Só o primeiro caso mexe no
+   * nome; um campo que nunca foi preenchido não apaga nada. */
+  const previousPhoneDigitsRef = useRef("");
 
   useEffect(() => {
     customerNameRef.current = customerName;
@@ -237,6 +242,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
       setNameSuggestion(null);
       setIdentityError(null);
       lastAutofilledPhoneRef.current = null;
+      previousPhoneDigitsRef.current = "";
     }, 0);
     return () => window.clearTimeout(timer);
   }, [isOpen]);
@@ -246,10 +252,13 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
   useEffect(() => {
     if (!isOpen) return;
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
+    /** Havia número escrito e ele foi encurtado/apagado agora. */
+    const phoneWasErased = wasPhoneErased(previousPhoneDigitsRef.current, customerPhone);
+    previousPhoneDigitsRef.current = customerPhone;
 
     if (!normalizedPhone) {
       const idleTimer = window.setTimeout(() => {
-        if (lastAutofilledPhoneRef.current) {
+        if (lastAutofilledPhoneRef.current && phoneWasErased) {
           lastAutofilledPhoneRef.current = null;
           // Sem telefone válido não há consulta pra sustentar o nome que ela
           // preencheu — mas o nome digitado pelo atendente continua no campo.
@@ -981,8 +990,15 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                       type="text"
                       placeholder="Ex: Marcos Silva"
                       value={customerName}
-                      onChange={(e) => applyResolvedName(resolveNameFromInput(e.target.value), customerPhone)}
-                      onFocus={() => setShowNameSuggestions(true)}
+                      onChange={(e) => {
+                        // Digitou: a lista de recentes sai da frente na hora.
+                        setShowNameSuggestions(false);
+                        applyResolvedName(resolveNameFromInput(e.target.value), customerPhone);
+                      }}
+                      // Só sugere em campo vazio — tocar num nome já escrito é
+                      // pra corrigir, e um painel cobrindo o formulário nessa
+                      // hora atrapalha mais do que ajuda.
+                      onFocus={() => setShowNameSuggestions(!customerName.trim())}
                       onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
                       className="flex-1 bg-transparent py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
                     />

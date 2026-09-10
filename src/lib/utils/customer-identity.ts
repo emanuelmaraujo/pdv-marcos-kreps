@@ -85,6 +85,17 @@ export function toSubmittablePhone(rawPhone: string): string | undefined {
   return describeCustomerPhone(rawPhone).e164 ?? undefined;
 }
 
+/**
+ * `true` só quando havia número escrito e ele acabou de ser apagado (todo ou em
+ * parte). Um campo que nunca foi preenchido nunca conta como apagado — é o que
+ * impede o fluxo de mexer no nome de quem só quer digitar o nome do cliente.
+ */
+export function wasPhoneErased(previousRaw: string, currentRaw: string): boolean {
+  const previousDigits = (previousRaw ?? "").replace(/\D/g, "");
+  const currentDigits = (currentRaw ?? "").replace(/\D/g, "");
+  return previousDigits.length > 0 && currentDigits.length < previousDigits.length;
+}
+
 export interface ResolvedCustomerName {
   name: string;
   source: CustomerNameSource;

@@ -44,6 +44,14 @@ const MAX_WIDTH: Record<NonNullable<SheetProps["maxWidth"]>, string> = {
 export function Sheet({ isOpen, onClose, title, header, children, maxWidth = "md", footer, bodyClassName }: SheetProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // Mesma armadilha do BottomSheet: `onClose` chega como arrow inline do pai,
+  // então tê-lo nas dependências fazia o efeito re-rodar a cada render do pai
+  // e mandar o foco pro botão "X" — quem estava digitando num campo perdia o
+  // teclado no meio. A ref mantém o Escape funcionando sem essa dependência.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -51,7 +59,7 @@ export function Sheet({ isOpen, onClose, title, header, children, maxWidth = "md
     closeButtonRef.current?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     };
     document.addEventListener("keydown", onKeyDown);
 
@@ -59,7 +67,7 @@ export function Sheet({ isOpen, onClose, title, header, children, maxWidth = "md
       document.body.style.overflow = "unset";
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !sheetRef.current) return;

@@ -6,6 +6,7 @@ import {
   resolveNameFromLookup,
   toSubmittablePhone,
   validateCustomerIdentity,
+  wasPhoneErased,
 } from "./customer-identity";
 
 describe("describeCustomerPhone", () => {
@@ -80,6 +81,26 @@ describe("toSubmittablePhone", () => {
   it("nunca envia texto cru de número inválido", () => {
     expect(toSubmittablePhone("(11) 9999")).toBeUndefined();
     expect(toSubmittablePhone("")).toBeUndefined();
+  });
+});
+
+describe("wasPhoneErased", () => {
+  it("é falso quando o campo nunca teve número", () => {
+    expect(wasPhoneErased("", "")).toBe(false);
+    expect(wasPhoneErased("", "(11")).toBe(false);
+  });
+
+  it("é falso enquanto o número está sendo digitado", () => {
+    expect(wasPhoneErased("(11) 9", "(11) 99")).toBe(false);
+  });
+
+  it("é verdadeiro ao apagar tudo ou parte do que estava escrito", () => {
+    expect(wasPhoneErased("(11) 99999-8888", "")).toBe(true);
+    expect(wasPhoneErased("(11) 99999-8888", "(11) 99999-888")).toBe(true);
+  });
+
+  it("ignora máscara: trocar formatação não é apagar", () => {
+    expect(wasPhoneErased("11999998888", "(11) 99999-8888")).toBe(false);
   });
 });
 
