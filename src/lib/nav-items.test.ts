@@ -30,9 +30,10 @@ describe("isNavItemActive", () => {
     expect(isNavItemActive(byHref("/app/pedidos"), "/app/pedidos-antigos")).toBe(false);
   });
 
-  it("barra móvel fica limitada a cinco itens para administradores", () => {
+  it("barra móvel mantém cardápio e configurações acessíveis para administradores", () => {
     const visible = navItems.filter((item) => item.showInBottomNav && isNavItemVisible(item, "ADMIN"));
-    expect(visible).toHaveLength(5);
+    expect(visible).toHaveLength(6);
+    expect(visible.map((item) => item.href)).toContain("/app/cardapio");
     expect(visible.at(-1)?.href).toBe("/app/configuracoes");
   });
 });
