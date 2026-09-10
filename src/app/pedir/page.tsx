@@ -58,6 +58,14 @@ import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
 // número, então um celular com DDD 55 (RS) era rejeitado como inválido e o
 // cliente não conseguia informar o WhatsApp — nem pedir entrega, que exige.
 import { formatWhatsAppInput, normalizeBrazilPhone } from "@/lib/utils/phone";
+import {
+  describeCustomerPhone,
+  resolveNameAfterPhoneChange,
+  resolveNameFromInput,
+  resolveNameFromLookup,
+  validateCustomerIdentity,
+  type CustomerNameSource,
+} from "@/lib/utils/customer-identity";
 import { getCurrentPosition } from "@/lib/utils/geolocation";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { rememberLastBranchSlug } from "@/lib/utils/lastBranch";
@@ -382,6 +390,19 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     customerNameRef.current = customerName;
   }, [customerName]);
 
+  // Origem do nome no campo: o que a pessoa digita (MANUAL) sobrevive a apagar
+  // ou corrigir o WhatsApp; só o nome vindo de consulta (LOOKUP) é descartado.
+  const [nameSuggestion, setNameSuggestion] = useState<string | null>(null);
+  const nameSourceRef = useRef<CustomerNameSource>("NONE");
+  const applyResolvedName = useCallback((
+    resolved: { name: string; source: CustomerNameSource; suggestion: string | null },
+    phone: string,
+  ) => {
+    setCustomerInfo(resolved.name, phone);
+    nameSourceRef.current = resolved.source;
+    setNameSuggestion(resolved.suggestion);
+  }, [setCustomerInfo]);
+
   /** true quando há um carrinho com itens salvo de OUTRA filial — bloqueia
    * adicionar itens até o cliente decidir (banner com "Começar novo pedido").
    * Não depende de nenhum rastreamento próprio de "hidratou ou não": antes de
@@ -564,7 +585,13 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       const timer = window.setTimeout(() => {
         if (lastAutofilledPhoneRef.current) {
           lastAutofilledPhoneRef.current = null;
-          setCustomerInfo("", formatWhatsAppInput(customerPhone));
+          applyResolvedName(
+            resolveNameAfterPhoneChange({
+              currentName: customerNameRef.current,
+              nameSource: nameSourceRef.current,
+            }),
+            formatWhatsAppInput(customerPhone),
+          );
           setCustomerEmail("");
           setMarketingOptIn(false);
           setRememberCheckoutData(false);
@@ -585,7 +612,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     const saved = readSavedPublicProfile();
     if (saved?.phone_e164 === normalizedPhone) {
       const timer = window.setTimeout(() => {
-        setCustomerInfo(saved.name, formatWhatsAppInput(saved.phone_e164));
+        applyResolvedName(
+          resolveNameFromLookup({
+            currentName: customerNameRef.current,
+            nameSource: nameSourceRef.current,
+            profileName: saved.name,
+          }),
+          formatWhatsAppInput(saved.phone_e164),
+        );
         setCustomerEmail(saved.email ?? "");
         setMarketingOptIn(saved.marketing_opt_in);
         setRememberCheckoutData(true);
@@ -610,7 +644,13 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
     if (lastAutofilledPhoneRef.current && lastAutofilledPhoneRef.current !== normalizedPhone) {
       lastAutofilledPhoneRef.current = null;
-      setCustomerInfo("", formatWhatsAppInput(normalizedPhone));
+      applyResolvedName(
+        resolveNameAfterPhoneChange({
+          currentName: customerNameRef.current,
+          nameSource: nameSourceRef.current,
+        }),
+        formatWhatsAppInput(normalizedPhone),
+      );
       setCustomerEmail("");
       setMarketingOptIn(false);
       setProfileNotice("");
@@ -625,7 +665,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         const response = await pdvApi.getPublicCustomerProfile({ customer_phone: normalizedPhone });
         if (cancelled) return;
         if (response.found && response.profile) {
-          setCustomerInfo(response.profile.name ?? customerNameRef.current, formatWhatsAppInput(normalizedPhone));
+          applyResolvedName(
+            resolveNameFromLookup({
+              currentName: customerNameRef.current,
+              nameSource: nameSourceRef.current,
+              profileName: response.profile.name,
+            }),
+            formatWhatsAppInput(normalizedPhone),
+          );
           setCustomerEmail(response.profile.email ?? "");
           setMarketingOptIn(response.profile.marketing_opt_in === true);
           if (
@@ -660,7 +707,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       window.clearTimeout(optOutTimer);
       window.clearTimeout(timer);
     };
-  }, [customerPhone, setCustomerInfo, setOrderType]);
+  }, [applyResolvedName, customerPhone, setOrderType]);
 
   useEffect(() => {
     const recheck = async () => {
@@ -902,6 +949,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     : 0;
   const estimatedTotal = estimatedSubtotal + estimatedPackagingFee + estimatedDeliveryFee;
   const checkoutPhone = useMemo(() => normalizeBrazilPhone(customerPhone), [customerPhone]);
+  /** Aviso de número pela metade — some assim que o WhatsApp fica válido. */
+  const customerPhoneWarning = useMemo(() => describeCustomerPhone(customerPhone).message, [customerPhone]);
   const isProfileChecking = !!checkoutPhone && profileLookupState === "checking";
 
   // Elegível a pular a tela de Dados: já reconhecemos o cliente (perfil
@@ -1048,7 +1097,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const handleForgetSavedProfile = useCallback(() => {
     localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
     lastAutofilledPhoneRef.current = null;
-    setCustomerInfo("", customerPhone);
+    applyResolvedName({ name: "", source: "NONE", suggestion: null }, customerPhone);
     setCustomerEmail("");
     setMarketingOptIn(false);
     setRememberCheckoutData(false);
@@ -1057,7 +1106,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     setProfileNotice("");
     setProfileLookupState("not_found");
     addToast("success", "Dados salvos neste dispositivo foram apagados.");
-  }, [addToast, customerPhone, setCustomerInfo]);
+  }, [addToast, applyResolvedName, customerPhone]);
 
   // CEP é a fonte de verdade pra rua/bairro/cidade/UF — bloqueia digitar um
   // bairro atendido só pra escapar do bloqueio de zona. Número/complemento/
@@ -1167,8 +1216,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       return;
     }
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
-    if (customerPhone.trim() && !normalizedPhone) {
-      setCheckoutError("Informe um WhatsApp valido com DDD.");
+    // Mesma régua do checkout do atendente: número pela metade avisa o que
+    // falta, e a entrega é a única modalidade que exige contato.
+    const identityError = validateCustomerIdentity(customerPhone, {
+      requirePhone: orderType === "ENTREGA",
+      requiredMessage: "Informe um WhatsApp válido com DDD para pedidos de entrega.",
+    });
+    if (identityError) {
+      setCheckoutError(identityError);
       return;
     }
     if (customerEmail.trim() && !isValidEmail(customerEmail)) {
@@ -1176,10 +1231,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       return;
     }
     if (orderType === "ENTREGA") {
-      if (!normalizedPhone) {
-        setCheckoutError("Informe um WhatsApp valido com DDD para pedidos de entrega.");
-        return;
-      }
       if (!selectedSavedAddress) {
         if (!isValidCepFormat(deliveryAddress.postal_code)) {
           setCheckoutError("Informe um CEP válido para a entrega.");
@@ -2073,6 +2124,13 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               help="Opcional. Usamos o WhatsApp para enviar atualizacoes do pedido."
             />
 
+            {/* Número pela metade avisa aqui, e não só quando o pedido é enviado. */}
+            {customerPhoneWarning && (
+              <p className="text-xs font-semibold text-[var(--status-danger)]" role="alert">
+                {customerPhoneWarning}
+              </p>
+            )}
+
             <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">
               Voce pode comprar sem preencher seus dados. Se informar o WhatsApp, ele sera usado para avisos de status do pedido.
             </div>
@@ -2105,9 +2163,22 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <FloatingInput
                   label="Nome (opcional)"
                   value={customerName}
-                  onChange={(v) => setCustomerInfo(v, customerPhone)}
+                  onChange={(v) => applyResolvedName(resolveNameFromInput(v), customerPhone)}
                   placeholder="Como te chamar?"
                 />
+
+                {nameSuggestion && (
+                  <button
+                    type="button"
+                    onClick={() => applyResolvedName(
+                      { name: nameSuggestion, source: "LOOKUP", suggestion: null },
+                      customerPhone,
+                    )}
+                    className="w-full rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-left text-xs font-medium text-[var(--text-secondary)]"
+                  >
+                    Salvamos <strong>{nameSuggestion}</strong> para este WhatsApp. Tocar aqui usa esse nome.
+                  </button>
+                )}
 
                 <FloatingInput
                   label="E-mail (opcional)"
