@@ -54,6 +54,13 @@ export function BottomSheet({ isOpen, onClose, title, children, footer, maxWidth
   const { sheetRef, onTouchStart, onTouchMove, onTouchEnd } = useDragToClose(onClose);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const titleId = useId();
+  // `onClose` costuma chegar como arrow inline do pai (`() => setAberto(false)`),
+  // ou seja: identidade nova a cada render do pai. Guardar em ref é o que
+  // impede o efeito de foco abaixo de re-rodar junto com o pai.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (isOpen) {
@@ -66,38 +73,62 @@ export function BottomSheet({ isOpen, onClose, title, children, footer, maxWidth
     };
   }, [isOpen]);
 
+  // Roda uma vez por abertura — e só por abertura. Antes tinha `onClose` nas
+  // dependências: como o pai passa uma arrow inline, qualquer render do pai
+  // (digitar no carrinho já é um) refazia o efeito, devolvia o foco pro botão
+  // que abriu a folha e jogava o foco no "X". Na prática, tocar num campo pra
+  // digitar fechava o teclado sozinho e não dava pra preencher.
   useEffect(() => {
     if (!isOpen) return;
+    const sheet = sheetRef.current;
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener('keydown', onKeyDown);
-      previouslyFocused?.focus();
+      // Só devolve o foco pra fora se ele ainda estiver dentro da folha que
+      // está fechando — nunca rouba o foco de um campo em uso.
+      const active = document.activeElement;
+      if (!active || active === document.body || sheet?.contains(active)) {
+        previouslyFocused?.focus();
+      }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, sheetRef]);
 
   useEffect(() => {
     if (!isOpen || !sheetRef.current) return;
 
     const viewport = window.visualViewport;
+    /** Altura mínima de folha utilizável — o teclado nunca espreme além disso,
+     * senão a folha vira uma faixa e parece que fechou sozinha ao tocar num
+     * campo. O campo focado continua sendo trazido pra vista por scroll. */
+    const MIN_SHEET_HEIGHT = 240;
     const updateKeyboardInset = () => {
       if (!sheetRef.current) return;
-      const inset = viewport
+      const rawInset = viewport
         ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
         : 0;
-      sheetRef.current.style.setProperty("--keyboard-inset", `${inset}px`);
+      const room = Math.max(0, window.innerHeight - 64 - MIN_SHEET_HEIGHT);
+      sheetRef.current.style.setProperty("--keyboard-inset", `${Math.min(rawInset, room)}px`);
     };
     const keepFocusedFieldVisible = (event: FocusEvent) => {
       const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
+      // Só campos de dentro desta folha, e só quando o teclado realmente cobre
+      // o campo. Rolar em todo foco brigava com o scroll nativo do navegador e
+      // tirava o campo de baixo do dedo — o toque no nome do cliente parecia
+      // não pegar, ou fechava o teclado no meio da digitação.
+      if (!(target instanceof HTMLElement) || !sheetRef.current?.contains(target)) return;
       window.setTimeout(() => {
-        target.scrollIntoView({ block: "center", behavior: "smooth" });
-      }, 80);
+        if (!sheetRef.current?.contains(target) || document.activeElement !== target) return;
+        const visibleBottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+        const rect = target.getBoundingClientRect();
+        if (rect.top >= 0 && rect.bottom <= visibleBottom - 8) return;
+        target.scrollIntoView({ block: "nearest" });
+      }, 120);
     };
 
     updateKeyboardInset();

@@ -219,7 +219,13 @@ export default function NovoPedidoPage() {
       if (bestId) setSelectedCategoryId(bestId);
     }
 
-    function onScroll() {
+    function onScroll(event: Event) {
+      // Scroll de dentro de um overlay (checkout, personalização) não é scroll
+      // do cardápio: reagir a ele re-renderizava a página inteira enquanto o
+      // atendente digitava dentro da folha. Como o listener é de captura, ele
+      // enxerga esses containers — daí o filtro por [role="dialog"].
+      const target = event.target;
+      if (target instanceof Element && target.closest('[role="dialog"]')) return;
       if (raf) return;
       raf = window.requestAnimationFrame(pickActiveSection);
     }

@@ -64,6 +64,7 @@ import {
   resolveNameFromInput,
   resolveNameFromLookup,
   validateCustomerIdentity,
+  wasPhoneErased,
   type CustomerNameSource,
 } from "@/lib/utils/customer-identity";
 import { getCurrentPosition } from "@/lib/utils/geolocation";
@@ -394,6 +395,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   // ou corrigir o WhatsApp; só o nome vindo de consulta (LOOKUP) é descartado.
   const [nameSuggestion, setNameSuggestion] = useState<string | null>(null);
   const nameSourceRef = useRef<CustomerNameSource>("NONE");
+  /** Dígitos do WhatsApp na passada anterior — só apaga o que a consulta
+   * preencheu quando havia número escrito e ele foi apagado de fato. */
+  const previousPhoneDigitsRef = useRef("");
   const applyResolvedName = useCallback((
     resolved: { name: string; source: CustomerNameSource; suggestion: string | null },
     phone: string,
@@ -581,9 +585,12 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
   useEffect(() => {
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
+    const phoneWasErased = wasPhoneErased(previousPhoneDigitsRef.current, customerPhone);
+    previousPhoneDigitsRef.current = customerPhone;
+
     if (!normalizedPhone) {
       const timer = window.setTimeout(() => {
-        if (lastAutofilledPhoneRef.current) {
+        if (lastAutofilledPhoneRef.current && phoneWasErased) {
           lastAutofilledPhoneRef.current = null;
           applyResolvedName(
             resolveNameAfterPhoneChange({
