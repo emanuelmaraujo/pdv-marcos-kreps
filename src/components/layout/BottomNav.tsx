@@ -21,7 +21,7 @@ export function BottomNav() {
       style={{ backgroundColor: "var(--bg-surface)" }}
       className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] pb-safe shadow-[0_-2px_12px_-2px_rgba(0,0,0,0.08)] isolate md:hidden"
     >
-      <div className="flex h-16 items-stretch px-1">
+      <div className="grid h-16 grid-flow-col auto-cols-fr items-stretch px-0.5">
         {visibleItems.map((item) => {
           const isActive = isNavItemActive(item, pathname);
           const Icon = item.icon;
@@ -32,7 +32,7 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               aria-current={isActive ? "page" : undefined}
-              className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl ${
+              className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 ${
                 isActive
                   ? "text-brand-red"
                   : "text-[var(--text-muted)] active:text-[var(--text-secondary)]"
@@ -52,8 +52,8 @@ export function BottomNav() {
                   </span>
                 )}
               </span>
-              <span className={`text-[10px] leading-none ${isActive ? "font-semibold" : "font-medium"}`}>
-                {item.name}
+              <span className={`max-w-full truncate text-[9px] leading-none min-[380px]:text-[10px] ${isActive ? "font-semibold" : "font-medium"}`}>
+                {item.bottomLabel ?? item.name}
               </span>
             </Link>
           );

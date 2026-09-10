@@ -24,8 +24,10 @@ export type NavItem = {
    * os dois acendem ao mesmo tempo.
    */
   exact?: boolean;
-  /** Mantém a barra inferior enxuta (máximo de cinco destinos). */
+  /** Exibe o destino também na navegação mobile. */
   showInBottomNav?: boolean;
+  /** Rótulo compacto para a barra inferior em telas estreitas. */
+  bottomLabel?: string;
 };
 
 const STAFF_ROLES: UserRole[] = ["ADMIN", "ATTENDANT"];
@@ -36,8 +38,8 @@ export const navItems: NavItem[] = [
   { name: "Novo",      href: "/app/novo-pedido",             icon: CirclePlus, showInBottomNav: true },
   { name: "Caixa",     href: "/app/caixa",                   icon: Banknote,  adminOnly: true, showInBottomNav: true },
   { name: "Impresso",  href: "/app/impressao",               icon: Printer },
-  { name: "Cardápio",  href: "/app/cardapio",                icon: BookOpen,  adminOnly: true },
-  { name: "Configurações", href: "/app/configuracoes",       icon: Settings, adminOnly: true, showInBottomNav: true },
+  { name: "Cardápio",  href: "/app/cardapio",                icon: BookOpen,  adminOnly: true, showInBottomNav: true },
+  { name: "Configurações", href: "/app/configuracoes",       icon: Settings, adminOnly: true, showInBottomNav: true, bottomLabel: "Ajustes" },
   { name: "Minhas Entregas", href: "/app/motoboy",           icon: Bike,      roles: ["COURIER"], exact: true, showInBottomNav: true },
   { name: "Histórico", href: "/app/motoboy/historico",       icon: Wallet,    roles: ["COURIER"], showInBottomNav: true },
 ];
