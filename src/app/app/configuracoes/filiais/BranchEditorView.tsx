@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { ArrowLeft, Bike, Building2, Clock, CreditCard, Loader2, MessageSquare, Printer } from "lucide-react";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
-import { TabbedForm, type TabbedFormTab } from "@/components/ui/TabbedForm";
 import { useBranchEditor } from "@/hooks/useBranchEditor";
 import { DadosTab } from "./components/tabs/DadosTab";
 import { HorariosTab } from "./components/tabs/HorariosTab";
 import { EntregaTab } from "./components/tabs/EntregaTab";
 import { ImpressaoTab } from "./components/tabs/ImpressaoTab";
 import { WhatsAppTab } from "./components/tabs/WhatsAppTab";
+import { BranchSettingsShell, type BranchSettingsTab } from "./components/BranchSettingsShell";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { SettingsBadge, SettingsPageHeader } from "../components/SettingsPageHeader";
 
@@ -63,7 +63,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
     }
   }
 
-  const tabs: TabbedFormTab[] = [
+  const tabs: BranchSettingsTab[] = [
     {
       id: "dados", label: "Dados", icon: Building2,
       description: "Nome, identificação e disponibilidade da filial.",
@@ -152,8 +152,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       {pageHeader}
 
-      <TabbedForm
-        variant="page"
+      <BranchSettingsShell
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={handleTabChange}
@@ -198,7 +197,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
               globalSettings={editor.globalSettings}
             />
           )}
-      </TabbedForm>
+      </BranchSettingsShell>
     </main>
   );
 }
