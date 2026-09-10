@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
 import { useCart, CartItem } from "@/features/cart/useCart";
@@ -38,6 +38,15 @@ import { PayItemsModal } from "@/app/app/pedidos/components/PayItemsModal";
 import { Order } from "@/types/pdv";
 import { useBranch } from "@/contexts/BranchContext";
 import { formatWhatsAppInput, normalizeBrazilPhone } from "@/lib/utils/phone";
+import {
+  describeCustomerPhone,
+  resolveNameAfterPhoneChange,
+  resolveNameFromInput,
+  resolveNameFromLookup,
+  toSubmittablePhone,
+  validateCustomerIdentity,
+  type CustomerNameSource,
+} from "@/lib/utils/customer-identity";
 
 // ─── Local storage helpers for recent names ───────────────────────────────────
 
@@ -151,12 +160,33 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
   const [profileNotice, setProfileNotice] = useState("");
   const [profileLookupRetry, setProfileLookupRetry] = useState(0);
   const [rememberCustomerData, setRememberCustomerData] = useState(false);
+  // Origem do nome que está no campo: o que o atendente digita (MANUAL) nunca
+  // é apagado nem sobrescrito por consulta de telefone. Ver customer-identity.
+  const [nameSource, setNameSource] = useState<CustomerNameSource>("NONE");
+  const [nameSuggestion, setNameSuggestion] = useState<string | null>(null);
+  const [identityError, setIdentityError] = useState<string | null>(null);
   const customerNameRef = useRef(customerName);
+  const nameSourceRef = useRef<CustomerNameSource>(nameSource);
   const lastAutofilledPhoneRef = useRef<string | null>(null);
 
   useEffect(() => {
     customerNameRef.current = customerName;
   }, [customerName]);
+
+  useEffect(() => {
+    nameSourceRef.current = nameSource;
+  }, [nameSource]);
+
+  /** Aplica nome + origem de uma vez, mantendo o telefone atual do carrinho. */
+  const applyResolvedName = useCallback((
+    resolved: { name: string; source: CustomerNameSource; suggestion: string | null },
+    phone: string,
+  ) => {
+    setCustomerInfo(resolved.name, phone);
+    setNameSource(resolved.source);
+    nameSourceRef.current = resolved.source;
+    setNameSuggestion(resolved.suggestion);
+  }, [setCustomerInfo]);
 
   // Carrega taxa de embalagem:
   //   - branch.packing_fee tem prioridade (override por filial).
@@ -202,6 +232,10 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
       setProfileLookupState("idle");
       setProfileNotice("");
       setRememberCustomerData(false);
+      setNameSource("NONE");
+      nameSourceRef.current = "NONE";
+      setNameSuggestion(null);
+      setIdentityError(null);
       lastAutofilledPhoneRef.current = null;
     }, 0);
     return () => window.clearTimeout(timer);
@@ -217,7 +251,15 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
       const idleTimer = window.setTimeout(() => {
         if (lastAutofilledPhoneRef.current) {
           lastAutofilledPhoneRef.current = null;
-          setCustomerInfo("", formatWhatsAppInput(customerPhone));
+          // Sem telefone válido não há consulta pra sustentar o nome que ela
+          // preencheu — mas o nome digitado pelo atendente continua no campo.
+          applyResolvedName(
+            resolveNameAfterPhoneChange({
+              currentName: customerNameRef.current,
+              nameSource: nameSourceRef.current,
+            }),
+            formatWhatsAppInput(customerPhone),
+          );
           setRememberCustomerData(false);
         }
         setProfileLookupState("idle");
@@ -239,7 +281,13 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
     const timer = window.setTimeout(async () => {
       if (phoneChanged) {
         lastAutofilledPhoneRef.current = null;
-        setCustomerInfo("", formatWhatsAppInput(normalizedPhone));
+        applyResolvedName(
+          resolveNameAfterPhoneChange({
+            currentName: customerNameRef.current,
+            nameSource: nameSourceRef.current,
+          }),
+          formatWhatsAppInput(normalizedPhone),
+        );
         setProfileNotice("");
       }
       try {
@@ -247,8 +295,14 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
         const response = await pdvApi.getCustomerProfile({ customer_phone: normalizedPhone });
         if (cancelled) return;
         if (response.found && response.profile) {
-          const resolvedName = response.profile.name ?? customerNameRef.current;
-          setCustomerInfo(resolvedName, formatWhatsAppInput(normalizedPhone));
+          applyResolvedName(
+            resolveNameFromLookup({
+              currentName: customerNameRef.current,
+              nameSource: nameSourceRef.current,
+              profileName: response.profile.name,
+            }),
+            formatWhatsAppInput(normalizedPhone),
+          );
           setRememberCustomerData(true);
           lastAutofilledPhoneRef.current = normalizedPhone;
           setProfileLookupState("found");
@@ -276,9 +330,28 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
       window.clearTimeout(optOutTimer);
       window.clearTimeout(timer);
     };
-  }, [customerPhone, isOpen, profileLookupRetry, setCustomerInfo]);
+  }, [applyResolvedName, customerPhone, isOpen, profileLookupRetry]);
 
   const isDeliveryOrder = orderType === "ENTREGA";
+  // Estado do WhatsApp digitado — classificado na hora, sem esperar o submit.
+  const phoneState = describeCustomerPhone(customerPhone);
+  // Só número pela metade bloqueia. Telefone vazio segue: balcão sem cadastro é
+  // rotina, e pedido de plataforma (iFood) chega sem contato do cliente. Na
+  // entrega isso vira aviso, não trava — ver deliveryWithoutPhone abaixo.
+  // Adicionar itens a um pedido aberto não envia identificação nenhuma — nesse
+  // modo o bloco de cliente não trava nada.
+  const identityBlockingError = targetOrderId ? null : validateCustomerIdentity(customerPhone);
+  const deliveryWithoutPhone = isDeliveryOrder && phoneState.status === "EMPTY";
+
+  /** Só avança quando a identificação está coerente. */
+  const goToPayment = () => {
+    if (identityBlockingError) {
+      setIdentityError(identityBlockingError);
+      return;
+    }
+    setIdentityError(null);
+    setStep(2);
+  };
   const estimatedSubtotal = getEstimatedSubtotal();
   // Embalagem cobrada por krep marcado como Para Levar (entrega força embalagem em todos os itens)
   const takeoutQuantity = isDeliveryOrder
@@ -394,12 +467,22 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
       }
 
       const derivedOrderType = isDeliveryOrder ? "ENTREGA" : (items.some((i) => i.is_takeout) ? "VIAGEM" : "BALCAO");
-      const normalizedPhone = normalizeBrazilPhone(customerPhone);
+      // Última barreira: número pela metade nunca chega na edge function (que
+      // devolveria erro genérico depois de o atendente já ter escolhido o
+      // pagamento) e nunca é gravado cru no pedido.
+      if (identityBlockingError) {
+        setIdentityError(identityBlockingError);
+        setError(identityBlockingError);
+        setStep(1);
+        setIsSubmitting(false);
+        return;
+      }
+      const normalizedPhone = toSubmittablePhone(customerPhone);
       const payload = {
         branch_id: currentBranchId,
         order_type: derivedOrderType,
         customer_name: customerName.trim() || undefined,
-        customer_phone: normalizedPhone ?? (customerPhone.trim() || undefined),
+        customer_phone: normalizedPhone,
         remember_checkout_data: normalizedPhone ? rememberCustomerData : false,
         notes: orderNotes.trim() || undefined,
         payment_method: splitBill ? "PENDING" : selectedPaymentMethod,
@@ -809,13 +892,18 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
             <section aria-labelledby="customer-identification-heading" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3.5">
               <div>
                 <h3 id="customer-identification-heading" className="text-xs font-black text-[var(--text-primary)]">Identificação do cliente</h3>
-                <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">Informe o WhatsApp para localizar e preencher o nome.</p>
+                <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
+                  Os dois campos são opcionais: dá pra fechar só com o nome, ou sem nenhum dos dois.
+                  O WhatsApp localiza o cliente e libera os avisos de status.
+                </p>
               </div>
 
               {/* WhatsApp */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="customer-whatsapp" className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">WhatsApp (opcional)</label>
+                  <label htmlFor="customer-whatsapp" className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
+                    WhatsApp (opcional)
+                  </label>
                   {profileLookupState === "checking" && (
                     <span className="flex items-center gap-1 text-[10px] font-bold text-[var(--text-secondary)]">
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -828,19 +916,38 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                   type="tel"
                   placeholder="(00) 00000-0000"
                   value={customerPhone}
-                  onChange={(e) => setCustomerInfo(customerName, e.target.value)}
+                  aria-invalid={phoneState.status === "INCOMPLETE" || phoneState.status === "INVALID"}
+                  aria-describedby="customer-whatsapp-hint"
+                  onChange={(e) => {
+                    setIdentityError(null);
+                    setCustomerInfo(customerName, e.target.value);
+                  }}
                   onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"
+                  className={`w-full rounded-xl border bg-[var(--bg-subtle)] px-4 py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-all focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 ${
+                    phoneState.message
+                      ? "border-[var(--status-danger)]/40 focus:border-[var(--status-danger)]/40 focus:ring-[var(--status-danger)]/10"
+                      : "border-[var(--border)] focus:border-brand-red/30 focus:ring-brand-red/10"
+                  }`}
                 />
 
-                <div aria-live="polite">
-                  {profileLookupState === "found" && profileNotice && (
+                <div aria-live="polite" id="customer-whatsapp-hint">
+                  {phoneState.message && (
+                    <p className="text-[11px] font-bold text-[var(--status-danger)]">
+                      {phoneState.message}
+                    </p>
+                  )}
+                  {!phoneState.message && profileLookupState === "found" && profileNotice && (
                     <p className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
                       <CheckCircle2 className="h-3 w-3" />
                       {profileNotice}
                     </p>
                   )}
-                  {profileLookupState === "not_found" && (
+                  {!phoneState.message && deliveryWithoutPhone && (
+                    <p className="text-[11px] font-bold text-amber-600">
+                      Entrega sem WhatsApp: o cliente não recebe o aviso de saída para entrega.
+                    </p>
+                  )}
+                  {!phoneState.message && !deliveryWithoutPhone && profileLookupState === "not_found" && (
                     <p className="text-[11px] font-medium text-[var(--text-muted)]">
                       Cliente novo. Marque a opção abaixo para salvar para a próxima vez.
                     </p>
@@ -865,7 +972,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
 
               {/* Customer name remains directly below lookup result so autofill is visible. */}
               <div className="space-y-2">
-                <label htmlFor="customer-name" className="block text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nome do cliente</label>
+                <label htmlFor="customer-name" className="block text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Nome do cliente (opcional)</label>
                 <div className="relative">
                   <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 transition-all focus-within:border-brand-red/30 focus-within:bg-[var(--bg-surface)] focus-within:ring-4 focus-within:ring-brand-red/10">
                     <User className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
@@ -874,7 +981,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                       type="text"
                       placeholder="Ex: Marcos Silva"
                       value={customerName}
-                      onChange={(e) => setCustomerInfo(e.target.value, customerPhone)}
+                      onChange={(e) => applyResolvedName(resolveNameFromInput(e.target.value), customerPhone)}
                       onFocus={() => setShowNameSuggestions(true)}
                       onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
                       className="flex-1 bg-transparent py-3.5 text-sm font-bold text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
@@ -886,7 +993,7 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                         <button
                           key={name}
                           type="button"
-                          onMouseDown={() => setCustomerInfo(name, customerPhone)}
+                          onPointerDown={() => applyResolvedName(resolveNameFromInput(name), customerPhone)}
                           className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]"
                         >
                           <Clock className="h-3 w-3 text-[var(--text-muted)]" />
@@ -898,8 +1005,26 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                 </div>
               </div>
 
+              {/* Cadastro tem outro nome pra este WhatsApp: sugere sem sobrescrever
+                 o que o atendente digitou. */}
+              {nameSuggestion && (
+                <button
+                  type="button"
+                  onClick={() => applyResolvedName(
+                    { name: nameSuggestion, source: "LOOKUP", suggestion: null },
+                    customerPhone,
+                  )}
+                  className="flex w-full items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-left text-[11px] font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-surface)]"
+                >
+                  <User className="h-3 w-3 shrink-0 text-[var(--text-muted)]" />
+                  <span className="min-w-0">
+                    No cadastro deste WhatsApp o nome é <strong>{nameSuggestion}</strong>. Tocar aqui usa esse nome.
+                  </span>
+                </button>
+              )}
+
               {/* Remember toggle — só aparece com telefone valido */}
-              {normalizeBrazilPhone(customerPhone) && (
+              {phoneState.status === "VALID" && (
                 <button
                   type="button"
                   onClick={() => setRememberCustomerData((v) => !v)}
@@ -935,11 +1060,19 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
               />
             </div>
 
+            {/* Explica por que o botão não avançou. Some sozinho quando o campo
+               é corrigido — nunca fica preso na tela. */}
+            {identityError && identityBlockingError && (
+              <p role="alert" className="rounded-xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] px-4 py-3 text-[11px] font-bold text-[var(--status-danger)]">
+                {identityBlockingError} Corrija o WhatsApp ou apague o campo para seguir sem ele.
+              </p>
+            )}
+
             <div className="flex gap-3">
               <Button variant="outline" className="h-12 border-2 font-black gap-2" onClick={() => setStep(0)}>
                 <ChevronLeft size={16} /> Voltar
               </Button>
-              <Button className="flex-1 h-12 font-black text-base" onClick={() => setStep(2)}>
+              <Button className="flex-1 h-12 font-black text-base" onClick={goToPayment}>
                 Continuar → Pagamento
               </Button>
             </div>
