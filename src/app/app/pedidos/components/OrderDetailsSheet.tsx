@@ -317,6 +317,9 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           </div>
         </section>
 
+        {/* Endereço e número permanecem visíveis; contato completo abre sob demanda. */}
+        <OrderFulfillmentSummary order={order} />
+
         <OrderActionBrief
           order={order}
           isDelivery={isDelivery}
@@ -334,8 +337,6 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
             <span className="shrink-0 text-sm font-black">Receber {currency.format(outstandingAmount)}</span>
           </button>
         )}
-
-        <OrderFulfillmentSummary order={order} />
 
         {order.notes && (
           <section className="flex gap-3 rounded-2xl border border-violet-500/15 bg-violet-500/[0.06] p-3.5">
