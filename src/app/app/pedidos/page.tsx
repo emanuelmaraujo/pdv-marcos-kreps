@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { getSelectedOrderSyncCandidate, hasOrderBoardChanged } from "@/lib/utils/order-refresh";
+import { orderMatchesSearch } from "@/lib/utils/order-search";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { OrderCard } from "./components/OrderCard";
 import { OrderDetailsSheet } from "./components/OrderDetailsSheet";
@@ -281,10 +282,7 @@ function KanbanColumn({
   isLoading?: boolean;
 }) {
   const filtered = orders
-    .filter((o) => {
-      const q = searchQuery.toLowerCase().trim();
-      return !q || String(o.daily_number).includes(q) || o.customer_name?.toLowerCase().includes(q);
-    })
+    .filter((order) => orderMatchesSearch(order, searchQuery))
     .sort((a, b) => Number(isReopenedComanda(a)) - Number(isReopenedComanda(b)) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   const avgWait = config.showAvgWait ? getAvgWaitMinutes(filtered, now) : null;
@@ -552,7 +550,6 @@ export default function PedidosPage() {
   // status técnico. Assim pagamentos que precisam ser fechados não somem.
   const filteredOrders = orders
     .filter((order) => {
-      const q = searchQuery.toLowerCase().trim();
       const matchesTab = activeTab === "AGORA"
         ? !["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(order.status)
         : activeTab === "PRODUCAO"
@@ -569,8 +566,7 @@ export default function PedidosPage() {
           : activeTab === "ENTREGUE"
           ? order.status === "ENTREGUE" && !isDeliveredPendingPayment(order)
           : order.status === activeTab);
-      const matchesSearch =
-        !q || String(order.daily_number).includes(q) || order.customer_name?.toLowerCase().includes(q);
+      const matchesSearch = orderMatchesSearch(order, searchQuery);
       return matchesTab && matchesSearch;
     })
     .sort((a, b) => {
@@ -623,7 +619,7 @@ export default function PedidosPage() {
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" strokeWidth={1.75} />
             <input
               type="text"
-              placeholder="Buscar número ou cliente..."
+              placeholder="Buscar pedido, cliente, telefone ou endereço..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] pl-10 pr-4 text-sm font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-brand-red/30 focus:bg-[var(--bg-surface)] focus:outline-none focus:ring-4 focus:ring-brand-red/10"

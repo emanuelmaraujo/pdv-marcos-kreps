@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Order, OrderItem, OrderItemStatus } from "@/types/pdv";
-import { Bike, CheckCircle2, Clock, CreditCard, Loader2, Package, ShoppingBag, Utensils } from "lucide-react";
+import { Bike, CheckCircle2, Clock, CreditCard, Loader2, MapPin, Package, ShoppingBag, Utensils } from "lucide-react";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { CategoryLookup, groupOrderItems } from "./order-item-presentation";
+import { deliveryNumberLabel, deliveryStreetName } from "@/lib/utils/order-delivery";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const ITEM_DOT: Record<OrderItemStatus, string> = { PENDING: "bg-[var(--text-muted)]/40", IN_PREPARATION: "bg-[var(--status-warning)]", READY: "bg-[var(--status-success)]", DELIVERED: "bg-[var(--status-success)] opacity-60", CANCELLED: "bg-[var(--bg-subtle)] ring-1 ring-[var(--border)]" };
@@ -63,13 +64,18 @@ export function OrderCard({ order, onClick, now, categoryLookup = {}, onQuickAct
   const awaitingCourier = order.status === "SAIU_PARA_ENTREGA";
   const triggerAction = async (event: React.MouseEvent) => { event.stopPropagation(); if (!nextAction || loading) return; setLoading(true); try { await nextAction.run(); } finally { setLoading(false); } };
   const triggerPayment = (event: React.MouseEvent) => { event.stopPropagation(); if (!onPay || loading) return; onPay(order); };
+  const openFromKeyboard = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key) || loading) return;
+    event.preventDefault();
+    onClick(order);
+  };
 
-  return <article onClick={() => !loading && onClick(order)} className={`relative overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] transition active:scale-[0.99] ${urgent ? "border-[var(--status-danger)]/50 ring-2 ring-[var(--status-danger)]/15" : "border-[var(--border)]"} ${loading ? "pointer-events-none opacity-60" : "cursor-pointer hover:shadow-[var(--shadow-md)]"}`}>
+  return <article onClick={() => !loading && onClick(order)} onKeyDown={openFromKeyboard} role="button" tabIndex={loading ? -1 : 0} aria-label={`Abrir detalhes do pedido ${order.daily_number} de ${order.customer_name || "cliente final"}`} className={`focus-ring relative overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] transition active:scale-[0.99] ${urgent ? "border-[var(--status-danger)]/50 ring-2 ring-[var(--status-danger)]/15" : "border-[var(--border)]"} ${loading ? "pointer-events-none opacity-60" : "cursor-pointer hover:shadow-[var(--shadow-md)]"}`}>
     <div className={`h-1 ${ACCENT[order.status]}`} />
     <div className="space-y-3 p-3.5">
       <header className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><span className="flex h-10 min-w-10 flex-col items-center justify-center rounded-xl bg-brand-charcoal px-1 text-sm font-black text-white">{order.branch?.code && <small className="text-[8px] leading-none text-zinc-400">{order.branch.code}</small>}{String(order.daily_number).padStart(2, "0")}</span><div className="min-w-0"><p className="truncate text-sm font-black text-[var(--text-primary)]">{order.customer_name || "Cliente final"}</p><div className="mt-1 flex flex-wrap items-center gap-1"><OrderTypeBadge type={order.type} /><OrderStatusBadge status={order.status} />{active && since && <ElapsedTimer since={since} now={now} />}</div></div></div><PaymentStatusBadge status={pendingPayment ? "PARTIAL" : order.payment_status} /></header>
       {order.type === "VIAGEM" && <div className="flex items-center gap-2 rounded-xl border border-[var(--status-warning)]/25 bg-[var(--status-warning-bg)] px-3 py-2 text-[11px] font-black uppercase tracking-wide text-[var(--status-warning)]"><ShoppingBag className="h-3.5 w-3.5" />Para viagem · separar para retirada</div>}
-      {order.type === "ENTREGA" && <div className="flex items-center gap-2 rounded-xl border border-blue-500/25 bg-blue-500/10 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-blue-600"><Bike className="h-3.5 w-3.5" /><span className="truncate">Entrega{order.delivery_neighborhood ? ` · ${order.delivery_neighborhood}` : " · definir despacho"}</span></div>}
+      {order.type === "ENTREGA" && <div className="flex items-start gap-2 rounded-xl border border-blue-500/25 bg-blue-500/10 px-3 py-2 text-blue-700"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /><div className="min-w-0"><p className="truncate text-[11px] font-black uppercase tracking-wide">{deliveryStreetName(order)} · {deliveryNumberLabel(order)}</p>{order.delivery_neighborhood && <p className="mt-0.5 truncate text-[10px] font-semibold text-blue-700/75">{order.delivery_neighborhood}</p>}</div></div>}
       {pendingPayment && <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-800"><span>{reopenedComanda ? "Adicional a receber" : `Pagamento ${order.payment_status === "PARTIAL" ? "parcial" : "pendente"}`}</span><span className="tabular-nums">{currency.format(pendingAmount || order.total_amount)}</span></div>}
       {awaitingCourier && <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-700"><Bike className="h-3.5 w-3.5" /><span className="truncate">Aguardando confirmação de {order.courier_name || "motoboy"}</span></div>}
       {(order.items ?? []).length > 0 && <ItemPreview items={order.items ?? []} categories={categoryLookup} />}
