@@ -32,32 +32,35 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [searchParams, pathname, router]);
 
-  // Se a URL aponta direto pra uma aba além de "Dados" sem a filial ainda
-  // existir (ex: link colado à mão), volta pra "Dados" — as outras abas
-  // dependem de um branchId real.
   useEffect(() => {
-    if (!editor.loading && !editor.branchId && activeTab !== "dados") {
+    if (!editor.loading && !branchId && activeTab !== "dados") {
       goToTab("dados");
     }
-  }, [editor.loading, editor.branchId, activeTab, goToTab]);
+  }, [editor.loading, branchId, activeTab, goToTab]);
 
-  async function handleTabChange(nextId: string) {
-    if (!editor.branchId && nextId !== "dados") {
-      try {
-        await editor.ensureCreated();
-      } catch (e: unknown) {
-        addToast("error", getFriendlyErrorMessage(e, "Preencha os dados básicos antes de continuar."));
-        return;
-      }
+  useEffect(() => {
+    if (searchParams.get("created") !== "1") return;
+    addToast("success", "Filial criada. Agora você pode configurar toda a operação da unidade.");
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("created");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [searchParams, pathname, router, addToast]);
+
+  function handleTabChange(nextId: string) {
+    if (!branchId && nextId !== "dados") {
+      return;
     }
     goToTab(nextId);
   }
 
   async function handleSubmit() {
     try {
-      await editor.save();
-      addToast("success", branchId ? "Filial salva!" : "Filial criada!");
-      router.push("/app/configuracoes/filiais");
+      const savedBranchId = await editor.save();
+      if (branchId) {
+        addToast("success", "Alterações salvas nesta filial.");
+      } else {
+        router.replace(`/app/configuracoes/filiais/${savedBranchId}?tab=dados&created=1`);
+      }
     } catch (e: unknown) {
       addToast("error", getFriendlyErrorMessage(e, "Não conseguimos salvar a filial."));
     }
@@ -65,14 +68,14 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
 
   const tabs: BranchSettingsTab[] = [
     {
-      id: "dados", label: "Dados", icon: Building2,
-      description: "Nome, identificação e disponibilidade da filial.",
+      id: "dados", label: "Unidade", icon: Building2,
+      description: "Identificação, contato, disponibilidade e valores próprios.",
       accent: { iconBg: "bg-[var(--status-info-bg)]", iconColor: "text-[var(--status-info)]" },
       validate: () => editor.validateDados(),
     },
     {
-      id: "horarios", label: "Horários", icon: Clock,
-      description: "Janela de atendimento — deixe em branco para usar o horário global.",
+      id: "horarios", label: "Atendimento", icon: Clock,
+      description: "Horário dos pedidos online e herança da configuração geral.",
       accent: { iconBg: "bg-[var(--status-warning-bg)]", iconColor: "text-[var(--status-warning)]" },
     },
     {
@@ -91,6 +94,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
       accent: { iconBg: "bg-[var(--status-success-bg)]", iconColor: "text-[var(--status-success)]" },
     },
   ];
+  const visibleTabs = branchId ? tabs : tabs.slice(0, 1);
 
   if (editor.loading) {
     return (
@@ -121,13 +125,13 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
       title={branchId ? editor.editing.name || "Editar filial" : "Nova filial"}
       description={branchId
         ? "Centralize os dados operacionais desta unidade. As alterações ficam isoladas nesta filial e as integrações podem herdar os padrões da rede."
-        : "Cadastre a identidade da unidade primeiro; depois configure horários, entrega, impressão e WhatsApp no mesmo fluxo."}
+        : "Informe os dados essenciais para criar a unidade. Depois, cada área operacional poderá ser configurada separadamente."}
       icon={Building2}
       meta={branchId ? statusPills.map((pill) => (
         <SettingsBadge key={pill.label} tone={pill.tone}>{pill.label}</SettingsBadge>
-      )) : <SettingsBadge tone="info">Cadastro guiado em 5 etapas</SettingsBadge>}
+      )) : <SettingsBadge tone="info">Cadastro inicial</SettingsBadge>}
       action={
-        <div className="grid grid-cols-2 gap-2 sm:flex">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Link
             href="/app/configuracoes/filiais"
             className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 text-sm font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
@@ -153,15 +157,16 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
       {pageHeader}
 
       <BranchSettingsShell
-        tabs={tabs}
+        tabs={visibleTabs}
         activeTab={activeTab}
         onTabChange={handleTabChange}
         onSubmit={handleSubmit}
-        submitting={editor.saving || editor.creatingDraft}
-        submitLabel={branchId ? "Salvar filial" : "Criar filial"}
+        submitting={editor.saving}
+        submitLabel={branchId ? "Salvar alterações" : "Criar e configurar"}
+        creationMode={!branchId}
       >
         {activeTab === "dados" && <DadosTab editing={editor.editing} setField={editor.setField} />}
-          {activeTab === "horarios" && <HorariosTab editing={editor.editing} setField={editor.setField} />}
+          {activeTab === "horarios" && <HorariosTab editing={editor.editing} setField={editor.setField} globalSettings={editor.globalSettings} />}
           {activeTab === "entrega" && (
             <EntregaTab
               editing={editor.editing}
