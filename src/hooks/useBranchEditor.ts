@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Branch, Courier, DeliveryZone } from "@/types/pdv";
 import { branchesAdminApi, BranchInput, couriersApi, deliveryZonesApi } from "@/lib/api/branches-admin-api";
 import { settingsApi } from "@/lib/api/settings-api";
 import { EMPTY_BRANCH, PrinterConfig, WaTemplates, parseConfig, parseTemplates, validateBranchCode, validateBranchSlug } from "@/app/app/configuracoes/filiais/utils";
 
-// Estado + ações de edição de uma filial — usado tanto na criação (branchId
-// inicial undefined) quanto na edição (branchId vindo da rota /filiais/[id]).
-// No fluxo de criação, a filial é criada de fato (ensureCreated) assim que o
-// usuário sai da aba "Dados" pela primeira vez — depois disso o resto do
-// wizard funciona exatamente como editar uma filial existente, sem exigir
-// um "salvar" explícito antes de cadastrar bairros/entregadores.
+// Estado + ações de edição de uma filial — usado tanto no cadastro inicial
+// quanto na manutenção de uma unidade existente. Entidades dependentes, como
+// bairros e entregadores, só ficam disponíveis após a filial ter um id real.
 export function useBranchEditor(initialBranchId?: string) {
   const [branchId, setBranchId] = useState<string | null>(initialBranchId ?? null);
   const [editing, setEditing] = useState<BranchInput>({ ...EMPTY_BRANCH });
@@ -18,7 +15,6 @@ export function useBranchEditor(initialBranchId?: string) {
   const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(!!initialBranchId);
   const [saving, setSaving] = useState(false);
-  const [creatingDraft, setCreatingDraft] = useState(false);
 
   const [zones, setZones] = useState<DeliveryZone[]>([]);
   const [zonesLoading, setZonesLoading] = useState(false);
@@ -114,50 +110,16 @@ export function useBranchEditor(initialBranchId?: string) {
     return payload;
   }
 
-  // Guarda a promise em andamento: dois cliques rápidos em "Próximo" (antes do
-  // primeiro re-render desabilitar o botão) chamariam ensureCreated() duas
-  // vezes com branchId ainda null nas duas closures, criando a filial em
-  // duplicidade. Compartilhar a mesma promise entre chamadas concorrentes
-  // fecha essa race condition sem depender só do estado (que só atualiza no
-  // próximo render).
-  const creatingPromiseRef = useRef<Promise<string> | null>(null);
-
-  /** Garante que a filial já existe no banco — cria na primeira chamada (fluxo "novo"), no-op depois. */
-  const ensureCreated = useCallback(async (): Promise<string> => {
-    if (branchId) return branchId;
-    if (creatingPromiseRef.current) return creatingPromiseRef.current;
-
-    const validationError = validateDados();
-    if (validationError) throw new Error(validationError);
-
-    const promise = (async () => {
-      setCreatingDraft(true);
-      try {
-        const created = await branchesAdminApi.create(buildPayload());
-        setBranchId(created.id);
-        return created.id;
-      } finally {
-        setCreatingDraft(false);
-        creatingPromiseRef.current = null;
-      }
-    })();
-    creatingPromiseRef.current = promise;
-    return promise;
-    // buildPayload/validateDados fecham sobre editing/printerCfg/waCfg mas
-    // são recriadas a cada render (não memoizadas) — listá-las aqui recriaria
-    // ensureCreated em todo render e anularia o useCallback. Listar o estado
-    // bruto do qual elas dependem tem o mesmo efeito de "frescor" sem esse custo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branchId, editing, printerCfg, waCfg]);
-
-  async function save(): Promise<void> {
+  async function save(): Promise<string> {
     setSaving(true);
     try {
       if (branchId) {
         await branchesAdminApi.update(branchId, buildPayload());
+        return branchId;
       } else {
         const created = await branchesAdminApi.create(buildPayload());
         setBranchId(created.id);
+        return created.id;
       }
     } finally {
       setSaving(false);
@@ -165,16 +127,16 @@ export function useBranchEditor(initialBranchId?: string) {
   }
 
   async function addZone() {
-    const id = await ensureCreated();
+    if (!branchId) throw new Error("Crie a filial antes de adicionar bairros.");
     const fee = Number(newZone.fee.replace(",", "."));
     if (!newZone.neighborhood.trim() || !Number.isFinite(fee) || fee < 0) {
       throw new Error("Informe um bairro e uma taxa válida.");
     }
     setSavingZone(true);
     try {
-      await deliveryZonesApi.create(id, { neighborhood: newZone.neighborhood.trim(), fee });
+      await deliveryZonesApi.create(branchId, { neighborhood: newZone.neighborhood.trim(), fee });
       setNewZone({ neighborhood: "", fee: "" });
-      await loadZones(id);
+      await loadZones(branchId);
     } finally {
       setSavingZone(false);
     }
@@ -193,13 +155,13 @@ export function useBranchEditor(initialBranchId?: string) {
   }
 
   async function addCourier() {
-    const id = await ensureCreated();
+    if (!branchId) throw new Error("Crie a filial antes de adicionar entregadores.");
     if (!newCourier.name.trim()) throw new Error("Informe o nome do entregador.");
     setSavingCourier(true);
     try {
-      await couriersApi.create(id, { name: newCourier.name.trim(), phone: newCourier.phone.trim() || undefined });
+      await couriersApi.create(branchId, { name: newCourier.name.trim(), phone: newCourier.phone.trim() || undefined });
       setNewCourier({ name: "", phone: "" });
-      await loadCouriers(id);
+      await loadCouriers(branchId);
     } finally {
       setSavingCourier(false);
     }
@@ -229,9 +191,7 @@ export function useBranchEditor(initialBranchId?: string) {
     globalSettings,
     loading,
     saving,
-    creatingDraft,
     validateDados,
-    ensureCreated,
     save,
     zones,
     zonesLoading,

@@ -32,7 +32,7 @@ export function DadosTab({
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field
             label="Código"
             required
@@ -127,7 +127,7 @@ export function DadosTab({
         </FieldGroup>
 
         <FieldGroup title="Taxas e metas" icon={Wallet} iconBg="bg-[var(--status-success-bg)]" iconColor="text-[var(--status-success)]">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Taxa de embalagem (R$)">
               <input
                 type="number"

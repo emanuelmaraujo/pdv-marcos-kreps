@@ -6,11 +6,15 @@ import { INPUT_CLS } from "../../utils";
 export function HorariosTab({
   editing,
   setField,
+  globalSettings,
 }: {
   editing: BranchInput;
   setField: <K extends keyof BranchInput>(k: K, v: BranchInput[K]) => void;
+  globalSettings: Record<string, string>;
 }) {
   const hasCustomSchedule = Boolean(editing.ordering_start_time || editing.ordering_end_time);
+  const globalStart = globalSettings.public_ordering_start_time || "Não definido";
+  const globalEnd = globalSettings.public_ordering_end_time || "Não definido";
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
@@ -70,8 +74,8 @@ export function HorariosTab({
           <div><p className="text-xs font-bold text-[var(--text-primary)]">Resumo operacional</p><p className="text-[10px] text-[var(--text-muted)]">Disponibilidade do cardápio público</p></div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-[var(--bg-surface)] p-3"><p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Abertura</p><p className="mt-1 text-lg font-black text-[var(--text-primary)]">{editing.ordering_start_time || "Global"}</p></div>
-          <div className="rounded-xl bg-[var(--bg-surface)] p-3"><p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Fechamento</p><p className="mt-1 text-lg font-black text-[var(--text-primary)]">{editing.ordering_end_time || "Global"}</p></div>
+          <div className="rounded-xl bg-[var(--bg-surface)] p-3"><p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Abertura</p><p className="mt-1 text-lg font-black text-[var(--text-primary)]">{editing.ordering_start_time || globalStart}</p></div>
+          <div className="rounded-xl bg-[var(--bg-surface)] p-3"><p className="text-[10px] font-bold uppercase text-[var(--text-muted)]">Fechamento</p><p className="mt-1 text-lg font-black text-[var(--text-primary)]">{editing.ordering_end_time || globalEnd}</p></div>
         </div>
         <p className="mt-3 text-[11px] leading-5 text-[var(--text-secondary)]">Fora dessa janela, o cliente vê a loja fechada e não consegue finalizar um novo pedido.</p>
       </aside>
