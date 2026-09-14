@@ -269,13 +269,14 @@ function AvgWaitBadge({ minutes }: { minutes: number | null }) {
 // ─── Kanban Column ────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  config, orders, now, onCardClick, onQuickAction, onPay, categoryLookup, searchQuery, isLoading,
+  config, orders, now, onCardClick, onQuickAction, onMarkDelivered, onPay, categoryLookup, searchQuery, isLoading,
 }: {
   config: KanbanColumnConfig;
   orders: Order[];
   now: number;
   onCardClick: (order: Order) => void;
   onQuickAction: (order: Order) => Promise<void>;
+  onMarkDelivered: (order: Order) => Promise<void>;
   onPay: (order: Order) => void;
   categoryLookup: CategoryLookup;
   searchQuery: string;
@@ -328,6 +329,7 @@ function KanbanColumn({
               now={now}
               onClick={onCardClick}
               onQuickAction={config.status === "ENTREGUE" || config.status === "CANCELADO" ? undefined : onQuickAction}
+              onMarkDelivered={config.status === "NA_FILA" ? onMarkDelivered : undefined}
               onPay={onPay}
               categoryLookup={categoryLookup}
             />
@@ -354,7 +356,7 @@ export default function PedidosPage() {
   const [orderCategories, setOrderCategories] = useState<CategoryLookup>({});
   const isFocusMode = useSyncExternalStore(subscribeFocusMode, getFocusModeSnapshot, () => false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
-  const { currentBranch } = useBranch();
+  const { currentBranch, isLoading: isBranchLoading } = useBranch();
   const { toasts, addToast, removeToast } = useToast();
 
   const selectedOrderRef = useRef<Order | null>(null);
@@ -364,12 +366,13 @@ export default function PedidosPage() {
   useEffect(() => { ordersRef.current = orders; }, [orders]);
 
   useEffect(() => {
+    if (isBranchLoading) return;
     let active = true;
     menuApi.getMenuData(currentBranch?.id ?? null)
       .then((menu) => { if (active) setOrderCategories(categoryLookup(menu.categories)); })
       .catch(() => { if (active) setOrderCategories({}); });
     return () => { active = false; };
-  }, [currentBranch?.id]);
+  }, [currentBranch?.id, isBranchLoading]);
 
   const toggleFocusMode = useCallback(() => {
     const next = !getFocusModeSnapshot();
@@ -436,6 +439,7 @@ export default function PedidosPage() {
   // vira um fetchOrders completo — rajada de requests pro mesmo pedido.
   // Coalesce numa janela curta e refaz só uma vez.
   useEffect(() => {
+    if (isBranchLoading) return;
     const timer = window.setTimeout(() => fetchOrders(), 0);
     const supabase = createClient();
 
@@ -473,7 +477,7 @@ export default function PedidosPage() {
       document.removeEventListener("visibilitychange", onVisibility);
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders]);
+  }, [fetchOrders, isBranchLoading]);
 
   // Quick action handler (for card buttons — no modal)
   const handleQuickAction = useCallback(async (order: Order): Promise<void> => {
@@ -522,6 +526,21 @@ export default function PedidosPage() {
         setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: order.status } : o)));
       }
       addToast("error", getFriendlyErrorMessage(err, "Não conseguimos atualizar o status do pedido. Tente novamente."));
+    }
+  }, [fetchOrders, addToast]);
+
+  // Atalho operacional para balcão/viagem: conclui direto da fila, sem passar
+  // pelo estado PRONTO. Pedidos de entrega sempre seguem pelo despacho.
+  const handleMarkDelivered = useCallback(async (order: Order): Promise<void> => {
+    if (!window.confirm(`Confirmar que o pedido #${order.daily_number} foi entregue ao cliente?`)) return;
+
+    setOrders((prev) => prev.map((item) => (item.id === order.id ? { ...item, status: "ENTREGUE" } : item)));
+    try {
+      await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
+      await fetchOrders({ showLoading: false });
+    } catch (err) {
+      setOrders((prev) => prev.map((item) => (item.id === order.id ? { ...item, status: order.status } : item)));
+      addToast("error", getFriendlyErrorMessage(err, "Não conseguimos marcar o pedido como entregue. Tente novamente."));
     }
   }, [fetchOrders, addToast]);
 
@@ -726,6 +745,7 @@ export default function PedidosPage() {
             now={now}
             onCardClick={setSelectedOrder}
             onQuickAction={handleQuickAction}
+            onMarkDelivered={handleMarkDelivered}
             onPay={setPaymentOrder}
             categoryLookup={orderCategories}
             searchQuery={searchQuery}
@@ -766,6 +786,7 @@ export default function PedidosPage() {
                 now={now}
                 onClick={setSelectedOrder}
                 onQuickAction={handleQuickAction}
+                onMarkDelivered={handleMarkDelivered}
                 onPay={setPaymentOrder}
                 categoryLookup={orderCategories}
               />

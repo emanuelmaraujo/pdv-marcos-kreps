@@ -37,10 +37,11 @@ function ItemPreview({ items, categories }: { items: OrderItem[]; categories: Ca
   })}{hiddenCount > 0 && <p className="pl-0.5 text-[11px] font-semibold text-[var(--text-muted)]">+{hiddenCount} item{hiddenCount > 1 ? "s" : ""} no pedido</p>}</div>;
 }
 
-interface Props { order: Order; onClick: (order: Order) => void; now: number; categoryLookup?: CategoryLookup; onQuickAction?: (order: Order) => Promise<void>; onPay?: (order: Order) => void; }
+interface Props { order: Order; onClick: (order: Order) => void; now: number; categoryLookup?: CategoryLookup; onQuickAction?: (order: Order) => Promise<void>; onMarkDelivered?: (order: Order) => Promise<void>; onPay?: (order: Order) => void; }
 
-export function OrderCard({ order, onClick, now, categoryLookup = {}, onQuickAction, onPay }: Props) {
+export function OrderCard({ order, onClick, now, categoryLookup = {}, onQuickAction, onMarkDelivered, onPay }: Props) {
   const [loading, setLoading] = useState(false);
+  const [delivering, setDelivering] = useState(false);
   const active = ACTIVE_STATUSES.includes(order.status);
   const pendingPayment = order.payment_status === "PENDING" || order.payment_status === "PARTIAL" || (order.items ?? []).some((item) => item.status !== "CANCELLED" && !["PAID", "COURTESY"].includes(item.payment_status));
   const pendingAmount = (order.items ?? []).filter((item) => item.status !== "CANCELLED" && !["PAID", "COURTESY"].includes(item.payment_status)).reduce((sum, item) => sum + Number(item.total_price ?? 0), 0) + (!order.paid_at ? Number(order.packing_fee ?? 0) + Number(order.delivery_fee ?? 0) : 0);
@@ -62,15 +63,17 @@ export function OrderCard({ order, onClick, now, categoryLookup = {}, onQuickAct
             ? { label: "Entregar", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90", run: () => onQuickAction?.(order) }
             : null;
   const awaitingCourier = order.status === "SAIU_PARA_ENTREGA";
+  const canDeliverFromQueue = !!onMarkDelivered && order.status === "NA_FILA" && order.type !== "ENTREGA";
   const triggerAction = async (event: React.MouseEvent) => { event.stopPropagation(); if (!nextAction || loading) return; setLoading(true); try { await nextAction.run(); } finally { setLoading(false); } };
+  const triggerDeliver = async (event: React.MouseEvent) => { event.stopPropagation(); if (!onMarkDelivered || delivering) return; setDelivering(true); try { await onMarkDelivered(order); } finally { setDelivering(false); } };
   const triggerPayment = (event: React.MouseEvent) => { event.stopPropagation(); if (!onPay || loading) return; onPay(order); };
   const openFromKeyboard = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key) || loading) return;
+    if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key) || loading || delivering) return;
     event.preventDefault();
     onClick(order);
   };
 
-  return <article onClick={() => !loading && onClick(order)} onKeyDown={openFromKeyboard} role="button" tabIndex={loading ? -1 : 0} aria-label={`Abrir detalhes do pedido ${order.daily_number} de ${order.customer_name || "cliente final"}`} className={`focus-ring relative overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] transition active:scale-[0.99] ${urgent ? "border-[var(--status-danger)]/50 ring-2 ring-[var(--status-danger)]/15" : "border-[var(--border)]"} ${loading ? "pointer-events-none opacity-60" : "cursor-pointer hover:shadow-[var(--shadow-md)]"}`}>
+  return <article onClick={() => !loading && !delivering && onClick(order)} onKeyDown={openFromKeyboard} role="button" tabIndex={loading || delivering ? -1 : 0} aria-label={`Abrir detalhes do pedido ${order.daily_number} de ${order.customer_name || "cliente final"}`} className={`focus-ring relative overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] transition active:scale-[0.99] ${urgent ? "border-[var(--status-danger)]/50 ring-2 ring-[var(--status-danger)]/15" : "border-[var(--border)]"} ${loading || delivering ? "pointer-events-none opacity-60" : "cursor-pointer hover:shadow-[var(--shadow-md)]"}`}>
     <div className={`h-1 ${ACCENT[order.status]}`} />
     <div className="space-y-3 p-3.5">
       <header className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><span className="flex h-10 min-w-10 flex-col items-center justify-center rounded-xl bg-brand-charcoal px-1 text-sm font-black text-white">{order.branch?.code && <small className="text-[8px] leading-none text-zinc-400">{order.branch.code}</small>}{String(order.daily_number).padStart(2, "0")}</span><div className="min-w-0"><p className="truncate text-sm font-black text-[var(--text-primary)]">{order.customer_name || "Cliente final"}</p><div className="mt-1 flex flex-wrap items-center gap-1"><OrderTypeBadge type={order.type} /><OrderStatusBadge status={order.status} />{active && since && <ElapsedTimer since={since} now={now} />}</div></div></div><PaymentStatusBadge status={pendingPayment ? "PARTIAL" : order.payment_status} /></header>
@@ -80,7 +83,7 @@ export function OrderCard({ order, onClick, now, categoryLookup = {}, onQuickAct
       {awaitingCourier && <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-700"><Bike className="h-3.5 w-3.5" /><span className="truncate">Aguardando confirmação de {order.courier_name || "motoboy"}</span></div>}
       {(order.items ?? []).length > 0 && <ItemPreview items={order.items ?? []} categories={categoryLookup} />}
       {activeItems.length > 1 && <div className="flex items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5"><span className="text-[11px] font-semibold text-[var(--text-secondary)]">{readyItems}/{activeItems.length} prontos</span><div className="flex flex-1 flex-wrap gap-1">{activeItems.map((item) => <span key={item.id} className={`h-2 w-2 rounded-full ${ITEM_DOT[item.status]}`} />)}</div></div>}
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-2.5"><div><p className="text-[10px] font-medium text-[var(--text-muted)]">Total do pedido</p><p className="text-base font-black tabular-nums text-[var(--text-primary)]">{currency.format(order.total_amount)}</p></div><div className="ml-auto flex items-center gap-1.5">{pendingPayment && onPay && <button type="button" onClick={triggerPayment} className="flex h-11 items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 text-xs font-black text-amber-800 active:scale-95"><CreditCard className="h-3.5 w-3.5" />Receber</button>}{nextAction && <button type="button" onClick={triggerAction} className={`flex h-11 max-w-[210px] items-center gap-1.5 rounded-xl px-3 text-xs font-black shadow-sm active:scale-95 ${nextAction.color}`}>{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <nextAction.Icon className="h-3.5 w-3.5" />}{nextAction.label}</button>}</div></footer>
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-2.5"><div><p className="text-[10px] font-medium text-[var(--text-muted)]">Total do pedido</p><p className="text-base font-black tabular-nums text-[var(--text-primary)]">{currency.format(order.total_amount)}</p></div><div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">{pendingPayment && onPay && <button type="button" onClick={triggerPayment} className="flex h-11 items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 text-xs font-black text-amber-800 active:scale-95"><CreditCard className="h-3.5 w-3.5" />Receber</button>}{canDeliverFromQueue && <button type="button" onClick={triggerDeliver} className="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--status-success)] px-3 text-xs font-black text-white shadow-sm active:scale-95">{delivering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Entregar</button>}{nextAction && <button type="button" onClick={triggerAction} className={`flex h-11 max-w-[210px] items-center gap-1.5 rounded-xl px-3 text-xs font-black shadow-sm active:scale-95 ${nextAction.color}`}>{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <nextAction.Icon className="h-3.5 w-3.5" />}{nextAction.label}</button>}</div></footer>
     </div>
   </article>;
 }

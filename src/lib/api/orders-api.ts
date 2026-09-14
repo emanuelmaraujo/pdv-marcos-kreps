@@ -15,18 +15,43 @@ export const ordersApi = {
         *,
         branch:branches(id, code, name, slug),
         items:order_items(
-          *,
-          product:products(*),
+          id,
+          order_id,
+          product_id,
+          product_name_snapshot,
+          product_price_snapshot,
+          production_sector,
+          quantity,
+          observation,
+          total_price,
+          created_at,
+          status,
+          sequence_no,
+          addition_batch_no,
+          prep_started_at,
+          item_ready_at,
+          delivered_at,
+          cancelled_at,
+          payment_status,
+          payment_method,
+          paid_at,
+          is_takeout,
+          product:products(category_id),
           addons:order_item_addons(
-            *,
-            addon:addons(*)
+            id,
+            order_item_id,
+            addon_id,
+            quantity,
+            addon_name_snapshot,
+            addon_price_snapshot
           ),
           removed_ingredients:order_item_removed_ingredients(
-            *,
-            ingredient:ingredients(*)
+            id,
+            order_item_id,
+            ingredient_id,
+            ingredient_name_snapshot
           )
-        ),
-        transactions:payment_transactions(*)
+        )
       `)
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
