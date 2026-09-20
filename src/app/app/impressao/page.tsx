@@ -14,6 +14,9 @@ import {
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { printerApi } from "@/lib/api/printer-api";
+import { settingsApi } from "@/lib/api/settings-api";
+import { resolveEffectivePrinterSector, type SectorKey } from "@/lib/config/effective-branch-config";
+import { useBranch } from "@/contexts/BranchContext";
 import { PrinterJob } from "@/types/pdv";
 import { PrinterJobCard } from "./components/PrinterJobCard";
 
@@ -44,12 +47,19 @@ export default function ImpressaoPage() {
   const [activeStatus, setActiveStatus] = useState<PrintStatusFilter>("PENDING");
   const [activeSector, setActiveSector] = useState<PrintSectorFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [hasConfiguredPrinter, setHasConfiguredPrinter] = useState<boolean | null>(null);
+  const { currentBranch, isLoading: isBranchLoading } = useBranch();
 
   const fetchJobs = useCallback(async (showLoading = false) => {
+    if (!currentBranch?.id) {
+      setJobs([]);
+      setIsLoading(false);
+      return;
+    }
     if (showLoading) setIsRefreshing(true);
     setError("");
     try {
-      const data = await printerApi.getTodayJobs();
+      const data = await printerApi.getTodayJobs(currentBranch.id);
       setJobs(data || []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro ao carregar fila");
@@ -57,13 +67,42 @@ export default function ImpressaoPage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [currentBranch?.id]);
 
   useEffect(() => {
+    if (isBranchLoading || !currentBranch) return;
+
+    let cancelled = false;
+    void settingsApi.getSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        const sectors: SectorKey[] = ["kitchen", "juice", "customer"];
+        const configured = sectors.some((sector) => {
+          const effective = resolveEffectivePrinterSector(settings, currentBranch, sector);
+          return effective.enabled && Boolean(effective.ip) && Boolean(effective.port);
+        });
+        setHasConfiguredPrinter(configured);
+        if (!configured) {
+          setJobs([]);
+          setIsLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setHasConfiguredPrinter(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentBranch, isBranchLoading]);
+
+  useEffect(() => {
+    if (isBranchLoading || !currentBranch?.id || hasConfiguredPrinter !== true) return;
+
     const t = window.setTimeout(() => fetchJobs(), 0);
     const interval = window.setInterval(() => fetchJobs(), 10_000);
     return () => { window.clearTimeout(t); window.clearInterval(interval); };
-  }, [fetchJobs]);
+  }, [currentBranch?.id, fetchJobs, hasConfiguredPrinter, isBranchLoading]);
 
   const stats = useMemo(() => ({
     pending: jobs.filter((j) => j.status === "PENDING").length,
@@ -119,7 +158,7 @@ export default function ImpressaoPage() {
           <div className="ml-auto border-l border-[var(--border)] px-3 py-2">
             <button
               onClick={() => fetchJobs(true)}
-              disabled={isLoading || isRefreshing}
+              disabled={isLoading || isRefreshing || !currentBranch?.id}
               className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)]/70 active:scale-95 disabled:opacity-50"
             >
               {isRefreshing
@@ -203,6 +242,14 @@ export default function ImpressaoPage() {
         ) : error ? (
           <div className="rounded-2xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] p-4 text-center text-sm font-semibold text-[var(--status-danger)]">
             {error}
+          </div>
+        ) : hasConfiguredPrinter === false ? (
+          <div className="py-12">
+            <EmptyState
+              icon={Printer}
+              title="Sem impressora configurada"
+              description="Esta filial não mantém atualização automática da fila de impressão."
+            />
           </div>
         ) : filteredJobs.length === 0 ? (
           <div className="py-12">
