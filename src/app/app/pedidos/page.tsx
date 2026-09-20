@@ -452,18 +452,43 @@ export default function PedidosPage() {
       }, 400);
     };
 
+    // Realtime é a via principal. O polling só entra quando o canal falhar.
+    // Antes havia um fetch completo de todos os pedidos do dia a cada 15s,
+    // mesmo com o WebSocket saudável. Como o payload cresce ao longo do dia,
+    // isso multiplicava carga no Supabase sem necessidade.
+    const FALLBACK_POLL_MS = 60_000;
+    let pollInterval: number | null = null;
+
+    const stopFallbackPolling = () => {
+      if (pollInterval !== null) {
+        window.clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+
+    const startFallbackPolling = () => {
+      if (pollInterval !== null) return;
+      pollInterval = window.setInterval(() => {
+        if (document.visibilityState === "visible") {
+          fetchOrders({ showLoading: false });
+        }
+      }, FALLBACK_POLL_MS);
+    };
+
     const channel = supabase
       .channel("orders-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleFetch)
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleFetch)
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          stopFallbackPolling();
+          return;
+        }
 
-    const POLL_MS = 15_000;
-    const pollInterval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        fetchOrders({ showLoading: false });
-      }
-    }, POLL_MS);
+        if (status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
+          startFallbackPolling();
+        }
+      });
 
     const onVisibility = () => {
       if (document.visibilityState === "visible") fetchOrders({ showLoading: false });
@@ -473,7 +498,7 @@ export default function PedidosPage() {
     return () => {
       window.clearTimeout(timer);
       if (debounceTimer) window.clearTimeout(debounceTimer);
-      window.clearInterval(pollInterval);
+      stopFallbackPolling();
       document.removeEventListener("visibilitychange", onVisibility);
       supabase.removeChannel(channel);
     };
