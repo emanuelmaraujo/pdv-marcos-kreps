@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/feedback/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
+import { settingsApi } from "@/lib/api/settings-api";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { menuApi } from "@/lib/api/menu-api";
 import { createClient } from "@/lib/supabase/client";
@@ -75,6 +76,45 @@ interface KanbanColumnConfig {
 
 const ORDERS_FOCUS_MODE_STORAGE_KEY = "pdv:orders-focus-mode";
 const ORDERS_FOCUS_MODE_EVENT = "pdv:orders-focus-mode-change";
+
+type OrderingRuntimeSettings = {
+  enabled: boolean;
+  start: string | null;
+  end: string | null;
+};
+
+function timeToMinutes(value?: string | null): number | null {
+  if (!value) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function saoPauloMinutesNow(): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0) % 24;
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
+  return hour * 60 + minute;
+}
+
+function isWithinOrderingWindow(start?: string | null, end?: string | null): boolean {
+  const startMinutes = timeToMinutes(start);
+  const endMinutes = timeToMinutes(end);
+  if (startMinutes === null || endMinutes === null) return true;
+
+  const nowMinutes = saoPauloMinutesNow();
+  if (startMinutes <= endMinutes) {
+    return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
+  }
+
+  // Janela atravessa meia-noite.
+  return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
+}
 
 const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
   NA_FILA: 0,
@@ -354,6 +394,8 @@ export default function PedidosPage() {
   const [showOperationalSummary, setShowOperationalSummary] = useState(false);
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
   const [orderCategories, setOrderCategories] = useState<CategoryLookup>({});
+  const [orderingRuntime, setOrderingRuntime] = useState<OrderingRuntimeSettings | null>(null);
+  const [scheduleTick, setScheduleTick] = useState(0);
   const isFocusMode = useSyncExternalStore(subscribeFocusMode, getFocusModeSnapshot, () => false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const { currentBranch, isLoading: isBranchLoading } = useBranch();
@@ -373,6 +415,48 @@ export default function PedidosPage() {
       .catch(() => { if (active) setOrderCategories({}); });
     return () => { active = false; };
   }, [currentBranch?.id, isBranchLoading]);
+
+  useEffect(() => {
+    if (isBranchLoading || !currentBranch) return;
+
+    let cancelled = false;
+    void settingsApi.getSettings()
+      .then((data) => {
+        if (cancelled) return;
+        setOrderingRuntime({
+          enabled:
+            String(data.public_ordering_enabled ?? "true") === "true"
+            && currentBranch.ordering_enabled !== false,
+          start: currentBranch.ordering_start_time ?? data.public_ordering_start_time ?? null,
+          end: currentBranch.ordering_end_time ?? data.public_ordering_end_time ?? null,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Se a leitura global falhar, usa a configuração local da filial.
+        setOrderingRuntime({
+          enabled: currentBranch.ordering_enabled !== false,
+          start: currentBranch.ordering_start_time ?? null,
+          end: currentBranch.ordering_end_time ?? null,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentBranch, isBranchLoading]);
+
+  // Timer apenas local: não acessa banco. Serve para ligar/desligar o modo
+  // automático quando cruza o horário de abertura/fechamento sem recarregar a página.
+  useEffect(() => {
+    const interval = window.setInterval(() => setScheduleTick((value) => value + 1), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const automaticUpdatesEnabled = Boolean(
+    orderingRuntime?.enabled
+    && isWithinOrderingWindow(orderingRuntime.start, orderingRuntime.end)
+  );
 
   const toggleFocusMode = useCallback(() => {
     const next = !getFocusModeSnapshot();
@@ -440,7 +524,15 @@ export default function PedidosPage() {
   // Coalesce numa janela curta e refaz só uma vez.
   useEffect(() => {
     if (isBranchLoading) return;
+
+    // O carregamento inicial continua disponível fora do horário para consulta
+    // e fechamento de pendências. Só as atualizações automáticas ficam pausadas.
     const timer = window.setTimeout(() => fetchOrders(), 0);
+
+    if (!automaticUpdatesEnabled) {
+      return () => window.clearTimeout(timer);
+    }
+
     const supabase = createClient();
 
     let debounceTimer: number | null = null;
@@ -502,7 +594,7 @@ export default function PedidosPage() {
       document.removeEventListener("visibilitychange", onVisibility);
       supabase.removeChannel(channel);
     };
-  }, [fetchOrders, isBranchLoading]);
+  }, [automaticUpdatesEnabled, fetchOrders, isBranchLoading, scheduleTick]);
 
   // Quick action handler (for card buttons — no modal)
   const handleQuickAction = useCallback(async (order: Order): Promise<void> => {
@@ -715,9 +807,23 @@ export default function PedidosPage() {
             <QuickMetric icon={ShoppingBag} label="Hoje"     value={orders.length}              detail="pedidos" />
 
             {/* Live badge */}
-            <div className="hidden lg:flex items-center gap-1.5 rounded-xl bg-[var(--status-success-bg)] px-3 h-11">
-              <Radio className={`h-3 w-3 text-[var(--status-success)] ${!isLoading ? "animate-pulse" : ""}`} />
-              <span className="text-[11px] font-semibold text-[var(--status-success)]">Ao vivo</span>
+            <div className={`hidden lg:flex items-center gap-1.5 rounded-xl px-3 h-11 ${
+              automaticUpdatesEnabled
+                ? "bg-[var(--status-success-bg)]"
+                : "bg-[var(--bg-subtle)]"
+            }`}>
+              <Radio className={`h-3 w-3 ${
+                automaticUpdatesEnabled
+                  ? `text-[var(--status-success)] ${!isLoading ? "animate-pulse" : ""}`
+                  : "text-[var(--text-muted)]"
+              }`} />
+              <span className={`text-[11px] font-semibold ${
+                automaticUpdatesEnabled
+                  ? "text-[var(--status-success)]"
+                  : "text-[var(--text-muted)]"
+              }`}>
+                {automaticUpdatesEnabled ? "Ao vivo" : "Fora do horário"}
+              </span>
             </div>
         </div>
         </div>
