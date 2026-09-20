@@ -142,7 +142,7 @@ function resolvePrintWorkerStatus(data: Record<string, string>): PrintWorkerStat
   const lastSeenAt = data.print_worker_last_seen_at;
   const lastSeenTime = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
   const secondsSinceLastSeen = Number.isFinite(lastSeenTime) ? (Date.now() - lastSeenTime) / 1000 : Infinity;
-  const online = data.print_worker_status === "ACTIVE" && secondsSinceLastSeen <= 45;
+  const online = data.print_worker_status === "ACTIVE" && secondsSinceLastSeen <= 150;
 
   return {
     online,
@@ -260,7 +260,7 @@ export default function GeneralSettingsView() {
     }, 0);
     const interval = window.setInterval(() => {
       void loadSettings(true);
-    }, 15000);
+    }, 60000);
 
     return () => {
       window.clearTimeout(timer);
