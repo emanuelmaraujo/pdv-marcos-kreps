@@ -692,6 +692,12 @@ export const pdvApi = {
       force_delivery: payload.forceDelivery
     }),
 
+  restoreCancelledOrder: (orderId: string) =>
+    invokeEdgeFunction<{ success: boolean; order: Pick<Order, 'id' | 'daily_number' | 'status' | 'payment_status'> }>(
+      'restore-cancelled-order',
+      { order_id: orderId },
+    ),
+
   dispatchDelivery: (payload: { orderId: string; courierId?: string; courierName?: string; courierPhone?: string }) =>
     invokeEdgeFunction('dispatch-delivery', {
       order_id: payload.orderId,
