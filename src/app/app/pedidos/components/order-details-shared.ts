@@ -21,6 +21,20 @@ export const orderCurrency = new Intl.NumberFormat("pt-BR", {
 });
 
 export const POST_PAYMENT_ADDITION_WINDOW_MS = 60 * 60 * 1000;
+export const CANCEL_RESTORE_WINDOW_MS = 30 * 60 * 1000;
+
+export function canRestoreCancelledOrder(order: Order, now = Date.now()) {
+  if (order.status !== "CANCELADO" || !order.cancelled_at) return false;
+  const cancelledAt = new Date(order.cancelled_at).getTime();
+  if (!Number.isFinite(cancelledAt)) return false;
+  const elapsed = now - cancelledAt;
+  return elapsed >= 0 && elapsed <= CANCEL_RESTORE_WINDOW_MS;
+}
+
+export function cancelRestoreRemainingMinutes(order: Order, now = Date.now()) {
+  if (!canRestoreCancelledOrder(order, now)) return 0;
+  return Math.max(0, Math.ceil((CANCEL_RESTORE_WINDOW_MS - (now - new Date(order.cancelled_at!).getTime())) / 60_000));
+}
 
 /**
  * Uma comanda paga segue aberta por uma hora para acréscimos. Depois disso,
@@ -150,6 +164,10 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
       { closeAfter: true },
     );
   };
+  const onRestoreCancelled = () => {
+    if (!order) return;
+    void handleAction(() => pdvApi.restoreCancelledOrder(order.id));
+  };
   const onMarkPayment = (method: PaymentMethod, status: PaymentStatus) =>
     order && handleAction(() => pdvApi.markPayment({
       orderId: order.id,
@@ -244,6 +262,7 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
     onDeliver,
     onRevertToQueue,
     onCancel,
+    onRestoreCancelled,
     onMarkPayment,
     onChangeMethod,
     onReprint,
