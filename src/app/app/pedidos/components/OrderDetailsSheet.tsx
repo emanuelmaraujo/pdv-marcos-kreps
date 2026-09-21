@@ -18,6 +18,8 @@ import {
   getOutstandingOrderAmount,
   additionWindowRemainingMinutes,
   isOrderOpenForAdditions,
+  canRestoreCancelledOrder,
+  cancelRestoreRemainingMinutes,
   orderCurrency as currency,
   useOrderDetailsActions,
 } from "./order-details-shared";
@@ -39,6 +41,7 @@ import {
   CircleDollarSign,
   MessageSquareText,
   ReceiptText,
+  RotateCcw,
 } from "lucide-react";
 
 interface Props {
@@ -156,7 +159,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
     showChangeMethod, setShowChangeMethod, editingItem, setEditingItem,
     showDispatchForm, setShowDispatchForm,
     courierIdInput, setCourierIdInput, registeredCouriers,
-    onConfirm, onReady, onDeliver, onCancel,
+    onConfirm, onReady, onDeliver, onCancel, onRestoreCancelled,
     onMarkPayment, onChangeMethod, onReprint, onDispatch, openDispatchForm,
   } = useOrderDetailsActions({ order, onClose, onOrderUpdated });
 
@@ -180,6 +183,8 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
   const hasOutstandingPayment = (order.payment_status === "PENDING" || order.payment_status === "PARTIAL") && outstandingAmount > 0;
   const canAddItems = !isAppAwaitingPayment && isOrderOpenForAdditions(order);
   const additionMinutesLeft = additionWindowRemainingMinutes(order);
+  const canRestoreCancellation = canRestoreCancelledOrder(order);
+  const restoreMinutesLeft = cancelRestoreRemainingMinutes(order);
 
   const queueEnteredAt = order.queue_entered_at ?? order.confirmed_at;
   const elapsedMin = isENTREGUE && order.delivered_at && queueEnteredAt
@@ -326,6 +331,33 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
           hasOutstandingPayment={hasOutstandingPayment && ["AGUARDANDO_PAGAMENTO", "ENTREGUE"].includes(order.status)}
           outstandingAmount={outstandingAmount}
         />
+
+        {isCANCELADO && canRestoreCancellation && (
+          <section className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Cancelamento reversível</p>
+                <p className="mt-0.5 text-xs font-semibold text-[var(--text-secondary)]">
+                  Pode voltar ao estado anterior por mais {restoreMinutesLeft} min.
+                </p>
+              </div>
+              <Button
+                className="h-11 shrink-0 rounded-xl bg-emerald-600 px-3 text-xs font-black text-white hover:bg-emerald-700"
+                onClick={onRestoreCancelled}
+                disabled={isLoading}
+              >
+                <RotateCcw size={14} className="mr-1.5" />
+                DESFAZER
+              </Button>
+            </div>
+          </section>
+        )}
+
+        {isCANCELADO && !canRestoreCancellation && (
+          <p className="rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
+            O prazo de 30 minutos para desfazer este cancelamento expirou.
+          </p>
+        )}
 
         {hasOutstandingPayment && !isAppAwaitingPayment && (
           <button
