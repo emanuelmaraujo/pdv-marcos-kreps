@@ -116,6 +116,18 @@ serve(async (req) => {
 
     const now = new Date().toISOString();
 
+    // Snapshot autoritativo para permitir desfazer um cancelamento exatamente.
+    // Preserva inclusive itens que já estavam cancelados individualmente.
+    let cancellationSnapshot: Array<Record<string, unknown>> | null = null;
+    if (status === "CANCELADO") {
+      const { data: itemsBeforeCancel, error: snapshotErr } = await supabaseAdmin
+        .from("order_items")
+        .select("id, status, prep_started_at, item_ready_at, delivered_at, cancelled_at")
+        .eq("order_id", order.id);
+      if (snapshotErr) throw new Error(`Erro ao registrar estado anterior dos itens: ${snapshotErr.message}`);
+      cancellationSnapshot = (itemsBeforeCancel ?? []) as Array<Record<string, unknown>>;
+    }
+
     // ── Aplica a mudança nos itens; o trigger derivará orders.status ────────
     if (status === "NA_FILA") {
       // Reverte itens READY → PENDING para que o trigger mova o pedido de volta a NA_FILA.
@@ -158,12 +170,13 @@ serve(async (req) => {
         .in("status", ["READY", "PENDING", "IN_PREPARATION"]);
       if (itemsErr) throw new Error(`Erro ao marcar itens como DELIVERED: ${itemsErr.message}`);
     } else if (status === "CANCELADO") {
-      // Cancela todos os itens ainda não entregues.
+      // Cancela apenas itens operacionais. Itens que já estavam CANCELLED
+      // permanecem intactos para não perder o cancelamento individual anterior.
       const { error: itemsErr } = await supabaseAdmin
         .from("order_items")
         .update({ status: "CANCELLED", cancelled_at: now })
         .eq("order_id", order.id)
-        .neq("status", "DELIVERED");
+        .in("status", ["PENDING", "IN_PREPARATION", "READY"]);
       if (itemsErr) throw new Error(`Erro ao cancelar itens: ${itemsErr.message}`);
 
       // Pedido em estado pré-fila (AGUARDANDO_*) o trigger não toca — força aqui.
@@ -188,6 +201,9 @@ serve(async (req) => {
       record_id:  order.id,
       user_id:    user.id,
       branch_id:  order.branch_id,
+      old_data:   status === "CANCELADO"
+        ? { status: cur, items: cancellationSnapshot }
+        : null,
       new_data:   { from: cur, to: status, reason: reason ?? null, force_delivery: !!force_delivery },
     });
 
