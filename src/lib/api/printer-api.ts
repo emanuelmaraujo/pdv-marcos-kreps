@@ -3,7 +3,7 @@ import { createClient } from '../supabase/client';
 import { getBusinessDayRange } from '../utils/business-day';
 
 export const printerApi = {
-  getTodayJobs: async (): Promise<PrinterJob[]> => {
+  getTodayJobs: async (branchId: string): Promise<PrinterJob[]> => {
     const supabase = createClient();
 
     const { start, end } = getBusinessDayRange();
@@ -20,6 +20,7 @@ export const printerApi = {
           customer_name
         )
       `)
+      .eq('branch_id', branchId)
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
       .order('created_at', { ascending: false });

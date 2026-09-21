@@ -7,7 +7,7 @@ export const branchesApi = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('branches')
-      .select('id, code, slug, name, type, active, address, phone, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time, whatsapp_enabled, delivery_enabled, default_delivery_fee, monthly_revenue_goal, created_at, updated_at')
+      .select('id, code, slug, name, type, active, address, phone, printer_config, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time, whatsapp_enabled, delivery_enabled, default_delivery_fee, monthly_revenue_goal, created_at, updated_at')
       .eq('active', true)
       .order('name');
     if (error) throw error;
