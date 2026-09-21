@@ -56,7 +56,7 @@ export function OrderItemsControl({
 
   const items = order.items ?? [];
   if (items.length === 0) return null;
-  const itemGroups = groupOrderItems(items, categoryLookup);
+  const itemGroups = groupOrderItems(items, categoryLookup, { includeCancelled: true });
 
   const readyItems = items.filter((i) => i.status === 'READY');
   const canDeliverReady = order.type !== 'ENTREGA' && readyItems.length > 0;

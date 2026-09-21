@@ -42,10 +42,17 @@ export function getOrderItemGroup(item: OrderItem, categories: CategoryLookup): 
  * A ordem é estável e segue o cardápio da filial. O lote e a senha do item só
  * resolvem empates: itens acrescentados depois não se misturam ao pedido inicial.
  */
-export function groupOrderItems(items: OrderItem[], categories: CategoryLookup): OrderItemGroup[] {
+export function groupOrderItems(
+  items: OrderItem[],
+  categories: CategoryLookup,
+  options: { includeCancelled?: boolean } = {},
+): OrderItemGroup[] {
   const groups = new Map<string, OrderItemGroup>();
+  const visibleItems = options.includeCancelled
+    ? items
+    : items.filter((entry) => entry.status !== "CANCELLED");
 
-  for (const item of items.filter((entry) => entry.status !== "CANCELLED")) {
+  for (const item of visibleItems) {
     const meta = getOrderItemGroup(item, categories);
     const group = groups.get(meta.id) ?? { ...meta, items: [] };
     group.items.push(item);

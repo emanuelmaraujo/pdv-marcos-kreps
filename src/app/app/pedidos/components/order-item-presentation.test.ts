@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { OrderItem } from "@/types/pdv";
 import { groupOrderItems } from "./order-item-presentation";
 
-function item(id: string, categoryId: string, additionBatchNo = 0, sequenceNo = 1): OrderItem {
+function item(
+  id: string,
+  categoryId: string,
+  additionBatchNo = 0,
+  sequenceNo = 1,
+  status: OrderItem["status"] = "PENDING",
+): OrderItem {
   return {
     id,
     order_id: "order",
@@ -12,7 +18,7 @@ function item(id: string, categoryId: string, additionBatchNo = 0, sequenceNo = 
     production_sector: "KITCHEN",
     quantity: 1,
     total_price: 10,
-    status: "PENDING",
+    status,
     payment_status: "PENDING",
     payment_method: "PENDING",
     addition_batch_no: additionBatchNo,
@@ -36,5 +42,18 @@ describe("groupOrderItems", () => {
 
     expect(groups.map((group) => group.label)).toEqual(["Crepes salgados", "Bebidas", "Batatas"]);
     expect(groups[0].items.map((entry) => entry.product_name_snapshot)).toEqual(["Crepe inicial", "Crepe adicionado"]);
+  });
+
+  it("mantém itens cancelados disponíveis para histórico quando solicitado", () => {
+    const cancelledItem = item("Crepe cancelado", "savory", 0, 1, "CANCELLED");
+    const categories = {
+      savory: { name: "Crepes salgados", sort_order: 1 },
+    };
+
+    expect(groupOrderItems([cancelledItem], categories)).toEqual([]);
+
+    const groups = groupOrderItems([cancelledItem], categories, { includeCancelled: true });
+    expect(groups).toHaveLength(1);
+    expect(groups[0].items.map((entry) => entry.product_name_snapshot)).toEqual(["Crepe cancelado"]);
   });
 });
