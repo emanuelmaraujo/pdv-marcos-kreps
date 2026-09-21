@@ -73,7 +73,7 @@ serve(async (req) => {
 
     const { data: audit, error: auditErr } = await supabaseAdmin
       .from("audit_logs")
-      .select("id, new_data, created_at")
+      .select("id, old_data, new_data, created_at")
       .eq("table_name", "orders")
       .eq("record_id", order.id)
       .eq("action", "ORDER_CANCELADO")
@@ -87,25 +87,55 @@ serve(async (req) => {
       throw new Error("Não foi possível identificar um estado anterior restaurável para este pedido.");
     }
 
-    const { data: cancelledItems, error: itemsReadErr } = await supabaseAdmin
-      .from("order_items")
-      .select("id, prep_started_at, item_ready_at, delivered_at, status")
-      .eq("order_id", order.id)
-      .eq("status", "CANCELLED");
-    if (itemsReadErr) throw new Error(`Erro ao ler itens cancelados: ${itemsReadErr.message}`);
+    const oldData = (audit?.old_data as Record<string, unknown> | null) ?? null;
+    const itemSnapshot = Array.isArray(oldData?.items)
+      ? oldData!.items as Array<Record<string, unknown>>
+      : null;
 
-    for (const item of cancelledItems ?? []) {
-      const restoredStatus = item.item_ready_at
-        ? "READY"
-        : item.prep_started_at
-          ? "IN_PREPARATION"
-          : "PENDING";
+    if (itemSnapshot?.length) {
+      // Caminho novo: restaura exatamente o snapshot salvo antes do cancelamento.
+      for (const item of itemSnapshot) {
+        const itemId = String(item.id ?? "");
+        const previousItemStatus = String(item.status ?? "");
+        if (!itemId || !["PENDING", "IN_PREPARATION", "READY", "DELIVERED", "CANCELLED"].includes(previousItemStatus)) {
+          throw new Error("Snapshot de item inválido no histórico de cancelamento.");
+        }
 
-      const { error: itemErr } = await supabaseAdmin
+        const { error: itemErr } = await supabaseAdmin
+          .from("order_items")
+          .update({
+            status: previousItemStatus,
+            prep_started_at: item.prep_started_at ?? null,
+            item_ready_at: item.item_ready_at ?? null,
+            delivered_at: item.delivered_at ?? null,
+            cancelled_at: item.cancelled_at ?? null,
+          })
+          .eq("id", itemId)
+          .eq("order_id", order.id);
+        if (itemErr) throw new Error(`Erro ao restaurar item: ${itemErr.message}`);
+      }
+    } else {
+      // Compatibilidade com cancelamentos antigos, anteriores ao snapshot.
+      const { data: cancelledItems, error: itemsReadErr } = await supabaseAdmin
         .from("order_items")
-        .update({ status: restoredStatus, cancelled_at: null })
-        .eq("id", item.id);
-      if (itemErr) throw new Error(`Erro ao restaurar item: ${itemErr.message}`);
+        .select("id, prep_started_at, item_ready_at, delivered_at, status")
+        .eq("order_id", order.id)
+        .eq("status", "CANCELLED");
+      if (itemsReadErr) throw new Error(`Erro ao ler itens cancelados: ${itemsReadErr.message}`);
+
+      for (const item of cancelledItems ?? []) {
+        const restoredStatus = item.item_ready_at
+          ? "READY"
+          : item.prep_started_at
+            ? "IN_PREPARATION"
+            : "PENDING";
+
+        const { error: itemErr } = await supabaseAdmin
+          .from("order_items")
+          .update({ status: restoredStatus, cancelled_at: null })
+          .eq("id", item.id);
+        if (itemErr) throw new Error(`Erro ao restaurar item: ${itemErr.message}`);
+      }
     }
 
     // Os triggers dos itens recalculam o status operacional. Estados pré-fila
