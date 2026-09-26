@@ -1,6 +1,5 @@
 import { initPrinter } from './printer';
 import { pollPendingJobs, subscribeToJobs, subscribeToSettingsChanges } from './jobs';
-import { config } from './config';
 import { startWorkerHeartbeat } from './status';
 
 // Exceção não tratada pode ter deixado estado inconsistente: aí sim vale sair
@@ -32,8 +31,7 @@ async function main() {
   console.log('[SYSTEM] Executando poll inicial por jobs perdidos ou pendentes...');
   await pollPendingJobs();
 
-  console.log(`[SYSTEM] Configurando rotina de checagem a cada ${config.pollIntervalMs}ms...`);
-  setInterval(pollPendingJobs, config.pollIntervalMs);
+  console.log('[SYSTEM] Realtime sera a via principal; polling fica somente como contingencia.');
 
   startWorkerHeartbeat();
   subscribeToJobs();
