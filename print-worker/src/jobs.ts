@@ -222,6 +222,24 @@ export async function processJob(job: any) {
 }
 
 let isProcessing = false;
+let fallbackPollTimer: NodeJS.Timeout | null = null;
+
+function stopFallbackPolling() {
+  if (!fallbackPollTimer) return;
+  clearInterval(fallbackPollTimer);
+  fallbackPollTimer = null;
+  console.log('[JOBS] Realtime saudavel — polling de contingencia desligado.');
+}
+
+function startFallbackPolling() {
+  if (fallbackPollTimer) return;
+
+  console.warn(`[JOBS] Realtime indisponivel — ativando polling de contingencia a cada ${config.pollIntervalMs}ms.`);
+  void pollPendingJobs();
+  fallbackPollTimer = setInterval(() => {
+    void pollPendingJobs();
+  }, config.pollIntervalMs);
+}
 
 // Reivindica jobs via claim_printer_jobs (SELECT ... FOR UPDATE SKIP LOCKED)
 // em vez de um SELECT simples por PENDING — garante que, se dois workers
@@ -260,21 +278,30 @@ export function subscribeToJobs() {
       (payload) => {
         const job = payload.new as any;
         if (job.status === 'PENDING') {
-          // Não processa o payload do realtime direto — ele não está travado.
-          // Dispara um poll, que reivindica via claim_printer_jobs antes de imprimir.
-          console.log(`[JOBS] Realtime: novo job ${job.id} — disparando poll pra reivindicar.`);
+          // O evento apenas sinaliza que existe trabalho. A reivindicacao continua
+          // atomica pela RPC, mas acontece somente quando houve mudanca real.
+          console.log(`[JOBS] Realtime: novo job ${job.id} — reivindicando fila.`);
           void pollPendingJobs();
         }
       }
     )
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
+        reconnectScheduled = false;
+        stopFallbackPolling();
         console.log('[JOBS] Assinatura Realtime ativada com sucesso.');
-      } else if ((status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') && !reconnectScheduled) {
+        return;
+      }
+
+      if (
+        (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED')
+        && !reconnectScheduled
+      ) {
         reconnectScheduled = true;
+        startFallbackPolling();
         console.log(`[JOBS] Realtime printer_jobs: ${status} — reconectando em 15s...`);
         setTimeout(() => {
-          supabase.removeChannel(ch);
+          void supabase.removeChannel(ch);
           subscribeToJobs();
         }, 15000);
       }

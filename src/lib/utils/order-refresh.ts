@@ -24,3 +24,31 @@ export function hasOrderBoardChanged<
       || current.payment_status !== order.payment_status;
   });
 }
+
+
+/**
+ * Mescla somente os pedidos que foram consultados novamente.
+ * Pedidos fora de requestedIds preservam a mesma referência e não são
+ * baixados/processados de novo. Se um ID consultado não voltar da API,
+ * ele é removido do quadro (ex.: saiu do recorte atual).
+ */
+export function mergeRefreshedOrders<
+  T extends { id: string; created_at?: string },
+>(
+  currentOrders: T[],
+  refreshedOrders: T[],
+  requestedIds: Iterable<string>,
+): T[] {
+  const requested = new Set(requestedIds);
+  const refreshedById = new Map(refreshedOrders.map((order) => [order.id, order]));
+
+  const merged = [
+    ...currentOrders.filter((order) => !requested.has(order.id)),
+    ...refreshedById.values(),
+  ];
+
+  return merged.sort((a, b) => {
+    if (!a.created_at || !b.created_at) return 0;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+}
