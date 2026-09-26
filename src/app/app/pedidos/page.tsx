@@ -11,7 +11,7 @@ import { menuApi } from "@/lib/api/menu-api";
 import { createClient } from "@/lib/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
-import { getSelectedOrderSyncCandidate, hasOrderBoardChanged } from "@/lib/utils/order-refresh";
+import { getSelectedOrderSyncCandidate, hasOrderBoardChanged, mergeRefreshedOrders } from "@/lib/utils/order-refresh";
 import { orderMatchesSearch } from "@/lib/utils/order-search";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { OrderCard } from "./components/OrderCard";
@@ -403,6 +403,9 @@ export default function PedidosPage() {
 
   const selectedOrderRef = useRef<Order | null>(null);
   const ordersRef = useRef<Order[]>([]);
+  const incrementalFetchInFlightRef = useRef<Promise<void> | null>(null);
+  const pendingOrderIdsRef = useRef<Set<string>>(new Set());
+  const pendingSelectedSyncRef = useRef(false);
 
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
@@ -509,24 +512,85 @@ export default function PedidosPage() {
     }
   }, [addToast, currentBranch]);
 
-  // Initial load + realtime + polling de fallback. Refaz quando filial muda.
+  // Fila incremental compartilhada por Realtime e pelas ações do operador.
+  // Se já existe uma consulta em andamento, novos IDs entram no Set e serão
+  // drenados juntos na próxima rodada. Assim nunca existem várias leituras
+  // pesadas concorrentes da fila para o mesmo cliente.
+  const refreshOrderIds = useCallback(async (
+    orderIds: Iterable<string>,
+    {
+      syncSelectedOrder = false,
+    }: {
+      syncSelectedOrder?: boolean;
+    } = {},
+  ) => {
+    for (const orderId of orderIds) {
+      if (orderId) pendingOrderIdsRef.current.add(orderId);
+    }
+    if (pendingOrderIdsRef.current.size === 0) return;
+
+    pendingSelectedSyncRef.current = pendingSelectedSyncRef.current || syncSelectedOrder;
+
+    if (incrementalFetchInFlightRef.current) {
+      await incrementalFetchInFlightRef.current;
+      return;
+    }
+
+    const request = (async () => {
+      while (pendingOrderIdsRef.current.size > 0) {
+        const ids = Array.from(pendingOrderIdsRef.current);
+        pendingOrderIdsRef.current.clear();
+
+        const shouldSyncSelected = pendingSelectedSyncRef.current;
+        pendingSelectedSyncRef.current = false;
+
+        try {
+          const refreshedOrders = await ordersApi.getOrdersByIds(ids, currentBranch?.id ?? null);
+          const currentSelected = selectedOrderRef.current;
+          const previousOrders = ordersRef.current;
+          const nextOrders = mergeRefreshedOrders(previousOrders, refreshedOrders, ids);
+          const boardChanged = hasOrderBoardChanged(previousOrders, nextOrders);
+
+          ordersRef.current = nextOrders;
+          setOrders(nextOrders);
+
+          const updatedSelected = getSelectedOrderSyncCandidate(
+            currentSelected,
+            nextOrders,
+            shouldSyncSelected,
+          );
+          if (updatedSelected) setSelectedOrder(updatedSelected);
+
+          if (!shouldSyncSelected && currentSelected && boardChanged) {
+            addToast("success", "Quadro atualizado. O pedido aberto foi preservado.");
+          }
+        } catch (err) {
+          // Falha de sincronização não transforma uma ação já confirmada no
+          // servidor em erro local. Mantém o estado atual e permite o próximo
+          // evento/refresh tentar novamente sem criar loop de requisições.
+          setError(getFriendlyErrorMessage(err, "Não conseguimos sincronizar os pedidos alterados agora."));
+        }
+      }
+    })();
+
+    incrementalFetchInFlightRef.current = request;
+    try {
+      await request;
+    } finally {
+      if (incrementalFetchInFlightRef.current === request) {
+        incrementalFetchInFlightRef.current = null;
+      }
+    }
+  }, [addToast, currentBranch]);
+
+  // Initial load + Realtime + polling apenas como recuperação.
   //
-  // Estratégia em camadas:
-  // 1. Realtime do Supabase (ideal — atualiza em ms quando há mudança).
-  // 2. Polling a cada 15s (fallback caso o Realtime esteja desligado na
-  //    tabela ou a conexão WS caia — comum em redes ruins de feira/popup).
-  // 3. Refresh ao voltar a aba para foreground (visibilitychange).
-  //
-  // Debounce nos eventos de realtime: um pedido com vários itens dispara
-  // vários eventos "orders"/"order_items" quase simultâneos (um INSERT por
-  // item, updates em cadeia dos triggers de status). Sem debounce, cada um
-  // vira um fetchOrders completo — rajada de requests pro mesmo pedido.
-  // Coalesce numa janela curta e refaz só uma vez.
+  // A carga completa acontece uma vez ao abrir/trocar de filial. Depois disso,
+  // eventos do Realtime carregam somente o pedido alterado. O polling completo
+  // só é ativado se o canal Realtime falhar.
   useEffect(() => {
     if (isBranchLoading) return;
 
-    // O carregamento inicial continua disponível fora do horário para consulta
-    // e fechamento de pendências. Só as atualizações automáticas ficam pausadas.
     const timer = window.setTimeout(() => fetchOrders(), 0);
 
     if (!automaticUpdatesEnabled) {
@@ -534,20 +598,31 @@ export default function PedidosPage() {
     }
 
     const supabase = createClient();
-
+    const realtimePendingIds = new Set<string>();
     let debounceTimer: number | null = null;
-    const scheduleFetch = () => {
+    let realtimeHealthy = false;
+
+    const findOrderIdByItemId = (itemId?: string | null) => {
+      if (!itemId) return null;
+      for (const order of ordersRef.current) {
+        if ((order.items ?? []).some((item) => item.id === itemId)) return order.id;
+      }
+      return null;
+    };
+
+    const scheduleOrderRefresh = (orderId?: string | null) => {
+      if (!orderId) return;
+      realtimePendingIds.add(orderId);
       if (debounceTimer) window.clearTimeout(debounceTimer);
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
-        fetchOrders({ showLoading: false });
+        const ids = Array.from(realtimePendingIds);
+        realtimePendingIds.clear();
+        void refreshOrderIds(ids);
       }, 400);
     };
 
     // Realtime é a via principal. O polling só entra quando o canal falhar.
-    // Antes havia um fetch completo de todos os pedidos do dia a cada 15s,
-    // mesmo com o WebSocket saudável. Como o payload cresce ao longo do dia,
-    // isso multiplicava carga no Supabase sem necessidade.
     const FALLBACK_POLL_MS = 60_000;
     let pollInterval: number | null = null;
 
@@ -562,39 +637,62 @@ export default function PedidosPage() {
       if (pollInterval !== null) return;
       pollInterval = window.setInterval(() => {
         if (document.visibilityState === "visible") {
-          fetchOrders({ showLoading: false });
+          void fetchOrders({ showLoading: false });
         }
       }, FALLBACK_POLL_MS);
     };
 
     const channel = supabase
       .channel("orders-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, scheduleFetch)
-      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, scheduleFetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
+        const orderId = payload.new?.id ?? payload.old?.id;
+        if (typeof orderId === "string") scheduleOrderRefresh(orderId);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, (payload) => {
+        const directOrderId = payload.new?.order_id ?? payload.old?.order_id;
+        if (typeof directOrderId === "string") {
+          scheduleOrderRefresh(directOrderId);
+          return;
+        }
+
+        // Em DELETE o Supabase pode entregar apenas a PK do item. Nesse caso
+        // recuperamos o order_id do snapshot que já está carregado na tela.
+        const itemId = payload.new?.id ?? payload.old?.id;
+        if (typeof itemId === "string") {
+          scheduleOrderRefresh(findOrderIdByItemId(itemId));
+        }
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
+          realtimeHealthy = true;
           stopFallbackPolling();
           return;
         }
 
         if (status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
+          realtimeHealthy = false;
           startFallbackPolling();
         }
       });
 
     const onVisibility = () => {
-      if (document.visibilityState === "visible") fetchOrders({ showLoading: false });
+      // Com Realtime saudável não há motivo para baixar o dia inteiro ao voltar
+      // para a aba. A reconciliação completa fica restrita à recuperação de falha.
+      if (document.visibilityState === "visible" && !realtimeHealthy) {
+        void fetchOrders({ showLoading: false });
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       window.clearTimeout(timer);
       if (debounceTimer) window.clearTimeout(debounceTimer);
+      realtimePendingIds.clear();
       stopFallbackPolling();
       document.removeEventListener("visibilitychange", onVisibility);
       supabase.removeChannel(channel);
     };
-  }, [automaticUpdatesEnabled, fetchOrders, isBranchLoading, scheduleTick]);
+  }, [automaticUpdatesEnabled, fetchOrders, isBranchLoading, refreshOrderIds]);
 
   // Quick action handler (for card buttons — no modal)
   const handleQuickAction = useCallback(async (order: Order): Promise<void> => {
@@ -636,7 +734,7 @@ export default function PedidosPage() {
       } else if (order.status === "PRONTO" && order.type !== "ENTREGA") {
         await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
       }
-      await fetchOrders({ showLoading: false });
+      await refreshOrderIds([order.id]);
     } catch (err) {
       if (optimisticStatus) {
         // Reverte a atualização otimista — o servidor não confirmou a mudança.
@@ -644,7 +742,7 @@ export default function PedidosPage() {
       }
       addToast("error", getFriendlyErrorMessage(err, "Não conseguimos atualizar o status do pedido. Tente novamente."));
     }
-  }, [fetchOrders, addToast]);
+  }, [refreshOrderIds, addToast]);
 
   // Atalho operacional para balcão/viagem: conclui direto da fila, sem passar
   // pelo estado PRONTO. Pedidos de entrega sempre seguem pelo despacho.
@@ -654,12 +752,12 @@ export default function PedidosPage() {
     setOrders((prev) => prev.map((item) => (item.id === order.id ? { ...item, status: "ENTREGUE" } : item)));
     try {
       await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
-      await fetchOrders({ showLoading: false });
+      await refreshOrderIds([order.id]);
     } catch (err) {
       setOrders((prev) => prev.map((item) => (item.id === order.id ? { ...item, status: order.status } : item)));
       addToast("error", getFriendlyErrorMessage(err, "Não conseguimos marcar o pedido como entregue. Tente novamente."));
     }
-  }, [fetchOrders, addToast]);
+  }, [refreshOrderIds, addToast]);
 
   // Derived counts
   const getCount = (status: OrderStatus) => orders.filter((o) => o.status === status).length;
@@ -932,15 +1030,15 @@ export default function PedidosPage() {
         order={selectedOrder}
         isOpen={!!selectedOrder}
         onClose={handleCloseModal}
-        onOrderUpdated={() => fetchOrders({ showLoading: false, syncSelectedOrder: true })}
+        onOrderUpdated={() => selectedOrder && refreshOrderIds([selectedOrder.id], { syncSelectedOrder: true })}
         categoryLookup={orderCategories}
       />
       {paymentOrder && (
         <PayItemsModal
           order={paymentOrder}
           onClose={() => setPaymentOrder(null)}
-          onPaymentRegistered={() => fetchOrders({ showLoading: false })}
-          onPaid={() => { setPaymentOrder(null); fetchOrders({ showLoading: false }); }}
+          onPaymentRegistered={() => refreshOrderIds([paymentOrder.id])}
+          onPaid={() => { const orderId = paymentOrder.id; setPaymentOrder(null); void refreshOrderIds([orderId]); }}
         />
       )}
     </div>
