@@ -2,9 +2,9 @@ import os from 'os';
 import { supabase } from './supabase';
 import { getRemoteConfig } from './jobs';
 
-// O Realtime é a via principal do worker. O heartbeat existe apenas para
-// indicar saúde no painel; 15s gerava milhares de writes desnecessários por dia.
-const HEARTBEAT_INTERVAL_MS = 60_000;
+// O Realtime é a via principal do worker. O heartbeat só serve para indicar
+// saúde no painel e não precisa gravar no banco a cada minuto.
+const HEARTBEAT_INTERVAL_MS = 5 * 60_000;
 
 function localIps() {
   return Object.values(os.networkInterfaces())
@@ -23,6 +23,7 @@ async function reportWorkerMetadata() {
     { key: 'print_worker_platform', value: `${process.platform} ${process.arch}` },
     { key: 'print_worker_printer_host', value: remoteConfig.printerHost },
     { key: 'print_worker_printer_port', value: remoteConfig.printerPort },
+    { key: 'print_worker_status', value: 'ACTIVE' },
   ].map((row) => ({ ...row, updated_at: now }));
 
   const { error } = await supabase.from('settings').upsert(rows);
@@ -34,9 +35,9 @@ async function reportWorkerMetadata() {
 async function reportWorkerHeartbeat() {
   const now = new Date().toISOString();
 
-  // Apenas os campos realmente dinâmicos mudam a cada batida.
+  // Status e metadados são gravados no startup. Durante a execução,
+  // somente o last_seen realmente muda.
   const { error } = await supabase.from('settings').upsert([
-    { key: 'print_worker_status', value: 'ACTIVE', updated_at: now },
     { key: 'print_worker_last_seen_at', value: now, updated_at: now },
   ]);
 
