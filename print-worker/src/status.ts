@@ -4,7 +4,7 @@ import { getRemoteConfig } from './jobs';
 
 // O Realtime é a via principal do worker. O heartbeat só serve para indicar
 // saúde no painel e não precisa gravar no banco a cada minuto.
-const HEARTBEAT_INTERVAL_MS = 5 * 60_000;
+const HEARTBEAT_INTERVAL_MS = 2 * 60_000;
 
 function localIps() {
   return Object.values(os.networkInterfaces())
