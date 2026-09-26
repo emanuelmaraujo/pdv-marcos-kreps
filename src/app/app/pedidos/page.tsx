@@ -1030,14 +1030,17 @@ export default function PedidosPage() {
         order={selectedOrder}
         isOpen={!!selectedOrder}
         onClose={handleCloseModal}
-        onOrderUpdated={() => selectedOrder && refreshOrderIds([selectedOrder.id], { syncSelectedOrder: true })}
+        onOrderUpdated={async () => {
+          if (!selectedOrder) return;
+          await refreshOrderIds([selectedOrder.id], { syncSelectedOrder: true });
+        }}
         categoryLookup={orderCategories}
       />
       {paymentOrder && (
         <PayItemsModal
           order={paymentOrder}
           onClose={() => setPaymentOrder(null)}
-          onPaymentRegistered={() => refreshOrderIds([paymentOrder.id])}
+          onPaymentRegistered={() => { void refreshOrderIds([paymentOrder.id]); }}
           onPaid={() => { const orderId = paymentOrder.id; setPaymentOrder(null); void refreshOrderIds([orderId]); }}
         />
       )}
