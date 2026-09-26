@@ -645,11 +645,15 @@ export default function PedidosPage() {
     const channel = supabase
       .channel("orders-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
-        const orderId = payload.new?.id ?? payload.old?.id;
+        const nextOrder = payload.new as Partial<Order>;
+        const previousOrder = payload.old as Partial<Order>;
+        const orderId = nextOrder.id ?? previousOrder.id;
         if (typeof orderId === "string") scheduleOrderRefresh(orderId);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, (payload) => {
-        const directOrderId = payload.new?.order_id ?? payload.old?.order_id;
+        const nextItem = payload.new as { id?: string; order_id?: string };
+        const previousItem = payload.old as { id?: string; order_id?: string };
+        const directOrderId = nextItem.order_id ?? previousItem.order_id;
         if (typeof directOrderId === "string") {
           scheduleOrderRefresh(directOrderId);
           return;
@@ -657,7 +661,7 @@ export default function PedidosPage() {
 
         // Em DELETE o Supabase pode entregar apenas a PK do item. Nesse caso
         // recuperamos o order_id do snapshot que já está carregado na tela.
-        const itemId = payload.new?.id ?? payload.old?.id;
+        const itemId = nextItem.id ?? previousItem.id;
         if (typeof itemId === "string") {
           scheduleOrderRefresh(findOrderIdByItemId(itemId));
         }
