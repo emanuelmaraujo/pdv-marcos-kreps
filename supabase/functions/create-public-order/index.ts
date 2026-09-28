@@ -6,6 +6,7 @@ import { resolveDeliveryFee } from "../_shared/delivery.ts";
 import { fetchCepAddress } from "../_shared/cep.ts";
 import { isAllowedOrigin, publicCorsHeaders } from "../_shared/public-cors.ts";
 import { checkRateLimit, getClientIp } from "../_shared/rate-limit.ts";
+import { evaluateCoupon, normalizeCouponCode, type CouponRecord } from "../_shared/coupons.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -236,10 +237,12 @@ serve(async (req) => {
     const orderType = body.order_type;
     const paymentMethodCode = cleanText(body.payment_method_code, 80) ?? DEFAULT_PAYMENT_METHOD_CODE;
     const branchSlug = cleanText(body.branch_slug, 32);
+    const couponCode = normalizeCouponCode(body.coupon_code);
     const isDelivery = orderType === "ENTREGA";
     const saveAddress = body.save_address === true;
 
     if (items.length === 0) throw new Error("Carrinho vazio.");
+    if (body.coupon_code && !couponCode) throw new Error("Cupom inválido.");
     if (items.length > 50) throw new Error("Carrinho excede o limite de itens.");
     if (body.customer_phone && !customerPhone) throw new Error("Informe um WhatsApp valido com DDD.");
     if (orderType !== "BALCAO" && orderType !== "VIAGEM" && orderType !== "ENTREGA") {
@@ -548,7 +551,32 @@ serve(async (req) => {
       }
     }
 
-    const totalAmount = Number((productsSubtotal + addonsTotal + packingFeeValue + deliveryFeeValue).toFixed(2));
+    const discountBase = Number((productsSubtotal + addonsTotal).toFixed(2));
+    let discountAmount = 0;
+    let discountPercentage = 0;
+    let appliedCoupon: CouponRecord | null = null;
+
+    if (couponCode) {
+      const { data: coupon, error: couponErr } = await supabaseAdmin
+        .from("coupons")
+        .select("id, code, description, discount_type, discount_value, min_subtotal, active, valid_from, valid_until")
+        .eq("branch_id", branch.id)
+        .eq("code", couponCode)
+        .maybeSingle();
+
+      if (couponErr) throw new Error("Erro ao validar cupom.");
+
+      const evaluation = evaluateCoupon(coupon as CouponRecord | null, discountBase);
+      if (!evaluation.valid) throw new Error(evaluation.error);
+
+      appliedCoupon = coupon as CouponRecord;
+      discountAmount = evaluation.discountAmount;
+      discountPercentage = evaluation.discountPercentage;
+    }
+
+    const totalAmount = Number((
+      discountBase + packingFeeValue + deliveryFeeValue - discountAmount
+    ).toFixed(2));
     const nowIso = new Date().toISOString();
     const customerId = await registerCustomer(supabaseAdmin, {
       customerPhone,
@@ -570,6 +598,17 @@ serve(async (req) => {
       customer_phone: customerPhone,
       customer_email: customerEmail,
       customer_id: customerId,
+      discount_amount: discountAmount,
+      discount_percentage: discountPercentage,
+      discount_reason: appliedCoupon ? `Cupom ${appliedCoupon.code}` : null,
+      coupon_id: appliedCoupon?.id ?? null,
+      coupon_code: appliedCoupon?.code ?? null,
+      discount: appliedCoupon ? {
+        type: appliedCoupon.discount_type,
+        value: Number(appliedCoupon.discount_value),
+        amount_applied: discountAmount,
+        reason: `Cupom ${appliedCoupon.code}`,
+      } : null,
       packing_fee: packingFeeValue,
       delivery_fee: deliveryFeeValue,
       delivery: isDelivery ? {
@@ -636,7 +675,7 @@ serve(async (req) => {
     if (idempotencyKey) {
       const { data: previous, error: previousErr } = await supabaseAdmin
         .from("orders")
-        .select("id, daily_number, public_token, total_amount, status, payment_status")
+        .select("id, daily_number, public_token, total_amount, discount_amount, discount_percentage, coupon_code, status, payment_status")
         .eq("public_idempotency_key", idempotencyKey)
         .maybeSingle();
 
@@ -651,6 +690,9 @@ serve(async (req) => {
             daily_number: previous.daily_number,
             public_token: previous.public_token,
             total_amount: Number(previous.total_amount),
+            discount_amount: Number(previous.discount_amount ?? 0),
+            discount_percentage: Number(previous.discount_percentage ?? 0),
+            coupon_code: previous.coupon_code ?? undefined,
             status: previous.status,
             payment_status: previous.payment_status,
             payment_method_code: paymentMethodCode,
@@ -708,6 +750,9 @@ serve(async (req) => {
         daily_number: rpcResult.daily_number,
         public_token: rpcResult.public_token,
         total_amount: Number(rpcResult.total_amount),
+        discount_amount: Number(rpcResult.discount_amount ?? 0),
+        discount_percentage: Number(rpcResult.discount_percentage ?? 0),
+        coupon_code: rpcResult.coupon_code ?? undefined,
         status: rpcResult.status,
         payment_status: rpcResult.payment_status,
         payment_method_code: paymentMethodCode,

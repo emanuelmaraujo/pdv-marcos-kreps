@@ -360,6 +360,17 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [orderData, setOrderData] = useState<CreatePublicOrderResponse["order"] | null>(null);
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
+  const [couponInput, setCouponInput] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponMessage, setCouponMessage] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    description?: string | null;
+    discount_type: "PERCENT" | "AMOUNT";
+    discount_value: number;
+    discount_amount: number;
+    cart_signature: string;
+  } | null>(null);
   const { toasts, addToast, removeToast } = useToast();
   const lastAutofilledPhoneRef = useRef<string | null>(null);
   // Depois que a pessoa escolhe a modalidade na mão, o autofill de perfil
@@ -954,7 +965,12 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const estimatedDeliveryFee = orderType === "ENTREGA"
     ? (matchedDeliveryZone ? matchedDeliveryZone.fee : deliveryZones.length === 0 ? defaultDeliveryFee : 0)
     : 0;
-  const estimatedTotal = estimatedSubtotal + estimatedPackagingFee + estimatedDeliveryFee;
+  const couponIsCurrent = appliedCoupon?.cart_signature === cartSignature;
+  const estimatedCouponDiscount = couponIsCurrent ? (appliedCoupon?.discount_amount ?? 0) : 0;
+  const estimatedTotal = Math.max(
+    0,
+    estimatedSubtotal + estimatedPackagingFee + estimatedDeliveryFee - estimatedCouponDiscount,
+  );
   const checkoutPhone = useMemo(() => normalizeBrazilPhone(customerPhone), [customerPhone]);
   /** Aviso de número pela metade — some assim que o WhatsApp fica válido. */
   const customerPhoneWarning = useMemo(() => describeCustomerPhone(customerPhone).message, [customerPhone]);
@@ -1188,6 +1204,40 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
    * limpa orderData/cart e leva pra tela PAID sozinho. */
   const orderAwaitingPayment = !!orderData && orderData.payment_status !== "PAID";
 
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) {
+      setAppliedCoupon(null);
+      setCouponMessage("Digite um cupom.");
+      return;
+    }
+
+    setCouponLoading(true);
+    setCouponMessage("");
+    try {
+      const result = await pdvApi.validateCoupon({
+        coupon_code: code,
+        branch_slug: branchSlug,
+        subtotal: estimatedSubtotal,
+      });
+
+      if (!result.valid || !result.coupon) {
+        setAppliedCoupon(null);
+        setCouponMessage(result.error || "Cupom inválido.");
+        return;
+      }
+
+      setCouponInput(result.coupon.code);
+      setAppliedCoupon({ ...result.coupon, cart_signature: cartSignature });
+      setCouponMessage("Cupom aplicado.");
+    } catch (error) {
+      setAppliedCoupon(null);
+      setCouponMessage(getFriendlyErrorMessage(error, "Não foi possível validar o cupom."));
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
   const handleCreateOrder = async () => {
     if (isSubmittingOrder) return;
     setCheckoutError("");
@@ -1274,6 +1324,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         notes: orderNotes.trim() || undefined,
         payment_method_code: PAYMENT_METHOD_CODE,
         branch_slug: branchSlug,
+        coupon_code: couponIsCurrent ? appliedCoupon?.code : undefined,
         delivery_address_id: orderType === "ENTREGA" ? selectedSavedAddress?.id : undefined,
         delivery_address: orderType === "ENTREGA" && !selectedSavedAddress ? {
           street: deliveryAddress.street.trim(),
@@ -2017,10 +2068,54 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
                 </div>
               )}
+              {couponIsCurrent && appliedCoupon && estimatedCouponDiscount > 0 && (
+                <div className="flex items-center justify-between text-xs font-semibold text-[var(--status-success)]">
+                  <span>Cupom {appliedCoupon.code}</span>
+                  <span className="tabular-nums">- {currency.format(estimatedCouponDiscount)}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between pt-2 border-t border-[var(--border)] text-sm font-semibold text-[var(--text-primary)]">
                 <span>Total</span>
                 <span className="text-xl tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(estimatedTotal)}</span>
               </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-3">
+              <div className="flex items-center gap-2">
+                <Tag className="h-4 w-4 shrink-0 text-brand-red" />
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Tem cupom de desconto?</p>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={couponInput}
+                  onChange={(event) => {
+                    setCouponInput(event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 40));
+                    if (couponIsCurrent) {
+                      setAppliedCoupon(null);
+                      setCouponMessage("");
+                    }
+                  }}
+                  placeholder="Digite o código"
+                  autoCapitalize="characters"
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)] outline-none focus:border-brand-red"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleApplyCoupon()}
+                  disabled={couponLoading || !couponInput.trim()}
+                  className="h-11 shrink-0 rounded-xl bg-[var(--bg-inverse)] px-4 text-sm font-semibold text-white disabled:opacity-45"
+                >
+                  {couponLoading ? "Validando..." : couponIsCurrent ? "Reaplicar" : "Aplicar"}
+                </button>
+              </div>
+              {couponMessage && (
+                <p className={`mt-2 text-xs font-semibold ${couponIsCurrent ? "text-[var(--status-success)]" : "text-[var(--status-danger)]"}`}>
+                  {couponMessage}
+                </p>
+              )}
+              {couponIsCurrent && appliedCoupon?.description && (
+                <p className="mt-1 text-xs text-[var(--text-muted)]">{appliedCoupon.description}</p>
+              )}
             </div>
             </>
             )}
@@ -2479,7 +2574,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <p className="text-caption font-medium text-white/60">Pedido</p>
                 <h2 className="text-2xl font-bold leading-tight tabular-nums">#{String(orderData.daily_number).padStart(3, "0")}</h2>
               </div>
-              <p className="text-2xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(orderData.total_amount)}</p>
+              <div className="text-right">
+                <p className="text-2xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(orderData.total_amount)}</p>
+                {orderData.coupon_code && Number(orderData.discount_amount ?? 0) > 0 && (
+                  <p className="mt-1 text-xs font-semibold text-white/70">
+                    Cupom {orderData.coupon_code} · -{currency.format(Number(orderData.discount_amount ?? 0))}
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 

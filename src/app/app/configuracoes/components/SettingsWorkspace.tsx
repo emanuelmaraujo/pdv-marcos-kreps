@@ -10,6 +10,7 @@ import {
   LayoutGrid,
   Settings2,
   SlidersHorizontal,
+  Tag,
   Users,
 } from "lucide-react";
 import { useBranch } from "@/contexts/BranchContext";
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/app/configuracoes/usuarios", label: "Usuários", shortLabel: "Usuários", icon: Users },
   { href: "/app/configuracoes/filiais", label: "Filiais", shortLabel: "Filiais", icon: Building2 },
   { href: "/app/configuracoes/pagamentos", label: "Pagamentos", shortLabel: "Taxas", icon: CreditCard },
+  { href: "/app/configuracoes/cupons", label: "Cupons", shortLabel: "Cupons", icon: Tag },
   { href: "/app/configuracoes/geral", label: "Geral", shortLabel: "Geral", icon: Settings2, globalOnly: true },
   { href: "/app/configuracoes/auditoria", label: "Auditoria", shortLabel: "Histórico", icon: FileClock },
 ] as const;
