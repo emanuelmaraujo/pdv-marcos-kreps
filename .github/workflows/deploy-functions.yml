@@ -83,6 +83,7 @@ jobs:
             loyalty-revoke \
             mercado-pago-webhook \
             subscribe-order-push \
+            validate-coupon \
             webauthn \
             expire-pending-public-orders \
             send-whatsapp \
