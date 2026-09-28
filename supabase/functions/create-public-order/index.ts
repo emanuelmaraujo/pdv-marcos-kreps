@@ -675,7 +675,7 @@ serve(async (req) => {
     if (idempotencyKey) {
       const { data: previous, error: previousErr } = await supabaseAdmin
         .from("orders")
-        .select("id, daily_number, public_token, total_amount, status, payment_status")
+        .select("id, daily_number, public_token, total_amount, discount_amount, discount_percentage, coupon_code, status, payment_status")
         .eq("public_idempotency_key", idempotencyKey)
         .maybeSingle();
 
@@ -690,6 +690,9 @@ serve(async (req) => {
             daily_number: previous.daily_number,
             public_token: previous.public_token,
             total_amount: Number(previous.total_amount),
+            discount_amount: Number(previous.discount_amount ?? 0),
+            discount_percentage: Number(previous.discount_percentage ?? 0),
+            coupon_code: previous.coupon_code ?? undefined,
             status: previous.status,
             payment_status: previous.payment_status,
             payment_method_code: paymentMethodCode,
