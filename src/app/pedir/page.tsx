@@ -369,13 +369,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     discount_type: "PERCENT" | "AMOUNT";
     discount_value: number;
     discount_amount: number;
+    cart_signature: string;
   } | null>(null);
   const { toasts, addToast, removeToast } = useToast();
-  useEffect(() => {
-    setAppliedCoupon(null);
-    setCouponMessage("");
-  }, [cartSignature]);
-
   const lastAutofilledPhoneRef = useRef<string | null>(null);
   // Depois que a pessoa escolhe a modalidade na mão, o autofill de perfil
   // salvo (local ou do servidor) nunca mais pode sobrescrever essa escolha —
@@ -969,7 +965,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const estimatedDeliveryFee = orderType === "ENTREGA"
     ? (matchedDeliveryZone ? matchedDeliveryZone.fee : deliveryZones.length === 0 ? defaultDeliveryFee : 0)
     : 0;
-  const estimatedCouponDiscount = appliedCoupon?.discount_amount ?? 0;
+  const couponIsCurrent = appliedCoupon?.cart_signature === cartSignature;
+  const estimatedCouponDiscount = couponIsCurrent ? (appliedCoupon?.discount_amount ?? 0) : 0;
   const estimatedTotal = Math.max(
     0,
     estimatedSubtotal + estimatedPackagingFee + estimatedDeliveryFee - estimatedCouponDiscount,
@@ -1231,7 +1228,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       }
 
       setCouponInput(result.coupon.code);
-      setAppliedCoupon(result.coupon);
+      setAppliedCoupon({ ...result.coupon, cart_signature: cartSignature });
       setCouponMessage("Cupom aplicado.");
     } catch (error) {
       setAppliedCoupon(null);
@@ -1327,7 +1324,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         notes: orderNotes.trim() || undefined,
         payment_method_code: PAYMENT_METHOD_CODE,
         branch_slug: branchSlug,
-        coupon_code: appliedCoupon?.code,
+        coupon_code: couponIsCurrent ? appliedCoupon?.code : undefined,
         delivery_address_id: orderType === "ENTREGA" ? selectedSavedAddress?.id : undefined,
         delivery_address: orderType === "ENTREGA" && !selectedSavedAddress ? {
           street: deliveryAddress.street.trim(),
@@ -2071,7 +2068,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
                 </div>
               )}
-              {appliedCoupon && estimatedCouponDiscount > 0 && (
+              {couponIsCurrent && appliedCoupon && estimatedCouponDiscount > 0 && (
                 <div className="flex items-center justify-between text-xs font-semibold text-[var(--status-success)]">
                   <span>Cupom {appliedCoupon.code}</span>
                   <span className="tabular-nums">- {currency.format(estimatedCouponDiscount)}</span>
@@ -2093,7 +2090,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   value={couponInput}
                   onChange={(event) => {
                     setCouponInput(event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 40));
-                    if (appliedCoupon) {
+                    if (couponIsCurrent) {
                       setAppliedCoupon(null);
                       setCouponMessage("");
                     }
@@ -2108,15 +2105,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   disabled={couponLoading || !couponInput.trim()}
                   className="h-11 shrink-0 rounded-xl bg-[var(--bg-inverse)] px-4 text-sm font-semibold text-white disabled:opacity-45"
                 >
-                  {couponLoading ? "Validando..." : appliedCoupon ? "Reaplicar" : "Aplicar"}
+                  {couponLoading ? "Validando..." : couponIsCurrent ? "Reaplicar" : "Aplicar"}
                 </button>
               </div>
               {couponMessage && (
-                <p className={`mt-2 text-xs font-semibold ${appliedCoupon ? "text-[var(--status-success)]" : "text-[var(--status-danger)]"}`}>
+                <p className={`mt-2 text-xs font-semibold ${couponIsCurrent ? "text-[var(--status-success)]" : "text-[var(--status-danger)]"}`}>
                   {couponMessage}
                 </p>
               )}
-              {appliedCoupon?.description && (
+              {couponIsCurrent && appliedCoupon?.description && (
                 <p className="mt-1 text-xs text-[var(--text-muted)]">{appliedCoupon.description}</p>
               )}
             </div>
