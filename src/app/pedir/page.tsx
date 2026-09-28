@@ -2574,7 +2574,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <p className="text-caption font-medium text-white/60">Pedido</p>
                 <h2 className="text-2xl font-bold leading-tight tabular-nums">#{String(orderData.daily_number).padStart(3, "0")}</h2>
               </div>
-              <p className="text-2xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(orderData.total_amount)}</p>
+              <div className="text-right">
+                <p className="text-2xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(orderData.total_amount)}</p>
+                {orderData.coupon_code && Number(orderData.discount_amount ?? 0) > 0 && (
+                  <p className="mt-1 text-xs font-semibold text-white/70">
+                    Cupom {orderData.coupon_code} · -{currency.format(Number(orderData.discount_amount ?? 0))}
+                  </p>
+                )}
+              </div>
             </div>
           </section>
 
