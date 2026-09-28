@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   Settings2,
   ShieldCheck,
+  Tag,
   Users,
 } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
@@ -37,6 +38,14 @@ const sections = [
     description: "Débito, crédito, parcelamento, vigência e custo estimado.",
     href: "/app/configuracoes/pagamentos",
     icon: CreditCard,
+    scope: "Filial",
+    globalOnly: false,
+  },
+  {
+    title: "Cupons de desconto",
+    description: "Crie, programe, ative e desative cupons promocionais por filial.",
+    href: "/app/configuracoes/cupons",
+    icon: Tag,
     scope: "Filial",
     globalOnly: false,
   },
@@ -79,7 +88,7 @@ export default function SettingsHomePage() {
               <p className="mt-1 text-sm text-[var(--text-secondary)]">Escolha uma área para revisar ou alterar.</p>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {visibleSections.map((section) => {
               const Icon = section.icon;
               return (
