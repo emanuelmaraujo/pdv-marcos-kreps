@@ -204,7 +204,7 @@ export default function CouponsSettingsPage() {
             <SettingsBadge>{activeNow} vigente(s) agora</SettingsBadge>
           </>
         }
-        actions={<Button onClick={openCreate} disabled={!currentBranchId}><Plus className="mr-2 h-4 w-4" />Novo cupom</Button>}
+        action={<Button onClick={openCreate} disabled={!currentBranchId}><Plus className="mr-2 h-4 w-4" />Novo cupom</Button>}
       />
 
       {formOpen && (
