@@ -179,6 +179,7 @@ export type CreatePublicOrderPayload = {
   notes?: string;
   payment_method_code?: string;
   branch_slug?: string;
+  coupon_code?: string;
   delivery_address?: {
     street: string;
     number?: string;
@@ -215,9 +216,26 @@ export type CreatePublicOrderResponse = {
     daily_number: number;
     public_token: string;
     total_amount: number;
+    discount_amount?: number;
+    discount_percentage?: number;
+    coupon_code?: string;
     status: OrderStatus;
     payment_status: string;
     payment_method_code: string;
+  };
+};
+
+export type ValidateCouponResponse = {
+  success: boolean;
+  valid: boolean;
+  error?: string;
+  coupon?: {
+    code: string;
+    description?: string | null;
+    discount_type: "PERCENT" | "AMOUNT";
+    discount_value: number;
+    min_subtotal: number;
+    discount_amount: number;
   };
 };
 
@@ -437,6 +455,9 @@ export const pdvApi = {
 
     return data as CreatePublicOrderResponse;
   },
+
+  validateCoupon: (payload: { coupon_code: string; branch_slug: string; subtotal: number }) =>
+    invokeEdgeFunction<ValidateCouponResponse>('validate-coupon', payload),
 
   getPublicOrderStatus: (payload: { public_token: string }) =>
     invokeEdgeFunction<PublicOrderStatusResponse>('get-public-order-status', payload),
