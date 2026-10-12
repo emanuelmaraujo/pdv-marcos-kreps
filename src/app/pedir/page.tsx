@@ -366,7 +366,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [appliedCoupon, setAppliedCoupon] = useState<{
     code: string;
     description?: string | null;
-    discount_type: "PERCENT" | "AMOUNT";
+    discount_type: "PERCENT" | "AMOUNT" | "FREE_DELIVERY";
     discount_value: number;
     discount_amount: number;
     cart_signature: string;
@@ -967,9 +967,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     : 0;
   const couponIsCurrent = appliedCoupon?.cart_signature === cartSignature;
   const estimatedCouponDiscount = couponIsCurrent ? (appliedCoupon?.discount_amount ?? 0) : 0;
+  const freeDeliveryCoupon = couponIsCurrent && appliedCoupon?.discount_type === "FREE_DELIVERY" && orderType === "ENTREGA";
   const estimatedTotal = Math.max(
     0,
-    estimatedSubtotal + estimatedPackagingFee + estimatedDeliveryFee - estimatedCouponDiscount,
+    estimatedSubtotal + estimatedPackagingFee + (freeDeliveryCoupon ? 0 : estimatedDeliveryFee) - estimatedCouponDiscount,
   );
   const checkoutPhone = useMemo(() => normalizeBrazilPhone(customerPhone), [customerPhone]);
   /** Aviso de número pela metade — some assim que o WhatsApp fica válido. */
@@ -1219,6 +1220,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         coupon_code: code,
         branch_slug: branchSlug,
         subtotal: estimatedSubtotal,
+        order_type: orderType,
       });
 
       if (!result.valid || !result.coupon) {
@@ -2068,6 +2070,12 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
                 </div>
               )}
+              {freeDeliveryCoupon && (
+                <div className="flex items-center justify-between text-xs font-semibold text-[var(--status-success)]">
+                  <span>Cupom FERIADOU · frete grátis</span>
+                  <span>- {currency.format(estimatedDeliveryFee)}</span>
+                </div>
+              )}
               {couponIsCurrent && appliedCoupon && estimatedCouponDiscount > 0 && (
                 <div className="flex items-center justify-between text-xs font-semibold text-[var(--status-success)]">
                   <span>Cupom {appliedCoupon.code}</span>
@@ -2465,7 +2473,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       </div>
                     ) : effectiveNeighborhood.trim() ? (
                       <p className="text-xs font-semibold text-[var(--text-secondary)]">
-                        Taxa de entrega estimada: {currency.format(estimatedDeliveryFee)}
+                        Taxa de entrega estimada: {freeDeliveryCoupon ? "Grátis com FERIADOU" : currency.format(estimatedDeliveryFee)}
                       </p>
                     ) : null}
                   </div>

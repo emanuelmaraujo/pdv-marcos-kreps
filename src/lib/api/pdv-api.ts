@@ -232,7 +232,7 @@ export type ValidateCouponResponse = {
   coupon?: {
     code: string;
     description?: string | null;
-    discount_type: "PERCENT" | "AMOUNT";
+    discount_type: "PERCENT" | "AMOUNT" | "FREE_DELIVERY";
     discount_value: number;
     min_subtotal: number;
     discount_amount: number;
@@ -456,7 +456,7 @@ export const pdvApi = {
     return data as CreatePublicOrderResponse;
   },
 
-  validateCoupon: (payload: { coupon_code: string; branch_slug: string; subtotal: number }) =>
+  validateCoupon: (payload: { coupon_code: string; branch_slug: string; subtotal: number; order_type: "BALCAO" | "VIAGEM" | "ENTREGA" }) =>
     invokeEdgeFunction<ValidateCouponResponse>('validate-coupon', payload),
 
   getPublicOrderStatus: (payload: { public_token: string }) =>

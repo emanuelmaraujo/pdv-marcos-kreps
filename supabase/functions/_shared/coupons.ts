@@ -67,3 +67,21 @@ export function evaluateCoupon(
     discountPercentage: 0,
   };
 }
+
+/**
+ * Campanha pontual da filial principal: somente segunda-feira, 12/10/2026
+ * (horário de Brasília). Não modifica regras de cupons permanentes.
+ */
+export const FERIADOU_CODE = "FERIADOU";
+
+export function isFeriadouActive(
+  branchSlug: string,
+  orderType: string,
+  now = new Date(),
+): boolean {
+  const time = now.getTime();
+  return branchSlug === "nb"
+    && orderType === "ENTREGA"
+    && time >= Date.parse("2026-10-12T03:00:00.000Z")
+    && time < Date.parse("2026-10-13T03:00:00.000Z");
+}
