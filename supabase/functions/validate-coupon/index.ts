@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { isAllowedOrigin, publicCorsHeaders } from "../_shared/public-cors.ts";
 import { checkRateLimit, getClientIp } from "../_shared/rate-limit.ts";
-import { evaluateCoupon, normalizeCouponCode, type CouponRecord } from "../_shared/coupons.ts";
+import { FERIADOU_CODE, isFeriadouActive, evaluateCoupon, normalizeCouponCode, type CouponRecord } from "../_shared/coupons.ts";
 
 function getHeaders(req: Request) {
   return publicCorsHeaders(req);
@@ -54,6 +54,27 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!branch) return json(req, { success: true, valid: false, error: "Cupom inválido." });
+
+    // Campanha FERIADOU: frete grátis, sem desconto sobre produtos.
+    // Restrita a pedidos de entrega da filial nb durante 12/10/2026.
+    if (code === FERIADOU_CODE) {
+      const valid = isFeriadouActive(branchSlug, String(body.order_type ?? ""));
+      if (!valid) {
+        return json(req, { success: true, valid: false, error: "Cupom inválido ou expirado para esta modalidade." });
+      }
+      return json(req, {
+        success: true,
+        valid: true,
+        coupon: {
+          code: FERIADOU_CODE,
+          description: "Frete grátis somente nesta segunda-feira",
+          discount_type: "FREE_DELIVERY",
+          discount_value: 100,
+          min_subtotal: 0,
+          discount_amount: 0,
+        },
+      });
+    }
 
     const { data: coupon, error } = await supabaseAdmin
       .from("coupons")
