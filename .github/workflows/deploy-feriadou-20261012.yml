@@ -1,0 +1,57 @@
+name: Deploy FERIADOU Edge Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/deploy-feriadou-20261012.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-feriadou:
+    name: Deploy only coupon and order functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+
+      # No db push/migration repair: remote database history remains untouched.
+      - name: Validate target project
+        shell: bash
+        run: |
+          test "${#PROJECT_REF}" -eq 20
+          [[ "$PROJECT_REF" =~ ^[a-z0-9]{20}$ ]]
+          test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Deploy FERIADOU validation function
+        run: supabase functions deploy validate-coupon --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Deploy FERIADOU public order function
+        run: supabase functions deploy create-public-order --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Smoke-test FERIADOU (no order is created)
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://$PROJECT_REF.supabase.co/functions/v1/validate-coupon"
+          response="$(curl --retry 3 --retry-delay 2 -fsS --max-time 30 -X POST "$url" \
+            -H "Content-Type: application/json" \
+            -H "Origin: https://marcoskreps.com.br" \
+            -d '{ "coupon_code": "FERIADOU", "branch_slug": "nb", "subtotal": 50, "order_type": "ENTREGA" }')"
+          echo "$response" | jq -e '.success == true and .valid == true and .coupon.discount_type == "FREE_DELIVERY" and .coupon.discount_amount == 0' > /dev/null
+          echo "FERIADOU accepted for eligible delivery: OK"
+          invalid="$(curl --retry 3 --retry-delay 2 -fsS --max-time 30 -X POST "$url" \
+            -H "Content-Type: application/json" \
+            -H "Origin: https://marcoskreps.com.br" \
+            -d '{ "coupon_code": "FERIADOU", "branch_slug": "nb", "subtotal": 50, "order_type": "VIAGEM" }')"
+          echo "$invalid" | jq -e '.success == true and .valid == false' > /dev/null
+          echo "FERIADOU rejected for takeaway: OK"
