@@ -6,7 +6,7 @@ import { resolveDeliveryFee } from "../_shared/delivery.ts";
 import { fetchCepAddress } from "../_shared/cep.ts";
 import { isAllowedOrigin, publicCorsHeaders } from "../_shared/public-cors.ts";
 import { checkRateLimit, getClientIp } from "../_shared/rate-limit.ts";
-import { evaluateCoupon, normalizeCouponCode, type CouponRecord } from "../_shared/coupons.ts";
+import { FERIADOU_CODE, isFeriadouActive, evaluateCoupon, normalizeCouponCode, type CouponRecord } from "../_shared/coupons.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -556,7 +556,12 @@ serve(async (req) => {
     let discountPercentage = 0;
     let appliedCoupon: CouponRecord | null = null;
 
-    if (couponCode) {
+    const isFeriadou = couponCode === FERIADOU_CODE;
+    if (isFeriadou && !isFeriadouActive(branchSlug ?? "", orderType)) {
+      throw new Error("Cupom inválido ou expirado para esta modalidade.");
+    }
+
+    if (couponCode && !isFeriadou) {
       const { data: coupon, error: couponErr } = await supabaseAdmin
         .from("coupons")
         .select("id, code, description, discount_type, discount_value, min_subtotal, active, valid_from, valid_until")
@@ -573,6 +578,9 @@ serve(async (req) => {
       discountAmount = evaluation.discountAmount;
       discountPercentage = evaluation.discountPercentage;
     }
+
+    // Somente o frete é zerado; produtos, taxas e zonas atendidas não mudam.
+    if (isFeriadou) deliveryFeeValue = 0;
 
     const totalAmount = Number((
       discountBase + packingFeeValue + deliveryFeeValue - discountAmount
@@ -602,7 +610,7 @@ serve(async (req) => {
       discount_percentage: discountPercentage,
       discount_reason: appliedCoupon ? `Cupom ${appliedCoupon.code}` : null,
       coupon_id: appliedCoupon?.id ?? null,
-      coupon_code: appliedCoupon?.code ?? null,
+      coupon_code: isFeriadou ? FERIADOU_CODE : (appliedCoupon?.code ?? null),
       discount: appliedCoupon ? {
         type: appliedCoupon.discount_type,
         value: Number(appliedCoupon.discount_value),
