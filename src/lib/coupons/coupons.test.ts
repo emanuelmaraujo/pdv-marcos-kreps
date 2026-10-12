@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateCoupon, normalizeCouponCode, type CouponRecord } from "../../../supabase/functions/_shared/coupons";
+import { evaluateCoupon, isFeriadouActive, normalizeCouponCode, type CouponRecord } from "../../../supabase/functions/_shared/coupons";
 
 const baseCoupon: CouponRecord = {
   id: "coupon-1",
@@ -47,5 +47,22 @@ describe("coupon validation", () => {
       new Date("2026-09-28T20:00:00.000Z"),
     );
     expect(result.valid).toBe(false);
+  });
+});
+
+describe("FERIADOU — somente frete grátis na segunda 12/10/2026", () => {
+  const monday = new Date("2026-10-12T22:00:00.000Z");
+  it("aceita entrega no Núcleo Bandeirante durante a campanha", () => {
+    expect(isFeriadouActive("nb", "ENTREGA", monday)).toBe(true);
+  });
+  it("não libera balcão, viagem ou outra filial", () => {
+    expect(isFeriadouActive("nb", "VIAGEM", monday)).toBe(false);
+    expect(isFeriadouActive("nb", "BALCAO", monday)).toBe(false);
+    expect(isFeriadouActive("outro", "ENTREGA", monday)).toBe(false);
+  });
+  it("expira exatamente à meia-noite de Brasília", () => {
+    expect(isFeriadouActive("nb", "ENTREGA", new Date("2026-10-13T02:59:59.999Z"))).toBe(true);
+    expect(isFeriadouActive("nb", "ENTREGA", new Date("2026-10-13T03:00:00.000Z"))).toBe(false);
+    expect(isFeriadouActive("nb", "ENTREGA", new Date("2026-10-12T02:59:59.999Z"))).toBe(false);
   });
 });
