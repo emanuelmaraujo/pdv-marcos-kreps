@@ -965,7 +965,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const estimatedDeliveryFee = orderType === "ENTREGA"
     ? (matchedDeliveryZone ? matchedDeliveryZone.fee : deliveryZones.length === 0 ? defaultDeliveryFee : 0)
     : 0;
-  const couponIsCurrent = appliedCoupon?.cart_signature === cartSignature;
+  const couponIsCurrent = appliedCoupon?.cart_signature === cartSignature
+    && (appliedCoupon?.discount_type !== "FREE_DELIVERY" || orderType === "ENTREGA");
   const estimatedCouponDiscount = couponIsCurrent ? (appliedCoupon?.discount_amount ?? 0) : 0;
   const freeDeliveryCoupon = couponIsCurrent && appliedCoupon?.discount_type === "FREE_DELIVERY" && orderType === "ENTREGA";
   const estimatedTotal = Math.max(
@@ -1213,6 +1214,17 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       return;
     }
 
+    // O cupom é informado na revisão, antes de o cliente escolher a modalidade
+    // na próxima etapa. Para FERIADOU, valide como entrega e só altere a
+    // modalidade se o servidor confirmar que a promoção está válida.
+    const wantsFeriadouDelivery = code === "FERIADOU" && orderType !== "ENTREGA";
+    if (wantsFeriadouDelivery && (!branchConfigLoaded || !deliveryEnabled)) {
+      setAppliedCoupon(null);
+      setCouponMessage("O FERIADOU exige entrega disponível nesta unidade.");
+      return;
+    }
+    const couponOrderType = wantsFeriadouDelivery ? "ENTREGA" : orderType;
+
     setCouponLoading(true);
     setCouponMessage("");
     try {
@@ -1220,7 +1232,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         coupon_code: code,
         branch_slug: branchSlug,
         subtotal: estimatedSubtotal,
-        order_type: orderType,
+        order_type: couponOrderType,
       });
 
       if (!result.valid || !result.coupon) {
@@ -1229,9 +1241,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         return;
       }
 
+      if (wantsFeriadouDelivery) {
+        hasManuallySelectedOrderTypeRef.current = true;
+        setOrderType("ENTREGA");
+      }
       setCouponInput(result.coupon.code);
       setAppliedCoupon({ ...result.coupon, cart_signature: cartSignature });
-      setCouponMessage("Cupom aplicado.");
+      setCouponMessage(wantsFeriadouDelivery
+        ? "Frete grátis ativado! Entrega selecionada. Continue para informar o endereço."
+        : "Cupom aplicado.");
     } catch (error) {
       setAppliedCoupon(null);
       setCouponMessage(getFriendlyErrorMessage(error, "Não foi possível validar o cupom."));
@@ -2093,6 +2111,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <Tag className="h-4 w-4 shrink-0 text-brand-red" />
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Tem cupom de desconto?</p>
               </div>
+              {couponInput.trim().toUpperCase() === "FERIADOU" && orderType !== "ENTREGA" && deliveryEnabled && (
+                <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                  O FERIADOU oferece frete grátis. Ao aplicar, você seleciona Entrega para continuar.
+                </p>
+              )}
               <div className="mt-2 flex gap-2">
                 <input
                   value={couponInput}
@@ -2313,6 +2336,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           type="button"
                           onClick={() => {
                             hasManuallySelectedOrderTypeRef.current = true;
+                            if (opt.v !== "ENTREGA" && appliedCoupon?.discount_type === "FREE_DELIVERY") {
+                              setAppliedCoupon(null);
+                              setCouponMessage("O FERIADOU só vale para entrega. Cupom removido.");
+                            }
                             setOrderType(opt.v);
                           }}
                           className={`flex-1 h-11 rounded-lg text-sm font-semibold ${
@@ -2465,7 +2492,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                         </p>
                         <button
                           type="button"
-                          onClick={() => setOrderType("VIAGEM")}
+                          onClick={() => {
+                            if (appliedCoupon?.discount_type === "FREE_DELIVERY") {
+                              setAppliedCoupon(null);
+                              setCouponMessage("O FERIADOU só vale para entrega. Cupom removido.");
+                            }
+                            hasManuallySelectedOrderTypeRef.current = true;
+                            setOrderType("VIAGEM");
+                          }}
                           className="focus-ring mt-2 flex h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--bg-surface)] text-xs font-bold text-[var(--status-danger)] ring-1 ring-inset ring-[var(--status-danger)]/30 transition-colors hover:bg-[var(--status-danger-bg)]"
                         >
                           Retirar no balcão em vez disso
