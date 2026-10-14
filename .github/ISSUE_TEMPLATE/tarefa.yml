@@ -1,0 +1,36 @@
+name: Tarefa
+description: Objetivo e critérios para uma tarefa de implementação.
+title: "[Tarefa] "
+body:
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Objetivo
+      description: Qual comportamento deve mudar e por quê?
+    validations:
+      required: true
+  - type: textarea
+    id: aceite
+    attributes:
+      label: Critério de aceite
+      description: Como verificar que a tarefa foi concluída?
+    validations:
+      required: true
+  - type: textarea
+    id: area
+    attributes:
+      label: Área/arquivos
+      description: Indique a área e os arquivos prováveis; marque desconhecido se necessário.
+    validations:
+      required: true
+  - type: dropdown
+    id: risco
+    attributes:
+      label: Risco
+      description: Pagamentos, auth, migrations, dados reais e produção exigem aprovação humana.
+      options:
+        - baixo
+        - médio
+        - alto
+    validations:
+      required: true
