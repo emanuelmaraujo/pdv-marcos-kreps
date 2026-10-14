@@ -43,6 +43,7 @@ nodes:
       executado.
   - id: review
     type: agent
+    runner: codex
     name: Revisar segurança, negócio e escopo
     verdicts:
       - approve
