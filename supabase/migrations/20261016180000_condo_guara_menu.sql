@@ -1,7 +1,9 @@
 -- Cardápio oficial enviado para feira do Condomínio Guará em 16/10/2026.
 -- Dados operacionais independentes por filial; não altera nenhuma filial existente.
 -- Loja ativa no PDV; pedidos públicos, entrega, WhatsApp e impressoras desativados
--- até configurar horário, equipe e periféricos.
+-- Atendimento presencial no balcão, das 18:00 às 22:00.
+-- Horário é informação operacional, não restringe automaticamente pedidos internos.
+-- Pedidos públicos/delivery, WhatsApp e impressoras permanecem desativados.
 -- 16 salgados + 5 doces; embalagem viagem R$ 1,00. Não há bebidas/adicionais no PDF.
 DO $seed$
 DECLARE
@@ -24,9 +26,9 @@ BEGIN
   END IF;
 
   INSERT INTO public.branches
-    (code, slug, name, type, active, address, packing_fee, ordering_enabled, delivery_enabled, whatsapp_enabled, printer_config)
+    (code, slug, name, type, active, address, packing_fee, ordering_enabled, ordering_start_time, ordering_end_time, delivery_enabled, whatsapp_enabled, printer_config)
   VALUES
-    ('CG','condo-guara','Condo Guará','FAIR',true,'Condomínio Guará, Guará, Brasília - DF',1.00,false,false,false,
+    ('CG','condo-guara','Condo Guará','FAIR',true,'Condomínio Guará, Guará, Brasília - DF',1.00,false,'18:00','22:00',false,false,
      '{"kitchen":{"enabled":false},"juice":{"enabled":false},"customer":{"enabled":false}}'::jsonb)
   ON CONFLICT (slug) DO NOTHING;
   SELECT id INTO STRICT v_branch FROM public.branches WHERE slug = 'condo-guara';
