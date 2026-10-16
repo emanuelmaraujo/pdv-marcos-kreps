@@ -1,0 +1,26 @@
+import type { Order } from "@/types/pdv";
+import { normalizeBrazilPhone } from "@/lib/utils/phone";
+import { whatsappUrlForPhone } from "@/lib/utils/whatsapp";
+
+/**
+ * Gera um link para enviar MANUALMENTE o aviso de pedido pronto.
+ * A ação fica disponível em todas as etapas; a interface alerta se não estiver pronto.
+ * Não dispara mensagens nem altera o status do pedido.
+ */
+export function orderReadyWhatsAppUrl(
+  order: Pick<Order, "customer_phone" | "customer_name" | "daily_number" | "type" | "branch">,
+): string | null {
+  const phone = normalizeBrazilPhone(order.customer_phone ?? "");
+  if (!phone || !Number.isFinite(order.daily_number)) return null;
+
+  const name = order.customer_name?.trim();
+  const greeting = name ? `Olá, ${name}!` : "Olá!";
+  const number = String(order.daily_number).padStart(2, "0");
+  const unit = order.branch?.name?.trim() ? ` (${order.branch.name.trim()})` : "";
+  const nextStep = order.type === "ENTREGA"
+    ? "Vamos organizar a entrega."
+    : "Você já pode retirar no balcão.";
+  const message = `${greeting}\nSeu pedido #${number} da Marcos Krep's${unit} está pronto! ${nextStep}\nObrigado pela preferência!`;
+
+  return whatsappUrlForPhone(phone, message);
+}

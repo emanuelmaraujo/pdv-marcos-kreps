@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Order } from "@/types/pdv";
 import { formatWhatsAppInput } from "@/lib/utils/phone";
-import { whatsappUrlForPhone } from "@/lib/utils/whatsapp";
+import { orderReadyWhatsAppUrl } from "@/lib/utils/order-ready-whatsapp";
 import {
   deliveryDirectionsUrl,
   deliveryNumberLabel,
@@ -44,6 +44,8 @@ export function OrderFulfillmentSummary({ order }: { order: Order }) {
   const isTakeout = order.type === "VIAGEM";
   const customerName = order.customer_name?.trim() || "Cliente final";
   const customerPhone = order.customer_phone?.trim();
+  const readyWhatsappUrl = orderReadyWhatsAppUrl(order);
+  const isReadyToNotify = ["PRONTO", "SAIU_PARA_ENTREGA", "ENTREGUE"].includes(order.status);
   const formattedPhone = customerPhone ? formatWhatsAppInput(customerPhone) : "";
   const fullAddress = isDelivery ? fullDeliveryAddress(order) : "";
   const directionsUrl = isDelivery ? deliveryDirectionsUrl(order) : null;
@@ -88,6 +90,32 @@ export function OrderFulfillmentSummary({ order }: { order: Order }) {
             {formattedPhone && <p className="mt-0.5 text-xs font-semibold text-[var(--text-secondary)]">{formattedPhone}</p>}
           </div>
         </div>
+
+        {/* Ação direta para todas as modalidades: não precisa expandir "Ver mais".
+            O WhatsApp prepara a mensagem e depende do operador para enviá-la. */}
+        {readyWhatsappUrl && (
+          <div className="mt-3 space-y-1.5">
+            <a
+              href={readyWhatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Abrir WhatsApp para avisar que o pedido #${String(order.daily_number).padStart(2, "0")} está pronto`}
+              className="focus-ring flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-black text-white shadow-sm transition-colors hover:bg-emerald-700"
+            >
+              <MessageCircle size={18} /> Avisar pedido pronto no WhatsApp
+            </a>
+            {!isReadyToNotify && (
+              <p className="px-1 text-[11px] font-medium text-[var(--text-secondary)]">
+                O pedido ainda não consta como pronto. Confirme antes de enviar.
+              </p>
+            )}
+          </div>
+        )}
+        {customerPhone && !readyWhatsappUrl && (
+          <p className="mt-3 text-xs font-semibold text-amber-700">
+            Telefone cadastrado incompleto ou inválido para abrir o WhatsApp.
+          </p>
+        )}
 
         {isDelivery && (
           <div className="mt-3 rounded-xl border border-blue-500/15 bg-[var(--bg-surface)] p-3">
@@ -177,16 +205,6 @@ export function OrderFulfillmentSummary({ order }: { order: Order }) {
           )}
 
           <div className="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {customerPhone && (
-              <a
-                href={whatsappUrlForPhone(customerPhone, `Olá! Sobre o pedido #${order.daily_number} da Marcos Krep's.`)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="focus-ring flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 text-xs font-black text-emerald-700"
-              >
-                <MessageCircle size={15} /> WhatsApp
-              </a>
-            )}
             {order.customer_email && (
               <a href={`mailto:${order.customer_email}`} className="focus-ring flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] px-3 text-xs font-black text-[var(--text-secondary)]">
                 <Mail size={15} /> E-mail
