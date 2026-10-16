@@ -5,13 +5,13 @@ import { EmptyState } from "@/components/feedback/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Order, OrderStatus } from "@/types/pdv";
 import { ordersApi } from "@/lib/api/orders-api";
-import { settingsApi } from "@/lib/api/settings-api";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { menuApi } from "@/lib/api/menu-api";
 import { createClient } from "@/lib/supabase/client";
 import { useBranch } from "@/contexts/BranchContext";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import { getSelectedOrderSyncCandidate, hasOrderBoardChanged, mergeRefreshedOrders } from "@/lib/utils/order-refresh";
+import { ORDER_BOARD_RECONCILE_INTERVAL_MS, shouldReconcileOrderBoard } from "@/lib/utils/order-board-sync";
 import { orderMatchesSearch } from "@/lib/utils/order-search";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { OrderCard } from "./components/OrderCard";
@@ -76,45 +76,6 @@ interface KanbanColumnConfig {
 
 const ORDERS_FOCUS_MODE_STORAGE_KEY = "pdv:orders-focus-mode";
 const ORDERS_FOCUS_MODE_EVENT = "pdv:orders-focus-mode-change";
-
-type OrderingRuntimeSettings = {
-  enabled: boolean;
-  start: string | null;
-  end: string | null;
-};
-
-function timeToMinutes(value?: string | null): number | null {
-  if (!value) return null;
-  const [hours, minutes] = value.split(":").map(Number);
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
-  return hours * 60 + minutes;
-}
-
-function saoPauloMinutesNow(): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date());
-  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0) % 24;
-  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
-  return hour * 60 + minute;
-}
-
-function isWithinOrderingWindow(start?: string | null, end?: string | null): boolean {
-  const startMinutes = timeToMinutes(start);
-  const endMinutes = timeToMinutes(end);
-  if (startMinutes === null || endMinutes === null) return true;
-
-  const nowMinutes = saoPauloMinutesNow();
-  if (startMinutes <= endMinutes) {
-    return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
-  }
-
-  // Janela atravessa meia-noite.
-  return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
-}
 
 const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
   NA_FILA: 0,
@@ -394,8 +355,7 @@ export default function PedidosPage() {
   const [showOperationalSummary, setShowOperationalSummary] = useState(false);
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
   const [orderCategories, setOrderCategories] = useState<CategoryLookup>({});
-  const [orderingRuntime, setOrderingRuntime] = useState<OrderingRuntimeSettings | null>(null);
-  const [scheduleTick, setScheduleTick] = useState(0);
+  const [syncMode, setSyncMode] = useState<"connecting" | "realtime" | "polling" | "offline">("connecting");
   const isFocusMode = useSyncExternalStore(subscribeFocusMode, getFocusModeSnapshot, () => false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const { currentBranch, isLoading: isBranchLoading } = useBranch();
@@ -406,6 +366,24 @@ export default function PedidosPage() {
   const incrementalFetchInFlightRef = useRef<Promise<void> | null>(null);
   const pendingOrderIdsRef = useRef<Set<string>>(new Set());
   const pendingSelectedSyncRef = useRef(false);
+  const boardRevisionRef = useRef(0);
+  const activeBranchIdRef = useRef<string | null>(currentBranch?.id ?? null);
+  const fullFetchInFlightRef = useRef<Promise<void> | null>(null);
+
+  // Trocar de filial invalida leituras antigas e evita mostrar pedidos da filial
+  // anterior enquanto o quadro da nova filial carrega.
+  useEffect(() => {
+    activeBranchIdRef.current = currentBranch?.id ?? null;
+    boardRevisionRef.current += 1;
+    fullFetchInFlightRef.current = null;
+    incrementalFetchInFlightRef.current = null;
+    pendingOrderIdsRef.current.clear();
+    pendingSelectedSyncRef.current = false;
+    ordersRef.current = [];
+    selectedOrderRef.current = null;
+    setOrders([]);
+    setSelectedOrder(null);
+  }, [currentBranch?.id]);
 
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
@@ -418,48 +396,6 @@ export default function PedidosPage() {
       .catch(() => { if (active) setOrderCategories({}); });
     return () => { active = false; };
   }, [currentBranch?.id, isBranchLoading]);
-
-  useEffect(() => {
-    if (isBranchLoading || !currentBranch) return;
-
-    let cancelled = false;
-    void settingsApi.getSettings()
-      .then((data) => {
-        if (cancelled) return;
-        setOrderingRuntime({
-          enabled:
-            String(data.public_ordering_enabled ?? "true") === "true"
-            && currentBranch.ordering_enabled !== false,
-          start: currentBranch.ordering_start_time ?? data.public_ordering_start_time ?? null,
-          end: currentBranch.ordering_end_time ?? data.public_ordering_end_time ?? null,
-        });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        // Se a leitura global falhar, usa a configuração local da filial.
-        setOrderingRuntime({
-          enabled: currentBranch.ordering_enabled !== false,
-          start: currentBranch.ordering_start_time ?? null,
-          end: currentBranch.ordering_end_time ?? null,
-        });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentBranch, isBranchLoading]);
-
-  // Timer apenas local: não acessa banco. Serve para ligar/desligar o modo
-  // automático quando cruza o horário de abertura/fechamento sem recarregar a página.
-  useEffect(() => {
-    const interval = window.setInterval(() => setScheduleTick((value) => value + 1), 60_000);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  const automaticUpdatesEnabled = Boolean(
-    orderingRuntime?.enabled
-    && isWithinOrderingWindow(orderingRuntime.start, orderingRuntime.end)
-  );
 
   const toggleFocusMode = useCallback(() => {
     const next = !getFocusModeSnapshot();
@@ -481,36 +417,52 @@ export default function PedidosPage() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const fetchOrders = useCallback(async ({
+  const fetchOrders = useCallback(({
     showLoading = true,
     syncSelectedOrder = false,
   }: {
     showLoading?: boolean;
     syncSelectedOrder?: boolean;
-  } = {}) => {
-    if (showLoading) setIsLoading(true);
-    setError("");
-    try {
-      const data = await ordersApi.getTodayOrders(currentBranch?.id ?? null);
-      const nextOrders = data || [];
-      const current = selectedOrderRef.current;
-      const boardChanged = hasOrderBoardChanged(ordersRef.current, nextOrders);
-      ordersRef.current = nextOrders;
-      setOrders(nextOrders);
-      // Atualizacoes automaticas mantem o board vivo, mas nao substituem o
-      // pedido que o atendente esta manipulando. Isso evita zerar selecoes e
-      // formularios internos (especialmente o pagamento por itens).
-      const updated = getSelectedOrderSyncCandidate(current, nextOrders, syncSelectedOrder);
-      if (updated) setSelectedOrder(updated);
-      if (!showLoading && !syncSelectedOrder && current && boardChanged) {
-        addToast("success", "Quadro atualizado. O pedido aberto foi preservado.");
+  } = {}): Promise<void> => {
+    // Um único carregamento completo por vez: polling, foco e recuperação de
+    // conexão podem disparar quase simultaneamente.
+    if (fullFetchInFlightRef.current) return fullFetchInFlightRef.current;
+    const branchId = currentBranch?.id ?? null;
+    const revisionAtStart = boardRevisionRef.current;
+
+    const request = (async () => {
+      if (showLoading) setIsLoading(true);
+      try {
+        const data = await ordersApi.getTodayOrders(branchId);
+        // Descartar resposta obsoleta: a filial mudou ou chegou uma atualização
+        // incremental mais recente enquanto o carregamento completo aguardava.
+        if (activeBranchIdRef.current !== branchId || boardRevisionRef.current !== revisionAtStart) return;
+        const nextOrders = data || [];
+        const current = selectedOrderRef.current;
+        const boardChanged = hasOrderBoardChanged(ordersRef.current, nextOrders);
+        boardRevisionRef.current += 1;
+        ordersRef.current = nextOrders;
+        setOrders(nextOrders);
+        const updated = getSelectedOrderSyncCandidate(current, nextOrders, syncSelectedOrder);
+        if (updated) setSelectedOrder(updated);
+        setError("");
+        if (!showLoading && !syncSelectedOrder && current && boardChanged) {
+          addToast("success", "Quadro atualizado. O pedido aberto foi preservado.");
+        }
+      } catch (err) {
+        if (activeBranchIdRef.current === branchId) {
+          setError(getFriendlyErrorMessage(err, "Não conseguimos carregar os pedidos agora. Tente novamente."));
+        }
+      } finally {
+        if (activeBranchIdRef.current === branchId) setIsLoading(false);
       }
-    } catch (err) {
-      setError(getFriendlyErrorMessage(err, "Não conseguimos carregar os pedidos agora. Tente novamente."));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [addToast, currentBranch]);
+    })();
+    fullFetchInFlightRef.current = request;
+    void request.finally(() => {
+      if (fullFetchInFlightRef.current === request) fullFetchInFlightRef.current = null;
+    });
+    return request;
+  }, [addToast, currentBranch?.id]);
 
   // Fila incremental compartilhada por Realtime e pelas ações do operador.
   // Se já existe uma consulta em andamento, novos IDs entram no Set e serão
@@ -545,12 +497,15 @@ export default function PedidosPage() {
         pendingSelectedSyncRef.current = false;
 
         try {
-          const refreshedOrders = await ordersApi.getOrdersByIds(ids, currentBranch?.id ?? null);
+          const branchId = currentBranch?.id ?? null;
+          const refreshedOrders = await ordersApi.getOrdersByIds(ids, branchId);
+          if (activeBranchIdRef.current !== branchId) break;
           const currentSelected = selectedOrderRef.current;
           const previousOrders = ordersRef.current;
           const nextOrders = mergeRefreshedOrders(previousOrders, refreshedOrders, ids);
           const boardChanged = hasOrderBoardChanged(previousOrders, nextOrders);
 
+          boardRevisionRef.current += 1;
           ordersRef.current = nextOrders;
           setOrders(nextOrders);
 
@@ -581,26 +536,27 @@ export default function PedidosPage() {
         incrementalFetchInFlightRef.current = null;
       }
     }
-  }, [addToast, currentBranch]);
+  }, [addToast, currentBranch?.id]);
 
-  // Initial load + Realtime + polling apenas como recuperação.
-  //
-  // A carga completa acontece uma vez ao abrir/trocar de filial. Depois disso,
-  // eventos do Realtime carregam somente o pedido alterado. O polling completo
-  // só é ativado se o canal Realtime falhar.
+  // O PDV presencial funciona mesmo quando pedidos públicos estão fechados.
+  // Realtime antecipa eventos, mas uma consulta periódica recupera eventos
+  // perdidos e mudanças de itens (order_items não está na publicação).
   useEffect(() => {
     if (isBranchLoading) return;
-
-    const timer = window.setTimeout(() => fetchOrders(), 0);
-
-    if (!automaticUpdatesEnabled) {
-      return () => window.clearTimeout(timer);
-    }
-
-    const supabase = createClient();
-    const realtimePendingIds = new Set<string>();
+    let disposed = false;
     let debounceTimer: number | null = null;
     let realtimeHealthy = false;
+    const pendingIds = new Set<string>();
+    const initialLoadTimer = window.setTimeout(() => { void fetchOrders(); }, 0);
+
+    const reconcile = () => {
+      if (disposed || !shouldReconcileOrderBoard(document.visibilityState, navigator.onLine !== false)) return;
+      void fetchOrders({ showLoading: false });
+    };
+
+    // Executa mesmo em conexão Realtime "SUBSCRIBED": essa confirmação
+    // indica socket conectado, não garante que cada evento foi entregue.
+    const reconcileTimer = window.setInterval(reconcile, ORDER_BOARD_RECONCILE_INTERVAL_MS);
 
     const findOrderIdByItemId = (itemId?: string | null) => {
       if (!itemId) return null;
@@ -611,37 +567,19 @@ export default function PedidosPage() {
     };
 
     const scheduleOrderRefresh = (orderId?: string | null) => {
-      if (!orderId) return;
-      realtimePendingIds.add(orderId);
-      if (debounceTimer) window.clearTimeout(debounceTimer);
+      if (!orderId || disposed) return;
+      pendingIds.add(orderId);
+      if (debounceTimer !== null) window.clearTimeout(debounceTimer);
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
-        const ids = Array.from(realtimePendingIds);
-        realtimePendingIds.clear();
+        const ids = Array.from(pendingIds);
+        pendingIds.clear();
         void refreshOrderIds(ids);
       }, 400);
     };
 
-    // Realtime é a via principal. O polling só entra quando o canal falhar.
-    const FALLBACK_POLL_MS = 60_000;
-    let pollInterval: number | null = null;
-
-    const stopFallbackPolling = () => {
-      if (pollInterval !== null) {
-        window.clearInterval(pollInterval);
-        pollInterval = null;
-      }
-    };
-
-    const startFallbackPolling = () => {
-      if (pollInterval !== null) return;
-      pollInterval = window.setInterval(() => {
-        if (document.visibilityState === "visible") {
-          void fetchOrders({ showLoading: false });
-        }
-      }, FALLBACK_POLL_MS);
-    };
-
+    const supabase = createClient();
+    setSyncMode(navigator.onLine === false ? "offline" : "connecting");
     const channel = supabase
       .channel("orders-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {
@@ -650,6 +588,8 @@ export default function PedidosPage() {
         const orderId = nextOrder.id ?? previousOrder.id;
         if (typeof orderId === "string") scheduleOrderRefresh(orderId);
       })
+      // Subscription is kept for forward compatibility; the periodic refresh
+      // also covers item-only updates until this table is published.
       .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, (payload) => {
         const nextItem = payload.new as { id?: string; order_id?: string };
         const previousItem = payload.old as { id?: string; order_id?: string };
@@ -658,45 +598,50 @@ export default function PedidosPage() {
           scheduleOrderRefresh(directOrderId);
           return;
         }
-
-        // Em DELETE o Supabase pode entregar apenas a PK do item. Nesse caso
-        // recuperamos o order_id do snapshot que já está carregado na tela.
         const itemId = nextItem.id ?? previousItem.id;
-        if (typeof itemId === "string") {
-          scheduleOrderRefresh(findOrderIdByItemId(itemId));
-        }
+        if (typeof itemId === "string") scheduleOrderRefresh(findOrderIdByItemId(itemId));
       })
       .subscribe((status) => {
+        if (disposed) return;
         if (status === "SUBSCRIBED") {
           realtimeHealthy = true;
-          stopFallbackPolling();
-          return;
-        }
-
-        if (status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
+          setSyncMode("realtime");
+          reconcile(); // Fechar lacuna entre conexão inicial/reconexão e eventos.
+        } else if (status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
           realtimeHealthy = false;
-          startFallbackPolling();
+          setSyncMode(navigator.onLine === false ? "offline" : "polling");
+          reconcile();
         }
       });
 
     const onVisibility = () => {
-      // Com Realtime saudável não há motivo para baixar o dia inteiro ao voltar
-      // para a aba. A reconciliação completa fica restrita à recuperação de falha.
-      if (document.visibilityState === "visible" && !realtimeHealthy) {
-        void fetchOrders({ showLoading: false });
-      }
+      if (document.visibilityState === "visible") reconcile();
     };
+    const onOnline = () => {
+      if (disposed) return;
+      setSyncMode(realtimeHealthy ? "realtime" : "polling");
+      reconcile();
+    };
+    const onOffline = () => { if (!disposed) setSyncMode("offline"); };
+    const onFocus = () => reconcile();
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("focus", onFocus);
 
     return () => {
-      window.clearTimeout(timer);
-      if (debounceTimer) window.clearTimeout(debounceTimer);
-      realtimePendingIds.clear();
-      stopFallbackPolling();
+      disposed = true;
+      window.clearTimeout(initialLoadTimer);
+      window.clearInterval(reconcileTimer);
+      if (debounceTimer !== null) window.clearTimeout(debounceTimer);
+      pendingIds.clear();
       document.removeEventListener("visibilitychange", onVisibility);
-      supabase.removeChannel(channel);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("focus", onFocus);
+      void supabase.removeChannel(channel);
     };
-  }, [automaticUpdatesEnabled, fetchOrders, isBranchLoading, refreshOrderIds]);
+  }, [fetchOrders, isBranchLoading, refreshOrderIds]);
 
   // Quick action handler (for card buttons — no modal)
   const handleQuickAction = useCallback(async (order: Order): Promise<void> => {
@@ -908,23 +853,17 @@ export default function PedidosPage() {
             <QuickMetric icon={PackageCheck}label="Prontos"  value={readyCount}                 detail="retirada"   tone="success" />
             <QuickMetric icon={ShoppingBag} label="Hoje"     value={orders.length}              detail="pedidos" />
 
-            {/* Live badge */}
-            <div className={`hidden lg:flex items-center gap-1.5 rounded-xl px-3 h-11 ${
-              automaticUpdatesEnabled
-                ? "bg-[var(--status-success-bg)]"
-                : "bg-[var(--bg-subtle)]"
+            {/* Indica a condição real da fila, não o horário do checkout online. */}
+            <div className={`flex items-center gap-1.5 rounded-xl px-3 h-11 ${
+              syncMode === "realtime" ? "bg-[var(--status-success-bg)]" : "bg-[var(--bg-subtle)]"
             }`}>
               <Radio className={`h-3 w-3 ${
-                automaticUpdatesEnabled
-                  ? `text-[var(--status-success)] ${!isLoading ? "animate-pulse" : ""}`
-                  : "text-[var(--text-muted)]"
+                syncMode === "realtime" ? "text-[var(--status-success)] animate-pulse" : "text-[var(--text-muted)]"
               }`} />
               <span className={`text-[11px] font-semibold ${
-                automaticUpdatesEnabled
-                  ? "text-[var(--status-success)]"
-                  : "text-[var(--text-muted)]"
+                syncMode === "realtime" ? "text-[var(--status-success)]" : "text-[var(--text-muted)]"
               }`}>
-                {automaticUpdatesEnabled ? "Ao vivo" : "Fora do horário"}
+                {syncMode === "realtime" ? "Ao vivo" : syncMode === "polling" ? "Auto · 20s" : syncMode === "offline" ? "Sem conexão" : "Conectando"}
               </span>
             </div>
         </div>
