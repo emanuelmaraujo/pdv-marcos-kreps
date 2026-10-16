@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/Button";
 import { useCart, CartItem } from "@/features/cart/useCart";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
 import { pdvApi } from "@/lib/api/pdv-api";
-import { useCurrentBranchId } from "@/contexts/BranchContext";
+import { useCurrentBranchId, useBranch } from "@/contexts/BranchContext";
+import { settingsApi } from "@/lib/api/settings-api";
+import { calculatePackagingEstimate } from "@/lib/utils/packaging-fee";
 import { Product, Ingredient, Order, Addon } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { OrderSummarySheet } from "@/components/checkout/OrderSummarySheet";
@@ -84,6 +86,7 @@ export default function NovoPedidoPage() {
   const searchParams = useSearchParams();
   const addToId = searchParams.get("add_to");
   const currentBranchId = useCurrentBranchId();
+  const { currentBranch } = useBranch();
   
   const {
     items,
@@ -118,6 +121,32 @@ export default function NovoPedidoPage() {
   const [notes, setNotes] = useState("");
   const [itemIsTakeout, setItemIsTakeout] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [packagingPolicy, setPackagingPolicy] = useState<{ enabled: boolean; globalFee: number } | null>(null);
+  const [packagingPolicyError, setPackagingPolicyError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    settingsApi.getSettings().then((settings) => {
+      if (!active) return;
+      setPackagingPolicy({
+        enabled: settings.apply_packaging_fee_for_takeout === "true",
+        globalFee: Number(settings.packaging_fee ?? 0) || 0,
+      });
+      setPackagingPolicyError(false);
+    }).catch(() => {
+      if (active) setPackagingPolicyError(true);
+    });
+    return () => { active = false; };
+  }, [currentBranchId]);
+
+  const branchPackagingFee = Number(currentBranch?.packing_fee ?? 0);
+  const feePerItem = branchPackagingFee > 0 ? branchPackagingFee : (packagingPolicy?.globalFee ?? 0);
+  const cartPackaging = calculatePackagingEstimate({
+    items, isDelivery: false,
+    enabled: packagingPolicy?.enabled === true,
+    feePerItem,
+  });
+  const estimatedCartTotal = getEstimatedSubtotal() + cartPackaging.fee;
   const [isDiscardCustomizationOpen, setIsDiscardCustomizationOpen] = useState(false);
   const customizationBaselineRef = useRef<string | null>(null);
 
@@ -416,6 +445,9 @@ export default function NovoPedidoPage() {
       .filter(Boolean) as Addon[];
   }, [selectedProduct, menuIndexes]);
 
+  const sheetPackagingFee = itemIsTakeout && packagingPolicy?.enabled
+    ? quantity * feePerItem
+    : 0;
   const sheetSubtotal = useMemo(() => {
     if (!selectedProduct) return 0;
     let total = selectedProduct.price;
@@ -701,8 +733,16 @@ export default function NovoPedidoPage() {
               </p>
               <p className="font-semibold text-base tabular-nums">
                 <span className="mr-0.5 text-xs font-medium text-[var(--text-secondary)]">R$</span>
-                {getEstimatedSubtotal().toFixed(2).replace('.', ',')}
+                {estimatedCartTotal.toFixed(2).replace('.', ',')}
               </p>
+              {cartPackaging.fee > 0 && (
+                <p className="mt-0.5 text-[10px] text-white/70">
+                  Inclui embalagem: R$ {cartPackaging.fee.toFixed(2).replace('.', ',')}
+                </p>
+              )}
+              {packagingPolicyError && items.some((item) => item.is_takeout) && (
+                <p className="mt-0.5 text-[10px] text-amber-300">Taxa de embalagem indisponível na prévia</p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--text-secondary)]">
               Ver pedido
@@ -867,6 +907,12 @@ export default function NovoPedidoPage() {
               </div>
             </div>
 
+            {sheetPackagingFee > 0 && (
+              <p className="text-xs font-semibold text-[var(--text-secondary)]">
+                Embalagem para viagem ({quantity} un.): R$ {sheetPackagingFee.toFixed(2).replace('.', ',')}
+              </p>
+            )}
+
             {/* Quantity & Add to Cart - Sticky at Bottom */}
             <div className="sticky bottom-0 left-0 right-0 pt-3 pb-4 bg-[var(--bg-surface)] border-t border-[var(--border)] flex items-center gap-3 mt-auto z-10">
               <div className="flex items-center gap-2 bg-[var(--bg-subtle)] rounded-xl p-1 h-12">
@@ -894,7 +940,7 @@ export default function NovoPedidoPage() {
               >
                 <span className="flex items-center gap-2">
                   {editingCartItemId ? 'Salvar' : 'Adicionar'}
-                  <span className="opacity-80 tabular-nums">· R$ {sheetSubtotal.toFixed(2).replace('.', ',')}</span>
+                  <span className="opacity-80 tabular-nums">· R$ {(sheetSubtotal + sheetPackagingFee).toFixed(2).replace('.', ',')}</span>
                 </span>
               </Button>
             </div>

@@ -7,6 +7,7 @@ import { useCart, CartItem } from "@/features/cart/useCart";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { useCurrentBranchId } from "@/contexts/BranchContext";
 import { settingsApi } from "@/lib/api/settings-api";
+import { calculatePackagingEstimate } from "@/lib/utils/packaging-fee";
 import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
 import type { MenuData } from "@/lib/api/menu-api";
@@ -363,10 +364,12 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
   };
   const estimatedSubtotal = getEstimatedSubtotal();
   // Embalagem cobrada por krep marcado como Para Levar (entrega força embalagem em todos os itens)
-  const takeoutQuantity = isDeliveryOrder
-    ? items.reduce((s, i) => s + i.quantity, 0)
-    : items.filter((i) => i.is_takeout).reduce((s, i) => s + i.quantity, 0);
-  const packagingTotal = applyPackagingForTakeout && packagingFee > 0 ? takeoutQuantity * packagingFee : 0;
+  const { quantity: takeoutQuantity, fee: packagingTotal } = calculatePackagingEstimate({
+    items,
+    isDelivery: isDeliveryOrder,
+    enabled: applyPackagingForTakeout,
+    feePerItem: packagingFee,
+  });
   const showPackagingFee = packagingTotal > 0;
   const deliveryFeeEstimate = isDeliveryOrder && deliveryEnabled ? defaultDeliveryFee : 0;
   const discountNum = parseFloat(discountValue.replace(",", ".")) || 0;
@@ -750,9 +753,21 @@ export function OrderSummarySheet({ isOpen, onClose, onEditItem, menuData, onAdd
                   </div>
                 ))}
               </div>
-              <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3">
-                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Subtotal estimado</span>
-                <span className="text-xl font-black text-brand-red">{currency.format(estimatedSubtotal)}</span>
+              <div className="space-y-1.5 border-t border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3">
+                <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-secondary)]">
+                  <span>Produtos</span>
+                  <span>{currency.format(estimatedSubtotal)}</span>
+                </div>
+                {showPackagingFee && (
+                  <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-secondary)]">
+                    <span>Embalagem ({takeoutQuantity} un.)</span>
+                    <span>{currency.format(packagingTotal)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-[var(--border)] pt-2">
+                  <span className="text-xs font-black uppercase tracking-widest text-[var(--text-muted)]">Total estimado</span>
+                  <span className="text-xl font-black text-brand-red">{currency.format(estimatedTotal)}</span>
+                </div>
               </div>
             </div>
 
