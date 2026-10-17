@@ -82,9 +82,20 @@ serve(async (req) => {
       : (courier as any)?.profiles;
     if (
       courierErr || !courier || !courier.active || !courier.profile_id ||
-      courier.branch_id !== order.branch_id || !courierProfile?.active || courierProfile.role !== "COURIER"
+      !courierProfile?.active || courierProfile.role !== "COURIER"
     ) {
       throw new Error("Motoboy inválido, inativo ou sem acesso ao aplicativo.");
+    }
+    // A coluna couriers.branch_id representa a filial inicial/legada.
+    // A autorização operacional para despachar vem do vínculo N:N atualizado.
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from("profile_branches")
+      .select("branch_id")
+      .eq("profile_id", courier.profile_id)
+      .eq("branch_id", order.branch_id)
+      .maybeSingle();
+    if (membershipError || !membership) {
+      throw new Error("Motoboy sem autorização para atender entregas desta filial.");
     }
     const courierId = courier.id;
     const courierName = courier.name;
