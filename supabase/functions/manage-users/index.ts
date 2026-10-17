@@ -47,11 +47,8 @@ function uniqueStrings(value: unknown) {
 }
 
 function validateCardinality(role: StaffRole, branchIds: string[]) {
-  if ((role === "ADMIN" || role === "COURIER") && branchIds.length !== 1) {
-    throw new Error(`${role === "ADMIN" ? "Administrador" : "Entregador"} deve pertencer a exatamente uma filial.`);
-  }
-  if (role === "ATTENDANT" && branchIds.length < 1) {
-    throw new Error("Atendente deve pertencer a pelo menos uma filial.");
+  if (branchIds.length < 1) {
+    throw new Error("Selecione pelo menos uma filial para o funcionário.");
   }
 }
 
