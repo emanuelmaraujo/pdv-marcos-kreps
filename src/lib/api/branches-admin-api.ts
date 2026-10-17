@@ -205,19 +205,18 @@ export interface CourierInput {
   active?: boolean;
 }
 
-// CRUD de entregadores cadastrados por filial — apenas ADMIN, mesmo padrão de
-// deliveryZonesApi. Entregador avulso (sem cadastro) continua funcionando no
-// despacho digitando nome/telefone livremente.
+// Cadastro de entregadores por filial. A listagem inclui motoboys com login
+// vinculados a várias unidades; o despacho exige login e vínculo autorizado.
 export const couriersApi = {
   listByBranch: async (branchId: string): Promise<Courier[]> => {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from('couriers')
-      .select('*')
-      .eq('branch_id', branchId)
-      .order('name');
+    // O backend valida a filial solicitada e resolve os vínculos N:N.
+    // Não filtrar por couriers.branch_id: este campo guarda só a filial inicial.
+    const { data, error } = await supabase.rpc('list_branch_couriers', {
+      p_branch_id: branchId,
+    });
     if (error) throw new Error(`Erro ao listar entregadores: ${error.message}`);
-    return (data ?? []) as Courier[];
+    return ((data ?? []) as Courier[]).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   },
 
   create: async (branchId: string, input: CourierInput): Promise<Courier> => {
