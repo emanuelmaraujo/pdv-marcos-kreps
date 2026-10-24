@@ -9,7 +9,7 @@ const errors = [];
 const lock = JSON.parse(readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
 const cliVersion = lock.packages?.['node_modules/supabase']?.version;
 const deploy = readFileSync(path.join(root, '.github/workflows/deploy-functions.yml'), 'utf8');
-if (!cliVersion || !deploy.includes(`version: ${cliVersion}\n`)) {
+if (!cliVersion || !deploy.split(/\r?\n/).some((line) => line.trim() === `version: ${cliVersion}`)) {
   errors.push('Alinhe a versão da CLI no deploy-functions.yml com o package-lock.json.');
 }
 let currentFunction = null;
