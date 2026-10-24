@@ -69,6 +69,10 @@ Esses ajustes restauram o histórico real e evitam repetir o seed de 21 crepes
 depois que bebidas já foram adicionadas à filial. Nenhuma linha do histórico remoto
 precisa ser apagada ou marcada como revertida para essa reconciliação.
 
+A CLI do deploy é fixada na mesma versão do lockfile, conferida por
+`npm run supabase:check`. As Actions oficiais são fixadas por commit e os jobs
+usam Ubuntu 24.04 para evitar mudanças implícitas de runtime e imagem do runner.
+
 A migration pendente `20261022214500` também foi corrigida antes da primeira
 aplicação registrada: `max(uuid)` foi substituído por extração via `array_agg`,
 preservando a verificação de que existe exatamente uma água sem gás na filial.

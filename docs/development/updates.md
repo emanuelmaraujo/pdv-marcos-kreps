@@ -6,7 +6,7 @@ Na raiz do projeto, confira a branch e o trabalho pendente:
 
 ```powershell
 git status -sb
-npm run update:local -- --check
+npm run update:check
 npm run update:local
 npm ci
 npm run check
@@ -16,6 +16,8 @@ O atualizador busca `origin` e incorpora `origin/main` na **branch atual** apena
 por fast-forward. Ele não troca para `main`, não publica commits e não atualiza
 automaticamente outras branches locais. `--check` atualiza apenas as referências
 remotas e mostra a comparação; não altera os arquivos versionados.
+O comando separado `update:check` também evita problemas de encaminhamento de
+argumentos pelo wrapper `npm.ps1` do PowerShell.
 Ambos os modos exigem árvore limpa, incluindo arquivos não rastreados.
 Branches com commits exclusivos dos dois lados exigem decisão manual.
 

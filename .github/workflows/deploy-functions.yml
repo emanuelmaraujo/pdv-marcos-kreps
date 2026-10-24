@@ -26,7 +26,7 @@ jobs:
   deploy:
     needs: checks
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -34,14 +34,14 @@ jobs:
       PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_ID }}
       EXPECTED_PROJECT_REF: feotsdzkwbikmcnzgsnh
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-      # Versão fixa evita resolução de latest sujeita a rate limit.
-      - uses: supabase/setup-cli@v1
+      # Mesma CLI do lockfile, usada no replay e nos testes locais/CI.
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
         with:
-          version: 2.117.0
+          version: 2.114.0
       - name: Validate target and required secrets
         run: node scripts/validate-supabase-target.mjs
       - name: Preview pending migrations

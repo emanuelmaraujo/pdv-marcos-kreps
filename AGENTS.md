@@ -39,7 +39,7 @@ Compare documentos com manifests, código, configuração e testes antes de agir
 - Tipos: `npm run typecheck`; documentação: `npm run docs:check`; Supabase:
   `npm run supabase:check`; conjunto local: `npm run check` (documentação,
   configuração do backend, tipos, lint e testes; interrompe na primeira falha).
-- Atualização segura: `npm run update:local -- --check` e `npm run update:local`.
+- Atualização segura: `npm run update:check` e `npm run update:local`.
   Exige árvore limpa e só incorpora `origin/main` por fast-forward na branch atual;
   leia `docs/development/updates.md`. Não aplica stash nem publica mudanças.
 - Print worker: `npm ci --prefix print-worker`; `npm run typecheck --prefix print-worker`;

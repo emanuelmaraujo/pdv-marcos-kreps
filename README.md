@@ -22,7 +22,7 @@ Veja [setup e comandos](docs/development/setup.md) para preparar frontend e work
 Com árvore de trabalho limpa:
 
 ```powershell
-npm run update:local -- --check
+npm run update:check
 npm run update:local
 npm ci
 npm run check

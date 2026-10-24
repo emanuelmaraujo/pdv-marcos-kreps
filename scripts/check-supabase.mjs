@@ -6,6 +6,12 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const config = readFileSync(path.join(root, 'supabase/config.toml'), 'utf8');
 const declarations = new Map();
 const errors = [];
+const lock = JSON.parse(readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
+const cliVersion = lock.packages?.['node_modules/supabase']?.version;
+const deploy = readFileSync(path.join(root, '.github/workflows/deploy-functions.yml'), 'utf8');
+if (!cliVersion || !deploy.includes(`version: ${cliVersion}\n`)) {
+  errors.push('Alinhe a versão da CLI no deploy-functions.yml com o package-lock.json.');
+}
 let currentFunction = null;
 for (const raw of config.split(/\r?\n/)) {
   const line = raw.replace(/#.*$/, '').trim();

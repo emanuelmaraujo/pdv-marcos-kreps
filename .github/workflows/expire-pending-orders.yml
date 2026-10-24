@@ -18,7 +18,7 @@ on:
 
 jobs:
   expire:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Chamar expire-pending-public-orders
         run: |

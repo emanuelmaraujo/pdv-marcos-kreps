@@ -71,7 +71,7 @@ Git local, sem entrar no repositório; não compartilhe logs brutos com credenci
 | `npm run check` | Documentação, configuração do Supabase, tipos, lint e testes; interrompe na primeira falha |
 | `npm run build` | Build de produção; verificação separada |
 | `npm run start` | Executar o build existente |
-| `npm run update:local -- --check` | Buscar referências e comparar com `origin/main` |
+| `npm run update:check` | Buscar referências e comparar com `origin/main` |
 | `npm run update:local` | Atualizar a branch atual por fast-forward |
 
 `npm run build` também precisa de `NEXT_PUBLIC_SUPABASE_URL` e

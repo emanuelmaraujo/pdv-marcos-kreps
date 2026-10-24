@@ -13,7 +13,8 @@
     "check": "npm run docs:check && npm run supabase:check && npm run typecheck && npm run lint && npm test",
     "update:local": "node scripts/update-local.mjs",
     "supabase:check": "node scripts/check-supabase.mjs",
-    "test:database": "node scripts/test-database.mjs"
+    "test:database": "node scripts/test-database.mjs",
+    "update:check": "node scripts/update-local.mjs --check"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

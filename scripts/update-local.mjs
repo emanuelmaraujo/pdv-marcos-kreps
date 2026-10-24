@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
 if (args.some((arg) => arg !== '--check') || args.length > 1) {
-  console.error('Uso: npm run update:local [-- --check]');
+  console.error('Uso: npm run update:check | npm run update:local');
   process.exit(1);
 }
 
