@@ -17,10 +17,13 @@ describe('destino do deploy Supabase', () => {
     'postgresql://postgres:password@db.zyxwvutsrqponmlkjihg.supabase.co/postgres',
     'postgresql://postgres.zyxwvutsrqponmlkjihg:password@aws-0-sa-east-1.pooler.supabase.com/postgres',
     'https://db.abcdefghijklmnopqrst.supabase.co',
-    '',
     'invalid',
-  ])('recusa destinos ausentes, inválidos ou de outro projeto', (databaseUrl) => {
+  ])('recusa URLs fornecidas inválidas ou de outro projeto', (databaseUrl) => {
     expect(() => validateSupabaseTarget({ ...base, databaseUrl })).toThrow();
+  });
+
+  it.each([undefined, ''])('aceita vinculação da CLI sem URL legada (%s)', (databaseUrl) => {
+    expect(() => validateSupabaseTarget({ ...base, databaseUrl })).not.toThrow();
   });
 
   it('não revela a senha no diagnóstico', () => {

@@ -3,7 +3,9 @@ export function validateSupabaseTarget({ projectRef, expectedProjectRef, databas
     throw new Error('SUPABASE_PROJECT_ID não corresponde ao projeto esperado para este repositório.');
   }
   if (!accessToken) throw new Error('Configure SUPABASE_ACCESS_TOKEN nos secrets do GitHub.');
-  if (!databaseUrl) throw new Error('Configure SUPABASE_DB_URL nos secrets do GitHub.');
+  // A vinculação da CLI usa credenciais temporárias pelo token. Uma URL direta
+  // é opcional; caso fornecida por um chamador, precisa continuar validada.
+  if (!databaseUrl) return;
   let url;
   try { url = new URL(databaseUrl); } catch { throw new Error('SUPABASE_DB_URL inválida.'); }
   const directHost = `db.${projectRef}.supabase.co`;
