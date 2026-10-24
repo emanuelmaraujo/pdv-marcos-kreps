@@ -368,6 +368,7 @@ export default function NovoPedidoPage() {
     removedIngredientIds,
     selectedAddons,
     selectedProduct,
+    setIsDiscardCustomizationOpen,
   ]);
 
   const toggleIngredient = useCallback((ingredientId: string) => {

@@ -2,7 +2,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 
-SELECT plan(33);
+SELECT plan(35);
 
 SELECT ok(
   has_table_privilege('authenticated', 'public.payment_transactions', 'SELECT'),
@@ -314,7 +314,7 @@ SELECT throws_ok(
   'atendente sem filial e rejeitado'
 );
 
-SELECT throws_ok(
+SELECT lives_ok(
   $$
     SELECT public.admin_upsert_user_access(
       '10000000-0000-0000-0000-000000000001',
@@ -327,12 +327,16 @@ SELECT throws_ok(
       '20000000-0000-0000-0000-000000000001', NULL
     )
   $$,
-  'P0001',
-  NULL,
-  'administrador local com mais de uma filial e rejeitado'
+  'administrador local pode pertencer a duas filiais autorizadas'
 );
 
-SELECT throws_ok(
+SELECT is(
+  (SELECT count(*) FROM public.profile_branches WHERE profile_id = '10000000-0000-0000-0000-000000000012'),
+  2::bigint,
+  'os dois vinculos do administrador sao preservados'
+);
+
+SELECT lives_ok(
   $$
     SELECT public.admin_upsert_user_access(
       '10000000-0000-0000-0000-000000000001',
@@ -345,9 +349,13 @@ SELECT throws_ok(
       '20000000-0000-0000-0000-000000000001', '11999999999'
     )
   $$,
-  'P0001',
-  NULL,
-  'entregador com mais de uma filial e rejeitado'
+  'entregador pode pertencer a duas filiais autorizadas'
+);
+
+SELECT is(
+  (SELECT count(*) FROM public.profile_branches WHERE profile_id = '10000000-0000-0000-0000-000000000013'),
+  2::bigint,
+  'os dois vinculos do entregador sao preservados'
 );
 
 SELECT * FROM finish();

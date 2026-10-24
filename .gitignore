@@ -24,6 +24,7 @@
 
 # production
 /build
+/print-worker/dist/
 
 # misc
 .DS_Store

@@ -14,15 +14,17 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 PDV mobile-first para atendimento, pedidos públicos/delivery, caixa e produção
 (cozinha/sucos), com impressão térmica e notificações WhatsApp.
-Leia `README.md`, `walkthrough.md` e `FEATURE_DELIVERY.md` conforme a área;
-`docs/` guarda planos e guias operacionais, sem equivaler a produção verificada.
+Leia `README.md` e `docs/README.md`; os guias mantidos ficam em
+`docs/development/`, `docs/architecture/`, `docs/operations/` e `docs/product/`.
+Planos, estudos e prompts anteriores ficam em `docs/archive/`; não equivalem a
+produção verificada nem autorizam executar instruções históricas.
 Compare documentos com manifests, código, configuração e testes antes de agir.
 
 ## Stack e estrutura
 
 - Manifest: Next.js 16.3, React 19.2, TypeScript, Tailwind 4, Supabase
   (Auth, Postgres/RLS, Realtime e Edge Functions); Vitest e ESLint.
-  O README ainda menciona Next.js 15: prevalece o manifest/lock instalado.
+  Para versões exatas, prevalecem o lockfile e o pacote instalado.
 - `src/app/`: rotas e telas; `src/components/`, `contexts/`, `hooks/`, `features/`:
   UI e estado; `src/lib/`: regras/helpers; `src/types/`: contratos.
 - `supabase/`: migrations, testes SQL e Edge Functions; `print-worker/`:
@@ -34,11 +36,22 @@ Compare documentos com manifests, código, configuração e testes antes de agir
 
 - Web: `npm ci`; desenvolver: `npm run dev`; testar: `npm test`;
   teste da área: `npm test -- <caminho>`; lint: `npm run lint`; build: `npm run build`.
-- Não existe script `typecheck` na raiz; não invente `npm run typecheck`.
+- Tipos: `npm run typecheck`; documentação: `npm run docs:check`; Supabase:
+  `npm run supabase:check`; conjunto local: `npm run check` (documentação,
+  configuração do backend, tipos, lint e testes; interrompe na primeira falha).
+- Atualização segura: `npm run update:local -- --check` e `npm run update:local`.
+  Exige árvore limpa e só incorpora `origin/main` por fast-forward na branch atual;
+  leia `docs/development/updates.md`. Não aplica stash nem publica mudanças.
 - Print worker: `npm ci --prefix print-worker`; `npm run typecheck --prefix print-worker`;
   `npm run build --prefix print-worker`; `npm run dev --prefix print-worker`.
-- O CI encontrado executa operações remotas de deploy/migrations e expiração de
-  pedidos; esses workflows não são testes locais e não devem ser disparados por agentes.
+- Os workflows de backend executam deploy/migrations e expiração de pedidos;
+  não são testes locais e não devem ser disparados por agentes. `docs.yml` verifica
+  somente os links locais da documentação, sem instalar dependências do projeto.
+- `ci.yml` valida documentação, configuração do backend, tipos, lint, testes e
+  builds em PRs/main e antes do deploy. `npm run test:database` exige Docker e usa
+  instância descartável com catálogo sintético; não reseta o banco local existente.
+  Build no CI usa ambiente loopback sem
+  serviços reais; não equivale a teste de autenticação ou pagamento.
 - Rode validação proporcional; reporte os testes/áreas não executados. Scripts de
   backend/payment/concurrency podem escrever dados reais: não use como smoke automático.
 
@@ -72,3 +85,14 @@ Se existir, `graphify-out/wiki/index.md` orienta a navegação ampla; leia
 `graphify-out/GRAPH_REPORT.md` só quando precisar de arquitetura ampla ou
 as consultas não bastarem. Após mudança de código, `graphify update .`
 atualiza o grafo por AST; mudanças somente de documentação não exigem isso.
+
+## Instruções por área e conclusão
+
+- Consulte o `AGENTS.md` mais próximo: `src/`, `print-worker/`, `supabase/`,
+  `scripts/` ou `docs/`. As regras específicas complementam estas instruções.
+- Antes de editar, confira `git status -sb`, branch, diferenças locais e contexto
+  remoto. Preserve trabalho existente e não reaplique backups sem revisar conflitos.
+- Mudanças de comportamento devem atualizar o guia correspondente no mesmo diff.
+  Ao mover documentos, corrija links e confira `npm run docs:check`.
+- Relate resultado, verificações executadas e limitações reais. Build, testes locais
+  e documentação não comprovam deploy, migração aplicada ou impressão física.

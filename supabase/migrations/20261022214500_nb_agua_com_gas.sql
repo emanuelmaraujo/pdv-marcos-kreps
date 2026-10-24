@@ -23,7 +23,9 @@ BEGIN
 
   -- Há um único item de água sem gás nessa unidade?
   -- btrim trata o cadastro real existente, que possui espaço no final.
-  SELECT count(*), max(p.category_id), max(p.price)
+  -- PostgreSQL não fornece max(uuid). A cardinalidade é validada abaixo;
+  -- array_agg preserva a categoria do único produto sem agregar UUID por ordem.
+  SELECT count(*), (array_agg(p.category_id))[1], max(p.price)
     INTO v_water_count, v_water_category_id, v_water_price
   FROM public.products AS p
   WHERE p.branch_id = v_branch_id

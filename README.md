@@ -1,42 +1,55 @@
 # PDV Marcos Krep's
 
-Sistema de Ponto de Venda (PDV) mobile-first desenvolvido para a Marcos Krep's, focado em agilidade no atendimento e gestão de produção (cozinha/sucos).
+Sistema de ponto de venda para atendimento, pedidos públicos, delivery, caixa e
+produção, com impressão térmica e notificações WhatsApp. Interface mobile-first em pt-BR.
 
-## 🚀 Tecnologias
-- **Frontend**: Next.js 15 (App Router), TailwindCSS, Shadcn/UI.
-- **Backend**: Supabase (Auth, Database, Edge Functions, Realtime).
-- **Impressão**: Node.js Local Worker (ESC/POS via TCP/IP).
-- **Notificações**: WhatsApp Cloud API (Meta).
+## Começar
 
-## 📁 Estrutura do Projeto
-- `/src`: Aplicação principal Next.js.
-- `/supabase`: Configurações de banco, RLS e Edge Functions.
-- `/print-worker`: Worker local para comunicação com impressoras térmicas.
-- `/docs`: Documentação operacional e guias de setup.
+Requer Git, Node.js 20.9 ou superior e npm. Na primeira instalação:
 
-## 🛠️ Como Rodar
-
-### 1. Aplicação Web
-```bash
-npm install
+```powershell
+npm ci
+Copy-Item .env.example .env.local
+# Preencha .env.local com o ambiente de desenvolvimento.
 npm run dev
 ```
 
-### 2. Print Worker (Local)
-1. Configure o `.env` na pasta `print-worker` com as chaves do Supabase.
-2. Execute:
-```bash
-cd print-worker
-npm install
-npm run dev
+Abra `http://localhost:3000`. Não sobrescreva um `.env.local` existente.
+Veja [setup e comandos](docs/development/setup.md) para preparar frontend e worker.
+
+## Atualizar e validar
+
+Com árvore de trabalho limpa:
+
+```powershell
+npm run update:local -- --check
+npm run update:local
+npm ci
+npm run check
 ```
 
-## 📖 Documentação Adicional
-- [Walkthrough Geral](walkthrough.md): Detalhes da arquitetura e fluxos.
-- [Plano de Teste Operacional](docs/mvp-operational-test.md): Checklist para validação do MVP.
-- [Guia WhatsApp](docs/whatsapp-cloud-setup.md): Configuração da API de notificações.
-- [Feature: Delivery](FEATURE_DELIVERY.md): Status e escopo da funcionalidade de entrega (documento vivo, atualizado por fase).
+O atualizador incorpora `origin/main` por fast-forward na branch atual e para se
+houver trabalho pendente ou histórico divergente. Consulte o [guia de atualizações](docs/development/updates.md)
+para backups, dependências, build do worker e limites da atualização local.
 
-## 🔒 Segurança
-- **RLS (Row Level Security)**: Garantia de que Atendentes não alteram o cardápio e que usuários públicos apenas consultam status.
-- **Trust-no-client**: Toda lógica de precificação e validação de regras de negócio ocorre nas Edge Functions.
+## Estrutura
+
+| Diretório | Responsabilidade |
+| --- | --- |
+| `src/` | Next.js 16 App Router, React 19, TypeScript e Tailwind CSS 4 |
+| `supabase/` | Banco, RLS, migrations e Edge Functions |
+| `print-worker/` | Serviço Node de impressão ESC/POS por rede |
+| `scripts/` | Ferramentas de manutenção e integração |
+| `docs/` | Guias mantidos, produto, operação e histórico |
+
+## Referências
+
+- [Índice da documentação](docs/README.md)
+- [Arquitetura](docs/architecture/overview.md)
+- [Impressão e diagnóstico do worker](print-worker/README.md)
+- [Delivery](docs/product/delivery.md)
+- [Regras para agentes](AGENTS.md)
+- [Planos, estudos e prompts arquivados](docs/archive/README.md)
+
+Precificação e autorização precisam ser validadas no servidor, com as políticas
+RLS correspondentes. Nunca coloque chaves de serviço em variáveis `NEXT_PUBLIC_*`.

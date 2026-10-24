@@ -12,7 +12,7 @@ import { X } from "lucide-react";
  * Substitui a duplicação de overlays `fixed inset-0` feitos à mão
  * (ex: OrderDetailsModal/PayItemsModal antes desta primitiva existir) —
  * é uma única implementação, não duas mantidas em paralelo.
- * Ver docs/plano-acao-ux-ui.md, Fase 0.
+ * Ver docs/archive/plans/plano-acao-ux-ui.md, Fase 0.
  */
 interface SheetProps {
   isOpen: boolean;
