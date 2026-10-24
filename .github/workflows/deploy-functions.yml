@@ -30,7 +30,6 @@ jobs:
     timeout-minutes: 20
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_ID }}
       EXPECTED_PROJECT_REF: feotsdzkwbikmcnzgsnh
     steps:
@@ -44,12 +43,14 @@ jobs:
           version: 2.114.0
       - name: Validate target and required secrets
         run: node scripts/validate-supabase-target.mjs
+      - name: Link expected project using CLI temporary credentials
+        run: supabase link --project-ref "$PROJECT_REF" --yes
       - name: Preview pending migrations
-        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all --dry-run
+        run: supabase db push --linked --include-all --dry-run
       - name: Apply pending migrations
         # include-all também contempla migrations versionadas anteriores à última
         # versão remota. Não repara, apaga ou marca histórico automaticamente.
-        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all --yes
+        run: supabase db push --linked --include-all --yes
       - name: Deploy all versioned Edge Functions
         # verify_jwt vem de config.toml; nenhuma lista manual pode omitir funções.
         run: supabase functions deploy --project-ref "$PROJECT_REF" --use-api --yes

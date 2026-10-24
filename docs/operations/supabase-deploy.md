@@ -15,9 +15,9 @@ O CI também executa `npm run test:database`: replay das 83 migrations, catálog
 sintético, verificação de idempotência dos ajustes de preço/água e testes SQL de
 permissões. A instância descartável usa portas 554xx e é removida ao concluir.
 
-1. Conferir projeto, URL de banco e presença dos secrets obrigatórios.
+1. Conferir projeto e presença do token obrigatório; vincular a CLI ao destino esperado.
 2. Mostrar migrations pendentes com `db push --dry-run`.
-3. Aplicar pendências com `db push --include-all --yes` usando `SUPABASE_DB_URL`.
+3. Aplicar pendências com `db push --linked --include-all --yes` usando credenciais temporárias da CLI.
 4. Publicar todas as funções locais com `functions deploy --use-api`.
 5. Registrar o commit no resumo da execução.
 
@@ -33,11 +33,17 @@ Uma falha nas migrations impede a publicação das funções dessa execução.
 | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | Autorização da CLI para publicar funções |
 | `SUPABASE_PROJECT_ID` | Ref do projeto; precisa coincidir com o destino esperado |
-| `SUPABASE_DB_URL` | Conexão Postgres completa, com credencial codificada corretamente |
 
-A validação aceita host direto `db.<ref>.supabase.co` ou pooler oficial com usuário
-`postgres.<ref>`. Não imprime a URL nem a senha. O workflow usa o secret de URL já
-existente, em vez de depender de `SUPABASE_DB_PASSWORD`, ausente no repositório.
+O workflow vincula a CLI com `SUPABASE_ACCESS_TOKEN` e `SUPABASE_PROJECT_ID`,
+usando o acesso temporário suportado pelo Supabase. Não depende de senha de banco
+persistida no GitHub. O token precisa das permissões exigidas por `link`, migrations
+e publicação de funções no projeto.
+
+O secret legado `SUPABASE_DB_URL` foi encontrado com formato inválido e não é mais
+consumido. A primeira execução interrompeu antes de qualquer alteração remota.
+Não é necessário reparar o histórico nem substituir esse secret para o novo fluxo.
+O validador também aceita URL direta opcional para outros chamadores e, nesse caso,
+exige host direto ou pooler oficial correspondente ao mesmo projeto.
 
 ## Autenticação das funções
 
@@ -90,3 +96,5 @@ somente duas funções e verificava uma campanha específica já datada.
 
 Referências oficiais: [deploy de funções](https://supabase.com/docs/guides/functions/deploy)
 e [ambientes e migrations](https://supabase.com/docs/guides/deployment/managing-environments).
+Autenticação: [acesso temporário](https://supabase.com/docs/guides/platform/temporary-access)
+e [permissões dos tokens](https://supabase.com/docs/guides/platform/personal-access-tokens).
