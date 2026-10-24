@@ -10,7 +10,7 @@
 //   node scripts/test-fase4-motoboy.js
 //
 // Cobre o fluxo real (via Edge Functions, não inserção direta) descrito no
-// FEATURE_DELIVERY.md, seção "Fase 4":
+// docs/product/delivery.md, seção "Fase 4":
 //   1. manage-users cria um usuário COURIER -> gera couriers.profile_id.
 //   2. manage-users rejeita COURIER sem exatamente 1 filial.
 //   3. dispatch-delivery atribui o motoboy cadastrado a um pedido PRONTO.

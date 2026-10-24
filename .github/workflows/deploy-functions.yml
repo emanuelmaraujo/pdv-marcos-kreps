@@ -2,93 +2,56 @@ name: Deploy Supabase Edge Functions
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "supabase/functions/**"
       - "supabase/config.toml"
       - "supabase/migrations/**"
+      - "scripts/check-supabase.mjs"
+      - "scripts/validate-supabase-target.mjs"
+      - ".github/workflows/deploy-functions.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+
 jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
-    runs-on: ubuntu-latest
+    needs: checks
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_ID }}
+      EXPECTED_PROJECT_REF: feotsdzkwbikmcnzgsnh
     steps:
-      - uses: actions/checkout@v4
-
-      # Versão fixa de propósito. Com `latest` a action resolve a release pela
-      # API do GitHub sem token, e o deploy morre em "Failed to resolve latest
-      # Supabase CLI release: rate limit exceeded" — foi o que derrubou o run
-      # #123. Com versão explícita ela baixa direto da release, sem chamada de
-      # API, então não tem limite pra estourar.
-      - uses: supabase/setup-cli@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          version: 2.117.0
-
-      - name: Validate project ref
-        run: |
-          PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
-          echo "Ref length: ${#PROJECT_REF}"
-          echo "Ref matches format: $(echo "$PROJECT_REF" | grep -cP '^[a-z0-9]{20}$' || echo 0)"
-
+          node-version-file: .nvmrc
+      # Mesma CLI do lockfile, usada no replay e nos testes locais/CI.
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.114.0
+      - name: Validate target and required secrets
+        run: node scripts/validate-supabase-target.mjs
+      - name: Preview pending migrations
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all --dry-run
       - name: Apply pending migrations
-        run: |
-          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_ID }}"
-          supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
-
-      - name: Deploy authenticated Edge Functions
-        run: |
-          PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
-          for fn in \
-            add-items-to-order \
-            cash-report \
-            change-payment-method \
-            confirm-delivery \
-            confirm-order \
-            courier-delivery-report \
-            create-attendant-order \
-            dispatch-delivery \
-            edit-order-item \
-            get-customer-profile \
-            loyalty-redeem \
-            manage-users \
-            mark-payment \
-            reprint-order \
-            test-printer \
-            update-order-item-status \
-            update-order-status; do
-            supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
-          done
-
-      - name: Deploy public Edge Functions (JWT verification disabled)
-        run: |
-          PROJECT_REF="${{ secrets.SUPABASE_PROJECT_ID }}"
-          for fn in \
-            create-public-order \
-            create-mercado-pago-payment \
-            get-public-branch-stats \
-            get-public-checkout-config \
-            get-public-customer-profile \
-            get-public-loyalty \
-            get-public-order-status \
-            list-public-branches \
-            lookup-cep \
-            lookup-orders-by-phone \
-            loyalty-accrue \
-            loyalty-expire \
-            loyalty-reconcile \
-            loyalty-revoke \
-            mercado-pago-webhook \
-            subscribe-order-push \
-            validate-coupon \
-            webauthn \
-            expire-pending-public-orders \
-            send-whatsapp \
-            whatsapp-webhook; do
-            supabase functions deploy "$fn" \
-              --project-ref "$PROJECT_REF" \
-              --no-verify-jwt
-          done
+        # include-all também contempla migrations versionadas anteriores à última
+        # versão remota. Não repara, apaga ou marca histórico automaticamente.
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all --yes
+      - name: Deploy all versioned Edge Functions
+        # verify_jwt vem de config.toml; nenhuma lista manual pode omitir funções.
+        run: supabase functions deploy --project-ref "$PROJECT_REF" --use-api --yes
+      - name: Record deployed revision
+        run: echo "Supabase atualizado a partir de $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

@@ -3,7 +3,7 @@ name: Expire Pending Public Orders
 # Chama expire-pending-public-orders periodicamente pra marcar como EXPIRADO
 # quem abriu um pedido público (checkout /pedir) e não pagou dentro do prazo —
 # sem isso, esses pedidos ficam presos em AGUARDANDO_PAGAMENTO pra sempre e não
-# aparecem como desistência em nenhum relatório. Ver FEATURE_DELIVERY.md /
+# aparecem como desistência em nenhum relatório. Ver docs/product/delivery.md /
 # investigação de "quero ter controle de quantas pessoas desistiram de pagar".
 #
 # Requer os secrets do repo:
@@ -18,7 +18,7 @@ on:
 
 jobs:
   expire:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Chamar expire-pending-public-orders
         run: |

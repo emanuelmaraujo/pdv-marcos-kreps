@@ -8,6 +8,7 @@ import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { useBranch } from "@/contexts/BranchContext";
 import { couponsApi, type Coupon, type CouponDiscountType, type CouponInput } from "@/lib/api/coupons-api";
 import { getFriendlyErrorMessage } from "@/lib/errors/messages";
+import { getCouponStatus } from "@/lib/utils/coupon-status";
 import { SettingsBadge, SettingsPageHeader } from "../components/SettingsPageHeader";
 
 type FormState = {
@@ -57,44 +58,59 @@ function isoToInput(value: string) {
 }
 
 export default function CouponsSettingsPage() {
+  const { currentBranchId } = useBranch();
+  return <CouponsWorkspace key={currentBranchId ?? "no-branch"} />;
+}
+
+function CouponsWorkspace() {
   const { currentBranch, currentBranchId, isLoading: branchLoading } = useBranch();
   const { toasts, addToast, removeToast } = useToast();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(currentBranchId));
+  const [now, setNow] = useState(() => Date.now());
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Coupon | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
 
-  const load = useCallback(async () => {
-    if (!currentBranchId) {
-      setCoupons([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
+  const load = useCallback(async (isCurrent: () => boolean = () => true) => {
+    if (!currentBranchId) return;
     try {
-      setCoupons(await couponsApi.list(currentBranchId));
+      const data = await couponsApi.list(currentBranchId);
+      if (!isCurrent()) return;
+      setCoupons(data);
+      setNow(Date.now());
     } catch (error) {
-      addToast("error", getFriendlyErrorMessage(error, "Não foi possível carregar os cupons."));
+      if (isCurrent()) addToast("error", getFriendlyErrorMessage(error, "Não foi possível carregar os cupons."));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }, [addToast, currentBranchId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (branchLoading || !currentBranchId) return;
+    let active = true;
+    void couponsApi.list(currentBranchId)
+      .then((data) => {
+        if (!active) return;
+        setCoupons(data);
+        setNow(Date.now());
+      })
+      .catch((error: unknown) => {
+        if (active) addToast("error", getFriendlyErrorMessage(error, "Não foi possível carregar os cupons."));
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [addToast, branchLoading, currentBranchId]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const activeNow = useMemo(() => {
-    const now = Date.now();
-    return coupons.filter((coupon) =>
-      coupon.active &&
-      new Date(coupon.valid_from).getTime() <= now &&
-      now < new Date(coupon.valid_until).getTime()
-    ).length;
-  }, [coupons]);
+    return coupons.filter((coupon) => getCouponStatus(coupon, now) === "Ativo").length;
+  }, [coupons, now]);
 
   const openCreate = () => {
     setEditing(null);
@@ -275,7 +291,7 @@ export default function CouponsSettingsPage() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {coupons.map((coupon) => (
-              <CouponCard key={coupon.id} coupon={coupon} onEdit={() => openEdit(coupon)} onToggle={() => void handleToggle(coupon)} onRemove={() => void handleRemove(coupon)} />
+              <CouponCard key={coupon.id} coupon={coupon} now={now} onEdit={() => openEdit(coupon)} onToggle={() => void handleToggle(coupon)} onRemove={() => void handleRemove(coupon)} />
             ))}
           </div>
         )}
@@ -284,11 +300,8 @@ export default function CouponsSettingsPage() {
   );
 }
 
-function CouponCard({ coupon, onEdit, onToggle, onRemove }: { coupon: Coupon; onEdit: () => void; onToggle: () => void; onRemove: () => void }) {
-  const now = Date.now();
-  const starts = new Date(coupon.valid_from).getTime();
-  const ends = new Date(coupon.valid_until).getTime();
-  const status = !coupon.active ? "Inativo" : now < starts ? "Agendado" : now >= ends ? "Expirado" : "Ativo";
+function CouponCard({ coupon, now, onEdit, onToggle, onRemove }: { coupon: Coupon; now: number; onEdit: () => void; onToggle: () => void; onRemove: () => void }) {
+  const status = getCouponStatus(coupon, now);
   const live = status === "Ativo";
   const discount = coupon.discount_type === "PERCENT" ? `${coupon.discount_value}%` : currency.format(coupon.discount_value);
 

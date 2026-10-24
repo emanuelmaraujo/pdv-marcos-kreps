@@ -468,3 +468,80 @@ verify_jwt = false
 
 # loyalty-redeem fica com o default (verify_jwt=true): usa Bearer JWT de
 # atendente/admin normal, igual mark-payment/confirm-order.
+
+# Política explícita para todas as demais funções. O deploy usa este arquivo
+# como fonte única; novas funções precisam declarar verify_jwt antes de publicar.
+[functions.create-attendant-order]
+verify_jwt = true
+
+[functions.mark-payment]
+verify_jwt = true
+
+[functions.update-order-status]
+verify_jwt = true
+
+[functions.reprint-order]
+verify_jwt = true
+
+[functions.confirm-order]
+verify_jwt = true
+
+[functions.add-items-to-order]
+verify_jwt = true
+
+[functions.manage-users]
+verify_jwt = true
+
+[functions.test-printer]
+verify_jwt = true
+
+[functions.cash-report]
+verify_jwt = true
+
+[functions.get-customer-profile]
+verify_jwt = true
+
+[functions.update-order-item-status]
+verify_jwt = true
+
+[functions.get-public-branch-stats]
+verify_jwt = false
+
+[functions.list-public-branches]
+verify_jwt = false
+
+[functions.lookup-orders-by-phone]
+verify_jwt = false
+
+[functions.change-payment-method]
+verify_jwt = true
+
+[functions.edit-order-item]
+verify_jwt = true
+
+[functions.loyalty-redeem]
+verify_jwt = true
+
+[functions.dispatch-delivery]
+verify_jwt = true
+
+[functions.confirm-delivery]
+verify_jwt = true
+
+[functions.get-public-customer-profile]
+verify_jwt = false
+
+[functions.lookup-cep]
+verify_jwt = false
+
+[functions.courier-delivery-report]
+verify_jwt = true
+
+[functions.subscribe-order-push]
+verify_jwt = false
+
+[functions.restore-cancelled-order]
+verify_jwt = true
+
+[functions.validate-coupon]
+verify_jwt = false

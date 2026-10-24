@@ -49,9 +49,10 @@ export default function ImpressaoPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [hasConfiguredPrinter, setHasConfiguredPrinter] = useState<boolean | null>(null);
   const { currentBranch, isLoading: isBranchLoading } = useBranch();
+  const currentBranchId = currentBranch?.id;
 
   const fetchJobs = useCallback(async (showLoading = false) => {
-    if (!currentBranch?.id) {
+    if (!currentBranchId) {
       setJobs([]);
       setIsLoading(false);
       return;
@@ -59,7 +60,7 @@ export default function ImpressaoPage() {
     if (showLoading) setIsRefreshing(true);
     setError("");
     try {
-      const data = await printerApi.getTodayJobs(currentBranch.id);
+      const data = await printerApi.getTodayJobs(currentBranchId);
       setJobs(data || []);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro ao carregar fila");
@@ -67,7 +68,7 @@ export default function ImpressaoPage() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [currentBranch?.id]);
+  }, [currentBranchId]);
 
   useEffect(() => {
     if (isBranchLoading || !currentBranch) return;

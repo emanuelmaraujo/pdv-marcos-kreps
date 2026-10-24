@@ -344,6 +344,11 @@ function KanbanColumn({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PedidosPage() {
+  const { currentBranchId } = useBranch();
+  return <PedidosWorkspace key={currentBranchId ?? "all-branches"} />;
+}
+
+function PedidosWorkspace() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -359,6 +364,7 @@ export default function PedidosPage() {
   const isFocusMode = useSyncExternalStore(subscribeFocusMode, getFocusModeSnapshot, () => false);
   // md+ = tablet/desktop → use Modal instead of BottomSheet
   const { currentBranch, isLoading: isBranchLoading } = useBranch();
+  const currentBranchId = currentBranch?.id ?? null;
   const { toasts, addToast, removeToast } = useToast();
 
   const selectedOrderRef = useRef<Order | null>(null);
@@ -367,23 +373,20 @@ export default function PedidosPage() {
   const pendingOrderIdsRef = useRef<Set<string>>(new Set());
   const pendingSelectedSyncRef = useRef(false);
   const boardRevisionRef = useRef(0);
-  const activeBranchIdRef = useRef<string | null>(currentBranch?.id ?? null);
+  const activeBranchIdRef = useRef<string | null | undefined>(currentBranchId);
   const fullFetchInFlightRef = useRef<Promise<void> | null>(null);
 
-  // Trocar de filial invalida leituras antigas e evita mostrar pedidos da filial
-  // anterior enquanto o quadro da nova filial carrega.
+  // A key reinicia o estado ao trocar de filial. O cleanup invalida respostas
+  // antigas antes que possam publicar dados no quadro que foi desmontado.
   useEffect(() => {
-    activeBranchIdRef.current = currentBranch?.id ?? null;
-    boardRevisionRef.current += 1;
-    fullFetchInFlightRef.current = null;
-    incrementalFetchInFlightRef.current = null;
-    pendingOrderIdsRef.current.clear();
-    pendingSelectedSyncRef.current = false;
-    ordersRef.current = [];
-    selectedOrderRef.current = null;
-    setOrders([]);
-    setSelectedOrder(null);
-  }, [currentBranch?.id]);
+    activeBranchIdRef.current = currentBranchId;
+    const pendingIds = pendingOrderIdsRef.current;
+    return () => {
+      activeBranchIdRef.current = undefined;
+      boardRevisionRef.current += 1;
+      pendingIds.clear();
+    };
+  }, [currentBranchId]);
 
   useEffect(() => { selectedOrderRef.current = selectedOrder; }, [selectedOrder]);
   useEffect(() => { ordersRef.current = orders; }, [orders]);
@@ -427,7 +430,7 @@ export default function PedidosPage() {
     // Um único carregamento completo por vez: polling, foco e recuperação de
     // conexão podem disparar quase simultaneamente.
     if (fullFetchInFlightRef.current) return fullFetchInFlightRef.current;
-    const branchId = currentBranch?.id ?? null;
+    const branchId = currentBranchId;
     const revisionAtStart = boardRevisionRef.current;
 
     const request = (async () => {
@@ -462,7 +465,7 @@ export default function PedidosPage() {
       if (fullFetchInFlightRef.current === request) fullFetchInFlightRef.current = null;
     });
     return request;
-  }, [addToast, currentBranch?.id]);
+  }, [addToast, currentBranchId]);
 
   // Fila incremental compartilhada por Realtime e pelas ações do operador.
   // Se já existe uma consulta em andamento, novos IDs entram no Set e serão
@@ -497,7 +500,7 @@ export default function PedidosPage() {
         pendingSelectedSyncRef.current = false;
 
         try {
-          const branchId = currentBranch?.id ?? null;
+          const branchId = currentBranchId;
           const refreshedOrders = await ordersApi.getOrdersByIds(ids, branchId);
           if (activeBranchIdRef.current !== branchId) break;
           const currentSelected = selectedOrderRef.current;
@@ -536,7 +539,7 @@ export default function PedidosPage() {
         incrementalFetchInFlightRef.current = null;
       }
     }
-  }, [addToast, currentBranch?.id]);
+  }, [addToast, currentBranchId]);
 
   // O PDV presencial funciona mesmo quando pedidos públicos estão fechados.
   // Realtime antecipa eventos, mas uma consulta periódica recupera eventos
@@ -547,7 +550,10 @@ export default function PedidosPage() {
     let debounceTimer: number | null = null;
     let realtimeHealthy = false;
     const pendingIds = new Set<string>();
-    const initialLoadTimer = window.setTimeout(() => { void fetchOrders(); }, 0);
+    const initialLoadTimer = window.setTimeout(() => {
+      setSyncMode(navigator.onLine === false ? "offline" : "connecting");
+      void fetchOrders();
+    }, 0);
 
     const reconcile = () => {
       if (disposed || !shouldReconcileOrderBoard(document.visibilityState, navigator.onLine !== false)) return;
@@ -579,7 +585,6 @@ export default function PedidosPage() {
     };
 
     const supabase = createClient();
-    setSyncMode(navigator.onLine === false ? "offline" : "connecting");
     const channel = supabase
       .channel("orders-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, (payload) => {

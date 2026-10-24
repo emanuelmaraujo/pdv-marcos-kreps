@@ -443,7 +443,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   Motion — decisão da Fase 0 (docs/plano-acao-ux-ui.md): sem lib nova
+   Motion — decisão da Fase 0 (docs/archive/plans/plano-acao-ux-ui.md): sem lib nova
    de animação. CSS puro cobre as transições do kit (Sheet/Modal, step
    de checkout, skeleton→conteúdo); projeto mantém dependências mínimas
    de propósito. Reavaliar só se motion orquestrado (gestos, spring

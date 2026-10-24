@@ -8,7 +8,7 @@ import type { MenuData } from "@/lib/api/menu-api";
  * Antes vivia duplicada por copy-paste nos dois arquivos; a versão de
  * `/pedir` era um superset (tags de bebida, resumo de produto) que
  * `/novo-pedido` não tinha. Extraído para um módulo único, ver
- * docs/plano-acao-ux-ui.md, Fase 0 — "um catálogo, uma linguagem visual".
+ * docs/archive/plans/plano-acao-ux-ui.md, Fase 0 — "um catálogo, uma linguagem visual".
  */
 
 export const ALL_FILTER = "Todos";

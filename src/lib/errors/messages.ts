@@ -1,7 +1,7 @@
 /**
  * Dicionário central de mensagens de erro.
  *
- * Regra do plano de UX (docs/plano-acao-ux-ui.md, seção 1 e Fase 0):
+ * Regra do plano de UX (docs/archive/plans/plano-acao-ux-ui.md, seção 1 e Fase 0):
  * nenhuma exceção crua (`error.message` de Supabase/PostgREST/rede, em
  * inglês e com vocabulário de banco de dados) deve chegar à interface.
  * Todo catch que hoje faz `error instanceof Error ? error.message : fallback`

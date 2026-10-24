@@ -1,0 +1,40 @@
+# Arquivo histórico
+
+Material realocado em 2026-10-24 sem revalidar cada conclusão contra produção.
+Datas, checklists e afirmações de implantação refletem a época de cada registro.
+Prompts antigos preservam contexto e não autorizam execução de suas instruções.
+Para os guias mantidos, volte ao [índice principal](../README.md).
+
+## Planos, propostas e relatórios
+
+- [Correção do PDV](plans/plano-acao-correcao-pdv.md)
+- [UX e UI](plans/plano-acao-ux-ui.md)
+- [Checkout público](plans/plano-acao-pedir.md)
+- [Fidelização](plans/plano-acao-fidelizacao.md)
+- [Proposta de fidelidade](plans/proposta-fidelidade.md)
+- [Estabilidade de pedidos e consulta de cliente](plans/p0-pedidos-e-consulta-cliente.md)
+
+## Estudos
+
+- [Configurações, usuários, filiais e taxas](studies/estudo-configuracoes-usuarios-filiais-taxas.md)
+- [Estética de checkout e pedidos](studies/estudo-estetico-checkout-pedidos.md)
+- [Pedidos e consulta de cliente mobile](studies/estudo-mobile-first-pedidos-e-consulta-cliente.md)
+
+## Prompts anteriores
+
+- [Delivery: fase 2](prompts/prompt-modulo-delivery-fase2.md)
+- [Delivery: fase 3](prompts/prompt-modulo-delivery-fase3.md)
+- [Delivery: fase 4](prompts/prompt-delivery-fase4.md)
+- [Delivery: continuação](prompts/prompt-delivery-continuacao.md)
+- [Fidelização: início](prompts/prompt-fidelizacao-inicio.md)
+- [Auditoria de configurações](prompts/prompt-auditoria-configuracoes-usuarios-filiais.md)
+- [Redesign de pedidos](prompts/prompt-redesign-pedidos-mobile-first.md)
+
+## Implementação inicial
+
+- [Walkthrough original](walkthrough.md)
+
+## Automações pontuais
+
+- [Deploy FERIADOU de 2026-10-12](workflows/deploy-feriadou-20261012.yml):
+  preservado como histórico; não é mais executado pelo GitHub Actions.
