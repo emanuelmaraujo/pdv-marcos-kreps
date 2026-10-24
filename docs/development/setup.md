@@ -48,11 +48,12 @@ local e somente a chave `anon`/pública mostrada pelo status em `.env.local`.
 Não copie a chave `service_role` para o frontend. Credenciais do ambiente local
 não devem ser copiadas para exemplos versionados ou para o GitHub.
 
-O histórico também contém migrations de catálogo que pressupõem dados operacionais
-da NB e uma instalação com `pg_cron`. Em uma instância vazia, esses pré-requisitos
-precisam ser preparados. Para verificar todo o histórico de forma reproduzível,
+O histórico pressupõe uma instalação com `pg_cron`. Os ajustes pontuais de preço
+ficam em `supabase/manual-data/` e pressupõem o catálogo operacional correspondente.
+Para verificar o histórico e esses scripts de forma reproduzível,
 use `npm run test:database`: ele cria uma instância descartável em portas 554xx,
-habilita a extensão, insere um catálogo sintético e remove só a instância que criou.
+habilita a extensão, aplica o histórico, testa os scripts com um catálogo sintético
+e remove só a instância que criou.
 O ambiente de desenvolvimento existente não é resetado. O log fica no diretório
 Git local, sem entrar no repositório; não compartilhe logs brutos com credenciais.
 
