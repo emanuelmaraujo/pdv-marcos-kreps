@@ -47,9 +47,15 @@ for (const file of readdirSync(path.join(root, 'supabase/migrations')).filter((n
   if (versions.has(match[1])) errors.push(`Versão de migration duplicada: ${match[1]}`);
   versions.add(match[1]);
 }
+const manual = readdirSync(path.join(root, 'supabase/manual-data')).filter((name) => name.endsWith('.sql'));
+for (const file of manual) {
+  const match = file.match(/^(\d{14})_[a-z0-9_]+\.sql$/);
+  if (!match) errors.push(`Nome de operação manual inválido: ${file}`);
+  else if (versions.has(match[1])) errors.push(`Operação manual também aparece no deploy automático: ${file}`);
+}
 if (errors.length) {
   console.error(errors.join('\n'));
   process.exitCode = 1;
 } else {
-  console.log(`Supabase: ${functions.length} funções com autenticação explícita; ${versions.size} migrations com versões únicas.`);
+  console.log(`Supabase: ${functions.length} funções; ${versions.size} migrations com versões únicas; ${manual.length} operações manuais separadas.`);
 }

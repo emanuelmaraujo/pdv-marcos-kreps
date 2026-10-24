@@ -15,6 +15,7 @@ não atesta o estado dos serviços publicados.
 | `src/proxy.ts` | Tratamento de sessão e navegação entre rotas públicas/protegidas |
 | `supabase/functions/` | Validações e operações de negócio no servidor |
 | `supabase/migrations/` | Evolução versionada do banco e das políticas |
+| `supabase/manual-data/` | Operações pontuais de catálogo, fora do deploy automático |
 | `supabase/tests/` | Verificações de banco, com ambiente próprio |
 | `print-worker/` | Consumo da fila de impressão e ESC/POS na rede da loja |
 | `scripts/` | Ferramentas locais e scripts de integração |

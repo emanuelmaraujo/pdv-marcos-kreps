@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,12 +40,6 @@ try {
   for (const dir of ['migrations', 'functions', 'tests']) {
     cpSync(path.join(root, 'supabase', dir), path.join(localSupabase, dir), { recursive: true });
   }
-  // Os dados operacionais de NB não fazem parte do histórico de schema.
-  // Um fixture sintético prepara apenas as dependências dessas migrations.
-  const fixtureMigration = path.join(localSupabase, 'migrations/20261018000000_local_test_fixture.sql');
-  if (existsSync(fixtureMigration)) throw new Error('Timestamp reservado ao fixture já existe no histórico.');
-  cpSync(path.join(root, 'supabase/fixtures/nb-catalog.sql'), fixtureMigration);
-
   let config = readFileSync(path.join(root, 'supabase/config.toml'), 'utf8')
     .replace(/^project_id\s*=\s*"[^"]+"/m, `project_id = "${projectId}"`)
     .replace(/(\[db\.migrations\][^[]*?)enabled = true/s, '$1enabled = false')
@@ -65,13 +59,19 @@ try {
   ]);
   config = config.replace(/(\[db\.migrations\][^[]*?)enabled = false/s, '$1enabled = true');
   writeFileSync(configFile, config);
-  supabase('Aplicando todo o histórico com dados sintéticos...', 'migration', 'up', '--local');
+  supabase('Aplicando histórico regular de migrations...', 'migration', 'up', '--local');
 
-  for (const name of ['20261022213000_nucleo_bandeirante_novos_precos.sql', '20261022214500_nb_agua_com_gas.sql']) {
-    run('Preparando verificação de idempotência...', 'docker', ['cp', path.join(root, 'supabase/migrations', name), `${container}:/tmp/replay.sql`]);
-    run(`Reaplicando ${name} apenas no banco descartável...`, 'docker', [
+  const runLocalSql = (file, label) => {
+    run('Preparando SQL exclusivo do banco descartável...', 'docker', ['cp', file, `${container}:/tmp/replay.sql`]);
+    run(label, 'docker', [
       'exec', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-qf', '/tmp/replay.sql',
     ]);
+  };
+  runLocalSql(path.join(root, 'supabase/fixtures/nb-catalog.sql'), 'Criando catálogo sintético...');
+  for (const name of readdirSync(path.join(root, 'supabase/manual-data')).filter((file) => file.endsWith('.sql')).sort()) {
+    for (let iteration = 1; iteration <= 2; iteration += 1) {
+      runLocalSql(path.join(root, 'supabase/manual-data', name), `Validando ${name}, execução ${iteration}/2...`);
+    }
   }
   const output = supabase('Executando testes SQL...', 'test', 'db');
   console.log(output.split(/\r?\n/).filter((line) => /All tests|Files=|Result:/.test(line)).join('\n'));

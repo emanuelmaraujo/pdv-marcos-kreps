@@ -11,8 +11,8 @@ de validação do deploy ou o próprio workflow. Também admite execução manua
 `main`. O [CI reutilizável](../../.github/workflows/ci.yml) precisa passar antes
 de qualquer atualização remota.
 
-O CI também executa `npm run test:database`: replay das 83 migrations, catálogo
-sintético, verificação de idempotência dos ajustes de preço/água e testes SQL de
+O CI também executa `npm run test:database`: replay das 81 migrations regulares,
+catálogo sintético, teste de dois scripts manuais de preço/água e testes SQL de
 permissões. A instância descartável usa portas 554xx e é removida ao concluir.
 
 1. Conferir projeto e presença do token obrigatório; vincular a CLI ao destino esperado.
@@ -26,6 +26,21 @@ todo arquivo pendente continua sendo código a revisar antes de integrar o PR.
 Não há reparo automático de histórico, execução de seed ou remoção de funções remotas.
 O grupo de concorrência `supabase-production` evita dois deploys simultâneos.
 Uma falha nas migrations impede a publicação das funções dessa execução.
+
+## Ajustes pontuais de catálogo
+
+Scripts de preço e catálogo dependentes de uma operação específica ficam em
+[`supabase/manual-data/`](../../supabase/manual-data/README.md). Não são executados
+por `db push` nem pelo deploy de funções. Exigem revisão dos nomes, preços e filial
+atuais e autorização explícita para a operação. O CI verifica esses scripts somente
+com dados sintéticos, inclusive reaplicação sem duplicação.
+
+Na recuperação, o script de preços de 22/10 esperava dez bebidas antigas e encontrou
+apenas seis nomes correspondentes: o catálogo atual contém variantes como Coca Lata
+e Suco Laranja. Seus guards interromperam a transação antes de qualquer atualização
+de preço. Os dois scripts de 22/10, marcados como manuais desde a elaboração e sem
+registro aplicado no histórico remoto, foram separados do fluxo automático.
+Nenhuma migration aplicada foi removida ou marcada como revertida.
 
 ## Secrets necessários
 
@@ -79,8 +94,8 @@ A CLI do deploy é fixada na mesma versão do lockfile, conferida por
 `npm run supabase:check`. As Actions oficiais são fixadas por commit e os jobs
 usam Ubuntu 24.04 para evitar mudanças implícitas de runtime e imagem do runner.
 
-A migration pendente `20261022214500` também foi corrigida antes da primeira
-aplicação registrada: `max(uuid)` foi substituído por extração via `array_agg`,
+O script manual `20261022214500` também teve sua compatibilidade corrigida:
+`max(uuid)` foi substituído por extração via `array_agg`,
 preservando a verificação de que existe exatamente uma água sem gás na filial.
 Os testes antigos de acesso foram alinhados à regra vigente de funcionários com
 múltiplas filiais, mantendo o bloqueio de funcionário sem vínculo e adicionando

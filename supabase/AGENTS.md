@@ -8,6 +8,9 @@ Leia as regras da raiz e o código da função/política afetada antes de editar
   validações de preço, pagamento, concorrência ou proteção contra duplicidade.
 - Migrations aplicadas são histórico: adicione uma migration para evoluções;
   não reescreva arquivos antigos. Confira dependências e políticas de acesso.
+- Ajustes pontuais de preço e catálogo dependentes da operação ficam em
+  `manual-data/`, com revisão e autorização próprias. Não os copie para o diretório
+  de migrations para forçar execução em deploy. Não mova migrations já aplicadas.
 - Scripts SQL e de integração exigem instância local/ambiente de teste explícito.
   Confirme destino e impacto antes de executar; não use dados reais como fixtures.
 - Testes Vitest da raiz não comprovam migrations ou Edge Functions publicadas.
