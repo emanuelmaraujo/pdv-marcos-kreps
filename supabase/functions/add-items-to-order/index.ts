@@ -66,11 +66,12 @@ serve(async (req) => {
     // 3. Buscar e validar pedido original
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from('orders')
-      .select('id, daily_number, status, payment_status, paid_at, total_amount, type, source, customer_name, customer_phone, notes, branch_id, branches ( code, name, printer_config )')
+      .select('id, daily_number, status, payment_status, paid_at, total_amount, type, source, payment_timing, customer_name, customer_phone, notes, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
     if (orderErr || !order) throw new Error('Pedido não encontrado ou fora das filiais autorizadas.');
+    if (order.payment_timing === "ON_DELIVERY") throw new Error("Itens de pagamento na entrega não podem ser alterados após envio. Contate o cliente para reorganizar o pedido.");
 
     // Regras de bloqueio obrigatórias
     const allowedStatuses = ['AGUARDANDO_PAGAMENTO', 'NA_FILA', 'PRONTO_PARCIAL', 'PRONTO', 'ENTREGUE'];

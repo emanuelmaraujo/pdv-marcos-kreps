@@ -1,3 +1,4 @@
+import { DELIVERY_PAYMENT_LABELS } from "@/lib/checkout/delivery-payment";
 import { Order, PaymentMethod } from "@/types/pdv";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { Button } from "@/components/ui/Button";
@@ -159,7 +160,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
     showChangeMethod, setShowChangeMethod, editingItem, setEditingItem,
     showDispatchForm, setShowDispatchForm,
     courierIdInput, setCourierIdInput, registeredCouriers,
-    onConfirm, onReady, onDeliver, onCancel, onRestoreCancelled,
+    onConfirm, onRequestContactConfirmation, onReady, onDeliver, onCancel, onRestoreCancelled,
     onMarkPayment, onChangeMethod, onReprint, onDispatch, openDispatchForm,
   } = useOrderDetailsActions({ order, onClose, onOrderUpdated });
 
@@ -241,6 +242,19 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
       ) : undefined}
     >
       <div className="flex flex-col gap-4 px-4 py-4 pb-8">
+        {order.payment_timing === "ON_DELIVERY" && (
+          <section className="space-y-2 rounded-2xl border border-amber-500/30 bg-amber-50 p-4 text-sm text-amber-950" aria-label="Pagamento na entrega">
+            <h3 className="font-bold">Pagamento na entrega {isPaid ? "recebido" : "pendente"}</h3>
+            <p>Forma esperada: {order.expected_payment_method ? DELIVERY_PAYMENT_LABELS[order.expected_payment_method] : "Confirmar com o cliente"}.</p>
+            {order.cash_change_for && <p>Troco para {currency.format(Number(order.cash_change_for))}.</p>}
+            <p>Receber o pedido ou marcar como entregue não registra pagamento. Confira o recebimento antes da baixa.</p>
+            {order.status === "AGUARDANDO_CONFIRMACAO" && <>
+              <p>Verifique contato, endereço, itens e total com o cliente antes de confirmar. O telefone informado não comprova posse.</p>
+              <button type="button" disabled={isLoading} onClick={onRequestContactConfirmation} className="min-h-11 rounded-xl border border-amber-700 px-3 font-semibold">Registrar solicitação de confirmação</button>
+            </>}
+          </section>
+        )}
+
 
         {/* Error */}
         {errorMsg && (
@@ -412,7 +426,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
             <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]"><ReceiptText size={13} /> Itens do pedido</p>
             <span className="rounded-full bg-[var(--bg-subtle)] px-2 py-0.5 text-[10px] font-black text-[var(--text-secondary)]">{itemCount || order.items?.length || 0} {itemCount === 1 ? "item" : "itens"}</span>
           </div>
-          <OrderItemsControl order={order} categoryLookup={categoryLookup} onMutated={onOrderUpdated} onEditItem={setEditingItem} />
+          <OrderItemsControl order={order} categoryLookup={categoryLookup} onMutated={onOrderUpdated} onEditItem={order.payment_timing === "ON_DELIVERY" ? undefined : setEditingItem} />
 
           {/* Financial summary */}
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] shadow-sm">

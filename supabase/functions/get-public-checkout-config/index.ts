@@ -103,7 +103,7 @@ serve(async (req) => {
     if (branchSlug) {
       const { data } = await supabaseAdmin
         .from("branches")
-        .select("id, code, name, slug, active, ordering_enabled, ordering_start_time, ordering_end_time, packing_fee, delivery_enabled, default_delivery_fee")
+        .select("id, code, name, slug, active, ordering_enabled, ordering_start_time, ordering_end_time, packing_fee, delivery_enabled, default_delivery_fee, address")
         .eq("slug", branchSlug)
         .maybeSingle();
       branch = data;
@@ -162,6 +162,12 @@ serve(async (req) => {
     const branchFee = branch ? Number(branch.packing_fee ?? 0) : 0;
     const packingFee = branchFee > 0 ? branchFee : settingNumber(settings.packaging_fee, 0);
 
+    const { data: codPolicy } = branch ? await supabaseAdmin.from("branch_cod_policies")
+      .select("enabled, methods, operational_approved_at, max_amount").eq("branch_id", branch.id).maybeSingle()
+      : { data: null };
+    const codEnabled = branch?.delivery_enabled === true && codPolicy?.enabled === true
+      && !!codPolicy.operational_approved_at && Number(codPolicy.max_amount)>0;
+
     return jsonResponse(req, {
       success: true,
       branch_not_found: branchNotFound,
@@ -170,6 +176,9 @@ serve(async (req) => {
         code: branch.code,
         name: branch.name,
         slug: branch.slug,
+        address: branch.address ?? null,
+        cod_enabled: codEnabled,
+        cod_methods: codEnabled ? codPolicy.methods : [],
         delivery_enabled: branch.delivery_enabled === true,
         default_delivery_fee: Number(branch.default_delivery_fee ?? 0),
       } : null,

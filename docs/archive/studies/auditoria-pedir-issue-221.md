@@ -11,6 +11,7 @@ Diagnóstico local e proposta para revisão, **não aprovação de redesign nem 
 concluída de COD**. O usuário autorizou pagamentos e migrations locais após o bloqueio
 inicial. Continuam proibidos serviços reais, dados reais, produção, merge e deploy.
 A issue exige proposta antes de mudança visual ampla; esta entrega prepara essa decisão.
+Foram implementadas apenas correções pontuais de custos, texto de modalidade e overflow, descritas abaixo.
 
 O [protótipo navegável](../../evidence/issue-221/proposta.html) usa dados sintéticos,
 sem chamadas de rede, sem criar pedidos e sem coletar pagamentos. É ilustrativo:
@@ -171,3 +172,77 @@ A matriz completa de Fase 0 inclui aberto/fechado, filiais, CEP, cupom, recusa d
 conexão lenta, teclado e acompanhamento. Capturas de fixtures cobrem apenas os estados
 explicitamente relacionados nas evidências locais; não comprovam gateway, impressão,
 WhatsApp, autenticação ou ambiente publicado.
+
+
+## Correções pontuais implementadas localmente
+
+- `CheckoutSummary.tsx`: resumo compartilhado em REVIEW e INFO; linhas explícitas
+  de itens/adicionais, embalagem, entrega e cupom; total parcial enquanto o endereço
+  não está validado. Não altera a criação do pedido, precificação ou cobrança.
+- `page.tsx`: usa o resumo nas duas telas e ajusta o texto de WhatsApp conforme
+  a modalidade. Telefone continua obrigatório apenas para entrega.
+- `ProgressSteps.tsx`: permite encolhimento dos itens; em mobile mantém o nome da
+  etapa atual e as demais etapas acessíveis aos leitores de tela. Marca a atual
+  com `aria-current="step"`.
+- O repro anterior registrou documento com 496 px nos viewports 360, 390 e 430;
+  os de 768/1280/1440 já cabiam. O mesmo repro verifica a correção localmente.
+
+Essas correções não constituem redesign amplo nem conclusão da issue.
+Idempotência transacional, COD, instrumentação e alterações de vitrine permanecem
+pendentes. Nenhuma migration ou Edge Function foi alterada nesta entrega.
+
+### Verificações
+
+- PASS: 74 testes existentes de pagamento, acompanhamento, identidade, entrega
+  e embalagem (cinco arquivos), executados antes das correções.
+- PASS: sete testes novos do resumo, cobrindo VIAGEM com/sem taxa, frete e desconto,
+  endereço pendente, região bloqueada e frete grátis por cupom.
+- PASS: 81 testes da área no diff com as correções (seis arquivos).
+- PASS: typecheck, lint focado e verificação de links da documentação.
+- PASS: repro de navegador nas seis larguras; documento cabe no viewport e resumo final discrimina embalagem.
+- Comparativos do aplicativo: [antes](../../evidence/issue-221/antes-dados-viagem-360.png),
+  [depois](../../evidence/issue-221/depois-dados-viagem-360.png) e
+  [resumo final visível](../../evidence/issue-221/depois-resumo-final-360.png).
+- [Roteiro reproduzível e limites](../../evidence/issue-221/README.md).
+
+As capturas existentes cobrem MENU, produto, REVIEW e INFO/VIAGEM nas seis larguras;
+não cobrem a matriz completa de estados da issue. CEP, cupons e falhas de pagamento
+possuem testes de partes do fluxo, mas não foram demonstrados visualmente nesta auditoria.
+Teclado físico/virtual, pagamento, acompanhamento completo, banco, impressão e
+serviços reais não foram validados. Build de produção e teste com usuários não executados.
+
+Comandos efetivamente executados para as correções:
+
+```bash
+npm test -- src/app/pedir/_components src/lib/utils/packaging-fee.test.ts src/lib/utils/delivery.test.ts src/lib/utils/customer-identity.test.ts
+npm run typecheck
+npx eslint src/app/pedir/page.tsx src/app/pedir/_components/ProgressSteps.tsx src/app/pedir/_components/CheckoutSummary.tsx src/app/pedir/_components/CheckoutSummary.test.tsx docs/evidence/issue-221/*.mjs
+npm run docs:check
+git diff --check
+```
+
+O teste direcionado passou com **81 testes em seis arquivos**. Lint focado não
+emitiu erros ou avisos. O verificador de documentação analisou 40 arquivos Markdown
+sem links locais quebrados. A primeira instalação omitiu dependências de desenvolvimento;
+foi repetida com `npm ci --include=dev --ignore-scripts`, sem alterar lockfile.
+Uma tentativa de lint foi interrompida (exit 143), e a execução completa seguinte
+passou. Capturas interrompidas durante recompilação foram refeitas com servidor
+estável; não contam como validação aprovada.
+
+O roteiro de navegador foi executado com `PLAYWRIGHT_MODULE` apontando ao
+`index.mjs` do Playwright disponível no ambiente; `AUDIT_PHASE=after` verifica
+largura e presença da embalagem no último resumo. O roteiro original CommonJS
+foi convertido para ESM para respeitar o lint; a execução ESM validou as correções.
+
+| Viewport | Largura do documento antes | Depois |
+| --- | --- | --- |
+| 360 | 496 | 360 |
+| 390 | 496 | 390 |
+| 430 | 496 | 430 |
+| 768 | 768 | 768 |
+| 1280 | 1280 | 1280 |
+| 1440 | 1440 | 1440 |
+
+Os dados brutos estão nos arquivos `antes-auditoria-local.json` e
+`depois-auditoria-local.json` junto às capturas; o critério anterior falhou
+explicitamente com “Checkout ultrapassa largura do viewport” antes da correção.

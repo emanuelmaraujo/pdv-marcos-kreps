@@ -171,6 +171,11 @@ export type AddItemsToOrderResponse = {
 
 export type CreatePublicOrderPayload = {
   order_type: 'BALCAO' | 'VIAGEM' | 'ENTREGA';
+  analytics_consent?: boolean;
+  analytics_context?: { device: string; source: string };
+  payment_timing?: 'ONLINE' | 'ON_DELIVERY';
+  expected_payment_method?: 'CASH' | 'PIX' | 'DEBIT_CARD' | 'CREDIT_CARD';
+  cash_change_for?: number;
   customer_name?: string;
   customer_phone?: string;
   customer_email?: string;
@@ -222,6 +227,9 @@ export type CreatePublicOrderResponse = {
     status: OrderStatus;
     payment_status: string;
     payment_method_code: string;
+    payment_timing?: "ONLINE" | "ON_DELIVERY";
+    expected_payment_method?: "CASH" | "PIX" | "DEBIT_CARD" | "CREDIT_CARD" | null;
+    cash_change_for?: number | null;
   };
 };
 
@@ -278,6 +286,9 @@ export type PublicOrderStatusResponse = {
     status: OrderStatus;
     payment_status: string;
     payment_method: PaymentMethod;
+    payment_timing?: "ONLINE" | "ON_DELIVERY";
+    expected_payment_method?: "CASH" | "PIX" | "DEBIT_CARD" | "CREDIT_CARD" | null;
+    cash_change_for?: number | null;
     total: number;
     customer_name?: string;
     created_at: string;
@@ -397,6 +408,8 @@ export type PublicCheckoutConfigResponse = {
   branch?: {
     id: string; code: string; name: string; slug: string;
     delivery_enabled?: boolean; default_delivery_fee?: number;
+    address?: string | null; cod_enabled?: boolean;
+    cod_methods?: Array<"CASH" | "PIX" | "DEBIT_CARD" | "CREDIT_CARD">;
   } | null;
   settings: {
     public_ordering_enabled: string;
@@ -410,6 +423,7 @@ export type PublicCheckoutConfigResponse = {
 };
 
 export const pdvApi = {
+  recordPublicFunnelEvent: (event: import("../../../supabase/functions/_shared/public-funnel").FunnelInput) => invokeEdgeFunction("record-public-funnel-event",event),
   getOrder: async (id: string) => {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -683,8 +697,8 @@ export const pdvApi = {
       { 'x-idempotency-key': payload.idempotency_key },
     ),
 
-  confirmOrder: (orderId: string) =>
-    invokeEdgeFunction('confirm-order', { order_id: orderId }),
+  confirmOrder: (orderId: string, cod?: { action?: 'CONFIRM' | 'REJECT' | 'REQUEST_CONFIRMATION'; contactConfirmed?: boolean; reason?: string }) =>
+    invokeEdgeFunction('confirm-order', { order_id: orderId, cod_action: cod?.action, contact_confirmed: cod?.contactConfirmed, cod_reason: cod?.reason }),
 
   markPayment: (payload: {
     orderId: string;
@@ -694,6 +708,7 @@ export const pdvApi = {
     ifoodChargedAmount?: number;
     notes?: string;
     orderItemIds?: string[];
+    receivedConfirmed?: boolean;
   }) =>
     invokeEdgeFunction('mark-payment', {
       order_id: payload.orderId,
@@ -703,6 +718,7 @@ export const pdvApi = {
       ifood_charged_amount: payload.ifoodChargedAmount,
       notes: payload.notes,
       order_item_ids: payload.orderItemIds,
+      received_confirmed: payload.receivedConfirmed,
     }),
 
   updateOrderStatus: (payload: { orderId: string; newStatus: OrderStatus; reason?: string; forceDelivery?: boolean }) =>

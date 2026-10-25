@@ -1,0 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const out = path.dirname(fileURLToPath(import.meta.url));
+(async()=>{const b=await chromium.launch({headless:true});for(const width of [390,1440]){const p=await b.newPage({viewport:{width,height:900}});await p.goto('file://'+path.join(out,'proposta.html'));for(const [name,label] of [['menu','Cardápio'],['checkout','Revisão e dados'],['cod','Confirmação COD']]){await p.getByRole('button',{name:label,exact:true}).click();await p.screenshot({path:path.join(out,`proposta-${name}-${width}.png`),fullPage:true});if(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('Overflow '+width+' '+name)}await p.close()}await b.close();console.log('Protótipo: 6 capturas, navegação e largura verificadas (390/1440).')})().catch(e=>{console.error(e);process.exit(1)});

@@ -63,7 +63,7 @@ serve(async (req) => {
       throw new Error("Role não autorizada.");
     }
 
-    const { order_id, payment_method, payment_status, amount, notes, order_item_ids, ifood_charged_amount } = await req.json();
+    const { order_id, payment_method, payment_status, amount, notes, order_item_ids, ifood_charged_amount, received_confirmed } = await req.json();
 
     if (!order_id) throw new Error("order_id ausente.");
     if (!VALID_STATUSES.includes(payment_status)) throw new Error("payment_status inválido.");
@@ -80,10 +80,14 @@ serve(async (req) => {
     // que garante que ATTENDANT só paga pedidos da própria filial.
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
-      .select("id, branch_id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at")
+      .select("id, branch_id, daily_number, status, type, customer_name, customer_phone, notes, discount_amount, total_amount, packing_fee, payment_status, payment_method, paid_at, payment_timing")
       .eq("id", order_id)
       .single();
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
+
+    if (order.payment_timing === "ON_DELIVERY" && payment_status === "PAID" && received_confirmed !== true) {
+      throw new Error("Confirme o recebimento efetivo antes de registrar o pagamento na entrega.");
+    }
 
     // Toda a regra financeira (seleção de itens, checagem de duplicidade,
     // soma de totais, taxa de embalagem/entrega, bate-confere de amount e o

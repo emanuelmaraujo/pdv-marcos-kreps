@@ -7,13 +7,13 @@ import { CheckCircle2 } from "lucide-react";
 export function ProgressSteps({ current }: { current: 0 | 1 | 2 | 3 | 4 }) {
   const steps = ["Cardápio", "Itens", "Dados", "Pagamento", "Pronto"];
   return (
-    <nav aria-label="Progresso do pedido" className="flex items-center gap-2">
+    <nav aria-label="Progresso do pedido" className="flex items-center gap-1 sm:gap-2">
       {steps.map((label, i) => {
         const isDone = i < current;
         const isCurrent = i === current;
         return (
-          <div key={label} className="flex flex-1 items-center gap-2">
-            <div className="flex items-center gap-2 min-w-0">
+          <div key={label} className={`flex min-w-0 items-center gap-1 sm:gap-2 ${isCurrent ? "flex-[2] sm:flex-1" : "flex-1"}`} aria-current={isCurrent ? "step" : undefined}>
+            <div className="flex min-w-0 items-center gap-1 sm:gap-2">
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-caption font-semibold ${
                   isDone
@@ -26,7 +26,8 @@ export function ProgressSteps({ current }: { current: 0 | 1 | 2 | 3 | 4 }) {
                 {isDone ? <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} /> : i + 1}
               </span>
               <span
-                className={`text-xs truncate ${
+                title={label}
+                className={`text-xs ${isCurrent ? "truncate" : "sr-only sm:not-sr-only sm:truncate"} ${
                   isCurrent
                     ? "font-semibold text-[var(--text-primary)]"
                     : isDone

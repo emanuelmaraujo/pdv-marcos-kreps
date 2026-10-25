@@ -55,17 +55,34 @@ serve(async (req) => {
       throw new Error('Role não autorizada. Apenas ADMIN e ATTENDANT podem confirmar pedidos.');
     }
 
-    const { order_id } = await req.json();
+    const { order_id, contact_confirmed, cod_action, cod_reason } = await req.json();
     if (!order_id) throw new Error('order_id não fornecido no payload.');
 
     // 3. Busca o Pedido (inclui printer_config da filial para override por setor)
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from('orders')
-      .select('id, daily_number, status, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, created_at, branch_id, branches ( code, name, printer_config )')
+      .select('id, daily_number, status, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, payment_timing, expected_payment_method, cash_change_for, cod_contact_verified_at, confirmed_at, created_at, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 
     if (orderErr || !order) throw new Error('Pedido inexistente ou fora das filiais autorizadas.');
+
+    const isCod = order.payment_timing === "ON_DELIVERY";
+    const codAction = cod_action ?? "CONFIRM";
+    const reviewCod = async (jobs: unknown[]) => {
+      const { data, error } = await supabaseAdmin.rpc("review_delivery_order_transactional", {
+        p_order_id: order.id, p_actor_id: user.id, p_action: codAction,
+        p_contact_confirmed: contact_confirmed === true,
+        p_reason: typeof cod_reason === "string" ? cod_reason.slice(0,500) : null,
+        p_jobs: jobs,
+      });
+      if (error) throw new Error(error.message);
+      return new Response(JSON.stringify({ ...data, order: {
+        order_id: order.id, daily_number: order.daily_number, status: data.status,
+      } }), { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 200 });
+    };
+    if (isCod && (codAction !== "CONFIRM" || order.confirmed_at)) return await reviewCod([]);
+    if (isCod && contact_confirmed !== true) throw new Error("Confirme contato e endereço com o cliente antes de liberar a produção.");
 
     // Regras de negócio do status
     if (order.status === 'CANCELADO') throw new Error('Pedido cancelado.');
@@ -222,6 +239,9 @@ serve(async (req) => {
       content = buildCustomerReceipt(order, items, receiptOpts);
       printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'CUSTOMER', content: { text: content } });
     }
+
+    // COD: confirmação, auditoria e jobs são atômicos; retries não reimprimem.
+    if (isCod) return await reviewCod(printerJobsToInsert);
 
     // 5. Inserir os printer_jobs se a array não estiver vazia
     if (printerJobsToInsert.length > 0) {

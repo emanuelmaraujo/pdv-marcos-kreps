@@ -219,6 +219,10 @@ export function buildCustomerReceipt(order: any, items: any[], options: ReceiptO
   if (settingNumber(order?.delivery_fee) > 0) content += `Taxa entrega: ${formatBRL(order.delivery_fee)}\n`;
   content += `TOTAL: ${formatBRL(order?.total_amount)}\n`;
   content += `Pagamento: ${text(order?.payment_status)}\n`;
+  if (order?.payment_timing === 'ON_DELIVERY') {
+    content += `COBRAR NA ENTREGA: ${text(order.expected_payment_method)}\n`;
+    if (order.cash_change_for) content += `Troco para: ${formatBRL(order.cash_change_for)}\n`;
+  }
   if (text(order?.payment_method) && text(order?.payment_method) !== "PENDING") {
     content += `Forma: ${text(order.payment_method)}\n`;
   }

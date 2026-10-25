@@ -263,14 +263,24 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
   // Polling automático a cada 30s — para nos estados terminais.
   useEffect(() => {
     const status = statusData?.order.status;
-    if (!status || ["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(status)) return;
+    const awaitingCodReceipt = statusData?.order.payment_timing === "ON_DELIVERY" && !["PAID","REFUNDED"].includes(statusData?.order.payment_status ?? "");
+    if (!status || ["CANCELADO", "EXPIRADO"].includes(status) || (status === "ENTREGUE" && !awaitingCodReceipt)) return;
     const interval = window.setInterval(() => fetchStatus(false), 30_000);
     return () => window.clearInterval(interval);
-  }, [fetchStatus, statusData?.order.status]);
+  }, [fetchStatus, statusData?.order.status, statusData?.order.payment_timing, statusData?.order.payment_status]);
 
   const order = statusData?.order;
   const stateKey = useMemo(() => (order ? statusToStateKey(order.status) : null), [order]);
-  const cfg = stateKey ? STATE_CONFIG[stateKey] : null;
+  const isCod = order?.payment_timing === "ON_DELIVERY";
+  const cfg = isCod && order?.status === "AGUARDANDO_CONFIRMACAO" ? {
+    pill: { label: "Aguardando confirmação da unidade", tone: "neutral-translucent" as const, pulsing: false },
+    hint: "Pedido recebido. A unidade precisa confirmar contato, endereço e disponibilidade antes do preparo.", activeStepIndex: 0,
+  } : stateKey ? STATE_CONFIG[stateKey] : null;
+  const steps = isCod ? [
+    { icon: CircleCheck, label: "Pedido recebido", subtitle: "Aguardando análise da unidade" },
+    { icon: CircleCheck, label: "Confirmação da unidade", subtitle: "Pagamento permanece pendente até o recebimento" },
+    ...STEPS.slice(2),
+  ] : STEPS;
   const displayNumber = order ? String(order.daily_number).padStart(3, "0") : "---";
 
   // Contagem de itens prontos / total (para "X de Y prontos")
@@ -375,22 +385,27 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
               </p>
             </section>
 
+            {isCod && <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-sm" aria-label="Pagamento na entrega">
+              <h2 className="font-semibold">{order?.payment_status === "PAID" ? "Pago" : order?.payment_status === "PARTIAL" ? "Pagamento na entrega parcialmente recebido" : "Pagamento na entrega pendente"}</h2>
+              <p className="mt-1 text-[var(--text-secondary)]">O status financeiro só muda após a unidade registrar o recebimento efetivo.</p>
+            </section>}
+
             {/* ── 3. Andamento (timeline vertical) ─────────────────── */}
             <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
               <div className="flex items-baseline justify-between mb-4">
                 <h2 className="text-caption font-semibold text-[var(--text-muted)]">Andamento</h2>
                 {cfg.activeStepIndex >= 0 && (
                   <span className="text-caption text-[var(--text-muted)]">
-                    Etapa {cfg.activeStepIndex + 1} de {STEPS.length}
+                    Etapa {cfg.activeStepIndex + 1} de {steps.length}
                   </span>
                 )}
               </div>
 
               <ol className="space-y-0">
-                {STEPS.map((step, idx) => {
+                {steps.map((step, idx) => {
                   const isDone = cfg.activeStepIndex > idx;
                   const isActive = cfg.activeStepIndex === idx;
-                  const isLast = idx === STEPS.length - 1;
+                  const isLast = idx === steps.length - 1;
                   const Icon = step.icon;
 
                   // Pulse só nos estados de ação pendente (awaiting payment + in prep)

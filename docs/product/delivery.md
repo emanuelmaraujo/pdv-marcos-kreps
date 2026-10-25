@@ -1,5 +1,24 @@
 # Feature: Delivery (Entrega)
 
+## Resumo público antes do pagamento
+
+No checkout público, as telas de revisão e de dados mostram a mesma prévia:
+itens e adicionais, embalagem, entrega, desconto vigente e total estimado.
+Em VIAGEM, a embalagem aparece como linha própria mesmo quando não há cobrança;
+a regra pública continua sendo uma taxa por pedido, conforme configuração da filial.
+O cálculo por item do PDV interno não se aplica a esse fluxo.
+
+Em ENTREGA, antes de validar endereço, a taxa aparece “a calcular” e o total é
+identificado como parcial. Região fora de atendimento recebe aviso específico.
+O servidor continua validando preços, descontos e disponibilidade ao enviar o pedido,
+antes do pagamento. O WhatsApp é obrigatório para entrega e opcional nas outras
+modalidades; não é necessário criar conta.
+
+Pagamento na entrega (COD) ainda não foi implementado ou habilitado nesta etapa.
+Veja o [diagnóstico e proposta da issue #221](../archive/studies/auditoria-pedir-issue-221.md)
+para riscos transacionais e decisões operacionais pendentes.
+
+
 > Organização revisada em 2026-10-24. O conteúdo consolida entregas de fases anteriores;
 > afirmações de produção e testes abaixo são registros dessas fases, sem nova validação operacional nesta revisão.
 
