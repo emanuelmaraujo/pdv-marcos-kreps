@@ -16,6 +16,8 @@ Para os guias mantidos, volte ao [índice principal](../README.md).
 
 ## Estudos
 
+- [Cardápio e checkout público — diagnóstico da issue #221](studies/auditoria-pedir-issue-221.md)
+
 - [Configurações, usuários, filiais e taxas](studies/estudo-configuracoes-usuarios-filiais-taxas.md)
 - [Estética de checkout e pedidos](studies/estudo-estetico-checkout-pedidos.md)
 - [Pedidos e consulta de cliente mobile](studies/estudo-mobile-first-pedidos-e-consulta-cliente.md)
