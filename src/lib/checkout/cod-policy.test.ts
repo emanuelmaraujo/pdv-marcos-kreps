@@ -10,6 +10,9 @@ describe("configuração de pagamento na entrega no painel", () => {
     const policy = parseCodPolicy({ enabled: false, methods: [], max_amount: null, max_pending: 20, confirmation_minutes: 30 });
     expect(codPolicyToForm(policy)).toEqual({ enabled: false, methods: [], maxAmount: "", maxPending: "20", confirmationMinutes: "30" });
   });
+  it("mostra o valor máximo com centavos", () => {
+    expect(codPolicyToForm(parseCodPolicy({ max_amount: 220.5 })).maxAmount).toBe("220,50");
+  });
   it("ignora formas desconhecidas vindas do servidor", () => {
     expect(parseCodPolicy({ methods: ["CASH", "BOLETO"] }).methods).toEqual(["CASH"]);
   });

@@ -71,7 +71,7 @@ export function CodPolicyCard({ branchId, deliveryEnabled }: { branchId: string;
           <Toggle
             label="Aceitar pagamento na entrega no pedido online"
             desc={policy.enabled && policy.operational_approved_at
-              ? `Ativo desde ${dateTime.format(new Date(policy.operational_approved_at))}.`
+              ? `Ativo. Última aprovação: ${dateTime.format(new Date(policy.operational_approved_at))}.`
               : "Desligado: o checkout público oferece só Pix e cartão online."}
             checked={form.enabled}
             onChange={(enabled) => update({ enabled })}
@@ -103,9 +103,10 @@ export function CodPolicyCard({ branchId, deliveryEnabled }: { branchId: string;
             </Field>
           </div>
           <p className="text-[11px] leading-relaxed text-[var(--text-secondary)]">
-            Pedidos acima do valor máximo ou além do limite em espera recebem só pagamento online. Sem confirmação no prazo, o pedido expira sem produção.
+            Pedidos acima do valor máximo ou além do limite em espera são recusados no envio, com orientação para pagar online. Sem confirmação no prazo, o pedido expira sem produção.
             {policy.pending_confirmation > 0 && ` Agora: ${policy.pending_confirmation} aguardando confirmação.`}
           </p>
+          <p className="text-[11px] font-semibold text-[var(--text-secondary)]">Esta seção tem salvamento próprio: “Salvar alterações” da filial não altera o pagamento na entrega.</p>
           {message && (
             <p role={message.tone === "error" ? "alert" : "status"} className={`text-xs font-semibold ${message.tone === "error" ? "text-[var(--status-danger)]" : "text-[var(--status-success)]"}`}>
               {message.text}

@@ -46,10 +46,14 @@ serve(async (req) => {
 
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
-      .select("id, branch_id, payment_status, status")
+      .select("id, branch_id, payment_status, status, payment_timing")
       .eq("id", order_id)
       .single();
     if (orderErr || !order) throw new Error("Pedido não encontrado ou sem permissão.");
+    // Recebimento presencial só pode ser reclassificado entre meios aceitos na entrega.
+    if (order.payment_timing === "ON_DELIVERY" && !["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD"].includes(payment_method)) {
+      throw new Error("Pagamento na entrega aceita apenas dinheiro, Pix ou cartão.");
+    }
 
     if (!["PAID", "COURTESY", "PARTIAL"].includes(order.payment_status)) {
       throw new Error("Só é possível alterar o método de pedidos pagos.");

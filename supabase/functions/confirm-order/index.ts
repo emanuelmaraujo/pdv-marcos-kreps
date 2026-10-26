@@ -77,10 +77,19 @@ serve(async (req) => {
         p_jobs: jobs,
       });
       if (error) throw new Error(error.message);
+      // Mesmo aviso do fluxo online quando o pedido entra em produção; retry não reenvia.
+      if (codAction === "CONFIRM" && !data?.replayed) {
+        await enqueueWhatsAppMessage(supabaseAdmin, {
+          orderId: order.id, branchId: order.branch_id, eventType: 'order_received',
+          phone: order.customer_phone, customerName: order.customer_name, dailyNumber: order.daily_number,
+          branchCode: (order as any).branches?.code ?? null, branchName: (order as any).branches?.name ?? null,
+        });
+      }
       return new Response(JSON.stringify({ ...data, order: {
         order_id: order.id, daily_number: order.daily_number, status: data.status,
       } }), { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 200 });
     };
+    if (!isCod && codAction !== "CONFIRM") throw new Error("Ação disponível apenas para pagamento na entrega.");
     if (isCod && (codAction !== "CONFIRM" || order.confirmed_at)) return await reviewCod([]);
     if (isCod && contact_confirmed !== true) throw new Error("Confirme contato e endereço com o cliente antes de liberar a produção.");
 

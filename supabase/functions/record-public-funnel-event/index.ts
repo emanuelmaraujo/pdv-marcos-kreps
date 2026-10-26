@@ -20,8 +20,13 @@ serve(async req => {
     const {data:branch}=await db.from("branches").select("id").eq("slug",event.branch_slug).eq("active",true).maybeSingle();
     if(!branch)return reply(400,false);
     if(event.product_id){const {data:product}=await db.from("products").select("id").eq("id",event.product_id).eq("branch_id",branch.id).maybeSingle();if(!product)return reply(400,false);}
+    // Id derivado no servidor: o navegador não consegue ocupar o id determinístico de eventos SERVER.
+    const hashed=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(`client:${event.event_id}`))).slice(0,16);
+    hashed[6]=(hashed[6]&0x0f)|0x40; hashed[8]=(hashed[8]&0x3f)|0x80;
+    const hex=Array.from(hashed,value=>value.toString(16).padStart(2,"0")).join("");
+    const eventId=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
     const {error}=await db.from("public_funnel_events").insert({
-      event_id:event.event_id,event_name:event.event_name,branch_id:branch.id,order_type:event.order_type,
+      event_id:eventId,event_name:event.event_name,branch_id:branch.id,order_type:event.order_type,
       device:event.device,source:event.source,error_category:event.error_category??"NONE",
       payment_option:event.payment_option??null,product_id:event.product_id??null,origin:"CLIENT",
     });

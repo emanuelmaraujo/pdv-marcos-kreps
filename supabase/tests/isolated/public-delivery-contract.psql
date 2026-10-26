@@ -91,6 +91,9 @@ BEGIN
   PERFORM public.review_delivery_order_transactional(v_id,v_actor,'CONFIRM',true,NULL,'[{"sector":"KITCHEN","content":{"text":"fixture"}}]');
   PERFORM pg_temp.assert_221((SELECT count(*) FROM public.printer_jobs WHERE order_id=v_id)=1,'retry de confirmação não reimprime');
   PERFORM pg_temp.assert_221((SELECT payment_status='PENDING' AND status='NA_FILA' FROM public.orders WHERE id=v_id),'confirmar não paga');
+  PERFORM set_config('request.jwt.claims','{"role":"authenticated"}',true);
+  PERFORM pg_temp.reject_221(format('UPDATE public.order_items SET status=''CANCELLED'' WHERE order_id=%L',v_id),'%cancelar item isolado%');
+  PERFORM set_config('request.jwt.claims','',true);
   -- Entregue não implica pago. Depois a equipe pode receber o valor.
   UPDATE public.order_items SET status='DELIVERED',delivered_at=now() WHERE order_id=v_id;
   PERFORM pg_temp.assert_221((SELECT payment_status='PENDING' FROM public.orders WHERE id=v_id),'entregue continua pendente');
@@ -107,6 +110,9 @@ BEGIN
   PERFORM pg_temp.assert_221((SELECT count(*) FROM public.payments WHERE order_id=v_id)=2,'retry não registra pagamento duplicado');
 
   v_result:=public.create_public_order_transactional(public.test_221_payload('cod-reject','ON_DELIVERY'));v_other:=(v_result->>'order_id')::uuid;
+  UPDATE public.orders SET cod_expires_at=now()-interval '1 second' WHERE id=v_other;
+  PERFORM pg_temp.reject_221(format('SELECT public.review_delivery_order_transactional(%L,%L,''CONFIRM'',true)',v_other,v_actor),'%fora do prazo%');
+  -- Rejeição após o prazo e antes da varredura continua permitida.
   PERFORM public.review_delivery_order_transactional(v_other,v_actor,'REJECT',false,'Cliente não confirmou endereço');
   PERFORM pg_temp.assert_221((SELECT status='CANCELADO' FROM public.orders WHERE id=v_other),'rejeição sem produção');
   v_result:=public.create_public_order_transactional(public.test_221_payload('cod-expire','ON_DELIVERY'));v_other:=(v_result->>'order_id')::uuid;

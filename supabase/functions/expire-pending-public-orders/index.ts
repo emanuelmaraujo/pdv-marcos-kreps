@@ -42,7 +42,8 @@ serve(async (req) => {
 
     await supabaseAdmin.rpc("purge_public_funnel_events");
     const { data: codExpired, error: codErr } = await supabaseAdmin.rpc("expire_unconfirmed_delivery_orders");
-    if (codErr) throw new Error("Erro ao expirar confirmações pendentes.");
+    // Falha no COD não pode impedir a expiração dos pedidos online abaixo.
+    if (codErr) console.error("[expire-pending-public-orders] cod expiration failed", { message: codErr.message });
 
     const { data: candidates, error: candidatesErr } = await supabaseAdmin
       .from("orders")

@@ -707,6 +707,8 @@ serve(async (req) => {
       "create_public_order_transactional",
       { p_payload: orderPayload },
     );
+    // Troco é dado do cliente e pode ser corrigido; os demais motivos não revelam limites.
+    if (rpcErr && /troco inválido/i.test(rpcErr.message ?? "")) throw new Error("Valor para troco inválido: informe um valor igual ou maior que o total do pedido.");
     if (rpcErr) throw new Error(paymentOption.timing === "ON_DELIVERY"
       ? "Pagamento na entrega indisponível para este pedido. Escolha pagamento online ou entre em contato com a unidade."
       : "Erro ao criar pedido. Tente novamente com os mesmos dados.");

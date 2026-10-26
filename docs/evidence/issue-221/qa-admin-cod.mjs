@@ -40,11 +40,18 @@ try {
     });
     const page = await context.newPage();
     page.on('dialog', (dialog) => dialog.accept());
-    await page.goto(`${app}/login`, { waitUntil: 'domcontentloaded', timeout: 240000 });
+    const diagnostics = [];
+    page.on('console', (msg) => { if (msg.type() === 'error') diagnostics.push(`console: ${msg.text().slice(0, 200)}`); });
+    page.on('requestfailed', (req) => diagnostics.push(`falhou: ${req.url().slice(0, 120)} ${req.failure()?.errorText}`));
+    // Em modo dev, clicar antes da hidratação faria submit nativo do formulário.
+    await page.goto(`${app}/login`, { waitUntil: 'networkidle', timeout: 240000 });
     await page.locator('#login-email').fill('e2e-admin@example.invalid');
     await page.locator('#login-password').fill('local-e2e-only-221');
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
-    await page.waitForURL(/\/app/, { timeout: 120000 });
+    await page.waitForURL(/\/app/, { timeout: 120000 }).catch(async (error) => {
+      console.error((await page.locator('body').innerText()).slice(0, 600), diagnostics.slice(-10).join('\n'));
+      throw error;
+    });
     await page.goto(`${app}/app/configuracoes/filiais/${branch.id}?tab=entrega`, { waitUntil: 'domcontentloaded', timeout: 240000 });
     const card = page.locator('div', { has: page.getByText('Pagamento na entrega', { exact: true }) }).filter({ has: page.getByRole('button', { name: 'Salvar pagamento na entrega' }) }).last();
     await card.getByRole('button', { name: 'Salvar pagamento na entrega' }).waitFor({ timeout: 240000 });
@@ -73,6 +80,7 @@ try {
       const config = await fetch(`${api}/functions/v1/get-public-checkout-config`, { method: 'POST', headers: { apikey: anon, Authorization: `Bearer ${anon}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ branch_slug: 'e2e-cod' }) }).then((r) => r.json());
       assert.equal(config.branch?.cod_enabled, false, 'checkout para de oferecer COD após desligar no painel');
     }
+    if (diagnostics.length) console.log(`Diagnóstico ${width}px:\n${diagnostics.join('\n')}`);
     console.log(`PASS: painel COD em ${width}px (validação, salvar, aprovação carimbada${width === 1440 ? ', desligar' : ''}).`);
     await context.close();
   }

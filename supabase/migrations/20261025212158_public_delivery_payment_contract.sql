@@ -216,7 +216,8 @@ BEGIN
       AND v_order.status IN ('NA_FILA','PRONTO','PRONTO_PARCIAL','SAIU_PARA_ENTREGA','ENTREGUE') THEN
     RETURN jsonb_build_object('success',true,'replayed',true,'status',v_order.status);
   END IF;
-  IF v_order.status <> 'AGUARDANDO_CONFIRMACAO' OR v_order.cod_expires_at <= now() THEN
+  -- Rejeitar continua possível entre o fim do prazo e a varredura de expiração.
+  IF v_order.status <> 'AGUARDANDO_CONFIRMACAO' OR (p_action <> 'REJECT' AND v_order.cod_expires_at <= now()) THEN
     RAISE EXCEPTION 'Pedido fora do prazo de confirmação ou já encerrado.';
   END IF;
   IF p_action='CONFIRM' THEN
@@ -285,6 +286,13 @@ BEGIN
       END IF;
       IF TG_TABLE_NAME='order_items' THEN
         IF TG_OP='INSERT' THEN RAISE EXCEPTION 'Não é possível adicionar itens ao pedido na entrega já enviado.'; END IF;
+        -- Cancelar item isolado deixaria total_amount cobrando o que não foi entregue.
+        -- A API direta da equipe não cancela item; o pedido inteiro é cancelado pelo backend.
+        IF NEW.status='CANCELLED' AND OLD.status IS DISTINCT FROM 'CANCELLED'
+           AND COALESCE(current_setting('request.jwt.claim.role',true),
+                 NULLIF(current_setting('request.jwt.claims',true),'')::jsonb->>'role')='authenticated' THEN
+          RAISE EXCEPTION 'Pedido com pagamento na entrega não permite cancelar item isolado.';
+        END IF;
         IF NEW.quantity IS DISTINCT FROM OLD.quantity OR NEW.total_price IS DISTINCT FROM OLD.total_price
            OR NEW.product_id IS DISTINCT FROM OLD.product_id OR NEW.product_price_snapshot IS DISTINCT FROM OLD.product_price_snapshot THEN
           RAISE EXCEPTION 'Itens de pagamento na entrega não podem ser alterados após envio.';

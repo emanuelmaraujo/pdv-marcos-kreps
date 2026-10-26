@@ -609,7 +609,7 @@ export function OrderDetailsSheet({ order, isOpen, onClose, onOrderUpdated, cate
                 <h4 className="text-sm font-black uppercase tracking-widest text-[var(--text-primary)]">Forma de Pagamento</h4>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                {(["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD", "COURTESY"] as PaymentMethod[]).map((method) => {
+                {((order.payment_timing === "ON_DELIVERY" ? ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD"] : ["PIX", "CASH", "DEBIT_CARD", "CREDIT_CARD", "IFOOD", "COURTESY"]) as PaymentMethod[]).map((method) => {
                   const { label, Icon, color } = PAYMENT_METHOD_CONFIG[method];
                   return (
                     <button

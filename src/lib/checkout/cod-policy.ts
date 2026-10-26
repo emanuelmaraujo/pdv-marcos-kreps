@@ -42,7 +42,7 @@ export function codPolicyToForm(policy: CodPolicy): CodPolicyForm {
   return {
     enabled: policy.enabled,
     methods: policy.methods,
-    maxAmount: policy.max_amount == null ? "" : String(policy.max_amount).replace(".", ","),
+    maxAmount: policy.max_amount == null ? "" : policy.max_amount.toFixed(2).replace(".", ","),
     maxPending: String(policy.max_pending),
     confirmationMinutes: String(policy.confirmation_minutes),
   };

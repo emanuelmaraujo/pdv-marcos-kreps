@@ -81,7 +81,7 @@ serve(async (req) => {
       .select(`
         id, order_id, sequence_no, status, product_name_snapshot, total_price,
         orders!inner ( id, branch_id, status, type, daily_number,
-                       customer_phone, customer_name )
+                       customer_phone, customer_name, payment_timing )
       `)
       .eq("id", order_item_id)
       .single();
@@ -101,6 +101,11 @@ serve(async (req) => {
     // Pedido em estados pré-fila ou finais não aceita mudanças por item.
     if (["AGUARDANDO_CONFIRMACAO", "AGUARDANDO_PAGAMENTO", "EXPIRADO"].includes(orderStatus)) {
       throw new Error(`Pedido em ${orderStatus} ainda não pode ter itens manipulados.`);
+    }
+    // O total de COD foi aceito pelo cliente e é cobrado na entrega: cancelar um
+    // item sem recalcular faria cobrar o que não foi entregue. Cancela-se o pedido.
+    if (order.payment_timing === "ON_DELIVERY" && new_status === "CANCELLED" && orderStatus !== "CANCELADO") {
+      throw new Error("Pedido com pagamento na entrega não permite cancelar item isolado. Combine com o cliente e cancele o pedido inteiro, se necessário.");
     }
     if (orderStatus === "CANCELADO" && new_status !== "CANCELLED") {
       throw new Error("Pedido cancelado: itens só aceitam CANCELLED.");
