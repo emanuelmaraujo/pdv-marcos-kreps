@@ -27,7 +27,7 @@ try {
  const bootstrap=readFileSync(path.join(root,'supabase/fixtures/postgres-contract-bootstrap.sql'),'utf8');
  sqlFile('schema',bootstrap+'\n'+migrations.map(x=>readFileSync(path.join(root,'supabase/migrations',x),'utf8')).join('\n'));
  console.log(`PASS: ${migrations.length} migrations em PostgreSQL sem rede (cron de retenção excluído).`);
- const fixture=readFileSync(path.join(root,'supabase/tests/isolated/public-delivery-contract.sql'),'utf8');
+ const fixture=readFileSync(path.join(root,'supabase/tests/isolated/public-delivery-contract.psql'),'utf8');
  sqlFile('rules','BEGIN;\n'+fixture+'\nROLLBACK;');
  console.log('PASS: contrato SQL, replay, troco, limites, filial, confirmação, parcial, baixa e expiração.');
  sqlFile('concurrency-setup','BEGIN;\n'+fixture.split('\nDO $$')[0]+'\nCOMMIT;');

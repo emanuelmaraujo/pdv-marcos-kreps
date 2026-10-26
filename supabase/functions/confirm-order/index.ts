@@ -61,7 +61,7 @@ serve(async (req) => {
     // 3. Busca o Pedido (inclui printer_config da filial para override por setor)
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from('orders')
-      .select('id, daily_number, status, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, payment_timing, expected_payment_method, cash_change_for, cod_contact_verified_at, confirmed_at, created_at, branch_id, branches ( code, name, printer_config )')
+      .select('id, daily_number, status, type, source, customer_name, customer_phone, notes, total_amount, packing_fee, discount_amount, payment_method, payment_status, payment_timing, expected_payment_method, cash_change_for, cod_received_amount, delivery_fee, cod_contact_verified_at, confirmed_at, created_at, branch_id, branches ( code, name, printer_config )')
       .eq('id', order_id)
       .single();
 

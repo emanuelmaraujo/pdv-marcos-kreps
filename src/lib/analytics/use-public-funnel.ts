@@ -3,6 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { pdvApi } from "@/lib/api/pdv-api";
 import { funnelSource, type ClientFunnelEvent, type FunnelInput } from "../../../supabase/functions/_shared/public-funnel";
 const CONSENT_KEY="pdv-public-funnel-consent";
+/** Sem resposta HTTP (extractEdgeFunctionError não inclui Status) é falha de rede, não recusa do pedido. */
+export function orderFailureCategory(error: unknown, closed: boolean): "CLOSED" | "ORDER" | "NETWORK" {
+  if (closed) return "CLOSED";
+  return error instanceof Error && /Status:? \d{3}/.test(error.message) ? "ORDER" : "NETWORK";
+}
 export function usePublicFunnel(branchSlug:string,orderType:FunnelInput["order_type"],enabled:boolean) {
   const [consent,setConsentState]=useState(false);
   const seen=useRef(new Set<string>());

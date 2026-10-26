@@ -6,8 +6,10 @@ import { Combobox } from "@/components/ui/Combobox";
 import { Field, FieldGroup, Toggle } from "../FormPrimitives";
 import { BRASILIA_NEIGHBORHOODS } from "@/lib/constants/brasilia-neighborhoods";
 import { INPUT_CLS } from "../../utils";
+import { CodPolicyCard } from "../CodPolicyCard";
 
 export function EntregaTab({
+  branchId,
   editing,
   setField,
   branchReady,
@@ -28,6 +30,7 @@ export function EntregaTab({
   onToggleCourier,
   onRemoveCourier,
 }: {
+  branchId: string | null;
   editing: BranchInput;
   setField: <K extends keyof BranchInput>(k: K, v: BranchInput[K]) => void;
   branchReady: boolean;
@@ -245,6 +248,7 @@ export function EntregaTab({
             )}
           </FieldGroup>
           </div>
+          {branchId && <CodPolicyCard branchId={branchId} deliveryEnabled={editing.delivery_enabled === true} />}
         </>
       )}
     </div>

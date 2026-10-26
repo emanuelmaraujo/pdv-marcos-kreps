@@ -80,7 +80,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
     },
     {
       id: "entrega", label: "Entrega", icon: Bike,
-      description: "Zonas de entrega, taxas por bairro e entregadores cadastrados.",
+      description: "Zonas, taxas por bairro, entregadores e pagamento na entrega.",
       accent: { iconBg: "bg-[var(--status-success-bg)]", iconColor: "text-[var(--status-success)]" },
     },
     {
@@ -169,6 +169,7 @@ export function BranchEditorView({ branchId }: { branchId?: string }) {
           {activeTab === "horarios" && <HorariosTab editing={editor.editing} setField={editor.setField} globalSettings={editor.globalSettings} />}
           {activeTab === "entrega" && (
             <EntregaTab
+              branchId={editor.branchId}
               editing={editor.editing}
               setField={editor.setField}
               branchReady={editor.branchReady}

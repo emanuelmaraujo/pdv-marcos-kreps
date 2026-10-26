@@ -7,6 +7,9 @@ CREATE TABLE public.branch_cod_policies (
   max_pending integer NOT NULL DEFAULT 20 CHECK(max_pending BETWEEN 1 AND 200),
   operational_approved_at timestamptz,
   confirmation_minutes integer NOT NULL DEFAULT 30,
+  operational_approved_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  updated_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT branch_cod_policy_valid CHECK (
     confirmation_minutes BETWEEN 5 AND 120
     AND methods <@ ARRAY['CASH','PIX','DEBIT_CARD','CREDIT_CARD']::text[]
@@ -152,7 +155,8 @@ BEGIN
        OR v_policy.max_amount IS NULL OR v_total IS NULL OR v_total <= 0 OR v_total > v_policy.max_amount
        OR v_method IS NULL OR NOT (v_method = ANY(v_policy.methods))
        OR p_payload->>'order_type' <> 'ENTREGA'
-       OR COALESCE(p_payload->>'customer_phone','') !~ '^55[0-9]{10,11}$' THEN
+       -- create-public-order grava E.164 (+55DDDNÚMERO).
+       OR COALESCE(p_payload->>'customer_phone','') !~ '^\+55[1-9][0-9]{9,10}$' THEN
       RAISE EXCEPTION 'Pagamento na entrega indisponível para este pedido.' USING ERRCODE = '22023';
     END IF;
     IF (SELECT count(*) FROM public.orders WHERE branch_id=v_branch_id AND payment_timing='ON_DELIVERY'
@@ -559,3 +563,75 @@ GRANT EXECUTE ON FUNCTION public.lookup_public_order_retry(text,uuid,jsonb), pub
   public.review_delivery_order_transactional(uuid,uuid,text,boolean,text,jsonb),
   public.pay_order_items_transactional(uuid,uuid,public.payment_method,public.payment_status,numeric,uuid[],text,numeric),
   public.expire_unconfirmed_delivery_orders() TO service_role;
+
+-- Painel administrativo: leitura e gravação da política sem acesso direto à
+-- tabela. Reusa can_manage_branch (ADMIN ativo da filial ou global); a
+-- aprovação operacional é carimbada pelo servidor, nunca enviada pelo navegador.
+CREATE FUNCTION public.get_branch_cod_policy(p_branch_id uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
+DECLARE v_policy public.branch_cod_policies%ROWTYPE; v_pending integer;
+BEGIN
+  IF NOT public.can_manage_branch(p_branch_id) THEN
+    RAISE EXCEPTION 'Sem permissão para configurar esta filial.' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO v_policy FROM public.branch_cod_policies WHERE branch_id=p_branch_id;
+  SELECT count(*) INTO v_pending FROM public.orders WHERE branch_id=p_branch_id
+    AND payment_timing='ON_DELIVERY' AND status='AGUARDANDO_CONFIRMACAO';
+  RETURN jsonb_build_object(
+    'enabled',COALESCE(v_policy.enabled,false),'methods',to_jsonb(COALESCE(v_policy.methods,'{}'::text[])),
+    'max_amount',v_policy.max_amount,'max_pending',COALESCE(v_policy.max_pending,20),
+    'confirmation_minutes',COALESCE(v_policy.confirmation_minutes,30),
+    'operational_approved_at',v_policy.operational_approved_at,'updated_at',v_policy.updated_at,
+    'pending_confirmation',v_pending);
+END $$;
+
+CREATE FUNCTION public.set_branch_cod_policy(
+  p_branch_id uuid, p_enabled boolean, p_methods text[], p_max_amount numeric,
+  p_max_pending integer, p_confirmation_minutes integer
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE v_old public.branch_cod_policies%ROWTYPE; v_branch public.branches%ROWTYPE; v_methods text[];
+BEGIN
+  IF NOT public.can_manage_branch(p_branch_id) THEN
+    RAISE EXCEPTION 'Sem permissão para configurar esta filial.' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO v_branch FROM public.branches WHERE id=p_branch_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Filial inexistente.' USING ERRCODE='P0002'; END IF;
+  SELECT COALESCE(array_agg(DISTINCT m ORDER BY m),'{}') INTO v_methods FROM unnest(COALESCE(p_methods,'{}')) AS m;
+  IF NOT v_methods <@ ARRAY['CASH','PIX','DEBIT_CARD','CREDIT_CARD']::text[] THEN
+    RAISE EXCEPTION 'Forma de pagamento presencial inválida.' USING ERRCODE='22023';
+  END IF;
+  IF p_max_pending IS NULL OR p_max_pending NOT BETWEEN 1 AND 200 THEN
+    RAISE EXCEPTION 'Limite de pedidos aguardando deve ficar entre 1 e 200.' USING ERRCODE='22023';
+  END IF;
+  IF p_confirmation_minutes IS NULL OR p_confirmation_minutes NOT BETWEEN 5 AND 120 THEN
+    RAISE EXCEPTION 'Prazo de confirmação deve ficar entre 5 e 120 minutos.' USING ERRCODE='22023';
+  END IF;
+  IF p_max_amount IS NOT NULL AND (p_max_amount <= 0 OR p_max_amount > 100000) THEN
+    RAISE EXCEPTION 'Valor máximo inválido.' USING ERRCODE='22023';
+  END IF;
+  IF p_enabled IS TRUE AND (v_branch.delivery_enabled IS NOT TRUE OR cardinality(v_methods)=0 OR p_max_amount IS NULL) THEN
+    RAISE EXCEPTION 'Para ativar, ligue a entrega da filial, escolha ao menos uma forma e informe o valor máximo.' USING ERRCODE='22023';
+  END IF;
+  SELECT * INTO v_old FROM public.branch_cod_policies WHERE branch_id=p_branch_id FOR UPDATE;
+  INSERT INTO public.branch_cod_policies AS p(branch_id,enabled,methods,max_amount,max_pending,confirmation_minutes,
+      operational_approved_at,operational_approved_by,updated_by,updated_at)
+  VALUES(p_branch_id,p_enabled IS TRUE,v_methods,p_max_amount,p_max_pending,p_confirmation_minutes,
+      CASE WHEN p_enabled IS TRUE THEN now() END,CASE WHEN p_enabled IS TRUE THEN auth.uid() END,auth.uid(),now())
+  ON CONFLICT(branch_id) DO UPDATE SET enabled=EXCLUDED.enabled,methods=EXCLUDED.methods,max_amount=EXCLUDED.max_amount,
+    max_pending=EXCLUDED.max_pending,confirmation_minutes=EXCLUDED.confirmation_minutes,
+    -- Reativar ou mudar limites é uma nova aprovação operacional; desligar remove a aprovação.
+    operational_approved_at=EXCLUDED.operational_approved_at,operational_approved_by=EXCLUDED.operational_approved_by,
+    updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at;
+  INSERT INTO public.audit_logs(user_id,action,table_name,record_id,branch_id,old_data,new_data)
+  VALUES(auth.uid(),'COD_POLICY_UPDATED','branch_cod_policies',p_branch_id,p_branch_id,
+    CASE WHEN v_old.branch_id IS NOT NULL THEN jsonb_build_object('enabled',v_old.enabled,'methods',v_old.methods,
+      'max_amount',v_old.max_amount,'max_pending',v_old.max_pending,'confirmation_minutes',v_old.confirmation_minutes) END,
+    jsonb_build_object('enabled',p_enabled IS TRUE,'methods',v_methods,'max_amount',p_max_amount,
+      'max_pending',p_max_pending,'confirmation_minutes',p_confirmation_minutes));
+  RETURN public.get_branch_cod_policy(p_branch_id);
+END $$;
+REVOKE ALL ON FUNCTION public.get_branch_cod_policy(uuid),
+  public.set_branch_cod_policy(uuid,boolean,text[],numeric,integer,integer) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.get_branch_cod_policy(uuid),
+  public.set_branch_cod_policy(uuid,boolean,text[],numeric,integer,integer) TO authenticated;
+

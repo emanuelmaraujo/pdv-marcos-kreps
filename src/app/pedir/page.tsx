@@ -83,7 +83,7 @@ import {
 } from "@/lib/menu/productTags";
 
 import { resolvePublicOrderAttempt, clearPublicOrderAttempt, publicOrderAttemptPayload } from "@/lib/checkout/public-order-attempt";
-import { usePublicFunnel } from "@/lib/analytics/use-public-funnel";
+import { orderFailureCategory, usePublicFunnel } from "@/lib/analytics/use-public-funnel";
 import { DELIVERY_PAYMENT_LABELS, isDeliveryPaymentMethod, type DeliveryPaymentMethod } from "@/lib/checkout/delivery-payment";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -1475,7 +1475,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setPaymentMode("PIX");
       setStep("PAYMENT");
     } catch (err) {
-      trackFunnel("order_failure", { error_category: err instanceof OrderingClosedError ? "CLOSED" : "ORDER" });
+      trackFunnel("order_failure", { error_category: orderFailureCategory(err, err instanceof OrderingClosedError) });
       if (err instanceof OrderingClosedError) {
         setOnlineOrderingEnabled(false);
         setOrderingClosedReason(err.message);
@@ -2577,7 +2577,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           {orderType === "ENTREGA" && codEnabled && codMethods.length > 0 && (
             <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4" aria-label="Quando pagar">
               <h2 className="font-semibold">Quando pagar</h2>
-              <label className="flex min-h-11 items-center gap-2"><input type="radio" name="payment-timing" checked={!useCod} onChange={() => { setPaymentTiming("ONLINE"); trackFunnel("payment_option_select", {payment_option:"PIX"}); }} /> Online — Pix ou cartão</label>
+              <label className="flex min-h-11 items-center gap-2"><input type="radio" name="payment-timing" checked={!useCod} onChange={() => setPaymentTiming("ONLINE")} /> Online — Pix ou cartão</label>
               <label className="flex min-h-11 items-center gap-2"><input type="radio" name="payment-timing" checked={useCod} onChange={() => { setPaymentTiming("ON_DELIVERY"); trackFunnel("payment_option_select", {payment_option:"ON_DELIVERY"}); }} /> Pagar na entrega</label>
               {useCod && <>
                 <p className="text-sm text-[var(--text-secondary)]">A unidade precisa confirmar o pedido antes do preparo. O pagamento será feito ao receber a entrega.</p>

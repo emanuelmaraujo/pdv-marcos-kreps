@@ -23,7 +23,7 @@ LANGUAGE sql AS $$
   'branch_id','f2210000-0000-4000-8000-000000000011','order_type',CASE WHEN p_timing='ONLINE' THEN 'BALCAO' ELSE 'ENTREGA' END,
   'payment_timing',p_timing,'expected_payment_method',CASE WHEN p_timing='ON_DELIVERY' THEN 'CASH' END,
   'cash_change_for',CASE WHEN p_timing='ON_DELIVERY' THEN 50 END,
-  'customer_phone','5561999990000','total_amount',45,'delivery_fee',5,
+  'customer_phone','+5561999990000','total_amount',45,'delivery_fee',5,
   'idempotency_key',p_key,'request',jsonb_build_object('fixture',p_key,'payment_timing',p_timing),
   'items',jsonb_build_array(
     jsonb_build_object('product_id','f2210000-0000-4000-8000-000000000031','product_name_snapshot','Produto sintético','product_price_snapshot',20,'production_sector','KITCHEN','quantity',1,'total_price',20),
@@ -75,6 +75,8 @@ BEGIN
   PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"total_amount":101,"cash_change_for":200}'),'%Pagamento na entrega indisponível%');
   PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"cash_change_for":20}'),'%troco inválido%');
   PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"order_type":"BALCAO"}'),'%Pagamento na entrega indisponível%');
+  -- create-public-order sempre envia E.164; outro formato indica contato não normalizado.
+  PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"customer_phone":"5561999990000"}'),'%Pagamento na entrega indisponível%');
   v_result:=public.create_public_order_transactional(v_payload);v_id:=(v_result->>'order_id')::uuid;
   PERFORM pg_temp.assert_221(v_result->>'status'='AGUARDANDO_CONFIRMACAO' AND v_result->>'payment_status'='PENDING','COD começa pendente');
   PERFORM pg_temp.assert_221((SELECT count(*) FROM public.printer_jobs WHERE order_id=v_id)=0,'público não imprime');

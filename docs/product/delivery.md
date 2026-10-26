@@ -17,10 +17,16 @@ modalidades; não é necessário criar conta.
 ## Pagamento na entrega (COD)
 
 Contrato implementado pela migration `20261025212158_public_delivery_payment_contract.sql`,
-**desativado em todas as filiais**. Sem registro em `branch_cod_policies` (tabela
-privada, somente `service_role`), o servidor recusa COD. Habilitar exige `enabled`,
-meios aceitos, `max_amount`, `operational_approved_at` e prazo de confirmação
-(5–120 min); não há tela administrativa para isso nesta etapa.
+**desativado em todas as filiais**. Sem política ativa em `branch_cod_policies` (tabela
+privada, sem acesso pelo PostgREST), o servidor recusa COD.
+
+**Configuração:** Configurações → Filiais → filial → aba Entrega → “Pagamento na entrega”.
+Só ADMIN da filial (ou administrador global) vê e salva. Para ativar: entrega ligada e
+salva na filial, ao menos uma forma aceita, valor máximo por pedido, limite de pedidos
+aguardando confirmação (1–200) e prazo de confirmação (5–120 min). Ao salvar ativo, o
+servidor registra data e responsável da aprovação e grava `COD_POLICY_UPDATED` em
+`audit_logs`; desligar remove a aprovação e o checkout deixa de oferecer COD na hora.
+Os limites não são enviados ao navegador do cliente.
 
 - Só ENTREGA pela vitrine pública, com WhatsApp. O cliente escolhe o meio esperado
   (dinheiro, Pix na entrega, débito ou crédito na maquininha) e, em dinheiro, troco
@@ -28,7 +34,8 @@ meios aceitos, `max_amount`, `operational_approved_at` e prazo de confirmação
 - Pedido criado como `AGUARDANDO_CONFIRMACAO`/`PENDING`. A chave de idempotência é
   gravada na mesma transação da criação, com hash do payload; retry devolve o mesmo pedido.
 - A equipe confirma em `confirm-order` após marcar que verificou contato e endereço;
-  a confirmação libera produção e impressão uma única vez. Sem confirmação no prazo,
+  a confirmação libera produção e impressão uma única vez. A via do cliente traz
+  “PAGAMENTO NA ENTREGA - NAO PAGO”, o valor a cobrar, a forma combinada e o troco. Sem confirmação no prazo,
   `expire-pending-public-orders` encerra o pedido sem produção.
 - `mark-payment` exige confirmação explícita de recebimento (`received_confirmed`).
   Recebimento parcial distribui o desconto de cupom proporcionalmente e cobra o frete
@@ -44,6 +51,16 @@ dimensões fechadas: evento, filial, modalidade, dispositivo, origem, categoria 
 e opção de pagamento. Não incluem nome, telefone, endereço, CEP, token, URL ou chave
 de idempotência. Eventos financeiros são gravados pelo banco (`origin = SERVER`)
 e apagados após 30 dias.
+
+### Implantação
+
+1. Merge do PR na `main` (exige aprovação humana). O workflow de deploy roda o CI,
+   aplica a migration e só então publica as Edge Functions.
+2. Publicação do frontend. Até lá, o checkout antigo continua só com pagamento online.
+3. Conferir no Supabase que a migration consta no histórico e que `branch_cod_policies` está vazia.
+4. Somente com decisão da unidade: ativar pelo painel em uma filial piloto, fazer um
+   pedido real de baixo valor e acompanhar confirmação, impressão, entrega, baixa e caixa.
+5. Reverter operacionalmente: desligar no painel. Pedidos já aceitos seguem o fluxo normal.
 
 Detalhes, riscos e limites de validação: [issue #221](../archive/studies/auditoria-pedir-issue-221.md).
 

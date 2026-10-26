@@ -1,5 +1,9 @@
 export const DELIVERY_PAYMENT_METHODS = ["CASH", "PIX", "DEBIT_CARD", "CREDIT_CARD"] as const;
 export type DeliveryPaymentMethod = typeof DELIVERY_PAYMENT_METHODS[number];
+// Sem acentos: a impressora térmica usa a mesma régua ASCII do restante da via.
+export const DELIVERY_PAYMENT_RECEIPT_LABELS: Record<DeliveryPaymentMethod, string> = {
+  CASH: "Dinheiro", PIX: "Pix na entrega", DEBIT_CARD: "Debito na maquininha", CREDIT_CARD: "Credito na maquininha",
+};
 
 export function parsePublicPaymentOption(body: Record<string, unknown>) {
   const timing = body.payment_timing ?? "ONLINE";
