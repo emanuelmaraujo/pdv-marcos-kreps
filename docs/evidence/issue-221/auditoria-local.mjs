@@ -17,7 +17,7 @@ for(const width of [360,390,430,768,1280,1440]){
  await context.route('**/*',async route=>{
   const url=new URL(route.request().url());
   if(url.hostname==='127.0.0.1' && url.port==='3221') return route.continue();
-  if(url.hostname==='127.0.0.1' && url.port==='9'){
+  if(url.hostname==='127.0.0.1' && ['9','54321'].includes(url.port)){
    let data;
    if(url.pathname.endsWith('get-public-checkout-config')) data={success:true,branch,settings:{public_ordering_start_time:'00:00',public_ordering_end_time:'23:59',packaging_fee:'2',apply_packaging_fee_for_takeout:'true'},online_ordering_enabled:true,ordering_closed_reason:''};
    else if(url.pathname.endsWith('get-public-branch-stats')) data={success:true,orders_today:0,top_product_by_category:{}};
@@ -34,7 +34,7 @@ for(const width of [360,390,430,768,1280,1440]){
  await page.getByRole('button').filter({has:page.getByRole('heading',{name:'Krep de teste',exact:true})}).click();
  await page.screenshot({path:path.join(out,`${phase}-produto-${width}.png`),fullPage:true});
  await page.getByRole('button',{name:/Adicionar.*R\$/}).click();
- const cart=page.getByRole('button',{name:/Ver (pedido|carrinho)|Revisar/}).first();
+ const cart=page.getByRole('button',{name:/Ver (pedido|carrinho)|Revisar|Fechar pedido/}).first();
  if(await cart.count()) await cart.click(); else await page.getByRole('button',{name:/Seu pedido/}).first().click();
  await page.getByRole('heading',{name:'Confira seu pedido'}).waitFor();
  await page.screenshot({path:path.join(out,`${phase}-revisao-${width}.png`),fullPage:true});

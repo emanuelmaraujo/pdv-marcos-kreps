@@ -63,3 +63,12 @@ Edge Functions publicadas, RLS ou migrations.
 Os comandos sobrescrevem as próprias capturas. O JSON de auditoria registra
 largura da página e texto sintético do resumo, sem tokens ou dados de clientes.
 Feche o servidor local depois da execução.
+
+## QA do pagamento na entrega
+
+`qa-cod.mjs` roda contra o build local (`npm run build` com
+`NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` e chave fictícia, depois
+`npx next start -H 127.0.0.1 -p 3221`). Simula configuração, CEP, criação e
+acompanhamento do pedido no navegador, aborta qualquer outro destino e grava
+`qa-cod.json` e as capturas `qa-cod-*`. `auditoria-local.mjs` aceita as portas
+fictícias 9 e 54321. Nenhum pedido, pagamento, impressão ou mensagem real é criado.

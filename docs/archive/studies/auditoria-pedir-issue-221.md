@@ -7,11 +7,15 @@ Fonte do escopo: [issue #221](https://github.com/emanuelmaraujo/pdv-marcos-kreps
 
 ## Estado desta entrega
 
-Diagnóstico local e proposta para revisão, **não aprovação de redesign nem implementação
-concluída de COD**. O usuário autorizou pagamentos e migrations locais após o bloqueio
-inicial. Continuam proibidos serviços reais, dados reais, produção, merge e deploy.
-A issue exige proposta antes de mudança visual ampla; esta entrega prepara essa decisão.
-Foram implementadas apenas correções pontuais de custos, texto de modalidade e overflow, descritas abaixo.
+Atualizado ao fim da implementação local. O usuário autorizou pagamentos e migrations
+locais e aprovou a direção visual do protótipo. Foram implementados o resumo de custos,
+a vitrine compacta, o checkout em duas colunas no desktop, a idempotência transacional,
+o contrato de pagamento na entrega (COD) **desativado em todas as filiais** e o funil
+opcional com consentimento. Veja [Implementação final e validação](#implementação-final-e-validação).
+Continuam proibidos serviços reais, dados reais, produção, merge e deploy; a migration
+não foi aplicada a nenhum banco existente.
+
+As seções seguintes registram o diagnóstico feito antes da implementação.
 
 O [protótipo navegável](../../evidence/issue-221/proposta.html) usa dados sintéticos,
 sem chamadas de rede, sem criar pedidos e sem coletar pagamentos. É ilustrativo:
@@ -138,7 +142,7 @@ flowchart TD
   L --> M[Conciliação e status financeiro derivado]
 ```
 
-## Contrato proposto para COD, ainda não implementado
+## Contrato proposto para COD (diagnóstico; implementado depois)
 
 - `payment_timing`: ONLINE por padrão, ON_DELIVERY somente para ENTREGA autorizada.
 - `expected_payment_method`: CASH, DEBIT_CARD, CREDIT_CARD ou PIX; meio recebido
@@ -187,9 +191,8 @@ WhatsApp, autenticação ou ambiente publicado.
 - O repro anterior registrou documento com 496 px nos viewports 360, 390 e 430;
   os de 768/1280/1440 já cabiam. O mesmo repro verifica a correção localmente.
 
-Essas correções não constituem redesign amplo nem conclusão da issue.
-Idempotência transacional, COD, instrumentação e alterações de vitrine permanecem
-pendentes. Nenhuma migration ou Edge Function foi alterada nesta entrega.
+Essas correções foram a primeira etapa. Idempotência, COD, instrumentação e vitrine
+vieram depois da aprovação, na seção final.
 
 ### Verificações
 
@@ -246,3 +249,58 @@ foi convertido para ESM para respeitar o lint; a execução ESM validou as corre
 Os dados brutos estão nos arquivos `antes-auditoria-local.json` e
 `depois-auditoria-local.json` junto às capturas; o critério anterior falhou
 explicitamente com “Checkout ultrapassa largura do viewport” antes da correção.
+
+## Implementação final e validação
+
+Após a aprovação da direção visual ("pode prosseguir"):
+
+- **Idempotência:** `create_public_order_transactional` cria o pedido e grava a chave
+  na mesma transação, com hash do payload; chave repetida com payload diferente é
+  recusada. No navegador, a chave fica em `sessionStorage` (apenas chave e hash, 24h)
+  e é reutilizada após falha de rede ou recarga.
+- **COD:** contrato descrito em [Delivery](../../product/delivery.md#pagamento-na-entrega-cod).
+  Política por filial privada e vazia; `get-public-checkout-config` só oferece COD com
+  política habilitada, aprovada e limitada. Confirmação (`review_delivery_order_transactional`)
+  exige verificação de contato/endereço e gera os jobs de impressão uma vez; `mark-payment`
+  exige confirmação de recebimento; expiração própria de confirmação.
+  Helpers SQL anteriores ficaram restritos ao `service_role`.
+- **Equipe:** detalhes do pedido mostram meio esperado/troco e pedem as duas confirmações
+  (contato antes de liberar; recebimento antes da baixa).
+- **Cliente:** escolha “Quando pagar” só aparece em ENTREGA com COD habilitado;
+  acompanhamento mostra confirmação e pagamento pendentes até a baixa.
+- **Funil:** desligado por padrão; consentimento explícito; schema fechado; retenção de 30 dias.
+- **Vitrine/checkout:** cabeçalho compacto com unidade e modalidade, cards com “Montar”,
+  resumo lateral no desktop.
+
+### Verificações finais (25/10/2026)
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm test` | PASS — 283 testes em 34 arquivos |
+| `npm run typecheck`, `npm run lint` | PASS, sem erros ou avisos |
+| `npm run docs:check`, `npm run supabase:check` | PASS — 82 migrations com versões únicas |
+| `npm run build` (env loopback do CI) | PASS |
+| `node scripts/test-public-delivery-contract.mjs` | PASS — 81 migrations em PostgreSQL 16 sem rede; regras, troco, limites, filial, confirmação, parcial, baixa e expiração; duas conexões concorrentes geram um pedido, um job e um recebimento |
+| `docs/evidence/issue-221/qa-cod.mjs` (build local, serviços simulados) | PASS — ver abaixo |
+| `AUDIT_PHASE=after docs/evidence/issue-221/auditoria-local.mjs` | PASS — seis larguras sem overflow, embalagem discriminada |
+
+O QA de navegador (`qa-cod.json`) cobre: COD desligado não exibe a escolha; erro sem
+meio esperado; troco menor que o total recusado e o erro some ao corrigir; falha de rede
+na criação seguida de retry com a **mesma** chave; redirecionamento para acompanhamento
+sem exibir “Pago”; nenhum evento de funil sem consentimento; com consentimento, eventos
+sem telefone, endereço ou token; resumo visível acima da barra fixa em 390 px e sem
+overflow em 390/1440. Capturas: `qa-cod-dados-*.png`, `qa-cod-rodape-390.png` e
+`qa-cod-acompanhamento-*.png`.
+
+### Limitações que permanecem
+
+- `npm run test:database` (Supabase completo) não rodou: o download das imagens Docker
+  falhou por limite de requisições. O fallback usa só PostgreSQL com stub de auth;
+  não valida RLS de ponta a ponta, Realtime nem o cron de retenção de impressão.
+- Edge Functions não foram executadas em Deno (runtime indisponível); foram cobertas por
+  typecheck do projeto, testes dos helpers compartilhados e pelas RPCs SQL que chamam.
+- O QA de navegador usa respostas simuladas; não prova gateway, impressão física,
+  WhatsApp, autenticação real nem ambiente publicado.
+- Não existe tela administrativa para habilitar COD; a política precisa de operação
+  autorizada no banco quando a unidade definir meios, limite e prazo.
+- Conversão, abandono e fotos reais continuam não medidos; nenhum benchmark externo consultado.

@@ -14,9 +14,38 @@ O servidor continua validando preços, descontos e disponibilidade ao enviar o p
 antes do pagamento. O WhatsApp é obrigatório para entrega e opcional nas outras
 modalidades; não é necessário criar conta.
 
-Pagamento na entrega (COD) ainda não foi implementado ou habilitado nesta etapa.
-Veja o [diagnóstico e proposta da issue #221](../archive/studies/auditoria-pedir-issue-221.md)
-para riscos transacionais e decisões operacionais pendentes.
+## Pagamento na entrega (COD)
+
+Contrato implementado pela migration `20261025212158_public_delivery_payment_contract.sql`,
+**desativado em todas as filiais**. Sem registro em `branch_cod_policies` (tabela
+privada, somente `service_role`), o servidor recusa COD. Habilitar exige `enabled`,
+meios aceitos, `max_amount`, `operational_approved_at` e prazo de confirmação
+(5–120 min); não há tela administrativa para isso nesta etapa.
+
+- Só ENTREGA pela vitrine pública, com WhatsApp. O cliente escolhe o meio esperado
+  (dinheiro, Pix na entrega, débito ou crédito na maquininha) e, em dinheiro, troco
+  opcional nunca inferior ao total. Isso registra intenção, não pagamento.
+- Pedido criado como `AGUARDANDO_CONFIRMACAO`/`PENDING`. A chave de idempotência é
+  gravada na mesma transação da criação, com hash do payload; retry devolve o mesmo pedido.
+- A equipe confirma em `confirm-order` após marcar que verificou contato e endereço;
+  a confirmação libera produção e impressão uma única vez. Sem confirmação no prazo,
+  `expire-pending-public-orders` encerra o pedido sem produção.
+- `mark-payment` exige confirmação explícita de recebimento (`received_confirmed`).
+  Recebimento parcial distribui o desconto de cupom proporcionalmente e cobra o frete
+  na última parcela; o status vira `PAID` somente quando o total é recebido.
+- O acompanhamento mostra “Aguardando confirmação da unidade” e “Pagamento na entrega
+  pendente” até a baixa; nunca exibe pagamento aprovado antes do recebimento.
+
+### Métricas do funil
+
+Desligadas por padrão. Só são enviadas com consentimento marcado pelo cliente
+(“Privacidade e medição de navegação”), por `record-public-funnel-event`, com
+dimensões fechadas: evento, filial, modalidade, dispositivo, origem, categoria de erro
+e opção de pagamento. Não incluem nome, telefone, endereço, CEP, token, URL ou chave
+de idempotência. Eventos financeiros são gravados pelo banco (`origin = SERVER`)
+e apagados após 30 dias.
+
+Detalhes, riscos e limites de validação: [issue #221](../archive/studies/auditoria-pedir-issue-221.md).
 
 
 > Organização revisada em 2026-10-24. O conteúdo consolida entregas de fases anteriores;

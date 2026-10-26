@@ -2582,12 +2582,12 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               {useCod && <>
                 <p className="text-sm text-[var(--text-secondary)]">A unidade precisa confirmar o pedido antes do preparo. O pagamento será feito ao receber a entrega.</p>
                 <label className="block text-sm">Forma de pagamento esperada
-                  <select className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-2" value={expectedMethod} onChange={event => setExpectedMethod(isDeliveryPaymentMethod(event.target.value) ? event.target.value : "")}>
+                  <select className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-2" value={expectedMethod} onChange={event => { setExpectedMethod(isDeliveryPaymentMethod(event.target.value) ? event.target.value : ""); setCheckoutError(""); }}>
                     <option value="">Selecione</option>
                     {codMethods.map(method => <option key={method} value={method}>{DELIVERY_PAYMENT_LABELS[method]}</option>)}
                   </select>
                 </label>
-                {expectedMethod === "CASH" && <FloatingInput label="Troco para quanto? (opcional)" value={cashChangeFor} onChange={setCashChangeFor} inputMode="decimal" placeholder="Ex.: 50,00" help="Deixe vazio se tiver o valor exato." />}
+                {expectedMethod === "CASH" && <FloatingInput label="Troco para quanto? (opcional)" value={cashChangeFor} onChange={value => { setCashChangeFor(value); setCheckoutError(""); }}inputMode="decimal" placeholder="Ex.: 50,00" help="Deixe vazio se tiver o valor exato." />}
               </>}
             </section>
           )}
