@@ -11,7 +11,7 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(api)) throw new Error('E2E a
 
 const ids = { branch: randomUUID(), other: randomUUID(), category: randomUUID(), product: randomUUID(), courier: randomUUID() };
 // Um telefone por cenário: o limite por telefone de create-public-order continua ativo.
-const phones = ['+5561988887771', '+5561988887772', '+5561988887773'];
+const phones = ['+5561988887771', '+5561988887772', '+5561988887773', '+5561988887774', '+5561988887775'];
 const addresses = Object.fromEntries(phones.map((value) => [value, randomUUID()]));
 const phone = phones[0];
 const sql = (query) => execFileSync('docker', ['exec', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-Atqc', query], { encoding: 'utf8' }).trim();
@@ -63,6 +63,7 @@ sql(`INSERT INTO public.branches(id,code,slug,name,active,delivery_enabled,defau
         ('${ids.other}','E2X','e2e-cod-x','Filial E2E outra',true,true,5,true,'00:00','23:59');
   INSERT INTO public.categories(id,branch_id,name) VALUES('${ids.category}','${ids.branch}','Categoria E2E');
   INSERT INTO public.products(id,branch_id,category_id,name,price,sector,active) VALUES('${ids.product}','${ids.branch}','${ids.category}','Krep E2E',20,'KITCHEN',true);
+  INSERT INTO public.delivery_zones(branch_id,neighborhood,neighborhood_normalized,fee) VALUES('${ids.branch}','Centro','centro',5);
   INSERT INTO public.customers(id,phone_e164,name) VALUES ${phones.map((p) => `('${p}','${p}','Cliente sintético')`).join(',')} ON CONFLICT DO NOTHING;
   INSERT INTO public.customer_addresses(id,customer_id,street,number,neighborhood,city,state,postal_code)
     VALUES ${phones.map((p) => `('${addresses[p]}','${p}','Rua Fictícia','10','Centro','Cidade Teste','DF','70000000')`).join(',')};
@@ -126,7 +127,7 @@ r = await call('update-order-item-status', { order_item_id: firstItem, new_statu
 check(r.status >= 400 && sql(`SELECT count(*) FROM public.order_items WHERE order_id='${created.order_id}' AND status='CANCELLED'`) === '0', 'item isolado de pedido COD não é cancelado');
 r = await fetch(`${api}/rest/v1/order_items?id=eq.${firstItem}`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }),
   headers: { apikey: anon, Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' } });
-check(r.status >= 400 && sql(`SELECT status FROM public.order_items WHERE id='${firstItem}'`) !== 'CANCELLED', 'admin não cancela item COD direto pela API');
+check(r.status >= 400 && sql(`SELECT status FROM public.order_items WHERE id='${firstItem}'`) !== 'CANCELLED', 'admin não cancela item COD direto pela API (grant local; guard provado no pgTAP)');
 
 // 4. Produção, despacho, entrega: continua pendente até a baixa.
 for (const item of sql(`SELECT id FROM public.order_items WHERE order_id='${created.order_id}'`).split('\n')) {
@@ -172,6 +173,47 @@ check(!!expiring.order, `pedido para expirar criado ${expiring.order ? '' : JSON
 sql(`UPDATE public.orders SET cod_expires_at=now()-interval '1 minute' WHERE id='${expiring.order.order_id}'`);
 r = await call('expire-pending-public-orders', {}, anon, { 'x-expiration-secret': process.env.EXPIRATION_SECRET });
 check(r.status === 200 && order(expiring.order.order_id).status === 'EXPIRADO', `prazo de confirmação expira o pedido ${r.status === 200 ? '' : JSON.stringify(r.data)}`.trim());
+
+// 7b. Cancelamento com valor recebido: corrida, API direta e estorno antes de cancelar.
+const confirmedOrder = async (customerPhone) => {
+  // Duas linhas de R$ 20: permite recebimento parcial de uma delas.
+  const twoLines = [1, 2].map(() => ({ product_id: ids.product, quantity: 1, addons: [], removed_ingredient_ids: [] }));
+  const placed = (await call('create-public-order', orderBody({ customer_phone: customerPhone, cash_change_for: null, items: twoLines }), anon, { 'x-idempotency-key': randomUUID() })).data.order;
+  assert(placed, 'pedido para cenário de cancelamento');
+  assert((await call('confirm-order', { order_id: placed.order_id, contact_confirmed: true }, attendant.token)).status === 200, 'confirmação do cenário');
+  return { id: placed.order_id, item: sql(`SELECT id FROM public.order_items WHERE order_id='${placed.order_id}' ORDER BY id LIMIT 1`) };
+};
+const race = await confirmedOrder(phones[3]);
+const [paidRace, cancelRace] = await Promise.all([
+  call('mark-payment', { order_id: race.id, payment_method: 'CASH', payment_status: 'PAID', amount: 20, order_item_ids: [race.item], received_confirmed: true }, attendant.token),
+  call('update-order-status', { order_id: race.id, status: 'CANCELADO', reason: 'Cliente desistiu' }, attendant.token),
+]);
+const raceState = order(race.id);
+// Recusa por valor não vale como corrida: um dos lados precisa ter sido aceito.
+assert(paidRace.status === 200 || cancelRace.status === 200, `corrida sem vencedor ${JSON.stringify([paidRace.data, cancelRace.data])}`);
+const racePayments = Number(sql(`SELECT count(*) FROM public.payments WHERE order_id='${race.id}'`));
+check((raceState.status === 'CANCELADO' && racePayments === 0 && paidRace.status >= 400)
+  || (raceState.status !== 'CANCELADO' && racePayments === 1 && Number(raceState.cod_received_amount) === 20 && cancelRace.status >= 400),
+  `corrida cancelar × receber termina consistente (status ${raceState.status}, pagamentos ${racePayments})`);
+
+const kept = racePayments === 1 ? race : await confirmedOrder(phones[4]);
+if (kept !== race) {
+  r = await call('mark-payment', { order_id: kept.id, payment_method: 'CASH', payment_status: 'PAID', amount: 20, order_item_ids: [kept.item], received_confirmed: true }, attendant.token);
+  assert(r.status === 200, `recebimento parcial do cenário ${JSON.stringify(r.data)}`);
+}
+const auditBefore = sql(`SELECT count(*) FROM public.audit_logs WHERE record_id='${kept.id}'`);
+r = await call('update-order-status', { order_id: kept.id, status: 'CANCELADO', reason: 'Cliente desistiu' }, admin.token);
+check(r.status >= 400 && order(kept.id).status !== 'CANCELADO', 'backend recusa cancelar COD com valor recebido');
+r = await fetch(`${api}/rest/v1/orders?id=eq.${kept.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELADO' }),
+  headers: { apikey: anon, Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' } });
+check(r.status >= 400 && order(kept.id).status !== 'CANCELADO', 'API direta não cancela COD com valor recebido (grant local; guard provado no pgTAP)');
+check(sql(`SELECT count(*)||':'||sum(amount) FROM public.payments WHERE order_id='${kept.id}'`) === '1:20.00'
+  && sql(`SELECT count(*) FROM public.audit_logs WHERE record_id='${kept.id}'`) === auditBefore, 'histórico financeiro e auditoria preservados');
+r = await call('mark-payment', { order_id: kept.id, payment_method: 'CASH', payment_status: 'REFUNDED', amount: 20, order_item_ids: [kept.item] }, admin.token);
+check(r.status === 200 && Number(order(kept.id).cod_received_amount) === 0, `estorno registrado zera o saldo recebido ${r.status === 200 ? '' : JSON.stringify(r.data)}`.trim());
+r = await call('update-order-status', { order_id: kept.id, status: 'CANCELADO', reason: 'Cliente desistiu após estorno' }, admin.token);
+check(r.status === 200 && order(kept.id).status === 'CANCELADO' && sql(`SELECT count(*) FROM public.payments WHERE order_id='${kept.id}'`) === '2',
+  'após estorno o cancelamento é aceito e o histórico fica com recebimento e estorno');
 
 // 8. Funil: schema fechado, sem dados pessoais.
 r = await call('record-public-funnel-event', { consent: true, event_id: randomUUID(), event_name: 'menu_view', branch_slug: 'e2e-cod', order_type: 'ENTREGA', device: 'MOBILE', source: 'DIRECT' });

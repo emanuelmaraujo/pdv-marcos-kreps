@@ -257,6 +257,13 @@ BEGIN
        AND current_setting('app.cod_review',true) IS DISTINCT FROM 'yes' THEN
       RAISE EXCEPTION 'Use a confirmação operacional do pedido.';
     END IF;
+    -- Valor recebido e não estornado preserva o pedido: cancelar apagaria a
+    -- obrigação sem devolver o dinheiro. Vale para qualquer caminho (backend,
+    -- API direta, trigger derivado dos itens) e serializa pelo lock da linha.
+    IF NEW.payment_timing='ON_DELIVERY' AND NEW.status IN ('CANCELADO','EXPIRADO')
+       AND OLD.status IS DISTINCT FROM NEW.status AND COALESCE(OLD.cod_received_amount,0) > 0 THEN
+      RAISE EXCEPTION 'Pedido com pagamento na entrega já recebido não pode ser cancelado. Registre o estorno do valor antes.' USING ERRCODE='P0001';
+    END IF;
     IF NEW.payment_timing='ON_DELIVERY' AND NEW.cod_received_amount IS DISTINCT FROM OLD.cod_received_amount
        AND current_setting('app.cod_receipt',true) IS DISTINCT FROM 'yes' THEN
       RAISE EXCEPTION 'Saldo de recebimento é derivado dos pagamentos.';
@@ -643,3 +650,8 @@ REVOKE ALL ON FUNCTION public.get_branch_cod_policy(uuid),
 GRANT EXECUTE ON FUNCTION public.get_branch_cod_policy(uuid),
   public.set_branch_cod_policy(uuid,boolean,text[],numeric,integer,integer) TO authenticated;
 
+-- Bairros do painel (aba Entrega): 20260909040313 concedeu SELECT explícito às
+-- tabelas da equipe mas omitiu delivery_zones; bancos recriados só por migrations
+-- respondiam 403 ao ADMIN. As policies já existentes limitam leitura à filial
+-- (can_access_branch) e escrita ao ADMIN da filial (can_manage_branch).
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.delivery_zones TO authenticated;

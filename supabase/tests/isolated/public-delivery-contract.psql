@@ -153,6 +153,16 @@ BEGIN
  PERFORM public.pay_order_items_transactional(v_order,v_actor,'PIX','PAID',20,ARRAY[v_second]);
  PERFORM pg_temp.assert_221((SELECT cod_received_amount=35 AND total_amount=35 FROM public.orders WHERE id=v_order),'última parcela quita total descontado incluindo frete');
  PERFORM pg_temp.reject_221(format('SELECT public.pay_order_items_transactional(%L,%L,''CASH'',''REFUNDED'',100,ARRAY[%L::uuid])',v_order,v_actor,v_first),'%excede o recebimento%');
+ -- Recebimento parcial bloqueia cancelamento por qualquer caminho, preservando o histórico.
+ v_order:=(public.create_public_order_transactional(public.test_221_payload('cod-cancel-paid','ON_DELIVERY'))->>'order_id')::uuid;
+ PERFORM public.review_delivery_order_transactional(v_order,v_actor,'CONFIRM',true);
+ SELECT id INTO v_first FROM public.order_items WHERE order_id=v_order ORDER BY id LIMIT 1;
+ PERFORM public.pay_order_items_transactional(v_order,v_actor,'CASH','PAID',20,ARRAY[v_first]);
+ PERFORM pg_temp.reject_221(format('UPDATE public.order_items SET status=''CANCELLED'',cancelled_at=now() WHERE order_id=%L AND status<>''CANCELLED''',v_order),'%já recebido não pode ser cancelado%');
+ PERFORM pg_temp.reject_221(format('UPDATE public.orders SET status=''CANCELADO'',cancelled_at=now() WHERE id=%L',v_order),'%já recebido não pode ser cancelado%');
+ PERFORM pg_temp.assert_221((SELECT status<>'CANCELADO' AND cod_received_amount=20 FROM public.orders WHERE id=v_order),'pedido e saldo preservados');
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.order_items WHERE order_id=v_order AND status='CANCELLED')=0,'itens não foram cancelados');
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.payments WHERE order_id=v_order)=1,'histórico de pagamento intacto');
  UPDATE public.branch_cod_policies SET max_pending=1 WHERE branch_id='f2210000-0000-4000-8000-000000000011';
  PERFORM public.create_public_order_transactional(public.test_221_payload('pending-limit-a','ON_DELIVERY'));
  PERFORM pg_temp.reject_221($q$SELECT public.create_public_order_transactional(public.test_221_payload('pending-limit-b','ON_DELIVERY'))$q$,'%Pagamento na entrega indisponível%');

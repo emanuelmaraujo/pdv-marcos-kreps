@@ -49,6 +49,13 @@ try {
     await page.locator('#login-email').fill('e2e-admin@example.invalid');
     await page.locator('#login-password').fill('local-e2e-only-221');
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+    // Em dev, a primeira interação pode chegar antes da hidratação; repete uma vez.
+    if (!(await page.waitForURL(/\/app/, { timeout: 20000 }).then(() => true, () => false))) {
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.locator('#login-email').fill('e2e-admin@example.invalid');
+      await page.locator('#login-password').fill('local-e2e-only-221');
+      await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+    }
     await page.waitForURL(/\/app/, { timeout: 120000 }).catch(async (error) => {
       console.error((await page.locator('body').innerText()).slice(0, 600), diagnostics.slice(-10).join('\n'));
       throw error;
@@ -56,6 +63,8 @@ try {
     await page.goto(`${app}/app/configuracoes/filiais/${branch.id}?tab=entrega`, { waitUntil: 'domcontentloaded', timeout: 240000 });
     const card = page.locator('div', { has: page.getByText('Pagamento na entrega', { exact: true }) }).filter({ has: page.getByRole('button', { name: 'Salvar pagamento na entrega' }) }).last();
     await card.getByRole('button', { name: 'Salvar pagamento na entrega' }).waitFor({ timeout: 240000 });
+    // Listagem de bairros da aba Entrega (antes: 403 em banco recriado por migrations).
+    await page.getByText('Centro', { exact: true }).first().waitFor({ timeout: 30000 });
     await card.getByText(/Última aprovação/).waitFor();
     await card.getByPlaceholder('Ex.: 150,00').fill('');
     await card.getByRole('button', { name: 'Salvar pagamento na entrega' }).click();
@@ -81,6 +90,7 @@ try {
       const config = await fetch(`${api}/functions/v1/get-public-checkout-config`, { method: 'POST', headers: { apikey: anon, Authorization: `Bearer ${anon}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ branch_slug: 'e2e-cod' }) }).then((r) => r.json());
       assert.equal(config.branch?.cod_enabled, false, 'checkout para de oferecer COD após desligar no painel');
     }
+    assert(!diagnostics.some((line) => /HTTP 403/.test(line)), `sem 403 no painel: ${diagnostics.join(' | ')}`);
     if (diagnostics.length) console.log(`Diagnóstico ${width}px:\n${diagnostics.join('\n')}`);
     console.log(`PASS: painel COD em ${width}px (validação, salvar, aprovação carimbada${width === 1440 ? ', desligar' : ''}).`);
     await context.close();

@@ -371,12 +371,36 @@ O E2E passa pelas Edge Functions reais (edge-runtime local) com usuários sinté
 - O CI executa `test:database`, mas não o E2E nem o QA do painel (exigem edge-runtime e Playwright).
 - A conciliação usa o `cash-report`, que já ignorava estornos antes desta mudança.
 - Nenhum teste com operadores ou clientes reais. O piloto continua como passo operacional.
-- Cancelar um pedido COD inteiro depois de recebimento parcial não tem estorno pelo
-  sistema (a RPC recusa pagamento em pedido CANCELADO). O acompanhamento orienta o
-  cliente a falar com a unidade. Decidir se o cancelamento deve ser bloqueado nesse caso.
+- (Resolvido na rodada 3.) Cancelamento de COD com valor recebido.
 - A segunda rodada da revisão independente aprovou (`approve`). Os dois pontos baixos que
   ela levantou foram atendidos: `NULLIF` no guard e texto de cancelamento após recebimento.
-- Pré-existente e fora do escopo: na instância local, `GET /rest/v1/delivery_zones` da aba
-  Entrega responde 403 para o ADMIN autenticado. Este diff não altera essa tabela,
-  seus grants nem a chamada. Investigar à parte, porque envolve RLS e permissões.
+- (Resolvido na rodada 3.) 403 em `delivery_zones`.
+
+## Rodada 3 — pendências antes do merge (26/10/2026)
+
+- **Cancelamento COD com valor recebido:** o guard em `orders` recusa a passagem para
+  CANCELADO/EXPIRADO quando `cod_received_amount > 0`. Isso vale para o backend, para a API
+  direta e para o recálculo derivado dos itens (o statement inteiro é desfeito) e serializa
+  com o recebimento pelo lock da linha. `update-order-status` antecipa a mensagem.
+  Depois do estorno (ADMIN, `mark-payment REFUNDED`), o cancelamento é aceito, e
+  `payments` e `audit_logs` ficam intactos. Não há tela de estorno; isso está documentado.
+- **403 em `delivery_zones`:**
+  - **Causa:** a migration `20260909040313` concedeu `SELECT` explícito às tabelas da equipe
+    e omitiu `delivery_zones`. Num banco recriado só por migrations, o ACL ficava
+    `authenticated=Dxtm`.
+  - **Correção:** `GRANT SELECT, INSERT, UPDATE, DELETE` ao `authenticated`. As policies
+    existentes limitam a leitura à filial e a escrita ao ADMIN da filial.
+  - **Produção:** provavelmente já tem esse acesso pelos grants do Dashboard; não foi
+    possível confirmar, porque a leitura do banco não foi autorizada nesta sessão.
+- **Migrations pendentes:** só `20261025212158_public_delivery_payment_contract.sql`. O log do
+  deploy de `a69253b` registrou “Remote database is up to date” e a `main` não avançou desde então.
+- **Revisão independente:** o código foi aprovado. O rollback inicial (revert do merge
+  inteiro) quebraria o deploy, porque apagaria a migration aplicada; a correção também foi aprovada.
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm run check` | PASS — 295 testes, tipos, lint, docs, Supabase |
+| `npm run build` | PASS |
+| `test:database` | PASS — 89 testes pgTAP em 8 arquivos (novo: `delivery_zones_access`) |
+| `test:cod-e2e -- --admin-qa` | PASS — 46 verificações (corrida cancelar × receber, API direta, estorno → cancelamento) e painel com a listagem de bairros sem 403 |
 

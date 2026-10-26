@@ -40,6 +40,13 @@ Os limites não são enviados ao navegador do cliente.
 - `mark-payment` exige confirmação explícita de recebimento (`received_confirmed`).
   Recebimento parcial distribui o desconto de cupom proporcionalmente e cobra o frete
   na última parcela; o status vira `PAID` somente quando o total é recebido.
+- Pedido COD com valor recebido e não estornado **não pode ser cancelado** (nem pelo
+  painel, nem pela API direta, nem por cancelamento dos itens). Primeiro é preciso
+  estornar até zerar o recebido; depois o cancelamento é aceito. **Ainda não há botão de
+  estorno no painel**: hoje ele só existe na Edge Function `mark-payment`
+  (`payment_status = REFUNDED`, somente ADMIN). Até existir a tela, trate esses casos
+  com o administrador.
+  Recebimentos e estornos permanecem em `payments` e `audit_logs`.
 - O acompanhamento mostra “Aguardando confirmação da unidade” e “Pagamento na entrega
   pendente” até a baixa; nunca exibe pagamento aprovado antes do recebimento.
 
@@ -52,15 +59,42 @@ e opção de pagamento. Não incluem nome, telefone, endereço, CEP, token, URL 
 de idempotência. Eventos financeiros são gravados pelo banco (`origin = SERVER`)
 e apagados após 30 dias.
 
-### Implantação
+### Implantação e rollback
 
-1. Merge do PR na `main` (exige aprovação humana). O workflow de deploy roda o CI,
-   aplica a migration e só então publica as Edge Functions.
-2. Publicação do frontend. Até lá, o checkout antigo continua só com pagamento online.
-3. Conferir no Supabase que a migration consta no histórico e que `branch_cod_policies` está vazia.
-4. Somente com decisão da unidade: ativar pelo painel em uma filial piloto, fazer um
-   pedido real de baixo valor e acompanhar confirmação, impressão, entrega, baixa e caixa.
-5. Reverter operacionalmente: desligar no painel. Pedidos já aceitos seguem o fluxo normal.
+Pendente em produção (log do deploy de `a69253b`: “Remote database is up to date”):
+somente `20261025212158_public_delivery_payment_contract.sql`. Ela depende de objetos já
+aplicados (`create_public_order_transactional`, `pay_order_items_transactional`,
+`can_manage_branch`, `is_global_admin`, `audit_logs.branch_id`) e roda numa transação:
+se algo divergir, falha inteira e as funções não são publicadas.
+
+Ao fazer o merge na `main`, de forma automática:
+1. Workflow *Deploy Supabase Edge Functions*: CI (incluindo pgTAP) → `db push --dry-run`
+   → `db push` → `functions deploy` de todas as funções.
+2. Vercel (integração Git): publica o frontend em paralelo. A ordem não importa: o
+   frontend novo funciona com as funções antigas (COD fica oculto e o cartão do painel
+   mostra erro de carregamento até a migration), e as funções antigas funcionam com o
+   schema novo.
+
+Plano seguro:
+1. Merge com autorização humana; acompanhar o workflow até a etapa “Apply pending
+   migrations” listar só a migration acima.
+2. Conferir que `branch_cod_policies` está vazia (COD desligado em todas as filiais) e
+   fazer um pedido online de teste.
+3. Piloto: ativar COD pelo painel em uma filial e fazer um pedido real de baixo valor
+   (confirmação, impressão, entrega, baixa, caixa).
+
+Rollback:
+- Operacional (imediato): desligar COD no painel. Antes de qualquer rollback de código,
+  confirmar ou rejeitar os pedidos COD em `AGUARDANDO_CONFIRMACAO`: as funções antigas não
+  confirmam nem expiram COD. Os já confirmados continuam recebendo baixa por `mark-payment`.
+- Frontend: promover o deployment anterior na Vercel.
+- Funções: commit na `main` que restaure **somente** `supabase/functions/**` (e o frontend,
+  se preciso) da revisão anterior, **mantendo o arquivo da migration**. Um `git revert`
+  do merge inteiro apagaria a migration já registrada no banco: o `db push --dry-run`
+  falharia por versão remota ausente localmente e as funções não seriam republicadas.
+  Nunca remover migration aplicada nem rodar `migration repair` automático.
+- Schema: permanece. É compatível com as funções antigas; reverter exige SQL manual
+  revisado e autorização própria.
 
 Detalhes, riscos e limites de validação: [issue #221](../archive/studies/auditoria-pedir-issue-221.md).
 
