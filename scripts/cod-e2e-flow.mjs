@@ -66,7 +66,7 @@ sql(`INSERT INTO public.branches(id,code,slug,name,active,delivery_enabled,defau
   INSERT INTO public.customers(id,phone_e164,name) VALUES ${phones.map((p) => `('${p}','${p}','Cliente sintético')`).join(',')} ON CONFLICT DO NOTHING;
   INSERT INTO public.customer_addresses(id,customer_id,street,number,neighborhood,city,state,postal_code)
     VALUES ${phones.map((p) => `('${addresses[p]}','${p}','Rua Fictícia','10','Centro','Cidade Teste','DF','70000000')`).join(',')};
-  INSERT INTO public.settings(key,value) VALUES('print_customer_copy','true'),('print_kitchen_copy','true'),('printing_enabled','true')
+  INSERT INTO public.settings(key,value) VALUES('print_customer_copy','true'),('print_kitchen_copy','true'),('printing_enabled','true'),('whatsapp_enabled','true')
     ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value;`);
 
 const admin = await user('e2e-admin@example.invalid', 'Admin E2E', 'ADMIN', [ids.branch]);
@@ -119,6 +119,14 @@ const receipt = sql(`SELECT content->>'text' FROM public.printer_jobs WHERE orde
 check(/COBRAR NA ENTREGA: R\$ ?45,00/.test(receipt) && /Dinheiro/.test(receipt) && /Troco para: R\$ ?50,00/.test(receipt), 'via do cliente orienta cobrança em pt-BR');
 check(!/Forma: PIX|PENDING/.test(receipt), 'via não sugere pagamento online nem código cru');
 check(order(created.order_id).payment_status === 'PENDING', 'confirmar não registra pagamento');
+// Só grava a fila local; nenhum envio real acontece no E2E.
+check(sql(`SELECT count(*) FROM public.whatsapp_messages WHERE order_id='${created.order_id}' AND event_type='order_received'`) === '1', 'cliente COD recebe aviso de confirmação uma única vez');
+const firstItem = sql(`SELECT id FROM public.order_items WHERE order_id='${created.order_id}' ORDER BY id LIMIT 1`);
+r = await call('update-order-item-status', { order_item_id: firstItem, new_status: 'CANCELLED', reason: 'Sem estoque' }, attendant.token);
+check(r.status >= 400 && sql(`SELECT count(*) FROM public.order_items WHERE order_id='${created.order_id}' AND status='CANCELLED'`) === '0', 'item isolado de pedido COD não é cancelado');
+r = await fetch(`${api}/rest/v1/order_items?id=eq.${firstItem}`, { method: 'PATCH', body: JSON.stringify({ status: 'CANCELLED' }),
+  headers: { apikey: anon, Authorization: `Bearer ${admin.token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' } });
+check(r.status >= 400 && sql(`SELECT status FROM public.order_items WHERE id='${firstItem}'`) !== 'CANCELLED', 'admin não cancela item COD direto pela API');
 
 // 4. Produção, despacho, entrega: continua pendente até a baixa.
 for (const item of sql(`SELECT id FROM public.order_items WHERE order_id='${created.order_id}'`).split('\n')) {

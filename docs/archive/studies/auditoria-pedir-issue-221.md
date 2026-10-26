@@ -294,13 +294,84 @@ overflow em 390/1440. Capturas: `qa-cod-dados-*.png`, `qa-cod-rodape-390.png` e
 
 ### Limitações que permanecem
 
-- `npm run test:database` (Supabase completo) não rodou: o download das imagens Docker
-  falhou por limite de requisições. O fallback usa só PostgreSQL com stub de auth;
-  não valida RLS de ponta a ponta, Realtime nem o cron de retenção de impressão.
-- Edge Functions não foram executadas em Deno (runtime indisponível); foram cobertas por
-  typecheck do projeto, testes dos helpers compartilhados e pelas RPCs SQL que chamam.
+- (Superado na rodada 2, abaixo.) `npm run test:database` e Edge Functions em runtime
+  não tinham sido executados na primeira rodada.
 - O QA de navegador usa respostas simuladas; não prova gateway, impressão física,
   WhatsApp, autenticação real nem ambiente publicado.
-- Não existe tela administrativa para habilitar COD; a política precisa de operação
-  autorizada no banco quando a unidade definir meios, limite e prazo.
+- (Superado na rodada 2.) Configuração pelo painel.
 - Conversão, abandono e fotos reais continuam não medidos; nenhum benchmark externo consultado.
+
+## Rodada 2 — validação integral, painel e revisão independente (26/10/2026)
+
+### Defeitos encontrados e corrigidos
+
+| Severidade | Defeito | Correção |
+| --- | --- | --- |
+| Alta | A criação COD exigia telefone `55…`, mas `create-public-order` grava `+55…`: **todo pedido COD real seria recusado**. O teste isolado usava o formato errado. | Regra `^\+55…` e fixture em E.164, mais um caso negativo |
+| Média | Cancelar um item de pedido COD mantinha `total_amount`, fazendo cobrar o que não foi entregue | Cancelamento de item isolado recusado em `update-order-item-status` e no guard do banco (para chamadas `authenticated`); o pedido inteiro continua cancelável |
+| Média | A confirmação COD não enfileirava o WhatsApp `order_received` | Enfileirado após a confirmação, sem reenviar em retry |
+| Baixa | A via do cliente mostrava `CASH`, `PENDING` e “Forma: PIX” em pedido COD | Texto em pt-BR, com valor a cobrar, forma combinada e troco |
+| Baixa | IFOOD/CORTESIA eram oferecidos e aceitos na troca de meio em COD | Filtrados na tela e recusados em `change-payment-method` |
+| Baixa | O acompanhamento mostrava “pendente” em COD cancelado ou expirado | Mostra “Pedido encerrado sem cobrança” e “estornado” |
+| Baixa | Não era possível rejeitar entre o fim do prazo e a varredura | REJECT permitido após o prazo; CONFIRM continua bloqueado |
+| Baixa | Erro de troco virava “COD indisponível” | Mensagem específica de troco |
+| Baixa | `cod_action` era ignorado em pedido online | Recusado |
+| Baixa | O cliente podia ocupar o id determinístico de um evento SERVER do funil | Id do evento CLIENT derivado no servidor (`sha256("client:"+id)`) |
+| Baixa | Uma falha na expiração COD interrompia a expiração online | Registrada em log; a online continua |
+| Baixa | Funil registrava PIX ao escolher “Online”; falha de rede virava `ORDER` | Sem evento falso; categoria `NETWORK` |
+| Baixa | 68 capturas (5,4 MB) versionadas | Subconjunto curado (1,2 MB) |
+
+O fixture isolado passou a usar a extensão `.psql`: o runner do `supabase test db` também
+executava o arquivo sozinho, fora da transação do teste.
+
+### Configuração por filial no painel
+
+Cartão “Pagamento na entrega” na aba Entrega da filial, salvo por `set_branch_cod_policy`
+(`can_manage_branch`, validação no servidor, aprovação com data e responsável carimbados,
+auditoria `COD_POLICY_UPDATED`). A tabela continua fora do PostgREST e os limites não vão
+ao checkout. Detalhes em [Delivery](../../product/delivery.md#pagamento-na-entrega-cod).
+
+### Revisão independente
+
+A revisão (subagente sem o contexto da implementação) apontou 2 problemas médios e 10 baixos,
+nenhum alto. Ela confirmou `search_path` e grants das funções SECURITY DEFINER, que o ator
+vem do JWT, a idempotência e a impressão única, que o COD nunca vira PAID sem baixa e que a
+janela de deploy (migration antes das funções novas) é compatível com as funções antigas.
+Todos os achados da tabela acima foram atendidos, exceto os mantidos como decisão:
+
+- `PayItemsModal` passou a somar `delivery_fee` também no online. Isso alinha a tela com a
+  RPC, que já cobrava a taxa na última parcela.
+- A evolução da vitrine (miniatura, cabeçalho) faz parte do redesign aprovado.
+- `cod_expires_at` não é protegido contra UPDATE direto por ADMIN da filial. Estender o
+  prazo não paga nem libera produção, e confirmar continua exigindo a RPC.
+
+### Verificações desta rodada
+
+| Verificação | Resultado |
+| --- | --- |
+| `npm run check` | PASS — 295 testes em 37 arquivos, tipos, lint, docs, config Supabase (82 migrations) |
+| `npm run build` (env loopback do CI) | PASS |
+| `npm run test:database` (Supabase completo, Docker) | PASS — 7 arquivos pgTAP, incluindo a política pelo painel |
+| `npm run test:cod-e2e -- --admin-qa` | PASS — 40 verificações E2E nas Edge Functions locais; painel com login real em 390 e 1440 px |
+
+O E2E passa pelas Edge Functions reais (edge-runtime local) com usuários sintéticos e cobre:
+- política pelo painel e checkout;
+- três envios simultâneos com a mesma chave;
+- confirmação por outra filial, confirmação sem contato e retry;
+- vias CUSTOMER e KITCHEN uma única vez, via em pt-BR e WhatsApp na fila;
+- cancelamento de item recusado, despacho e entrega pelo motoboy;
+- baixa sem confirmação, com valor errado e duplicada;
+- caixa com R$ 45,00 em dinheiro;
+- rejeição, expiração e funil (PII, consentimento e evento financeiro forjado).
+
+### Limitações reais
+
+- Tudo roda em instância descartável com dados sintéticos. Não houve aplicação da
+  migration em produção, impressão física, envio de WhatsApp nem pagamento real.
+- O CI executa `test:database`, mas não o E2E nem o QA do painel (exigem edge-runtime e Playwright).
+- A conciliação usa o `cash-report`, que já ignorava estornos antes desta mudança.
+- Nenhum teste com operadores ou clientes reais. O piloto continua como passo operacional.
+- Pré-existente e fora do escopo: na instância local, `GET /rest/v1/delivery_zones` da aba
+  Entrega responde 403 para o ADMIN autenticado. Este diff não altera essa tabela,
+  seus grants nem a chamada. Investigar à parte, porque envolve RLS e permissões.
+

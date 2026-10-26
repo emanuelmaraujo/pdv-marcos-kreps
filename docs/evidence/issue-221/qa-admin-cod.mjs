@@ -42,6 +42,7 @@ try {
     page.on('dialog', (dialog) => dialog.accept());
     const diagnostics = [];
     page.on('console', (msg) => { if (msg.type() === 'error') diagnostics.push(`console: ${msg.text().slice(0, 200)}`); });
+    page.on('response', (res) => { if (res.status() >= 400) diagnostics.push(`HTTP ${res.status()} ${res.request().method()} ${new URL(res.url()).pathname}`); });
     page.on('requestfailed', (req) => diagnostics.push(`falhou: ${req.url().slice(0, 120)} ${req.failure()?.errorText}`));
     // Em modo dev, clicar antes da hidratação faria submit nativo do formulário.
     await page.goto(`${app}/login`, { waitUntil: 'networkidle', timeout: 240000 });
@@ -55,7 +56,7 @@ try {
     await page.goto(`${app}/app/configuracoes/filiais/${branch.id}?tab=entrega`, { waitUntil: 'domcontentloaded', timeout: 240000 });
     const card = page.locator('div', { has: page.getByText('Pagamento na entrega', { exact: true }) }).filter({ has: page.getByRole('button', { name: 'Salvar pagamento na entrega' }) }).last();
     await card.getByRole('button', { name: 'Salvar pagamento na entrega' }).waitFor({ timeout: 240000 });
-    await card.getByText(/Ativo desde/).waitFor();
+    await card.getByText(/Última aprovação/).waitFor();
     await card.getByPlaceholder('Ex.: 150,00').fill('');
     await card.getByRole('button', { name: 'Salvar pagamento na entrega' }).click();
     await card.getByRole('alert').filter({ hasText: 'valor máximo' }).waitFor();

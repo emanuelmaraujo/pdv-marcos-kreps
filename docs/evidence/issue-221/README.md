@@ -10,6 +10,10 @@ foi inventada: o cenário usa o fallback sem foto.
 - [Proposta mobile](proposta-checkout-390.png) e [desktop](proposta-checkout-1440.png).
 - [Aplicativo: dados de VIAGEM em 360 px](antes-dados-viagem-360.png).
 
+Só um subconjunto curado das capturas fica versionado (360/390 px e as de COD e
+do painel). Os roteiros abaixo regeneram o conjunto completo de larguras localmente;
+os arquivos extras não devem ser commitados.
+
 `antes-*` são capturas do aplicativo existente, nas larguras indicadas no nome;
 `depois-*` registram as correções pontuais do aplicativo;
 `proposta-*` são capturas do HTML ilustrativo e não representam implementação.
@@ -72,3 +76,13 @@ Feche o servidor local depois da execução.
 acompanhamento do pedido no navegador, aborta qualquer outro destino e grava
 `qa-cod.json` e as capturas `qa-cod-*`. `auditoria-local.mjs` aceita as portas
 fictícias 9 e 54321. Nenhum pedido, pagamento, impressão ou mensagem real é criado.
+
+## QA do painel e fluxo COD nas Edge Functions
+
+`npm run test:cod-e2e` sobe a instância Supabase descartável de `test:database`,
+roda os testes pgTAP e `scripts/cod-e2e-flow.mjs`, que chama as Edge Functions
+locais com usuários sintéticos: política pelo painel, criação concorrente, confirmação,
+impressão, cancelamento de item, despacho, entrega, baixa, caixa, rejeição, expiração,
+WhatsApp (só fila local) e funil. Com `-- --admin-qa` e `PLAYWRIGHT_MODULE`,
+`qa-admin-cod.mjs` faz login real no painel em `next dev` e configura o COD em 390 e
+1440 px (`qa-admin-cod-*.png`). O endereço vem de cadastro salvo: o ViaCEP não é chamado.
