@@ -386,8 +386,8 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
             </section>
 
             {isCod && <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-sm" aria-label="Pagamento na entrega">
-              <h2 className="font-semibold">{order?.status === "CANCELADO" || order?.status === "EXPIRADO" ? "Pedido encerrado sem cobrança" : order?.payment_status === "REFUNDED" ? "Pagamento estornado" : order?.payment_status === "PAID" ? "Pago na entrega" : order?.payment_status === "PARTIAL" ? "Pagamento na entrega parcialmente recebido" : "Pagamento na entrega pendente"}</h2>
-              <p className="mt-1 text-[var(--text-secondary)]">{order?.status === "CANCELADO" || order?.status === "EXPIRADO" ? "Nada será cobrado por este pedido." : "O status financeiro só muda após a unidade registrar o recebimento efetivo."}</p>
+              <h2 className="font-semibold">{(order?.status === "CANCELADO" || order?.status === "EXPIRADO") && ["PARTIAL", "PAID"].includes(order?.payment_status ?? "") ? "Pedido cancelado após recebimento" : order?.status === "CANCELADO" || order?.status === "EXPIRADO" ? "Pedido encerrado sem cobrança" : order?.payment_status === "REFUNDED" ? "Pagamento estornado" : order?.payment_status === "PAID" ? "Pago na entrega" : order?.payment_status === "PARTIAL" ? "Pagamento na entrega parcialmente recebido" : "Pagamento na entrega pendente"}</h2>
+              <p className="mt-1 text-[var(--text-secondary)]">{(order?.status === "CANCELADO" || order?.status === "EXPIRADO") && ["PARTIAL", "PAID"].includes(order?.payment_status ?? "") ? "Já houve recebimento neste pedido. Fale com a unidade sobre a devolução." : order?.status === "CANCELADO" || order?.status === "EXPIRADO" ? "Nada será cobrado por este pedido." : "O status financeiro só muda após a unidade registrar o recebimento efetivo."}</p>
             </section>}
 
             {/* ── 3. Andamento (timeline vertical) ─────────────────── */}

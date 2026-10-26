@@ -289,7 +289,7 @@ BEGIN
         -- Cancelar item isolado deixaria total_amount cobrando o que não foi entregue.
         -- A API direta da equipe não cancela item; o pedido inteiro é cancelado pelo backend.
         IF NEW.status='CANCELLED' AND OLD.status IS DISTINCT FROM 'CANCELLED'
-           AND COALESCE(current_setting('request.jwt.claim.role',true),
+           AND COALESCE(NULLIF(current_setting('request.jwt.claim.role',true),''),
                  NULLIF(current_setting('request.jwt.claims',true),'')::jsonb->>'role')='authenticated' THEN
           RAISE EXCEPTION 'Pedido com pagamento na entrega não permite cancelar item isolado.';
         END IF;

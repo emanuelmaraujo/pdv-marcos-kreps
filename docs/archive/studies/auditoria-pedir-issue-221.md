@@ -371,6 +371,11 @@ O E2E passa pelas Edge Functions reais (edge-runtime local) com usuários sinté
 - O CI executa `test:database`, mas não o E2E nem o QA do painel (exigem edge-runtime e Playwright).
 - A conciliação usa o `cash-report`, que já ignorava estornos antes desta mudança.
 - Nenhum teste com operadores ou clientes reais. O piloto continua como passo operacional.
+- Cancelar um pedido COD inteiro depois de recebimento parcial não tem estorno pelo
+  sistema (a RPC recusa pagamento em pedido CANCELADO). O acompanhamento orienta o
+  cliente a falar com a unidade. Decidir se o cancelamento deve ser bloqueado nesse caso.
+- A segunda rodada da revisão independente aprovou (`approve`). Os dois pontos baixos que
+  ela levantou foram atendidos: `NULLIF` no guard e texto de cancelamento após recebimento.
 - Pré-existente e fora do escopo: na instância local, `GET /rest/v1/delivery_zones` da aba
   Entrega responde 403 para o ADMIN autenticado. Este diff não altera essa tabela,
   seus grants nem a chamada. Investigar à parte, porque envolve RLS e permissões.
