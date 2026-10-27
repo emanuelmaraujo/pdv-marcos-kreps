@@ -1,3 +1,4 @@
+import { productionHandoffMetadata } from '../_shared/production-handoff.ts';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
@@ -216,7 +217,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const { data: items } = await supabaseAdmin
     .from("order_items")
     .select(`
-      id, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector,
+      id, handoff_revision, status, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector,
       order_item_removed_ingredients ( ingredient_name_snapshot ),
       order_item_addons ( addon_name_snapshot, quantity, addon_price_snapshot )
     `)
@@ -265,7 +266,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       title: "KREPS",
       source: "PUBLIC",
     });
-    printerJobsToInsert.push({ order_id: orderId, branch_id: order.branch_id, sector: "KITCHEN", content: { text: content } });
+    printerJobsToInsert.push({ order_id: orderId, branch_id: order.branch_id, sector: "KITCHEN", content: { ...productionHandoffMetadata(items, 'KITCHEN'), text: content } });
   }
 
   if (juicePotatoItems.length > 0 && shouldPrintJuice && !existingSectors.has("JUICE_POTATO")) {
@@ -286,7 +287,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       title: "COZINHA",
       source: "PUBLIC",
     });
-    printerJobsToInsert.push({ order_id: orderId, branch_id: order.branch_id, sector: "JUICE_POTATO", content: { text: content } });
+    printerJobsToInsert.push({ order_id: orderId, branch_id: order.branch_id, sector: "JUICE_POTATO", content: { ...productionHandoffMetadata(items, 'JUICE_POTATO'), text: content } });
   }
 
   if (printerJobsToInsert.length > 0) {

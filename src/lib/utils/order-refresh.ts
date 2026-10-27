@@ -10,7 +10,7 @@ export function getSelectedOrderSyncCandidate<T extends { id: string }>(
 
 /** Identifica uma mudança material no quadro sem depender da identidade dos objetos. */
 export function hasOrderBoardChanged<
-  T extends { id: string; updated_at?: string; status?: string; payment_status?: string },
+  T extends { id: string; updated_at?: string; status?: string; payment_status?: string; handoff_signature?: string },
 >(currentOrders: T[], refreshedOrders: T[]) {
   if (currentOrders.length !== refreshedOrders.length) return true;
 
@@ -19,7 +19,8 @@ export function hasOrderBoardChanged<
     const current = currentById.get(order.id);
     if (!current) return true;
 
-    return current.updated_at !== order.updated_at
+    return current.handoff_signature !== order.handoff_signature
+      || current.updated_at !== order.updated_at
       || current.status !== order.status
       || current.payment_status !== order.payment_status;
   });

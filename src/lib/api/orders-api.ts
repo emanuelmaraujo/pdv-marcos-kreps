@@ -1,3 +1,4 @@
+import { enrichHandoffs } from './handoff-api';
 import { createClient } from '../supabase/client';
 import { Order } from '@/types/pdv';
 import { getBusinessDayRange } from '../utils/business-day';
@@ -74,7 +75,7 @@ export const ordersApi = {
       throw error;
     }
 
-    return visibleBoardOrders(data as Order[] | null);
+    return enrichHandoffs(visibleBoardOrders(data as Order[] | null));
   },
 
   // Sincronização incremental: quando o Realtime informa quais pedidos mudaram,
@@ -106,6 +107,6 @@ export const ordersApi = {
       throw error;
     }
 
-    return visibleBoardOrders(data as Order[] | null);
+    return enrichHandoffs(visibleBoardOrders(data as Order[] | null));
   },
 };

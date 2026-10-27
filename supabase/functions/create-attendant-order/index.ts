@@ -1,3 +1,4 @@
+import { productionHandoffMetadata } from '../_shared/production-handoff.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildCustomerReceipt, buildProductionReceipt, settingBool, settingNumber } from "../_shared/print-format.ts";
@@ -457,6 +458,15 @@ serve(async (req) => {
     const shouldPrintKitchen  = shouldPrint(printingEnabled && settingBool(settings['print_kitchen_copy']), branchCfg, 'kitchen', order_type, 'ATTENDANT');
     const shouldPrintJuice    = shouldPrint(printingEnabled && settingBool(settings['print_juice_potato_copy']), branchCfg, 'juice', order_type, 'ATTENDANT');
 
+    // Falha da consulta de cobertura não transforma um pedido já criado em erro.
+    // O texto legado continua disponível; sem snapshot verificável não há cobertura.
+    let handoffReceiptItems: any[] = finalItemsData;
+    if (shouldPrintKitchen || shouldPrintJuice) {
+      const { data: snapshot, error: snapshotError } = await supabaseAdmin.from('order_items')
+        .select('*, order_item_addons(*), order_item_removed_ingredients(*)').eq('order_id', createdOrder.id);
+      if (!snapshotError && snapshot?.length) handoffReceiptItems = snapshot;
+    }
+
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');
     
@@ -506,13 +516,13 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
-      content = buildProductionReceipt(receiptOrder, finalItemsData, 'KITCHEN', {
+      content = buildProductionReceipt(receiptOrder, handoffReceiptItems ?? [], 'KITCHEN', {
         timestamp: timestampNow,
         title: 'KREPS',
         branchCode: branch.code,
         branchName: branch.name,
       });
-      printerJobsToInsert.push({ order_id: createdOrder.id, branch_id: branch.id, sector: 'KITCHEN', content: { text: content } });
+      printerJobsToInsert.push({ order_id: createdOrder.id, branch_id: branch.id, sector: 'KITCHEN', content: { ...productionHandoffMetadata(handoffReceiptItems, 'KITCHEN'), text: content } });
     }
 
     // Monta Via JUICE_POTATO
@@ -532,13 +542,13 @@ serve(async (req) => {
         content += `\n`;
       }
       content += `------------------------\n`;
-      content = buildProductionReceipt(receiptOrder, finalItemsData, 'JUICE_POTATO', {
+      content = buildProductionReceipt(receiptOrder, handoffReceiptItems ?? [], 'JUICE_POTATO', {
         timestamp: timestampNow,
         title: 'COZINHA',
         branchCode: branch.code,
         branchName: branch.name,
       });
-      printerJobsToInsert.push({ order_id: createdOrder.id, branch_id: branch.id, sector: 'JUICE_POTATO', content: { text: content } });
+      printerJobsToInsert.push({ order_id: createdOrder.id, branch_id: branch.id, sector: 'JUICE_POTATO', content: { ...productionHandoffMetadata(handoffReceiptItems, 'JUICE_POTATO'), text: content } });
     }
 
     // Monta Via CUSTOMER

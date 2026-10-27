@@ -1,3 +1,4 @@
+import { productionHandoffMetadata } from '../_shared/production-handoff.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildProductionReceipt, settingBool } from "../_shared/print-format.ts";
@@ -251,6 +252,7 @@ serve(async (req) => {
       });
     }
 
+
     // 7. Atualizar Total do Pedido (Apenas total_amount)
     const newTotal = Number(order.total_amount) + additionalSubtotal;
     const { error: updateErr } = await supabaseAdmin
@@ -273,6 +275,15 @@ serve(async (req) => {
     const branchCfg = parseBranchPrinterConfig((order as any).branches?.printer_config);
     const shouldPrintKitchen = shouldPrint(printingEnabled && settingBool(settings['print_kitchen_copy']), branchCfg, 'kitchen', order.type, order.source);
     const shouldPrintJuice   = shouldPrint(printingEnabled && settingBool(settings['print_juice_potato_copy']), branchCfg, 'juice', order.type, order.source);
+
+    // Cobertura é conservadora: falha de leitura mantém a comanda anterior sem
+    // inventar revisão, e não interrompe a atualização financeira já existente.
+    if (shouldPrintKitchen || shouldPrintJuice) {
+      const { data: snapshot, error: snapshotError } = await supabaseAdmin.from('order_items')
+        .select('*, order_item_addons(*), order_item_removed_ingredients(*)')
+        .in('id', receiptItems.map((item) => item.id));
+      if (!snapshotError && snapshot?.length) receiptItems.splice(0, receiptItems.length, ...snapshot);
+    }
 
     const kitchenItems = finalItemsData.filter(i => i.product.sector === 'KITCHEN');
     const juicePotatoItems = finalItemsData.filter(i => i.product.sector === 'JUICE_POTATO');
@@ -305,7 +316,7 @@ serve(async (req) => {
         ...receiptOpts,
         title: 'KREPS',
       });
-      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { text: content, mode: 'ADDITIONAL', addition_batch_no: additionBatchNo, order_item_ids: kitchenReceiptItems.map((item) => item.id) } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { ...productionHandoffMetadata(receiptItems, 'KITCHEN'), text: content, mode: 'ADDITIONAL', addition_batch_no: additionBatchNo, order_item_ids: kitchenReceiptItems.map((item) => item.id) } });
     }
 
     if (juicePotatoItems.length > 0 && shouldPrintJuice) {
@@ -320,7 +331,7 @@ serve(async (req) => {
         ...receiptOpts,
         title: 'COZINHA',
       });
-      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { text: content, mode: 'ADDITIONAL', addition_batch_no: additionBatchNo, order_item_ids: juicePotatoReceiptItems.map((item) => item.id) } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { ...productionHandoffMetadata(receiptItems, 'JUICE_POTATO'), text: content, mode: 'ADDITIONAL', addition_batch_no: additionBatchNo, order_item_ids: juicePotatoReceiptItems.map((item) => item.id) } });
     }
 
     const createdJobsResponse = [];

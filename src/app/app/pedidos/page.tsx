@@ -1,5 +1,7 @@
 "use client";
 
+import { HandoffSettings } from './components/HandoffSettings';
+
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -270,7 +272,7 @@ function AvgWaitBadge({ minutes }: { minutes: number | null }) {
 // ─── Kanban Column ────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  config, orders, now, onCardClick, onQuickAction, onMarkDelivered, onPay, categoryLookup, searchQuery, isLoading,
+  config, orders, now, onCardClick, onQuickAction, onMarkDelivered, onPay, onHandoffChanged, offline, categoryLookup, searchQuery, isLoading,
 }: {
   config: KanbanColumnConfig;
   orders: Order[];
@@ -279,6 +281,8 @@ function KanbanColumn({
   onQuickAction: (order: Order) => Promise<void>;
   onMarkDelivered: (order: Order) => Promise<void>;
   onPay: (order: Order) => void;
+  onHandoffChanged: (id: string) => void;
+  offline: boolean;
   categoryLookup: CategoryLookup;
   searchQuery: string;
   isLoading?: boolean;
@@ -290,7 +294,7 @@ function KanbanColumn({
   const avgWait = config.showAvgWait ? getAvgWaitMinutes(filtered, now) : null;
 
   return (
-    <div className="flex min-w-[260px] max-w-[320px] flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)]/60">
+    <div className="flex min-w-[320px] max-w-[360px] flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-subtle)]/60">
       {/* Column header — borda superior colorida + fundo suave do status */}
       <div className={`relative shrink-0 px-3 py-2.5 ${config.headerBg}`}>
         <div className={`absolute inset-x-0 top-0 h-1 ${config.topColor}`} />
@@ -332,6 +336,8 @@ function KanbanColumn({
               onQuickAction={config.status === "ENTREGUE" || config.status === "CANCELADO" ? undefined : onQuickAction}
               onMarkDelivered={config.status === "NA_FILA" ? onMarkDelivered : undefined}
               onPay={onPay}
+            onHandoffChanged={onHandoffChanged}
+            handoffOffline={offline}
               categoryLookup={categoryLookup}
             />
           ))
@@ -606,6 +612,15 @@ function PedidosWorkspace() {
         const itemId = nextItem.id ?? previousItem.id;
         if (typeof itemId === "string") scheduleOrderRefresh(findOrderIdByItemId(itemId));
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_handoff_units' }, (payload) => {
+        const unit = payload.new as { order_id?: string };
+        scheduleOrderRefresh(unit.order_id);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'printer_jobs' }, (payload) => {
+        const job = payload.new as { order_id?: string };
+        scheduleOrderRefresh(job.order_id);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'production_handoff_config' }, () => reconcile())
       .subscribe((status) => {
         if (disposed) return;
         if (status === "SUBSCRIBED") {
@@ -803,7 +818,7 @@ function PedidosWorkspace() {
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* ── Shared header ──────────────────────────────────────── */}
-      <section className="z-20 -mx-3 border-b border-[var(--border)] bg-[var(--bg-surface)]/95 px-3 py-3 shadow-[var(--shadow-sm)] backdrop-blur md:sticky md:top-14 md:mx-0 md:rounded-2xl md:border md:px-4 md:py-3">
+      <section className="z-20 border-b border-[var(--border)] bg-[var(--bg-surface)]/95 px-3 py-3 shadow-[var(--shadow-sm)] backdrop-blur md:sticky md:top-14 md:mx-0 md:rounded-2xl md:border md:px-4 md:py-3">
 
         {/* Busca e ação imediata ficam na primeira dobra; o resumo abre só sob demanda em telas menores. */}
         <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
@@ -913,6 +928,9 @@ function PedidosWorkspace() {
         </div>
       </section>
 
+      {error && orders.length > 0 && <div role="status" className="mt-3 rounded-xl border border-[var(--status-warning)]/30 bg-[var(--status-warning-bg)] p-3 text-sm text-[var(--text-primary)]">Não foi possível atualizar o quadro. Exibindo os últimos dados carregados. {error}</div>}
+      <HandoffSettings onChanged={() => { void fetchOrders({ showLoading: false }); }} />
+
       {/* ── Desktop Kanban (lg+) ─────────────────────────────── */}
       <div
         className="hidden lg:flex gap-4 overflow-x-auto px-0 pb-4 pt-16"
@@ -928,6 +946,8 @@ function PedidosWorkspace() {
             onQuickAction={handleQuickAction}
             onMarkDelivered={handleMarkDelivered}
             onPay={setPaymentOrder}
+            onHandoffChanged={(id) => { void refreshOrderIds([id]); }}
+            offline={syncMode === "offline"}
             categoryLookup={orderCategories}
             searchQuery={searchQuery}
             isLoading={isLoading}
@@ -943,7 +963,7 @@ function PedidosWorkspace() {
               <Skeleton key={i} className="h-40 w-full" />
             ))}
           </div>
-        ) : error ? (
+        ) : error && orders.length === 0 ? (
           <div className="mx-3 rounded-2xl border border-[var(--status-danger)]/30 bg-[var(--status-danger-bg)] p-4 text-center">
             <p className="text-sm font-semibold text-[var(--status-danger)]">{error}</p>
             <button onClick={() => fetchOrders()} className="mt-2 inline-flex h-11 items-center text-xs font-semibold text-[var(--status-danger)] underline">
@@ -969,6 +989,8 @@ function PedidosWorkspace() {
                 onQuickAction={handleQuickAction}
                 onMarkDelivered={handleMarkDelivered}
                 onPay={setPaymentOrder}
+                onHandoffChanged={(id) => { void refreshOrderIds([id]); }}
+                handoffOffline={syncMode === "offline"}
                 categoryLookup={orderCategories}
               />
             ))}

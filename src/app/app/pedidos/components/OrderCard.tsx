@@ -1,9 +1,10 @@
+import { ProductionHandoff } from './ProductionHandoff';
 import { useState } from "react";
-import { Order, OrderItem, OrderItemStatus } from "@/types/pdv";
+import { Order, OrderItemStatus } from "@/types/pdv";
 import { Bike, CheckCircle2, Clock, CreditCard, Loader2, MapPin, Package, ShoppingBag, Utensils } from "lucide-react";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
-import { CategoryLookup, groupOrderItems } from "./order-item-presentation";
+import { CategoryLookup } from "./order-item-presentation";
 import { deliveryNumberLabel, deliveryStreetName } from "@/lib/utils/order-delivery";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -22,25 +23,9 @@ function ElapsedTimer({ since, now }: { since: string; now: number }) {
   return <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${color}`}><Clock className="h-2.5 w-2.5" />{minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)}h${minutes % 60}m`}</span>;
 }
 
-function ItemPreview({ items, categories, includeCancelled = false }: { items: OrderItem[]; categories: CategoryLookup; includeCancelled?: boolean }) {
-  const previewItems = includeCancelled ? items : items.filter((item) => item.status !== "CANCELLED");
-  const visible = groupOrderItems(items, categories, { includeCancelled }).flatMap((group) => group.items.map((item) => ({ group: group.label, item }))).slice(0, 4);
-  const hiddenCount = Math.max(0, previewItems.length - visible.length);
-  return <div className="space-y-1.5">{visible.map(({ group, item }, index) => {
-    const showGroup = index === 0 || group !== visible[index - 1].group;
-    const addons = item.addons ?? [];
-    return <div key={item.id} className="min-w-0">
-      {showGroup && <p className="mb-0.5 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">{group}</p>}
-      <p className={`truncate text-xs font-semibold leading-snug ${item.status === "CANCELLED" ? "text-[var(--text-muted)] line-through" : "text-[var(--text-primary)]"}`}><span className="mr-1.5 inline-flex min-w-5 justify-center rounded bg-[var(--bg-subtle)] px-1 text-[9px] font-black text-[var(--text-secondary)]">{item.quantity}×</span>{item.product_name_snapshot}</p>
-      {addons.length > 0 && <p className="truncate pl-7 text-[11px] font-medium text-[var(--status-success)]">+ {addons.map((addon) => `${addon.quantity > 1 ? `${addon.quantity}× ` : ""}${addon.addon_name_snapshot}`).join(", ")}</p>}
-      {item.removed_ingredients && item.removed_ingredients.length > 0 && <p className="truncate pl-7 text-[11px] font-medium text-[var(--status-danger)]">Sem {item.removed_ingredients.map((ingredient) => ingredient.ingredient_name_snapshot).join(", ")}</p>}
-    </div>;
-  })}{hiddenCount > 0 && <p className="pl-0.5 text-[11px] font-semibold text-[var(--text-muted)]">+{hiddenCount} item{hiddenCount > 1 ? "s" : ""} no pedido</p>}</div>;
-}
+interface Props { order: Order; onClick: (order: Order) => void; now: number; categoryLookup?: CategoryLookup; onQuickAction?: (order: Order) => Promise<void>; onMarkDelivered?: (order: Order) => Promise<void>; onPay?: (order: Order) => void; onHandoffChanged?: (id: string) => void; handoffOffline?: boolean; }
 
-interface Props { order: Order; onClick: (order: Order) => void; now: number; categoryLookup?: CategoryLookup; onQuickAction?: (order: Order) => Promise<void>; onMarkDelivered?: (order: Order) => Promise<void>; onPay?: (order: Order) => void; }
-
-export function OrderCard({ order, onClick, now, categoryLookup = {}, onQuickAction, onMarkDelivered, onPay }: Props) {
+export function OrderCard({ order, onClick, now, onQuickAction, onMarkDelivered, onPay, onHandoffChanged, handoffOffline = false }: Props) {
   const [loading, setLoading] = useState(false);
   const [delivering, setDelivering] = useState(false);
   const active = ACTIVE_STATUSES.includes(order.status);
@@ -68,23 +53,17 @@ export function OrderCard({ order, onClick, now, categoryLookup = {}, onQuickAct
   const triggerAction = async (event: React.MouseEvent) => { event.stopPropagation(); if (!nextAction || loading) return; setLoading(true); try { await nextAction.run(); } finally { setLoading(false); } };
   const triggerDeliver = async (event: React.MouseEvent) => { event.stopPropagation(); if (!onMarkDelivered || delivering) return; setDelivering(true); try { await onMarkDelivered(order); } finally { setDelivering(false); } };
   const triggerPayment = (event: React.MouseEvent) => { event.stopPropagation(); if (!onPay || loading) return; onPay(order); };
-  const openFromKeyboard = (event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key) || loading || delivering) return;
-    event.preventDefault();
-    onClick(order);
-  };
-
-  return <article onClick={() => !loading && !delivering && onClick(order)} onKeyDown={openFromKeyboard} role="button" tabIndex={loading || delivering ? -1 : 0} aria-label={`Abrir detalhes do pedido ${order.daily_number} de ${order.customer_name || "cliente final"}`} className={`focus-ring relative overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] transition active:scale-[0.99] ${urgent ? "border-[var(--status-danger)]/50 ring-2 ring-[var(--status-danger)]/15" : "border-[var(--border)]"} ${loading || delivering ? "pointer-events-none opacity-60" : "cursor-pointer hover:shadow-[var(--shadow-md)]"}`}>
+  return <article className={`focus-ring relative scroll-mt-20 overflow-hidden rounded-2xl border bg-[var(--bg-surface)] shadow-[var(--shadow-sm)] transition ${urgent ? "border-[var(--status-danger)]/50 ring-2 ring-[var(--status-danger)]/15" : "border-[var(--border)]"} ${loading || delivering ? "pointer-events-none opacity-60" : "hover:shadow-[var(--shadow-md)]"}`}>
     <div className={`h-1 ${ACCENT[order.status]}`} />
     <div className="space-y-3 p-3.5">
-      <header className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2.5"><span className="flex h-10 min-w-10 flex-col items-center justify-center rounded-xl bg-brand-charcoal px-1 text-sm font-black text-white">{order.branch?.code && <small className="text-[8px] leading-none text-zinc-400">{order.branch.code}</small>}{String(order.daily_number).padStart(2, "0")}</span><div className="min-w-0"><p className="truncate text-sm font-black text-[var(--text-primary)]">{order.customer_name || "Cliente final"}</p><div className="mt-1 flex flex-wrap items-center gap-1"><OrderTypeBadge type={order.type} /><OrderStatusBadge status={order.status} />{active && since && <ElapsedTimer since={since} now={now} />}</div></div></div><PaymentStatusBadge status={pendingPayment ? "PARTIAL" : order.payment_status} /></header>
+      <header className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><button type="button" onClick={() => onClick(order)} aria-label={`Abrir detalhes do pedido ${order.daily_number} de ${order.customer_name || 'Cliente final'}`} className="min-h-11 w-full break-words text-left text-xl font-extrabold leading-tight text-[var(--text-primary)]">{order.customer_name || 'Cliente final'}</button><p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">#{String(order.daily_number).padStart(3, '0')} · {order.branch?.name || order.branch?.code || 'Filial'}</p><div className="mt-2 flex flex-wrap items-center gap-1"><OrderTypeBadge type={order.type} /><OrderStatusBadge status={order.status} />{active && since && <ElapsedTimer since={since} now={now} />}</div></div><PaymentStatusBadge status={pendingPayment ? 'PARTIAL' : order.payment_status} /></header>
       {order.type === "VIAGEM" && <div className="flex items-center gap-2 rounded-xl border border-[var(--status-warning)]/25 bg-[var(--status-warning-bg)] px-3 py-2 text-[11px] font-black uppercase tracking-wide text-[var(--status-warning)]"><ShoppingBag className="h-3.5 w-3.5" />Para viagem · separar para retirada</div>}
       {order.type === "ENTREGA" && <div className="flex items-start gap-2 rounded-xl border border-blue-500/25 bg-blue-500/10 px-3 py-2 text-blue-700"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /><div className="min-w-0"><p className="truncate text-[11px] font-black uppercase tracking-wide">{deliveryStreetName(order)} · {deliveryNumberLabel(order)}</p>{order.delivery_neighborhood && <p className="mt-0.5 truncate text-[10px] font-semibold text-blue-700/75">{order.delivery_neighborhood}</p>}</div></div>}
-      {pendingPayment && <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-800"><span>{reopenedComanda ? "Adicional a receber" : `Pagamento ${order.payment_status === "PARTIAL" ? "parcial" : "pendente"}`}</span><span className="tabular-nums">{currency.format(pendingAmount || order.total_amount)}</span></div>}
+      {pendingPayment && <div className="flex items-center justify-between gap-2 rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-xs font-bold text-[var(--text-primary)]"><span>{reopenedComanda ? "Adicional a receber" : `Pagamento ${order.payment_status === "PARTIAL" ? "parcial" : "pendente"}`}</span><span className="tabular-nums">{currency.format(pendingAmount || order.total_amount)}</span></div>}
       {awaitingCourier && <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-700"><Bike className="h-3.5 w-3.5" /><span className="truncate">Aguardando confirmação de {order.courier_name || "motoboy"}</span></div>}
-      {(order.items ?? []).length > 0 && <ItemPreview items={order.items ?? []} categories={categoryLookup} includeCancelled={order.status === "CANCELADO"} />}
-      {activeItems.length > 1 && <div className="flex items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5"><span className="text-[11px] font-semibold text-[var(--text-secondary)]">{readyItems}/{activeItems.length} prontos</span><div className="flex flex-1 flex-wrap gap-1">{activeItems.map((item) => <span key={item.id} className={`h-2 w-2 rounded-full ${ITEM_DOT[item.status]}`} />)}</div></div>}
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-2.5"><div><p className="text-[10px] font-medium text-[var(--text-muted)]">Total do pedido</p><p className="text-base font-black tabular-nums text-[var(--text-primary)]">{currency.format(order.total_amount)}</p></div><div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">{pendingPayment && onPay && <button type="button" onClick={triggerPayment} className="flex h-11 items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 text-xs font-black text-amber-800 active:scale-95"><CreditCard className="h-3.5 w-3.5" />Receber</button>}{canDeliverFromQueue && <button type="button" onClick={triggerDeliver} className="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--status-success)] px-3 text-xs font-black text-white shadow-sm active:scale-95">{delivering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Entregar</button>}{nextAction && <button type="button" onClick={triggerAction} className={`flex h-11 max-w-[210px] items-center gap-1.5 rounded-xl px-3 text-xs font-black shadow-sm active:scale-95 ${nextAction.color}`}>{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <nextAction.Icon className="h-3.5 w-3.5" />}{nextAction.label}</button>}</div></footer>
+      {(order.items ?? []).length > 0 && <ProductionHandoff order={order} onChanged={onHandoffChanged} offline={handoffOffline} />}
+      {activeItems.length > 1 && <div className="flex items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5"><span className="text-[11px] font-semibold text-[var(--text-secondary)]">{readyItems}/{activeItems.length} linhas prontas</span><div className="flex flex-1 flex-wrap gap-1">{activeItems.map((item) => <span key={item.id} className={`h-2 w-2 rounded-full ${ITEM_DOT[item.status]}`} />)}</div></div>}
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-2.5"><div><p className="text-[10px] font-medium text-[var(--text-muted)]">Total do pedido</p><p className="text-base font-black tabular-nums text-[var(--text-primary)]">{currency.format(order.total_amount)}</p></div><div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">{pendingPayment && onPay && <button type="button" onClick={triggerPayment} className="flex h-11 items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 text-xs font-black text-[var(--text-primary)] active:scale-95"><CreditCard className="h-3.5 w-3.5" />Receber</button>}{canDeliverFromQueue && <button type="button" onClick={triggerDeliver} className="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--status-success)] px-3 text-xs font-black text-white shadow-sm active:scale-95">{delivering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Entregar</button>}{nextAction && <button type="button" onClick={triggerAction} className={`flex h-11 max-w-[210px] items-center gap-1.5 rounded-xl px-3 text-xs font-black shadow-sm active:scale-95 ${nextAction.color}`}>{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <nextAction.Icon className="h-3.5 w-3.5" />}{nextAction.label}</button>}</div></footer>
     </div>
   </article>;
 }

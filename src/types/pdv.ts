@@ -128,6 +128,18 @@ export interface OrderItemRemovedIngredient {
   ingredient?: Ingredient;
 }
 
+export interface HandoffUnit {
+  id: string; order_id: string; order_item_id: string; unit_no: number;
+  revision: number; version: number; sector: 'KITCHEN' | 'JUICE_POTATO';
+  state: 'UNKNOWN' | 'PENDING' | 'CONFIRMED'; confirmed: boolean;
+  mode: 'MANUAL' | 'PRINTER' | null; enabled: boolean | null; can_manage: boolean;
+  confirmation_origin?: 'MANUAL' | 'MANUAL_RECOVERY' | null;
+  confirmed_at: string | null; actor_name: string; printed_at: string | null;
+  job_status: 'PENDING' | 'PROCESSING' | 'PRINTED' | 'FAILED' | 'SKIPPED' | null;
+  job_id: string | null;
+  history: { origin: string; actor_name: string | null; reason: string | null; created_at: string }[];
+}
+
 export interface OrderItem {
   id: string;
   order_id: string;
@@ -225,6 +237,8 @@ export interface CustomerAddress {
 }
 
 export interface Order {
+  handoffs?: HandoffUnit[];
+  handoff_signature?: string;
   id: string;
   daily_number: number;
   branch_id: string;
