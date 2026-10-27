@@ -40,6 +40,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
+    await supabaseAdmin.rpc("purge_public_funnel_events");
+    const { data: codExpired, error: codErr } = await supabaseAdmin.rpc("expire_unconfirmed_delivery_orders");
+    // Falha no COD não pode impedir a expiração dos pedidos online abaixo.
+    if (codErr) console.error("[expire-pending-public-orders] cod expiration failed", { message: codErr.message });
+
     const { data: candidates, error: candidatesErr } = await supabaseAdmin
       .from("orders")
       .select(`
@@ -73,7 +78,7 @@ serve(async (req) => {
     });
 
     if (expiredOrders.length === 0) {
-      return jsonResponse({ success: true, expired_count: 0 });
+      return jsonResponse({ success: true, expired_count: Number(codExpired ?? 0) });
     }
 
     const expiredIds = expiredOrders.map((order: any) => order.id);
@@ -101,7 +106,7 @@ serve(async (req) => {
       },
     })));
 
-    return jsonResponse({ success: true, expired_count: expiredOrders.length });
+    return jsonResponse({ success: true, expired_count: expiredOrders.length + Number(codExpired ?? 0) });
   } catch (error) {
     console.error("[expire-pending-public-orders] failed", {
       message: error instanceof Error ? error.message : String(error),

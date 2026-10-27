@@ -545,3 +545,6 @@ verify_jwt = true
 
 [functions.validate-coupon]
 verify_jwt = false
+
+[functions.record-public-funnel-event]
+verify_jwt = false

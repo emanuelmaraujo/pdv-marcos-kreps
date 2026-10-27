@@ -1,0 +1,77 @@
+[
+  {
+    "width": 390,
+    "cod": false,
+    "timingVisible": false,
+    "cta": "Continuar para pagamento",
+    "createCalls": [],
+    "funnelEvents": [],
+    "funnelLeak": false,
+    "blocked": []
+  },
+  {
+    "width": 390,
+    "cod": true,
+    "timingVisible": true,
+    "missingMethodError": true,
+    "lowChangeError": true,
+    "staleErrorCleared": true,
+    "bodyWidth": 390,
+    "summaryClear": true,
+    "networkErrorShown": true,
+    "trackingPill": true,
+    "trackingShowsPaid": false,
+    "createCalls": [
+      {
+        "key": "7b5cf464-f56d-4238-a4e1-378771e5ad64",
+        "payment_timing": "ON_DELIVERY",
+        "expected_payment_method": "CASH",
+        "cash_change_for": 50,
+        "analytics_consent": false
+      },
+      {
+        "key": "7b5cf464-f56d-4238-a4e1-378771e5ad64",
+        "payment_timing": "ON_DELIVERY",
+        "expected_payment_method": "CASH",
+        "cash_change_for": 50,
+        "analytics_consent": false
+      }
+    ],
+    "funnelEvents": [],
+    "funnelLeak": false,
+    "blocked": []
+  },
+  {
+    "width": 1440,
+    "cod": true,
+    "timingVisible": true,
+    "missingMethodError": true,
+    "lowChangeError": true,
+    "staleErrorCleared": true,
+    "bodyWidth": 1440,
+    "summaryClear": true,
+    "trackingPill": true,
+    "trackingShowsPaid": false,
+    "createCalls": [
+      {
+        "key": "dcf93197-4956-4ac4-9707-f1abb5600bc2",
+        "payment_timing": "ON_DELIVERY",
+        "expected_payment_method": "CASH",
+        "cash_change_for": 50,
+        "analytics_consent": true
+      }
+    ],
+    "funnelEvents": [
+      "menu_view",
+      "product_view",
+      "add_to_cart",
+      "cart_view",
+      "checkout_start",
+      "delivery_check",
+      "payment_option_select",
+      "order_submit"
+    ],
+    "funnelLeak": false,
+    "blocked": []
+  }
+]

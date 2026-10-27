@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Order, OrderItem, PaymentMethod, PaymentStatus } from '@/types/pdv';
+import { getCodSelectionAmount } from '@/lib/checkout/delivery-payment';
 import { pdvApi } from '@/lib/api/pdv-api';
 import { Sheet } from '@/components/ui/Sheet';
 import { getFriendlyErrorMessage } from '@/lib/errors/messages';
@@ -114,22 +115,23 @@ export function PayItemsModal({
 
   const availableMethods = useMemo(
     () => METHODS.filter((method) => {
+      if (order.payment_timing === 'ON_DELIVERY' && ['IFOOD','COURTESY','PENDING'].includes(method.value)) return false;
       if (method.value === 'IFOOD') return canUseIfood;
       if (method.value === 'PENDING') return allowPending;
       return true;
     }),
-    [allowPending, canUseIfood],
+    [allowPending, canUseIfood, order.payment_timing],
   );
 
   const activeItems = items.filter((item) => item.status !== 'CANCELLED');
   const unpaidItems = activeItems.filter((item) => !isItemPaid(item));
   const selectedItems = unpaidItems.filter((item) => selected.has(item.id));
   const selectedItemsTotal = selectedItems.reduce((sum, item) => sum + Number(item.total_price ?? 0), 0);
-  const packingFeeAmount = Number(order.packing_fee ?? 0);
+  const packingFeeAmount = Number(order.packing_fee ?? 0) + Number(order.delivery_fee ?? 0);
   const shouldChargePackingFee = !order.paid_at && packingFeeAmount > 0;
   const isPayingAllRemaining = selected.size > 0 && selected.size === unpaidItems.length;
-  const selectedTotal = selectedItemsTotal + (isPayingAllRemaining && shouldChargePackingFee ? packingFeeAmount : 0);
-  const pendingTotal = unpaidItems.reduce((sum, item) => sum + Number(item.total_price ?? 0), 0)
+  const selectedTotal = order.payment_timing === "ON_DELIVERY" ? getCodSelectionAmount(order, items, selected) : selectedItemsTotal + (isPayingAllRemaining && shouldChargePackingFee ? packingFeeAmount : 0);
+  const pendingTotal = order.payment_timing === "ON_DELIVERY" ? Math.max(0, Number(order.total_amount)-Number(order.cod_received_amount??0)) : unpaidItems.reduce((sum, item) => sum + Number(item.total_price ?? 0), 0)
     + (shouldChargePackingFee ? packingFeeAmount : 0);
   const pendingAfterSelection = Math.max(0, pendingTotal - selectedTotal);
   const allSelected = selected.size > 0 && selected.size === unpaidItems.length;
@@ -163,6 +165,7 @@ export function PayItemsModal({
       return;
     }
 
+    if (order.payment_timing === 'ON_DELIVERY' && !window.confirm('Você conferiu o recebimento efetivo deste valor? Pedido entregue não significa pedido pago.')) return;
     setLoading(true);
     setError(null);
     try {
@@ -176,6 +179,7 @@ export function PayItemsModal({
           status: nextStatus,
           amount: selectedTotal,
           orderItemIds: itemIds,
+          receivedConfirmed: order.payment_timing === "ON_DELIVERY",
           ifoodChargedAmount: paymentMethod === 'IFOOD' ? ifoodAmount : undefined,
         });
       }
@@ -346,7 +350,7 @@ export function PayItemsModal({
                 </p>
                 {isPayingAllRemaining && shouldChargePackingFee && (
                   <p className="mt-1 text-xs font-bold text-[var(--status-warning)]">
-                    Inclui taxa de embalagem: {currency.format(packingFeeAmount)}
+                    Inclui embalagem e entrega: {currency.format(packingFeeAmount)}
                   </p>
                 )}
               </div>

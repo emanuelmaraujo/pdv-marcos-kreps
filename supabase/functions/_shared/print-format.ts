@@ -1,3 +1,4 @@
+import { DELIVERY_PAYMENT_RECEIPT_LABELS, type DeliveryPaymentMethod } from "./delivery-payment.ts";
 type Sector = "KITCHEN" | "JUICE_POTATO";
 
 type ReceiptOptions = {
@@ -218,9 +219,23 @@ export function buildCustomerReceipt(order: any, items: any[], options: ReceiptO
   if (settingNumber(order?.packing_fee) > 0) content += `Taxa embalagem: ${formatBRL(order.packing_fee)}\n`;
   if (settingNumber(order?.delivery_fee) > 0) content += `Taxa entrega: ${formatBRL(order.delivery_fee)}\n`;
   content += `TOTAL: ${formatBRL(order?.total_amount)}\n`;
-  content += `Pagamento: ${text(order?.payment_status)}\n`;
-  if (text(order?.payment_method) && text(order?.payment_method) !== "PENDING") {
-    content += `Forma: ${text(order.payment_method)}\n`;
+  if (order?.payment_timing === "ON_DELIVERY") {
+    // O motoboy cobra o saldo; o meio online padrão do pedido não vale aqui.
+    const due = Math.max(0, settingNumber(order?.total_amount) - settingNumber(order?.cod_received_amount));
+    const method = DELIVERY_PAYMENT_RECEIPT_LABELS[order?.expected_payment_method as DeliveryPaymentMethod];
+    if (order?.payment_status === "PAID") {
+      content += "Pagamento: recebido na entrega\n";
+    } else {
+      content += "PAGAMENTO NA ENTREGA - NAO PAGO\n";
+      content += `COBRAR NA ENTREGA: ${formatBRL(due)}\n`;
+      content += `Forma combinada: ${method ?? "confirmar com o cliente"}\n`;
+      if (settingNumber(order?.cash_change_for) > 0) content += `Troco para: ${formatBRL(order.cash_change_for)}\n`;
+    }
+  } else {
+    content += `Pagamento: ${text(order?.payment_status)}\n`;
+    if (text(order?.payment_method) && text(order?.payment_method) !== "PENDING") {
+      content += `Forma: ${text(order.payment_method)}\n`;
+    }
   }
   content += LINE + "\n";
   content += `SENHA: ${orderLabel(order, options.branchCode)}\n`;

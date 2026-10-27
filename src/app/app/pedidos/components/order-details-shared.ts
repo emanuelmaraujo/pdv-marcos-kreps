@@ -41,6 +41,7 @@ export function cancelRestoreRemainingMinutes(order: Order, now = Date.now()) {
  * novos itens precisam virar um novo pedido, para não reabrir vendas antigas.
  */
 export function isOrderOpenForAdditions(order: Order, now = Date.now()) {
+  if (order.payment_timing === "ON_DELIVERY") return false;
   if (["CANCELADO", "EXPIRADO", "AGUARDANDO_CONFIRMACAO", "SAIU_PARA_ENTREGA"].includes(order.status)) return false;
   if (!order.paid_at) return true;
   return now - new Date(order.paid_at).getTime() <= POST_PAYMENT_ADDITION_WINDOW_MS;
@@ -96,6 +97,7 @@ export const ORDER_DETAILS_PAYMENT_LABELS = Object.fromEntries(
 ) as Record<PaymentMethod, string>;
 
 export function getOutstandingOrderAmount(order: Order) {
+  if (order.payment_timing === "ON_DELIVERY") return Math.max(0, Number(order.total_amount) - Number(order.cod_received_amount ?? 0));
   const pendingItemsTotal = (order.items ?? [])
     .filter((item) => item.status !== "CANCELLED" && item.payment_status !== "PAID" && item.payment_status !== "COURTESY")
     .reduce((sum, item) => sum + Number(item.total_price ?? 0), 0);
@@ -144,7 +146,13 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
     }
   };
 
-  const onConfirm = () => order && handleAction(() => pdvApi.confirmOrder(order.id));
+  const onConfirm = () => {
+    if (!order) return;
+    const isCod = order.payment_timing === "ON_DELIVERY";
+    if (isCod && !window.confirm("Você falou com o cliente e confirmou contato, endereço, itens e valor? A produção será liberada e o pagamento continuará pendente.")) return;
+    return handleAction(() => pdvApi.confirmOrder(order.id, isCod ? { contactConfirmed: true } : undefined));
+  };
+  const onRequestContactConfirmation = () => order && handleAction(() => pdvApi.confirmOrder(order.id, { action: "REQUEST_CONFIRMATION" }));
   const onReady = () => order && handleAction(() => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "PRONTO" }));
   const onDeliver = () => {
     if (!order) return;
@@ -160,7 +168,9 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
       return;
     }
     void handleAction(
-      () => pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }),
+      () => order.payment_timing === "ON_DELIVERY" && order.status === "AGUARDANDO_CONFIRMACAO"
+        ? pdvApi.confirmOrder(order.id, { action: "REJECT", reason: cancelReason })
+        : pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "CANCELADO", reason: cancelReason }),
       { closeAfter: true },
     );
   };
@@ -168,13 +178,15 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
     if (!order) return;
     void handleAction(() => pdvApi.restoreCancelledOrder(order.id));
   };
-  const onMarkPayment = (method: PaymentMethod, status: PaymentStatus) =>
-    order && handleAction(() => pdvApi.markPayment({
-      orderId: order.id,
-      paymentMethod: method,
-      status,
-      amount: getOutstandingOrderAmount(order),
+  const onMarkPayment = (method: PaymentMethod, status: PaymentStatus) => {
+    if (!order) return;
+    const isCod = order.payment_timing === "ON_DELIVERY";
+    if (isCod && status === "PAID" && !window.confirm("O valor foi efetivamente recebido? Registre somente após conferir dinheiro, Pix ou aprovação da maquininha.")) return;
+    return handleAction(() => pdvApi.markPayment({
+      orderId: order.id, paymentMethod: method, status,
+      amount: getOutstandingOrderAmount(order), receivedConfirmed: isCod && status === "PAID",
     }));
+  };
   const onChangeMethod = (method: PaymentMethod) =>
     order && handleAction(async () => {
       await pdvApi.changePaymentMethod({ orderId: order.id, paymentMethod: method });
@@ -258,6 +270,7 @@ export function useOrderDetailsActions({ order, onClose, onOrderUpdated }: Order
     setCourierIdInput,
     registeredCouriers,
     onConfirm,
+    onRequestContactConfirmation,
     onReady,
     onDeliver,
     onRevertToQueue,

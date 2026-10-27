@@ -70,7 +70,7 @@ serve(async (req) => {
       .from("orders")
       .select(`
         id, branch_id, daily_number, status, payment_status, type,
-        customer_phone, customer_name,
+        customer_phone, customer_name, payment_timing, cod_received_amount,
         branches ( code, name )
       `)
       .eq("id", order_id)
@@ -78,6 +78,10 @@ serve(async (req) => {
     if (orderErr || !order) throw new Error("Pedido inexistente ou sem permissão.");
 
     const cur = order.status;
+    // Mensagem clara antes da escrita; o guard do banco é a garantia (concorrência/API direta).
+    if (status === "CANCELADO" && order.payment_timing === "ON_DELIVERY" && Number(order.cod_received_amount ?? 0) > 0) {
+      throw new Error("Pedido com pagamento na entrega já recebido não pode ser cancelado. Registre o estorno do valor antes.");
+    }
     if (cur === "ENTREGUE")  throw new Error("Pedido já ENTREGUE.");
     if (cur === "CANCELADO") throw new Error("Pedido já CANCELADO.");
     if (cur === "EXPIRADO")  throw new Error("Pedido EXPIRADO.");

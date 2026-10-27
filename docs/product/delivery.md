@@ -1,5 +1,104 @@
 # Feature: Delivery (Entrega)
 
+## Resumo público antes do pagamento
+
+No checkout público, as telas de revisão e de dados mostram a mesma prévia:
+itens e adicionais, embalagem, entrega, desconto vigente e total estimado.
+Em VIAGEM, a embalagem aparece como linha própria mesmo quando não há cobrança;
+a regra pública continua sendo uma taxa por pedido, conforme configuração da filial.
+O cálculo por item do PDV interno não se aplica a esse fluxo.
+
+Em ENTREGA, antes de validar endereço, a taxa aparece “a calcular” e o total é
+identificado como parcial. Região fora de atendimento recebe aviso específico.
+O servidor continua validando preços, descontos e disponibilidade ao enviar o pedido,
+antes do pagamento. O WhatsApp é obrigatório para entrega e opcional nas outras
+modalidades; não é necessário criar conta.
+
+## Pagamento na entrega (COD)
+
+Contrato implementado pela migration `20261025212158_public_delivery_payment_contract.sql`,
+**desativado em todas as filiais**. Sem política ativa em `branch_cod_policies` (tabela
+privada, sem acesso pelo PostgREST), o servidor recusa COD.
+
+**Configuração:** Configurações → Filiais → filial → aba Entrega → “Pagamento na entrega”.
+Só ADMIN da filial (ou administrador global) vê e salva. Para ativar: entrega ligada e
+salva na filial, ao menos uma forma aceita, valor máximo por pedido, limite de pedidos
+aguardando confirmação (1–200) e prazo de confirmação (5–120 min). Ao salvar ativo, o
+servidor registra data e responsável da aprovação e grava `COD_POLICY_UPDATED` em
+`audit_logs`; desligar remove a aprovação e o checkout deixa de oferecer COD na hora.
+Os limites não são enviados ao navegador do cliente.
+
+- Só ENTREGA pela vitrine pública, com WhatsApp. O cliente escolhe o meio esperado
+  (dinheiro, Pix na entrega, débito ou crédito na maquininha) e, em dinheiro, troco
+  opcional nunca inferior ao total. Isso registra intenção, não pagamento.
+- Pedido criado como `AGUARDANDO_CONFIRMACAO`/`PENDING`. A chave de idempotência é
+  gravada na mesma transação da criação, com hash do payload; retry devolve o mesmo pedido.
+- A equipe confirma em `confirm-order` após marcar que verificou contato e endereço;
+  a confirmação libera produção e impressão uma única vez. A via do cliente traz
+  “PAGAMENTO NA ENTREGA - NAO PAGO”, o valor a cobrar, a forma combinada e o troco. Sem confirmação no prazo,
+  `expire-pending-public-orders` encerra o pedido sem produção.
+- `mark-payment` exige confirmação explícita de recebimento (`received_confirmed`).
+  Recebimento parcial distribui o desconto de cupom proporcionalmente e cobra o frete
+  na última parcela; o status vira `PAID` somente quando o total é recebido.
+- Pedido COD com valor recebido e não estornado **não pode ser cancelado** (nem pelo
+  painel, nem pela API direta, nem por cancelamento dos itens). Primeiro é preciso
+  estornar até zerar o recebido; depois o cancelamento é aceito. **Ainda não há botão de
+  estorno no painel**: hoje ele só existe na Edge Function `mark-payment`
+  (`payment_status = REFUNDED`, somente ADMIN). Até existir a tela, trate esses casos
+  com o administrador.
+  Recebimentos e estornos permanecem em `payments` e `audit_logs`.
+- O acompanhamento mostra “Aguardando confirmação da unidade” e “Pagamento na entrega
+  pendente” até a baixa; nunca exibe pagamento aprovado antes do recebimento.
+
+### Métricas do funil
+
+Desligadas por padrão. Só são enviadas com consentimento marcado pelo cliente
+(“Privacidade e medição de navegação”), por `record-public-funnel-event`, com
+dimensões fechadas: evento, filial, modalidade, dispositivo, origem, categoria de erro
+e opção de pagamento. Não incluem nome, telefone, endereço, CEP, token, URL ou chave
+de idempotência. Eventos financeiros são gravados pelo banco (`origin = SERVER`)
+e apagados após 30 dias.
+
+### Implantação e rollback
+
+Pendente em produção (log do deploy de `a69253b`: “Remote database is up to date”):
+somente `20261025212158_public_delivery_payment_contract.sql`. Ela depende de objetos já
+aplicados (`create_public_order_transactional`, `pay_order_items_transactional`,
+`can_manage_branch`, `is_global_admin`, `audit_logs.branch_id`) e roda numa transação:
+se algo divergir, falha inteira e as funções não são publicadas.
+
+Ao fazer o merge na `main`, de forma automática:
+1. Workflow *Deploy Supabase Edge Functions*: CI (incluindo pgTAP) → `db push --dry-run`
+   → `db push` → `functions deploy` de todas as funções.
+2. Vercel (integração Git): publica o frontend em paralelo. A ordem não importa: o
+   frontend novo funciona com as funções antigas (COD fica oculto e o cartão do painel
+   mostra erro de carregamento até a migration), e as funções antigas funcionam com o
+   schema novo.
+
+Plano seguro:
+1. Merge com autorização humana; acompanhar o workflow até a etapa “Apply pending
+   migrations” listar só a migration acima.
+2. Conferir que `branch_cod_policies` está vazia (COD desligado em todas as filiais) e
+   fazer um pedido online de teste.
+3. Piloto: ativar COD pelo painel em uma filial e fazer um pedido real de baixo valor
+   (confirmação, impressão, entrega, baixa, caixa).
+
+Rollback:
+- Operacional (imediato): desligar COD no painel. Antes de qualquer rollback de código,
+  confirmar ou rejeitar os pedidos COD em `AGUARDANDO_CONFIRMACAO`: as funções antigas não
+  confirmam nem expiram COD. Os já confirmados continuam recebendo baixa por `mark-payment`.
+- Frontend: promover o deployment anterior na Vercel.
+- Funções: commit na `main` que restaure **somente** `supabase/functions/**` (e o frontend,
+  se preciso) da revisão anterior, **mantendo o arquivo da migration**. Um `git revert`
+  do merge inteiro apagaria a migration já registrada no banco: o `db push --dry-run`
+  falharia por versão remota ausente localmente e as funções não seriam republicadas.
+  Nunca remover migration aplicada nem rodar `migration repair` automático.
+- Schema: permanece. É compatível com as funções antigas; reverter exige SQL manual
+  revisado e autorização própria.
+
+Detalhes, riscos e limites de validação: [issue #221](../archive/studies/auditoria-pedir-issue-221.md).
+
+
 > Organização revisada em 2026-10-24. O conteúdo consolida entregas de fases anteriores;
 > afirmações de produção e testes abaixo são registros dessas fases, sem nova validação operacional nesta revisão.
 

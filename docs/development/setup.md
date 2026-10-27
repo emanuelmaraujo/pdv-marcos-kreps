@@ -66,6 +66,7 @@ Git local, sem entrar no repositório; não compartilhe logs brutos com credenci
 | `npm run lint` | ESLint |
 | `npm test` | Testes Vitest locais |
 | `npm run test:database` | Replay completo e testes SQL em instância Docker descartável |
+| `npm run test:cod-e2e` | Igual ao anterior e, na mesma instância, fluxo de pagamento na entrega pelas Edge Functions locais (`-- --admin-qa` inclui o painel no navegador) |
 | `npm test -- src/lib/utils/order-refresh.test.ts` | Teste específico |
 | `npm run docs:check` | Links locais de documentos Markdown |
 | `npm run supabase:check` | Cobertura de funções, política JWT explícita e versões de migrations |

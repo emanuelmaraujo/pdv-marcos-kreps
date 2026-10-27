@@ -235,6 +235,11 @@ export interface Order {
   status: OrderStatus;
   payment_status: PaymentStatus;
   payment_method: PaymentMethod;
+  payment_timing?: "ONLINE" | "ON_DELIVERY";
+  expected_payment_method?: "CASH" | "PIX" | "DEBIT_CARD" | "CREDIT_CARD" | null;
+  cash_change_for?: number | null;
+  cod_contact_verified_at?: string | null;
+  cod_received_amount?: number;
   customer_name?: string;
   customer_phone?: string;
   customer_email?: string;

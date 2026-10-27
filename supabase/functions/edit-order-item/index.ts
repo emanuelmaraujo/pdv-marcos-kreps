@@ -56,10 +56,11 @@ serve(async (req) => {
     // Valida pedido via JWT (RLS garante que o atendente opera a filial correta)
     const { data: order, error: orderErr } = await supabaseClientAuth
       .from("orders")
-      .select("id, status, discount_amount, branch_id")
+      .select("id, status, discount_amount, branch_id, payment_timing")
       .eq("id", item.order_id)
       .single();
     if (orderErr || !order) throw new Error("Pedido não encontrado ou sem permissão.");
+    if (order.payment_timing === "ON_DELIVERY") throw new Error("Itens de pagamento na entrega não podem ser alterados após envio. Contate o cliente para reorganizar o pedido.");
 
     if (order.status !== "NA_FILA") {
       throw new Error("Só é possível editar itens de pedidos com status NA_FILA.");

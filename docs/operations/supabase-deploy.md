@@ -11,7 +11,7 @@ de validação do deploy ou o próprio workflow. Também admite execução manua
 `main`. O [CI reutilizável](../../.github/workflows/ci.yml) precisa passar antes
 de qualquer atualização remota.
 
-O CI também executa `npm run test:database`: replay das 81 migrations regulares,
+O CI também executa `npm run test:database`: replay das 82 migrations regulares,
 catálogo sintético, teste de dois scripts manuais de preço/água e testes SQL de
 permissões. A instância descartável usa portas 554xx e é removida ao concluir.
 

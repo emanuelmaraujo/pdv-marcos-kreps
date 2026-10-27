@@ -1,0 +1,169 @@
+-- Fixtures sintéticos. Executar apenas no banco descartável do roteiro local.
+INSERT INTO auth.users(id,email) VALUES
+ ('f2210000-0000-4000-8000-000000000001','cod-actor@example.invalid'),
+ ('f2210000-0000-4000-8000-000000000002','cod-other@example.invalid');
+INSERT INTO public.branches(id,code,slug,name,active,delivery_enabled) VALUES
+ ('f2210000-0000-4000-8000-000000000011','TCA','fixture-cod-a','Fixture COD A',true,true),
+ ('f2210000-0000-4000-8000-000000000012','TCB','fixture-cod-b','Fixture COD B',true,false);
+INSERT INTO public.profiles(id,name,role,active,home_branch_id) VALUES
+ ('f2210000-0000-4000-8000-000000000001','Fixture A','ATTENDANT',true,'f2210000-0000-4000-8000-000000000011'),
+ ('f2210000-0000-4000-8000-000000000002','Fixture B','ATTENDANT',true,'f2210000-0000-4000-8000-000000000012');
+INSERT INTO public.profile_branches(profile_id,branch_id) VALUES
+ ('f2210000-0000-4000-8000-000000000001','f2210000-0000-4000-8000-000000000011'),
+ ('f2210000-0000-4000-8000-000000000002','f2210000-0000-4000-8000-000000000012');
+SET CONSTRAINTS ALL IMMEDIATE;
+INSERT INTO public.categories(id,branch_id,name) VALUES
+ ('f2210000-0000-4000-8000-000000000021','f2210000-0000-4000-8000-000000000011','Fixture COD');
+INSERT INTO public.products(id,branch_id,category_id,name,price,sector) VALUES
+ ('f2210000-0000-4000-8000-000000000031','f2210000-0000-4000-8000-000000000011','f2210000-0000-4000-8000-000000000021','Produto sintético',20,'KITCHEN');
+
+CREATE FUNCTION public.test_221_payload(p_key text,p_timing text DEFAULT 'ONLINE') RETURNS jsonb
+LANGUAGE sql AS $$
+ SELECT jsonb_build_object(
+  'branch_id','f2210000-0000-4000-8000-000000000011','order_type',CASE WHEN p_timing='ONLINE' THEN 'BALCAO' ELSE 'ENTREGA' END,
+  'payment_timing',p_timing,'expected_payment_method',CASE WHEN p_timing='ON_DELIVERY' THEN 'CASH' END,
+  'cash_change_for',CASE WHEN p_timing='ON_DELIVERY' THEN 50 END,
+  'customer_phone','+5561999990000','total_amount',45,'delivery_fee',5,
+  'idempotency_key',p_key,'request',jsonb_build_object('fixture',p_key,'payment_timing',p_timing),
+  'items',jsonb_build_array(
+    jsonb_build_object('product_id','f2210000-0000-4000-8000-000000000031','product_name_snapshot','Produto sintético','product_price_snapshot',20,'production_sector','KITCHEN','quantity',1,'total_price',20),
+    jsonb_build_object('product_id','f2210000-0000-4000-8000-000000000031','product_name_snapshot','Produto sintético','product_price_snapshot',20,'production_sector','KITCHEN','quantity',1,'total_price',20)
+  )
+ )
+$$;
+CREATE FUNCTION pg_temp.assert_221(p_ok boolean,p_message text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN IF p_ok IS NOT TRUE THEN RAISE EXCEPTION 'FAIL #221: %',p_message; END IF; END $$;
+CREATE FUNCTION pg_temp.reject_221(p_sql text,p_pattern text) RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  BEGIN EXECUTE p_sql;
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE p_pattern THEN RAISE EXCEPTION 'Erro inesperado: % (esperado %)',SQLERRM,p_pattern; END IF;
+    RETURN;
+  END;
+  RAISE EXCEPTION 'FAIL #221: operação deveria falhar: %',p_pattern;
+END $$;
+
+DO $$
+DECLARE v_payload jsonb; v_result jsonb; v_retry jsonb; v_id uuid; v_other uuid;
+  v_actor uuid:='f2210000-0000-4000-8000-000000000001';
+  v_foreign uuid:='f2210000-0000-4000-8000-000000000002';
+  v_first uuid; v_second uuid; v_before int;
+BEGIN
+  PERFORM pg_temp.assert_221(NOT has_table_privilege('anon','public.branch_cod_policies','SELECT'),'limiares privados');
+  PERFORM pg_temp.assert_221(NOT has_function_privilege('anon','public.create_public_order_transactional(jsonb)','EXECUTE'),'anon não cria pedido por RPC privilegiada');
+  PERFORM pg_temp.assert_221(NOT has_function_privilege('authenticated','public.review_delivery_order_transactional(uuid,uuid,text,boolean,text,jsonb)','EXECUTE'),'cliente não forja ator');
+  -- Demonstra a lacuna anterior: duas criações precificadas sem chave atômica
+  -- produzem dois pedidos (equivale a duas requisições após lookup simultâneo).
+  SELECT count(*) INTO v_before FROM public.orders;
+  PERFORM public.create_public_order_priced_v1(public.test_221_payload('legacy'));
+  PERFORM public.create_public_order_priced_v1(public.test_221_payload('legacy'));
+  PERFORM pg_temp.assert_221((SELECT count(*) FROM public.orders)=v_before+2,'reprodução do comportamento anterior');
+
+  v_payload:=public.test_221_payload('online-stable');
+  v_result:=public.create_public_order_transactional(v_payload);
+  v_retry:=public.create_public_order_transactional(v_payload);
+  PERFORM pg_temp.assert_221(v_result->>'order_id'=v_retry->>'order_id','retry online devolve o mesmo pedido');
+  PERFORM pg_temp.assert_221((SELECT count(*) FROM public.orders WHERE public_idempotency_key='online-stable')=1,'uma linha por chave');
+  PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',jsonb_set(v_payload,'{request}','{"changed":true}')),'%Chave de tentativa incompatível%');
+  PERFORM pg_temp.reject_221(format('SELECT public.lookup_public_order_retry(%L,%L::uuid,%L::jsonb)','online-stable','f2210000-0000-4000-8000-000000000012',v_payload->'request'),'%Chave de tentativa incompatível%');
+
+  PERFORM pg_temp.reject_221($q$ SELECT public.create_public_order_transactional(public.test_221_payload('disabled','ON_DELIVERY')) $q$,'%Pagamento na entrega indisponível%');
+  INSERT INTO public.branch_cod_policies(branch_id,enabled,methods,max_amount,operational_approved_at)
+   VALUES('f2210000-0000-4000-8000-000000000011',true,ARRAY['CASH','PIX'],100,now());
+  v_payload:=public.test_221_payload('cod-stable','ON_DELIVERY');
+  PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"expected_payment_method":"CREDIT_CARD"}'),'%Pagamento na entrega indisponível%');
+  PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"total_amount":101,"cash_change_for":200}'),'%Pagamento na entrega indisponível%');
+  PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"cash_change_for":20}'),'%troco inválido%');
+  PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"order_type":"BALCAO"}'),'%Pagamento na entrega indisponível%');
+  -- create-public-order sempre envia E.164; outro formato indica contato não normalizado.
+  PERFORM pg_temp.reject_221(format('SELECT public.create_public_order_transactional(%L::jsonb)',v_payload||'{"customer_phone":"5561999990000"}'),'%Pagamento na entrega indisponível%');
+  v_result:=public.create_public_order_transactional(v_payload);v_id:=(v_result->>'order_id')::uuid;
+  PERFORM pg_temp.assert_221(v_result->>'status'='AGUARDANDO_CONFIRMACAO' AND v_result->>'payment_status'='PENDING','COD começa pendente');
+  PERFORM pg_temp.assert_221((SELECT count(*) FROM public.printer_jobs WHERE order_id=v_id)=0,'público não imprime');
+  PERFORM pg_temp.reject_221(format('UPDATE public.orders SET payment_timing=''ONLINE'',expected_payment_method=NULL,cash_change_for=NULL WHERE id=%L',v_id),'%Compromisso de pagamento%');
+  PERFORM pg_temp.reject_221(format('UPDATE public.orders SET status=''NA_FILA'' WHERE id=%L',v_id),'%confirmação operacional%');
+  PERFORM pg_temp.reject_221(format('SELECT public.review_delivery_order_transactional(%L,%L,''CONFIRM'',true)',v_id,v_foreign),'%sem permissão%');
+  PERFORM pg_temp.reject_221(format('UPDATE public.orders SET status=''PRONTO'',confirmed_by=%L,confirmed_at=now(),cod_contact_verified_at=now() WHERE id=%L',v_actor,v_id),'%confirmação operacional%');
+  PERFORM pg_temp.reject_221(format('SELECT public.review_delivery_order_transactional(%L,%L,''CONFIRM'',false)',v_id,v_actor),'%Confirme o contato%');
+  PERFORM public.review_delivery_order_transactional(v_id,v_actor,'REQUEST_CONFIRMATION');
+  PERFORM pg_temp.assert_221((SELECT cod_confirmation_requested_at IS NOT NULL FROM public.orders WHERE id=v_id),'solicitação auditável');
+  PERFORM public.review_delivery_order_transactional(v_id,v_actor,'CONFIRM',true,NULL,'[{"sector":"KITCHEN","content":{"text":"fixture"}}]');
+  PERFORM public.review_delivery_order_transactional(v_id,v_actor,'CONFIRM',true,NULL,'[{"sector":"KITCHEN","content":{"text":"fixture"}}]');
+  PERFORM pg_temp.assert_221((SELECT count(*) FROM public.printer_jobs WHERE order_id=v_id)=1,'retry de confirmação não reimprime');
+  PERFORM pg_temp.assert_221((SELECT payment_status='PENDING' AND status='NA_FILA' FROM public.orders WHERE id=v_id),'confirmar não paga');
+  PERFORM set_config('request.jwt.claims','{"role":"authenticated"}',true);
+  PERFORM pg_temp.reject_221(format('UPDATE public.order_items SET status=''CANCELLED'' WHERE order_id=%L',v_id),'%cancelar item isolado%');
+  PERFORM set_config('request.jwt.claims','',true);
+  -- Entregue não implica pago. Depois a equipe pode receber o valor.
+  UPDATE public.order_items SET status='DELIVERED',delivered_at=now() WHERE order_id=v_id;
+  PERFORM pg_temp.assert_221((SELECT payment_status='PENDING' FROM public.orders WHERE id=v_id),'entregue continua pendente');
+  PERFORM pg_temp.reject_221(format('UPDATE public.order_items SET payment_status=''PAID'' WHERE order_id=%L',v_id),'%recebimento presencial%');
+  SELECT id INTO v_first FROM public.order_items WHERE order_id=v_id ORDER BY id LIMIT 1;
+  SELECT id INTO v_second FROM public.order_items WHERE order_id=v_id AND id<>v_first LIMIT 1;
+  PERFORM public.pay_order_items_transactional(v_id,v_actor,'CASH','PAID',20,ARRAY[v_first]);
+  PERFORM pg_temp.assert_221((SELECT payment_status='PARTIAL' FROM public.orders WHERE id=v_id),'baixa parcial preserva saldo');
+  PERFORM public.pay_order_items_transactional(v_id,v_actor,'PIX','PAID',25,ARRAY[v_second]);
+  PERFORM pg_temp.assert_221((SELECT payment_status='PAID' FROM public.orders WHERE id=v_id),'última baixa inclui entrega e quita');
+  PERFORM pg_temp.assert_221((SELECT status='ENTREGUE' FROM public.orders WHERE id=v_id),'receber não reabre produção de pedido entregue');
+  PERFORM pg_temp.assert_221((SELECT sum(amount) FROM public.payments WHERE order_id=v_id)=45,'recebimentos conciliam com total');
+  PERFORM pg_temp.reject_221(format('SELECT public.pay_order_items_transactional(%L,%L,''PIX'',''PAID'',45)',v_id,v_actor),'%sem itens elegíveis%');
+  PERFORM pg_temp.assert_221((SELECT count(*) FROM public.payments WHERE order_id=v_id)=2,'retry não registra pagamento duplicado');
+
+  v_result:=public.create_public_order_transactional(public.test_221_payload('cod-reject','ON_DELIVERY'));v_other:=(v_result->>'order_id')::uuid;
+  UPDATE public.orders SET cod_expires_at=now()-interval '1 second' WHERE id=v_other;
+  PERFORM pg_temp.reject_221(format('SELECT public.review_delivery_order_transactional(%L,%L,''CONFIRM'',true)',v_other,v_actor),'%fora do prazo%');
+  -- Rejeição após o prazo e antes da varredura continua permitida.
+  PERFORM public.review_delivery_order_transactional(v_other,v_actor,'REJECT',false,'Cliente não confirmou endereço');
+  PERFORM pg_temp.assert_221((SELECT status='CANCELADO' FROM public.orders WHERE id=v_other),'rejeição sem produção');
+  v_result:=public.create_public_order_transactional(public.test_221_payload('cod-expire','ON_DELIVERY'));v_other:=(v_result->>'order_id')::uuid;
+  UPDATE public.orders SET cod_expires_at=now()-interval '1 second' WHERE id=v_other;
+  PERFORM public.expire_unconfirmed_delivery_orders();
+  PERFORM pg_temp.assert_221((SELECT status='EXPIRADO' AND payment_status='PENDING' FROM public.orders WHERE id=v_other),'prazo COD separado');
+  PERFORM pg_temp.assert_221((SELECT status='AGUARDANDO_PAGAMENTO' FROM public.orders WHERE public_idempotency_key='online-stable'),'expiração COD não afeta online');
+END $$;
+
+DO $$
+DECLARE v_payload jsonb; v_order uuid; v_actor uuid:='f2210000-0000-4000-8000-000000000001';
+BEGIN
+ PERFORM pg_temp.assert_221(NOT has_table_privilege('anon','public.public_funnel_events','SELECT'),'anon não lê analytics');
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.public_funnel_events)=0,'sem opt-in não emite eventos de negócio');
+ v_payload:=public.test_221_payload('consent-online')||'{"analytics_consent":true,"analytics_device":"MOBILE","analytics_source":"INSTAGRAM"}';
+ v_order:=(public.create_public_order_transactional(v_payload)->>'order_id')::uuid;
+ PERFORM public.create_public_order_transactional(v_payload);
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.public_funnel_events WHERE event_name='order_created')=1,'criação de negócio é deduplicada');
+ PERFORM pg_temp.reject_221($q$INSERT INTO public.public_funnel_events(event_name,branch_id,order_type,origin) VALUES('payment_approved','f2210000-0000-4000-8000-000000000011','BALCAO','CLIENT')$q$,'%check constraint%');
+ v_order:=(public.create_public_order_transactional(public.test_221_payload('consent-cod','ON_DELIVERY')||'{"analytics_consent":true}')->>'order_id')::uuid;
+ PERFORM public.review_delivery_order_transactional(v_order,v_actor,'CONFIRM',true);
+ PERFORM public.review_delivery_order_transactional(v_order,v_actor,'CONFIRM',true);
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.public_funnel_events WHERE event_name='cod_order_confirmed')=1,'confirmação COD vem do banco e não duplica');
+ PERFORM public.pay_order_items_transactional(v_order,v_actor,'CASH','PAID',45);
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.public_funnel_events WHERE event_name='cod_payment_received')=1,'COD registra recebido separadamente de aprovação online');
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.public_funnel_events WHERE event_name='payment_approved')=0,'COD não inventa aprovação online');
+END $$;
+
+DO $$
+DECLARE v_order uuid; v_actor uuid:='f2210000-0000-4000-8000-000000000001'; v_first uuid; v_second uuid;
+BEGIN
+ v_order:=(public.create_public_order_transactional(public.test_221_payload('cod-coupon','ON_DELIVERY')||'{"discount_amount":10,"total_amount":35}')->>'order_id')::uuid;
+ PERFORM public.review_delivery_order_transactional(v_order,v_actor,'CONFIRM',true);
+ SELECT id INTO v_first FROM public.order_items WHERE order_id=v_order ORDER BY id LIMIT 1;
+ SELECT id INTO v_second FROM public.order_items WHERE order_id=v_order AND id<>v_first;
+ PERFORM public.pay_order_items_transactional(v_order,v_actor,'CASH','PAID',15,ARRAY[v_first]);
+ PERFORM pg_temp.assert_221((SELECT cod_received_amount=15 FROM public.orders WHERE id=v_order),'parcela respeita desconto proporcional');
+ PERFORM public.pay_order_items_transactional(v_order,v_actor,'PIX','PAID',20,ARRAY[v_second]);
+ PERFORM pg_temp.assert_221((SELECT cod_received_amount=35 AND total_amount=35 FROM public.orders WHERE id=v_order),'última parcela quita total descontado incluindo frete');
+ PERFORM pg_temp.reject_221(format('SELECT public.pay_order_items_transactional(%L,%L,''CASH'',''REFUNDED'',100,ARRAY[%L::uuid])',v_order,v_actor,v_first),'%excede o recebimento%');
+ -- Recebimento parcial bloqueia cancelamento por qualquer caminho, preservando o histórico.
+ v_order:=(public.create_public_order_transactional(public.test_221_payload('cod-cancel-paid','ON_DELIVERY'))->>'order_id')::uuid;
+ PERFORM public.review_delivery_order_transactional(v_order,v_actor,'CONFIRM',true);
+ SELECT id INTO v_first FROM public.order_items WHERE order_id=v_order ORDER BY id LIMIT 1;
+ PERFORM public.pay_order_items_transactional(v_order,v_actor,'CASH','PAID',20,ARRAY[v_first]);
+ PERFORM pg_temp.reject_221(format('UPDATE public.order_items SET status=''CANCELLED'',cancelled_at=now() WHERE order_id=%L AND status<>''CANCELLED''',v_order),'%já recebido não pode ser cancelado%');
+ PERFORM pg_temp.reject_221(format('UPDATE public.orders SET status=''CANCELADO'',cancelled_at=now() WHERE id=%L',v_order),'%já recebido não pode ser cancelado%');
+ PERFORM pg_temp.assert_221((SELECT status<>'CANCELADO' AND cod_received_amount=20 FROM public.orders WHERE id=v_order),'pedido e saldo preservados');
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.order_items WHERE order_id=v_order AND status='CANCELLED')=0,'itens não foram cancelados');
+ PERFORM pg_temp.assert_221((SELECT count(*) FROM public.payments WHERE order_id=v_order)=1,'histórico de pagamento intacto');
+ UPDATE public.branch_cod_policies SET max_pending=1 WHERE branch_id='f2210000-0000-4000-8000-000000000011';
+ PERFORM public.create_public_order_transactional(public.test_221_payload('pending-limit-a','ON_DELIVERY'));
+ PERFORM pg_temp.reject_221($q$SELECT public.create_public_order_transactional(public.test_221_payload('pending-limit-b','ON_DELIVERY'))$q$,'%Pagamento na entrega indisponível%');
+END $$;

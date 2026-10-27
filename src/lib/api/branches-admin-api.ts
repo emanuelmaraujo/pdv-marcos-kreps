@@ -2,6 +2,7 @@
 import { createClient } from '../supabase/client';
 import { Branch, BranchPrinterSlot, BranchType, BranchWhatsAppTemplate, Courier, DeliveryZone } from '@/types/pdv';
 import { normalizeNeighborhood } from '../utils/delivery';
+import { parseCodPolicy, type CodPolicy } from '../checkout/cod-policy';
 
 export interface BranchInput {
   code: string;
@@ -22,6 +23,24 @@ export interface BranchInput {
   default_delivery_fee?: number;
   monthly_revenue_goal?: number | null;
 }
+
+// Política de pagamento na entrega: RPCs autorizadas por can_manage_branch; a
+// tabela não é exposta e a aprovação operacional é carimbada pelo servidor.
+export const codPolicyApi = {
+  get: async (branchId: string): Promise<CodPolicy> => {
+    const { data, error } = await createClient().rpc('get_branch_cod_policy', { p_branch_id: branchId });
+    if (error) throw new Error(`Erro ao carregar pagamento na entrega: ${error.message}`);
+    return parseCodPolicy(data);
+  },
+  save: async (branchId: string, input: { enabled: boolean; methods: string[]; maxAmount: number | null; maxPending: number; confirmationMinutes: number }): Promise<CodPolicy> => {
+    const { data, error } = await createClient().rpc('set_branch_cod_policy', {
+      p_branch_id: branchId, p_enabled: input.enabled, p_methods: input.methods, p_max_amount: input.maxAmount,
+      p_max_pending: input.maxPending, p_confirmation_minutes: input.confirmationMinutes,
+    });
+    if (error) throw new Error(error.message);
+    return parseCodPolicy(data);
+  },
+};
 
 export const branchesAdminApi = {
   listAll: async (): Promise<Branch[]> => {

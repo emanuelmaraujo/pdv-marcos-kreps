@@ -650,6 +650,10 @@ function PedidosWorkspace() {
 
   // Quick action handler (for card buttons — no modal)
   const handleQuickAction = useCallback(async (order: Order): Promise<void> => {
+    if (order.payment_timing === "ON_DELIVERY" && order.status === "AGUARDANDO_CONFIRMACAO") {
+      setSelectedOrder(order);
+      return;
+    }
     if (
       order.status === "PRONTO" && order.type !== "ENTREGA" &&
       !window.confirm(`Confirmar que o pedido #${order.daily_number} foi entregue ao cliente?`)

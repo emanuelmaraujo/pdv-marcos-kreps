@@ -37,7 +37,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { ProductImage } from "@/components/menu/ProductImage";
 import { menuApi, MenuData } from "@/lib/api/menu-api";
-import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
+import { pdvApi, CreatePublicOrderPayload, CreatePublicOrderResponse, MercadoPagoPaymentResponse, OrderingClosedError } from "@/lib/api/pdv-api";
 import { Addon, CustomerAddress, DeliveryZone, Ingredient, OrderStatus, Product } from "@/types/pdv";
 import { CartItem, useCart } from "@/features/cart/useCart";
 import {
@@ -49,6 +49,7 @@ import { AcompanharPedido } from "./_components/AcompanharPedido";
 import { MercadoPagoBrick } from "./_components/MercadoPagoBrick";
 import { PixCheckout } from "./_components/PixCheckout";
 import { ProgressSteps } from "./_components/ProgressSteps";
+import { CheckoutSummary } from "./_components/CheckoutSummary";
 import { FloatingInput } from "./_components/FloatingInput";
 import { TimelineStep } from "./_components/TimelineStep";
 import { PAYMENT_METHOD_CODE, isValidEmail } from "./_components/payment-helpers";
@@ -80,6 +81,10 @@ import {
   resolveInitialCategoryId,
   splitProductName,
 } from "@/lib/menu/productTags";
+
+import { resolvePublicOrderAttempt, clearPublicOrderAttempt, publicOrderAttemptPayload } from "@/lib/checkout/public-order-attempt";
+import { orderFailureCategory, usePublicFunnel } from "@/lib/analytics/use-public-funnel";
+import { DELIVERY_PAYMENT_LABELS, isDeliveryPaymentMethod, type DeliveryPaymentMethod } from "@/lib/checkout/delivery-payment";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const DEFAULT_ORDERING_START = "17:00";
@@ -302,6 +307,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [branchId, setBranchId] = useState<string | null>(null);
   const [deliveryEnabled, setDeliveryEnabled] = useState(false);
   const [defaultDeliveryFee, setDefaultDeliveryFee] = useState(0);
+  const [branchAddress, setBranchAddress] = useState<string | null>(null);
+  const [codEnabled, setCodEnabled] = useState(false);
+  const [codMethods, setCodMethods] = useState<DeliveryPaymentMethod[]>([]);
+  const [paymentTiming, setPaymentTiming] = useState<"ONLINE" | "ON_DELIVERY">("ONLINE");
+  const [expectedMethod, setExpectedMethod] = useState<DeliveryPaymentMethod | "">("");
+  const [cashChangeFor, setCashChangeFor] = useState("");
+  const useCod = paymentTiming === "ON_DELIVERY" && orderType === "ENTREGA" && codEnabled;
+  const orderRequestSignatureRef = useRef<string | null>(null);
+
   const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -357,6 +371,17 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [profileNotice, setProfileNotice] = useState("");
   const [addonsExpanded, setAddonsExpanded] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const submitLockRef = useRef(false);
+  const { consent: analyticsConsent, setConsent: setAnalyticsConsent, track: trackFunnel, context: analyticsContext } = usePublicFunnel(branchSlug, orderType, !!branchId && branchConfigLoaded);
+  const lastFunnelStepRef = useRef("");
+  useEffect(() => {
+    if (step === "MENU") trackFunnel("menu_view", {}, "menu");
+    const key = `${branchSlug}:${step}:${analyticsConsent}`;
+    if (lastFunnelStepRef.current === key) return;
+    lastFunnelStepRef.current = key;
+    if (step === "REVIEW") trackFunnel("cart_view");
+    if (step === "INFO") trackFunnel("checkout_start");
+  }, [step, branchSlug, analyticsConsent, trackFunnel]);
   const [orderData, setOrderData] = useState<CreatePublicOrderResponse["order"] | null>(null);
   const [paymentMode, setPaymentMode] = useState<"PIX" | "CARD">("PIX");
   const [checkoutError, setCheckoutError] = useState("");
@@ -480,6 +505,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         const resolvedBranchId = config.branch.id;
         setBranchName(config.branch.name ?? null);
         setBranchId(resolvedBranchId);
+        setBranchAddress(config.branch.address ?? null);
+        setCodEnabled(config.branch.cod_enabled === true && config.branch.delivery_enabled === true);
+        setCodMethods((config.branch.cod_methods ?? []).filter(isDeliveryPaymentMethod));
         setDeliveryEnabled(config.branch.delivery_enabled === true);
         setDefaultDeliveryFee(Number(config.branch.default_delivery_fee ?? 0));
         setBranchConfigLoaded(true);
@@ -494,7 +522,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setApplyPackagingFeeForTakeout(settings.apply_packaging_fee_for_takeout === "true");
         setOnlineOrderingEnabled(isEnabled);
         setOrderingClosedReason(config.ordering_closed_reason);
-        if (!isEnabled) clearCart();
+
         const data = await menuApi.getMenuData(resolvedBranchId);
         setMenuData(data);
         setSelectedCategoryId(resolveInitialCategoryId(data.categories, data.products));
@@ -745,7 +773,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setOrderingSchedule({ start, end });
         setOnlineOrderingEnabled(isEnabled);
         setOrderingClosedReason(config.ordering_closed_reason);
-        if (!isEnabled) clearCart();
+
       } catch {
         // best-effort: mantem o estado atual em caso de erro
       }
@@ -973,6 +1001,24 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     0,
     estimatedSubtotal + estimatedPackagingFee + (freeDeliveryCoupon ? 0 : estimatedDeliveryFee) - estimatedCouponDiscount,
   );
+  const deliveryFeeKnown = orderType !== "ENTREGA" || (
+    (!!selectedSavedAddress || cepStatus === "resolved") && !!effectiveNeighborhood.trim() && !deliveryBlocked
+  );
+  const checkoutPreviewTotal = deliveryFeeKnown ? estimatedTotal : Math.max(0, estimatedSubtotal + estimatedPackagingFee - estimatedCouponDiscount);
+  const checkoutSummary = (
+    <CheckoutSummary
+      orderType={orderType}
+      subtotal={estimatedSubtotal}
+      packagingFee={estimatedPackagingFee}
+      deliveryFee={estimatedDeliveryFee}
+      deliveryFeeKnown={deliveryFeeKnown}
+      deliveryBlocked={deliveryBlocked}
+      couponCode={couponIsCurrent ? appliedCoupon?.code : undefined}
+      couponDiscount={estimatedCouponDiscount}
+      freeDelivery={freeDeliveryCoupon}
+      total={checkoutPreviewTotal}
+    />
+  );
   const checkoutPhone = useMemo(() => normalizeBrazilPhone(customerPhone), [customerPhone]);
   /** Aviso de número pela metade — some assim que o WhatsApp fica válido. */
   const customerPhoneWarning = useMemo(() => describeCustomerPhone(customerPhone).message, [customerPhone]);
@@ -995,6 +1041,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   }, [selectedAddons]);
 
   const openCustomization = useCallback((product: Product, existingItem?: CartItem) => {
+    trackFunnel("product_view", { product_id: product.id });
     if (branchDraftMismatch) {
       addToast("error", "Resolva o pedido em aberto de outra unidade antes de continuar.");
       return;
@@ -1014,7 +1061,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setQuantity(1);
       setItemNotes("");
     }
-  }, [addToast, branchDraftMismatch]);
+  }, [addToast, branchDraftMismatch, trackFunnel]);
 
   // Histórico do navegador: enquanto o modal de personalização está aberto,
   // o botão Voltar fecha o modal em vez de sair da página — pusha uma
@@ -1082,6 +1129,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
   const handleAddToCart = useCallback(() => {
     if (!selectedProduct) return;
+    if (!editingCartItemId) trackFunnel("add_to_cart", { product_id: selectedProduct.id });
     const addonsArray = Array.from(selectedAddons.entries()).map(([addonId, qty]) => {
       const addon = menuIndexes?.addonsById.get(addonId);
       return { addon_id: addonId, addon_name: addon?.name, quantity: qty, price: addon?.price || 0 };
@@ -1116,6 +1164,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     selectedAddons,
     selectedProduct,
     updateItem,
+    trackFunnel,
   ]);
 
   /** "Não é você?" — descarta o autofill e limpa o perfil salvo neste dispositivo. */
@@ -1151,6 +1200,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     setCepStatus("loading");
     pdvApi.lookupCep(digits).then((result) => {
       if (cepRequestIdRef.current !== requestId) return; // usuário já digitou outro CEP
+      trackFunnel("delivery_check", { error_category: result.success && result.address ? "NONE" : "ADDRESS" });
       if (!result.success || !result.address) {
         setCepStatus("error");
         setCepError(result.error || "CEP não encontrado.");
@@ -1165,7 +1215,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       }));
       setCepStatus("resolved");
     });
-  }, []);
+  }, [trackFunnel]);
 
   // Pin de GPS é só um complemento pro motoboy achar o lugar mais fácil —
   // nunca bloqueia o pedido. Sem permissão, segue normalmente sem o pin.
@@ -1259,7 +1309,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   };
 
   const handleCreateOrder = async () => {
-    if (isSubmittingOrder) return;
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    setIsSubmittingOrder(true);
+    try {
     setCheckoutError("");
 
     // Revalida o horario no momento exato do clique para garantir que o cliente
@@ -1281,7 +1334,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       if (!config.online_ordering_enabled) {
         const reason = config.ordering_closed_reason || "No momento nao estamos recebendo pedidos.";
         setCheckoutError(reason);
-        clearCart();
         return;
       }
     } catch (err) {
@@ -1328,13 +1380,24 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       }
     }
 
+    const changeValue = useCod && expectedMethod === "CASH" && cashChangeFor.trim()
+      ? Number(cashChangeFor.replace(",", ".")) : undefined;
+    if (useCod && (!isDeliveryPaymentMethod(expectedMethod) || !codMethods.includes(expectedMethod))) {
+      setCheckoutError("Selecione como pretende pagar na entrega."); return;
+    }
+    if (changeValue !== undefined && (!Number.isFinite(changeValue) || changeValue < estimatedTotal)) {
+      setCheckoutError("Informe um valor para troco igual ou maior que o total."); return;
+    }
+
     setIsSubmittingOrder(true);
     try {
       const publicOrderType: "BALCAO" | "VIAGEM" | "ENTREGA" = orderType;
-      if (!orderIdempotencyKeyRef.current) {
-        orderIdempotencyKeyRef.current = crypto.randomUUID();
-      }
-      const response = await pdvApi.createPublicOrder({
+      const payload: CreatePublicOrderPayload = {
+        analytics_consent: analyticsConsent,
+        analytics_context: analyticsConsent ? analyticsContext() : undefined,
+        payment_timing: useCod ? "ON_DELIVERY" : "ONLINE",
+        expected_payment_method: useCod && isDeliveryPaymentMethod(expectedMethod) ? expectedMethod : undefined,
+        cash_change_for: changeValue,
         order_type: publicOrderType,
         customer_name: customerName.trim() || undefined,
         customer_phone: normalizedPhone ?? undefined,
@@ -1372,8 +1435,22 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             ? `[VIAGEM] ${item.notes || ""}`.trim()
             : item.notes,
         })),
-      }, orderIdempotencyKeyRef.current);
+      };
+      const signature = JSON.stringify(publicOrderAttemptPayload(payload));
+      if (!orderIdempotencyKeyRef.current || orderRequestSignatureRef.current !== signature) {
+        orderIdempotencyKeyRef.current = await resolvePublicOrderAttempt(sessionStorage, branchSlug, payload);
+        orderRequestSignatureRef.current = signature;
+      }
+      if (canExpressCheckout) trackFunnel("checkout_start", {}, orderIdempotencyKeyRef.current);
+      trackFunnel("order_submit", {}, orderIdempotencyKeyRef.current);
+      const response = await pdvApi.createPublicOrder(payload, orderIdempotencyKeyRef.current);
 
+      clearPublicOrderAttempt(sessionStorage, branchSlug);
+      if (["EXPIRADO", "CANCELADO"].includes(response.order.status)) {
+        orderIdempotencyKeyRef.current = null;
+        setCheckoutError("A tentativa anterior foi encerrada. Revise os dados antes de enviar um novo pedido.");
+        return;
+      }
       // Pedido saiu: a próxima compra é outro pedido, logo outra chave.
       orderIdempotencyKeyRef.current = null;
       setOrderData(response.order);
@@ -1389,20 +1466,26 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       } else {
         localStorage.removeItem(PUBLIC_CUSTOMER_PROFILE_KEY);
       }
+      if (response.order.payment_timing === "ON_DELIVERY") {
+        clearCart(); clearSavedPublicOrderSession();
+        router.push(`/pedido/${encodeURIComponent(response.order.public_token)}`);
+        return;
+      }
       savePublicOrderSession(response.order, customerEmail, branchSlug);
       setPaymentMode("PIX");
       setStep("PAYMENT");
     } catch (err) {
+      trackFunnel("order_failure", { error_category: orderFailureCategory(err, err instanceof OrderingClosedError) });
       if (err instanceof OrderingClosedError) {
         setOnlineOrderingEnabled(false);
         setOrderingClosedReason(err.message);
-        clearCart();
       } else {
         setCheckoutError(getFriendlyErrorMessage(err, "Não conseguimos criar o pedido. Tente novamente."));
       }
     } finally {
       setIsSubmittingOrder(false);
     }
+    } finally { submitLockRef.current = false; setIsSubmittingOrder(false); }
   };
 
   if (loading) {
@@ -1675,63 +1758,32 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             </section>
           )}
 
-          {/* Hero — marrom escuro, copy direta ao benefício */}
-          <section
-            className="relative overflow-hidden rounded-3xl p-5 text-white shadow-[var(--shadow-md)] md:p-8"
-            style={{ backgroundColor: "var(--bg-inverse)" }}
-          >
-            {/* Glow vermelho sutil no canto */}
-            <div className="pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-brand-red/20 blur-3xl" />
-            <div className="pointer-events-none absolute right-12 bottom-0 h-32 w-32 rounded-full bg-[var(--accent)]/10 blur-2xl" />
-
-            <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0 flex-1">
-                {/* Badge "Aberto agora" com pulso verde */}
-                {onlineOrderingEnabled ? (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                    </span>
-                    Aberto agora · fecha às {orderingSchedule.end}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/80">
-                    Fechado · abre às {orderingSchedule.start}
-                  </span>
-                )}
-
-                <h2 className="mt-3 text-2xl font-bold leading-tight tracking-tight md:text-[28px]">
-                  Krep caprichado, pedido sem fila.
-                </h2>
-                <p className="mt-2 text-sm leading-relaxed text-white/65 md:text-[15px]">
-                  Escolha o recheio, ajuste a composição e pague com segurança quando estiver tudo certo.
-                </p>
-                {publicStats.ordersToday > 0 && (
-                  <p className="mt-2 text-xs font-medium text-white/55">
-                    {publicStats.ordersToday === 1
-                      ? "1 pedido feito hoje"
-                      : `${publicStats.ordersToday} pedidos feitos hoje`}
-                  </p>
-                )}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4" aria-label="Unidade e atendimento">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-[var(--text-primary)]">{branchName ?? "Escolha seu krep"}</h2>
+                {branchAddress && <p className="mt-1 text-sm text-[var(--text-secondary)]">{branchAddress}</p>}
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">{onlineOrderingEnabled ? `Aberto agora · até ${orderingSchedule.end}` : orderingClosedReason || `Atendimento das ${orderingSchedule.start} às ${orderingSchedule.end}`}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">Pix e cartão online{codEnabled ? " · Pagamento na entrega sujeito à confirmação" : ""}</p>
               </div>
-
-              {/* Carrinho compacto no canto direito (desktop) */}
-              {items.length > 0 && !branchDraftMismatch && (
-                <button
-                  type="button"
-                  onClick={() => setStep("REVIEW")}
-                  className="hidden md:flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-left hover:bg-white/15"
-                >
-                  <ShoppingCart className="h-5 w-5 text-white" strokeWidth={1.75} />
-                  <div className="leading-tight">
-                    <p className="text-caption text-white/70">Seu pedido</p>
-                    <p className="text-sm font-semibold text-white tabular-nums">{items.length} {items.length === 1 ? "item" : "itens"} · {currency.format(estimatedTotal)}</p>
-                  </div>
-                </button>
-              )}
+              <button type="button" className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold" onClick={() => router.push(BRANCHES_PAGE_PATH)}>Trocar unidade</button>
             </div>
+            <fieldset className="mt-3 flex flex-wrap gap-2">
+              <legend className="mb-2 text-sm font-semibold">Como quer receber?</legend>
+              {([{type:"BALCAO",label:"Comer aqui"},{type:"VIAGEM",label:"Para levar"},...(deliveryEnabled ? [{type:"ENTREGA",label:"Entrega"}] : [])] as const).map(option => (
+                <button type="button" key={option.type} aria-pressed={orderType===option.type} className={`min-h-11 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold ${orderType===option.type ? "bg-[var(--bg-inverse)] text-white" : "bg-[var(--bg-subtle)]"}`} onClick={() => {
+                  hasManuallySelectedOrderTypeRef.current=true;
+                  setOrderType(option.type as "BALCAO" | "VIAGEM" | "ENTREGA");
+                  if (option.type !== "ENTREGA" && appliedCoupon?.discount_type === "FREE_DELIVERY") { setAppliedCoupon(null); setCouponMessage("Cupom de entrega removido ao mudar a modalidade."); }
+                }}>{option.label}</button>
+              ))}
+            </fieldset>
           </section>
+
+          <details className="text-xs text-[var(--text-muted)]">
+            <summary className="min-h-11 cursor-pointer py-3">Privacidade e medição de navegação</summary>
+            <label className="flex min-h-11 items-start gap-2 py-2"><input type="checkbox" className="mt-1" checked={analyticsConsent} onChange={event => setAnalyticsConsent(event.target.checked)} />Permitir métricas de navegação para melhorar o cardápio. Sem nome, telefone, endereço ou token do pedido. Você pode desmarcar a qualquer momento.</label>
+          </details>
 
           {/* Acompanhar pedido — recolhido pra não competir com o cardápio.
              Precisa existir aqui, e não só no hub /pedir/filiais: o QR Code
@@ -1851,10 +1903,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           <div className="flex items-start gap-3">
                             <ProductImage
                               src={product.image_url}
-                              width={56}
-                              height={56}
-                              sizes="56px"
-                              className="h-14 w-14 shrink-0 rounded-xl object-cover bg-[var(--bg-subtle)]"
+                              width={88}
+                              height={88}
+                              sizes="88px"
+                              className="h-22 w-22 shrink-0 rounded-xl object-cover bg-[var(--bg-subtle)]"
                               fallback={
                                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-brand-red">
                                   {categoryKind === "SAVORY" ? <Flame className="h-6 w-6" strokeWidth={1.75} />
@@ -2077,34 +2129,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               ))}
             </div>
 
-            <div className="mt-4 rounded-2xl bg-[var(--bg-subtle)] p-4 space-y-1.5">
-              <div className="flex items-center justify-between text-sm text-[var(--text-secondary)]">
-                <span>Subtotal</span>
-                <span className="tabular-nums">{currency.format(estimatedSubtotal)}</span>
-              </div>
-              {estimatedPackagingFee > 0 && (
-                <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-                  <span>Embalagem para viagem</span>
-                  <span className="tabular-nums">{currency.format(estimatedPackagingFee)}</span>
-                </div>
-              )}
-              {freeDeliveryCoupon && (
-                <div className="flex items-center justify-between text-xs font-semibold text-[var(--status-success)]">
-                  <span>Cupom FERIADOU · frete grátis</span>
-                  <span>- {currency.format(estimatedDeliveryFee)}</span>
-                </div>
-              )}
-              {couponIsCurrent && appliedCoupon && estimatedCouponDiscount > 0 && (
-                <div className="flex items-center justify-between text-xs font-semibold text-[var(--status-success)]">
-                  <span>Cupom {appliedCoupon.code}</span>
-                  <span className="tabular-nums">- {currency.format(estimatedCouponDiscount)}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between pt-2 border-t border-[var(--border)] text-sm font-semibold text-[var(--text-primary)]">
-                <span>Total</span>
-                <span className="text-xl tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(estimatedTotal)}</span>
-              </div>
-            </div>
+            <div className="mt-4">{checkoutSummary}</div>
 
             <div className="mt-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-3">
               <div className="flex items-center gap-2">
@@ -2226,9 +2251,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
       {/* ── Tela 4: INFO — dados do cliente + modalidade ───────────────── */}
       {step === "INFO" && (
-        <main className="mx-auto max-w-2xl space-y-3 p-3 pb-40 sm:p-4 sm:pb-40">
+        <main className="mx-auto max-w-6xl grid grid-cols-1 gap-4 p-3 pb-40 sm:p-4 sm:pb-40 lg:grid-cols-[minmax(0,1fr)_22rem]">
           {/* Linha compacta: voltar + progress inline (mobile só mostra textos curtos) */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 lg:col-span-2">
             <button
               type="button"
               onClick={() => setStep("REVIEW")}
@@ -2247,14 +2272,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <h2 className="text-base font-semibold text-[var(--text-primary)]">Seus dados</h2>
 
             <FloatingInput
-              label="WhatsApp com DDD (opcional)"
+              label={orderType === "ENTREGA" ? "WhatsApp com DDD (obrigatório)" : "WhatsApp com DDD (opcional)"}
               value={customerPhone}
               onChange={(v) => setCustomerInfo(customerName, formatWhatsAppInput(v))}
               onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
               placeholder="(11) 99999-9999"
               type="tel"
               inputMode="tel"
-              help="Opcional. Usamos o WhatsApp para enviar atualizacoes do pedido."
+              help={orderType === "ENTREGA" ? "Obrigatório para contato sobre a entrega." : "Opcional. Usamos o WhatsApp para enviar atualizações do pedido."}
             />
 
             {/* Número pela metade avisa aqui, e não só quando o pedido é enviado. */}
@@ -2265,7 +2290,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             )}
 
             <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">
-              Voce pode comprar sem preencher seus dados. Se informar o WhatsApp, ele sera usado para avisos de status do pedido.
+              {orderType === "ENTREGA"
+                ? "Para entrega, precisamos de um WhatsApp com DDD e do endereço. Não é necessário criar uma conta."
+                : "Você pode comprar sem preencher seus dados. Se informar o WhatsApp, ele será usado para avisos de status do pedido."}
             </div>
 
             {isProfileChecking && (
@@ -2546,10 +2573,30 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 </div>
           </section>
 
+          <aside className="min-w-0 space-y-3 lg:sticky lg:top-24 lg:self-start">
+          {orderType === "ENTREGA" && codEnabled && codMethods.length > 0 && (
+            <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4" aria-label="Quando pagar">
+              <h2 className="font-semibold">Quando pagar</h2>
+              <label className="flex min-h-11 items-center gap-2"><input type="radio" name="payment-timing" checked={!useCod} onChange={() => setPaymentTiming("ONLINE")} /> Online — Pix ou cartão</label>
+              <label className="flex min-h-11 items-center gap-2"><input type="radio" name="payment-timing" checked={useCod} onChange={() => { setPaymentTiming("ON_DELIVERY"); trackFunnel("payment_option_select", {payment_option:"ON_DELIVERY"}); }} /> Pagar na entrega</label>
+              {useCod && <>
+                <p className="text-sm text-[var(--text-secondary)]">A unidade precisa confirmar o pedido antes do preparo. O pagamento será feito ao receber a entrega.</p>
+                <label className="block text-sm">Forma de pagamento esperada
+                  <select className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-2" value={expectedMethod} onChange={event => { setExpectedMethod(isDeliveryPaymentMethod(event.target.value) ? event.target.value : ""); setCheckoutError(""); }}>
+                    <option value="">Selecione</option>
+                    {codMethods.map(method => <option key={method} value={method}>{DELIVERY_PAYMENT_LABELS[method]}</option>)}
+                  </select>
+                </label>
+                {expectedMethod === "CASH" && <FloatingInput label="Troco para quanto? (opcional)" value={cashChangeFor} onChange={value => { setCashChangeFor(value); setCheckoutError(""); }}inputMode="decimal" placeholder="Ex.: 50,00" help="Deixe vazio se tiver o valor exato." />}
+              </>}
+            </section>
+          )}
+          {checkoutSummary}
+
           {/* Barra fixa no rodapé — resumo + CTA sempre na zona do polegar,
              mesmo em formulários longos (endereço de entrega). */}
           <div
-            className="fixed inset-x-0 bottom-0 z-40 -mx-3 space-y-2 border-t border-[var(--border)] px-3 pt-3 sm:mx-0 sm:px-4"
+            className="fixed inset-x-0 bottom-0 z-40 -mx-3 space-y-2 border-t border-[var(--border)] px-3 pt-3 sm:mx-0 sm:px-4 lg:static lg:mx-0 lg:border-0 lg:p-0"
             style={{ backgroundColor: "var(--bg-base)", paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
           >
             <div className="mx-auto max-w-2xl space-y-2">
@@ -2559,12 +2606,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               >
                 <span className="text-sm text-white/75">
                   {items.length} {items.length === 1 ? "item" : "itens"}
-                  {estimatedPackagingFee > 0 && <span className="text-white/50"> · com embalagem</span>}
                 </span>
                 <span className="flex items-baseline gap-1">
-                  <span className="text-caption text-white/60">Total</span>
+                  <span className="text-caption text-white/60">{deliveryFeeKnown ? "Total estimado" : "Total parcial"}</span>
                   <span className="text-base font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
-                    {currency.format(estimatedTotal)}
+                    {currency.format(checkoutPreviewTotal)}
                   </span>
                 </span>
               </div>
@@ -2583,10 +2629,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 style={{ height: 52 }}
               >
                 {isSubmittingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" strokeWidth={1.75} />}
-                Continuar para pagamento
+                {useCod ? "Solicitar pedido para entrega" : "Continuar para pagamento"}
               </button>
             </div>
           </div>
+          </aside>
         </main>
       )}
 
@@ -2632,7 +2679,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <p className="text-xs font-semibold text-[var(--text-muted)] px-1">Forma de pagamento</p>
             <button
               type="button"
-              onClick={() => setPaymentMode("PIX")}
+              onClick={() => { setPaymentMode("PIX"); trackFunnel("payment_option_select", {payment_option:"PIX"}); }}
               className={`w-full flex items-center gap-3 rounded-xl p-4 text-left ${
                 paymentMode === "PIX"
                   ? "border-2 border-brand-red bg-[var(--brand-light)]"
@@ -2651,7 +2698,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
             <button
               type="button"
-              onClick={() => setPaymentMode("CARD")}
+              onClick={() => { setPaymentMode("CARD"); trackFunnel("payment_option_select", {payment_option:"CARD"}); }}
               className={`w-full flex items-center gap-3 rounded-xl p-4 text-left ${
                 paymentMode === "CARD"
                   ? "border-2 border-brand-red bg-[var(--brand-light)]"

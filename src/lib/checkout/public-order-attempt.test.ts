@@ -1,0 +1,10 @@
+import { describe, expect, it } from "vitest";
+import { clearPublicOrderAttempt, resolvePublicOrderAttempt } from "./public-order-attempt";
+function memory() { const data=new Map<string,string>(); return { getItem:(k:string)=>data.get(k)??null,setItem:(k:string,v:string)=>void data.set(k,v),removeItem:(k:string)=>void data.delete(k),data }; }
+describe("tentativa pública de pedido",()=>{
+ it("reutiliza chave após remontagem com mesmo payload",async()=>{const storage=memory();const payload={items:[1],phone:"fixture"};expect(await resolvePublicOrderAttempt(storage,"a",payload)).toBe(await resolvePublicOrderAttempt(storage,"a",payload));expect([...storage.data.values()].join()).not.toContain("fixture");});
+ it("mudar endereço, modalidade ou compromisso de pagamento exige outra tentativa",async()=>{const storage=memory();const first=await resolvePublicOrderAttempt(storage,"a",{delivery:"a",payment_timing:"ONLINE"});expect(await resolvePublicOrderAttempt(storage,"a",{delivery:"b",payment_timing:"ONLINE"})).not.toBe(first);expect(await resolvePublicOrderAttempt(storage,"a",{delivery:"b",payment_timing:"ON_DELIVERY"})).not.toBe(first);});
+ it("isola filial e encerra tentativa apenas após resposta ou descarte",async()=>{const storage=memory();const first=await resolvePublicOrderAttempt(storage,"a",{});expect(await resolvePublicOrderAttempt(storage,"b",{})).not.toBe(first);clearPublicOrderAttempt(storage,"a");expect(await resolvePublicOrderAttempt(storage,"a",{})).not.toBe(first);});
+ it("expira rascunhos antigos",async()=>{const storage=memory();const first=await resolvePublicOrderAttempt(storage,"a",{},1);expect(await resolvePublicOrderAttempt(storage,"a",{},24*3600000+2)).not.toBe(first);});
+ it("storage indisponível não bloqueia criação",async()=>{const storage={getItem:()=>{throw Error();},setItem:()=>{throw Error();},removeItem:()=>{throw Error();}};expect(await resolvePublicOrderAttempt(storage,"a",{})).toMatch(/^[0-9a-f-]{36}$/);expect(()=>clearPublicOrderAttempt(storage,"a")).not.toThrow();});
+});

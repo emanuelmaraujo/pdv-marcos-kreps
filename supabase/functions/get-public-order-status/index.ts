@@ -334,7 +334,7 @@ serve(async (req) => {
     // enumeracao visual de pedidos como /pedido/123.
     let { data: order, error } = await supabaseClient
       .from('orders')
-      .select('id, daily_number, status, payment_status, payment_method, total_amount, customer_name, created_at, confirmed_at, ready_at, delivered_at')
+      .select('id, daily_number, status, payment_status, payment_method, payment_timing, expected_payment_method, cash_change_for, cod_expires_at, total_amount, customer_name, created_at, confirmed_at, ready_at, delivered_at')
       .eq('public_token', public_token)
       .single();
 
@@ -351,7 +351,7 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    if (order.payment_status === "PENDING" && transaction) {
+    if (order.payment_timing !== "ON_DELIVERY" && order.payment_status === "PENDING" && transaction) {
       const refreshed = await refreshMercadoPagoTransaction(supabaseClient, order, transaction);
       order = refreshed.order;
       transaction = refreshed.transaction;
@@ -394,6 +394,9 @@ serve(async (req) => {
         status: order.status,
         payment_status: order.payment_status,
         payment_method: order.payment_method,
+        payment_timing: order.payment_timing,
+        expected_payment_method: order.expected_payment_method,
+        cash_change_for: order.cash_change_for,
         total: order.total_amount,
         customer_name: order.customer_name,
         created_at: order.created_at,

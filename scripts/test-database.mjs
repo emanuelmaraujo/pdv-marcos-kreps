@@ -1,6 +1,7 @@
 import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -47,6 +48,11 @@ try {
   const ports = new Map([[54320, 55430], [54321, 55431], [54322, 55432], [54323, 55433],
     [54324, 55434], [54325, 55435], [54326, 55436], [54327, 55437], [54329, 55439], [8083, 8183]]);
   config = config.replace(/\b(?:5432\d|8083)\b/g, (value) => String(ports.get(Number(value)) ?? value));
+  // Segredo descartável gerado por execução, só para o cron local do E2E.
+  const expirationSecret = randomBytes(24).toString('hex');
+  if (process.argv.includes('--cod-e2e')) {
+    writeFileSync(path.join(localSupabase, 'functions/.env'), `PENDING_ORDER_EXPIRATION_SECRET=${expirationSecret}\n`);
+  }
   const configFile = path.join(localSupabase, 'config.toml');
   writeFileSync(configFile, config);
   // Também limpa uma inicialização parcial em caso de falha, sempre neste ID.
@@ -75,6 +81,25 @@ try {
   }
   const output = supabase('Executando testes SQL...', 'test', 'db');
   console.log(output.split(/\r?\n/).filter((line) => /All tests|Files=|Result:/.test(line)).join('\n'));
+  if (process.argv.includes('--cod-e2e')) {
+    // Edge Functions servidas pela mesma instância; chaves locais da CLI, nunca do .env.
+    const status = Object.fromEntries(supabase('Lendo chaves locais da instância...', 'status', '-o', 'env')
+      .split(/\r?\n/).map((line) => line.match(/^([A-Z_]+)="?(.*?)"?$/)).filter(Boolean).map((m) => [m[1], m[2]]));
+    const env = { ...process.env, API_URL: status.API_URL, ANON_KEY: status.ANON_KEY,
+      SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY, DB_CONTAINER: container, EXPIRATION_SECRET: expirationSecret };
+    console.log('Executando fluxo COD ponta a ponta nas Edge Functions locais...');
+    const e2e = spawnSync(process.execPath, [path.join(root, 'scripts/cod-e2e-flow.mjs')], { cwd: root, env, encoding: 'utf8', timeout: 600_000 });
+    appendFileSync(log, `\nE2E COD\n${e2e.stdout ?? ''}\n${e2e.stderr ?? ''}`);
+    console.log((e2e.stdout ?? '').trim());
+    if (e2e.status !== 0) throw new Error(`E2E COD falhou. ${(e2e.stderr ?? '').split('\n').slice(0, 6).join(' ')}`);
+    if (process.argv.includes('--admin-qa')) {
+      console.log('Executando QA do painel com login local...');
+      const qa = spawnSync(process.execPath, [path.join(root, 'docs/evidence/issue-221/qa-admin-cod.mjs')], { cwd: root, env, encoding: 'utf8', timeout: 900_000 });
+      appendFileSync(log, `\nQA painel\n${qa.stdout ?? ''}\n${qa.stderr ?? ''}`);
+      console.log((qa.stdout ?? '').trim());
+      if (qa.status !== 0) throw new Error(`QA do painel falhou. ${(qa.stderr ?? '').split('\n').slice(0, 8).join(' ')}`);
+    }
+  }
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

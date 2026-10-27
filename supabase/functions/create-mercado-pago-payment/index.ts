@@ -558,12 +558,13 @@ serve(async (req) => {
 
     const { data: order, error: orderErr } = await supabaseAdmin
       .from("orders")
-      .select("id, daily_number, public_token, status, payment_status, total_amount, customer_name, customer_phone, customer_email, created_at")
+      .select("id, daily_number, public_token, status, payment_status, total_amount, customer_name, customer_phone, customer_email, created_at, payment_timing")
       .eq("id", orderId)
       .eq("public_token", publicToken)
       .single();
 
     if (orderErr || !order) throw new Error("Pedido nao encontrado.");
+    if (order.payment_timing === "ON_DELIVERY") throw new Error("Este pedido prevê pagamento presencial na entrega.");
     if (order.status === "CANCELADO" || order.status === "EXPIRADO") {
       throw new Error("Pedido nao esta disponivel para pagamento.");
     }

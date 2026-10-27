@@ -1,3 +1,5 @@
+import { FUNNEL_DEVICES, FUNNEL_SOURCES } from "../_shared/public-funnel.ts";
+import { parsePublicPaymentOption } from "../_shared/delivery-payment.ts";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
@@ -227,6 +229,8 @@ serve(async (req) => {
     );
 
     const body = await req.json();
+    const paymentOption = parsePublicPaymentOption(body);
+    const idempotencyKey = cleanText(req.headers.get("x-idempotency-key"), 100) || null;
     const items = Array.isArray(body.items) ? body.items : [];
     const customerName = cleanText(body.customer_name, 80);
     const customerPhone = normalizeBrazilPhone(body.customer_phone);
@@ -351,6 +355,17 @@ serve(async (req) => {
       }, 403);
     }
 
+    // Retry antes de consultas mutáveis e de qualquer nova persistência.
+    if (idempotencyKey) {
+      const { data: previous, error: retryErr } = await supabaseAdmin.rpc("lookup_public_order_retry", {
+        p_key: idempotencyKey, p_branch_id: branch.id, p_request: body,
+      });
+      if (retryErr) throw new Error("Tentativa incompatível com o pedido. Revise os dados e tente novamente.");
+      if (previous) return jsonResponse(req, { success: true, order: {
+        ...previous, payment_method_code: paymentMethodCode,
+      } });
+    }
+    if (paymentOption.timing === "ONLINE") {
     const { data: methodConfig, error: methodErr } = await supabaseAdmin
       .from("payment_method_configs")
       .select("code, provider, enabled")
@@ -362,6 +377,14 @@ serve(async (req) => {
     }
     if (methodConfig.provider !== "MERCADO_PAGO") {
       throw new Error("Metodo ainda nao habilitado para checkout online.");
+    }
+
+    } else {
+      if (!idempotencyKey) throw new Error("Identificador de tentativa obrigatório.");
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${new Date().toISOString().slice(0,10)}:${customerPhone}`));
+      const counter = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2,"0")).join("");
+      const allowed = await checkRateLimit(supabaseAdmin, `cod:${branch.id}:${counter}`, 3, 15 * 60);
+      if (!allowed) throw new Error("Não foi possível receber o pedido. Aguarde e tente novamente.");
     }
 
     const productIds = uniq(items.map((item: any) => String(item.product_id ?? "")));
@@ -600,6 +623,14 @@ serve(async (req) => {
     // (pedido + itens + addons + ingredientes removidos + auditoria) pra RPC —
     // ver supabase/migrations/20260817080000_create_public_order_transactional.sql.
     const orderPayload = {
+      analytics_consent: body.analytics_consent === true,
+      analytics_device: body.analytics_consent === true && FUNNEL_DEVICES.includes(body.analytics_context?.device) ? body.analytics_context.device : "UNKNOWN",
+      analytics_source: body.analytics_consent === true && FUNNEL_SOURCES.includes(body.analytics_context?.source) ? body.analytics_context.source : "UNKNOWN",
+      idempotency_key: idempotencyKey,
+      request: body,
+      payment_timing: paymentOption.timing,
+      expected_payment_method: paymentOption.method,
+      cash_change_for: paymentOption.change,
       branch_id: branch.id,
       order_type: orderType,
       customer_name: customerName,
@@ -672,67 +703,21 @@ serve(async (req) => {
     };
 
     // ── Idempotência do checkout ────────────────────────────────────────────
-    // Sem isto, cada submit criava um pedido novo: duplo toque, "voltar" no
-    // navegador ou retry de pagamento geravam pedidos gêmeos que ficavam
-    // ocupando número do dia e a fila até expirar (caso real: #21 EXPIRADO e
-    // #23 PAGO, mesma cliente, mesmos itens, 53s de diferença).
-    // Regra de ouro: esta camada NUNCA pode impedir uma venda. Qualquer falha
-    // na consulta é logada e o fluxo segue criando o pedido normalmente.
-    const idempotencyKey = cleanText(req.headers.get("x-idempotency-key"), 100) || null;
-
-    if (idempotencyKey) {
-      const { data: previous, error: previousErr } = await supabaseAdmin
-        .from("orders")
-        .select("id, daily_number, public_token, total_amount, discount_amount, discount_percentage, coupon_code, status, payment_status")
-        .eq("public_idempotency_key", idempotencyKey)
-        .maybeSingle();
-
-      if (previousErr) {
-        logDbError("idempotency lookup failed (non-blocking)", previousErr);
-      } else if (previous) {
-        console.log(`[create-public-order] Submit repetido (chave ${idempotencyKey}): devolvendo pedido ${previous.id} em vez de duplicar.`);
-        return jsonResponse(req, {
-          success: true,
-          order: {
-            order_id: previous.id,
-            daily_number: previous.daily_number,
-            public_token: previous.public_token,
-            total_amount: Number(previous.total_amount),
-            discount_amount: Number(previous.discount_amount ?? 0),
-            discount_percentage: Number(previous.discount_percentage ?? 0),
-            coupon_code: previous.coupon_code ?? undefined,
-            status: previous.status,
-            payment_status: previous.payment_status,
-            payment_method_code: paymentMethodCode,
-          },
-        });
-      }
-    }
-
     const { data: rpcResult, error: rpcErr } = await supabaseAdmin.rpc(
       "create_public_order_transactional",
       { p_payload: orderPayload },
     );
-    if (rpcErr) throw new Error("Erro ao criar pedido.");
-
-    // Carimba a chave no pedido recém-criado. Se dois submits correram juntos,
-    // o índice único rejeita o segundo (23505) — o pedido já existe e está
-    // criado, então só registramos; nunca falhamos a resposta por causa disto.
-    if (idempotencyKey) {
-      const { error: stampErr } = await supabaseAdmin
-        .from("orders")
-        .update({ public_idempotency_key: idempotencyKey })
-        .eq("id", rpcResult.order_id);
-      if (stampErr) {
-        logDbError("idempotency stamp failed (non-blocking)", stampErr);
-      }
-    }
+    // Troco é dado do cliente e pode ser corrigido; os demais motivos não revelam limites.
+    if (rpcErr && /troco inválido/i.test(rpcErr.message ?? "")) throw new Error("Valor para troco inválido: informe um valor igual ou maior que o total do pedido.");
+    if (rpcErr) throw new Error(paymentOption.timing === "ON_DELIVERY"
+      ? "Pagamento na entrega indisponível para este pedido. Escolha pagamento online ou entre em contato com a unidade."
+      : "Erro ao criar pedido. Tente novamente com os mesmos dados.");
 
     // Salva o endereço digitado como novo endereço reutilizável do cliente,
     // só quando ele marcou explicitamente a opção — nunca por padrão. Endereço
     // já selecionado a partir de um salvo (delivery_address_id) não é duplicado.
     // Non-blocking: não afeta o pedido, que já foi criado com sucesso acima.
-    if (isDelivery && saveAddress && !deliveryAddressId && customerId) {
+    if (!rpcResult.replayed && isDelivery && saveAddress && !deliveryAddressId && customerId) {
       const { error: addressErr } = await supabaseAdmin.from("customer_addresses").insert({
         customer_id: customerId,
         street: deliveryStreet,
@@ -764,6 +749,9 @@ serve(async (req) => {
         status: rpcResult.status,
         payment_status: rpcResult.payment_status,
         payment_method_code: paymentMethodCode,
+        payment_timing: rpcResult.payment_timing ?? "ONLINE",
+        expected_payment_method: rpcResult.expected_payment_method,
+        cash_change_for: rpcResult.cash_change_for,
         delivery_fee: isDelivery ? deliveryFeeValue : undefined,
       },
     }, 201);
