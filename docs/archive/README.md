@@ -16,6 +16,8 @@ Para os guias mantidos, volte ao [índice principal](../README.md).
 
 ## Estudos
 
+- [Operação de pedidos #229 — estudo e protótipo local](studies/pedidos-229/estudo.md)
+
 - [Cardápio e checkout público — diagnóstico da issue #221](studies/auditoria-pedir-issue-221.md)
 
 - [Configurações, usuários, filiais e taxas](studies/estudo-configuracoes-usuarios-filiais-taxas.md)

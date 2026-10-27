@@ -28,6 +28,7 @@ Compare com código, migrations e testes antes de planejar trabalho novo.
 - [Planos e relatórios](archive/plans/): correções do PDV, UX, checkout,
   fidelização e estabilidade de pedidos.
 - [Diagnóstico local e proposta do checkout #221](archive/studies/auditoria-pedir-issue-221.md): evidências com fixtures e pendências, sem validação de produção.
+- [Operação de pedidos #229 — proposta local para revisão](archive/studies/pedidos-229/estudo.md): estudo, contratos pendentes e protótipo sem serviços reais.
 - [Estudos](archive/studies/): configurações, usuários, filiais, taxas e pedidos mobile.
 - [Prompts de tarefas anteriores](archive/prompts/): contexto histórico, sem autorização para executar suas instruções.
 - [Walkthrough original](archive/walkthrough.md): retrato da implementação inicial.
