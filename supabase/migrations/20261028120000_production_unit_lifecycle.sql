@@ -158,6 +158,27 @@ BEGIN
 END;
 $$;
 
+-- Unidade entregue foi consumida e continua cobrável: a linha que a contém não pode
+-- ser cancelada (nem pelo cancelamento do pedido), como já valia para linha DELIVERED.
+CREATE OR REPLACE FUNCTION handoff_private.guard_cancel_delivered_units()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+  IF NEW.status = 'CANCELLED' AND OLD.status IS DISTINCT FROM 'CANCELLED' AND EXISTS (
+    SELECT 1 FROM public.production_handoff_units
+    WHERE order_item_id = NEW.id AND state <> 'SUPERSEDED' AND prep_status = 'DELIVERED'
+  ) THEN
+    RAISE EXCEPTION 'Item com unidade já entregue não pode ser cancelado: a unidade entregue continua cobrável.'
+      USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_order_items_guard_delivered_units ON public.order_items;
+CREATE TRIGGER trg_order_items_guard_delivered_units
+BEFORE UPDATE OF status ON public.order_items
+FOR EACH ROW EXECUTE FUNCTION handoff_private.guard_cancel_delivered_units();
+
 DROP TRIGGER IF EXISTS trg_order_items_sync_units ON public.order_items;
 CREATE TRIGGER trg_order_items_sync_units
 AFTER UPDATE OF status ON public.order_items

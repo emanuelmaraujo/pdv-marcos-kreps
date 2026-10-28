@@ -323,14 +323,19 @@ export function OrderItemsControl({
                       <Pencil className="h-2.5 w-2.5" /> Editar
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => handleCancelItem(item)}
-                    disabled={isBusy}
-                    className="flex items-center gap-1 rounded px-2 py-1 text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)]"
-                  >
-                    <X className="h-2.5 w-2.5" /> Cancelar item
-                  </button>
+                  {/* Unidade já entregue continua cobrável: a linha não pode ser cancelada. */}
+                  {(order.handoffs ?? []).some((u) => u.order_item_id === item.id && u.prep_status === 'DELIVERED') ? (
+                    <span className="px-2 py-1">Parte entregue · sem cancelamento</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelItem(item)}
+                      disabled={isBusy}
+                      className="flex items-center gap-1 rounded px-2 py-1 text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)]"
+                    >
+                      <X className="h-2.5 w-2.5" /> Cancelar item
+                    </button>
+                  )}
                 </div>
               )}
             </li>

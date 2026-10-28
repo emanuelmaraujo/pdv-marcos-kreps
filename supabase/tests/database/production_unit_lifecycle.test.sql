@@ -195,16 +195,32 @@ UPDATE public.order_items SET status='READY', item_ready_at=now()
 SELECT is((SELECT prep_status FROM public.production_handoff_units WHERE id=(SELECT id FROM u44 WHERE unit_no=1)), 'DELIVERED', 'Legado "pedido pronto" não regride unidade entregue');
 SELECT is((SELECT count(*)::int FROM public.production_handoff_units WHERE id IN (SELECT id FROM u44 WHERE unit_no IN (2,3)) AND prep_status='READY'), 2, 'Legado "pedido pronto" avança unidades atrasadas');
 
--- Cancelamento legado do pedido e restauração preservam o estado de cada unidade
-UPDATE public.order_items SET status='CANCELLED', cancelled_at=now() WHERE id='b2290000-0000-4000-8000-000000000054';
-SELECT is((SELECT status::text FROM public.orders WHERE id='b2290000-0000-4000-8000-000000000044'), 'CANCELADO', 'Cancelar todos os itens leva o pedido a CANCELADO');
+-- Linha com unidade entregue não pode ser cancelada (unidade entregue continua cobrável)
 SELECT throws_ok(
-  $$SELECT public.batch_update_production_status('b2290000-0000-4000-8000-000000000044', ARRAY(SELECT id FROM u44 WHERE unit_no=2), NULL, 'DELIVERED')$$,
+  $$UPDATE public.order_items SET status='CANCELLED', cancelled_at=now() WHERE id='b2290000-0000-4000-8000-000000000054'$$,
+  'P0001', NULL, 'Cancelar linha com unidade entregue é rejeitado'
+);
+
+-- Cancelamento legado e restauração preservam o estado de cada unidade
+INSERT INTO public.orders(id, branch_id, daily_number, status, total_amount, type)
+ VALUES ('b2290000-0000-4000-8000-000000000045', 'b2290000-0000-4000-8000-000000000011', 105, 'NA_FILA', 50, 'BALCAO');
+INSERT INTO public.order_items(id, order_id, product_id, product_name_snapshot, product_price_snapshot, production_sector, quantity, total_price)
+ VALUES ('b2290000-0000-4000-8000-000000000057', 'b2290000-0000-4000-8000-000000000045', 'b2290000-0000-4000-8000-000000000031', 'Crepe Salgado', 25, 'KITCHEN', 2, 50);
+CREATE TEMP TABLE u45 AS SELECT unit_no, id FROM public.production_handoff_units
+ WHERE order_id = 'b2290000-0000-4000-8000-000000000045' AND state <> 'SUPERSEDED';
+SELECT lives_ok(
+  $$SELECT public.batch_update_production_status('b2290000-0000-4000-8000-000000000045', ARRAY(SELECT id FROM u45 WHERE unit_no=1), NULL, 'READY')$$,
+  'Unidade 1 pronta antes do cancelamento'
+);
+UPDATE public.order_items SET status='CANCELLED', cancelled_at=now() WHERE id='b2290000-0000-4000-8000-000000000057';
+SELECT is((SELECT status::text FROM public.orders WHERE id='b2290000-0000-4000-8000-000000000045'), 'CANCELADO', 'Cancelar todos os itens leva o pedido a CANCELADO');
+SELECT throws_ok(
+  $$SELECT public.batch_update_production_status('b2290000-0000-4000-8000-000000000045', ARRAY(SELECT id FROM u45 WHERE unit_no=2), NULL, 'READY')$$,
   '22023', NULL, 'Pedido cancelado não aceita produção'
 );
-UPDATE public.order_items SET status='READY', cancelled_at=NULL WHERE id='b2290000-0000-4000-8000-000000000054';
-SELECT is((SELECT status::text FROM public.orders WHERE id='b2290000-0000-4000-8000-000000000044'), 'PRONTO_PARCIAL', 'Restauração recalcula o pedido a partir de CANCELADO');
-SELECT is((SELECT prep_status FROM public.production_handoff_units WHERE id=(SELECT id FROM u44 WHERE unit_no=1)), 'DELIVERED', 'Restauração devolve a unidade entregue');
+UPDATE public.order_items SET status='IN_PREPARATION', cancelled_at=NULL WHERE id='b2290000-0000-4000-8000-000000000057';
+SELECT is((SELECT status::text FROM public.orders WHERE id='b2290000-0000-4000-8000-000000000045'), 'PRONTO_PARCIAL', 'Restauração recalcula o pedido a partir de CANCELADO');
+SELECT is((SELECT string_agg(prep_status, ',' ORDER BY unit_no) FROM public.production_handoff_units WHERE id IN (SELECT id FROM u45)), 'READY,PENDING', 'Restauração devolve o estado de cada unidade');
 
 -- Expansão por item: entrega somente o que está pronto
 SELECT is(

@@ -95,6 +95,8 @@ assert((await batch(maria, orderB, [crepeB[0]], 'DELIVERED')).ok);
 const legacy = await request('/functions/v1/update-order-status', { order_id: orderB, status: 'PRONTO' }, joao.token);
 assert(legacy.ok, `legado "pedido pronto": ${JSON.stringify(legacy.data)}`);
 assert.equal(sql(`SELECT string_agg(prep_status, ',' ORDER BY unit_no) FROM production_handoff_units WHERE order_item_id='b229b000-0000-4000-8000-000000000053' AND state<>'SUPERSEDED'`), 'DELIVERED,READY', 'legado não regride unidade entregue');
+const cancelPartial = await request('/functions/v1/update-order-item-status', { order_item_id: 'b229b000-0000-4000-8000-000000000053', new_status: 'CANCELLED', reason: 'QA' }, joao.token);
+assert(!cancelPartial.ok && /entregue/.test(cancelPartial.data?.error ?? ''), 'linha com unidade entregue não é cancelada');
 const legacyDone = await request('/functions/v1/update-order-status', { order_id: orderB, status: 'ENTREGUE' }, joao.token);
 assert(legacyDone.ok && legacyDone.data.order.status === 'ENTREGUE', 'legado: entregar pedido conclui unidades');
 console.log('PASS: update-order-status/update-order-item-status compatíveis com o ciclo por unidade.');
