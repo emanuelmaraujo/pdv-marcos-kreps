@@ -66,7 +66,58 @@ serve(async (req) => {
       throw new Error("Role não autorizada.");
     }
 
-    const { order_item_id, new_status, reason } = await req.json();
+    const body = await req.json();
+
+    // Modo lote (#229 / 1B): avanço por unidade/linha numa única transação no
+    // banco (batch_update_production_status valida filial, papel e transições
+    // com o JWT do próprio usuário). Aqui só notificamos o cliente, e apenas
+    // quando o pedido realmente entrou em PRONTO_PARCIAL/PRONTO neste comando.
+    if (body?.mode === "batch") {
+      const { data: result, error: rpcErr } = await supabaseClientAuth.rpc("batch_update_production_status", {
+        p_order_id: body.order_id,
+        p_unit_ids: Array.isArray(body.unit_ids) ? body.unit_ids : [],
+        p_item_ids: Array.isArray(body.item_ids) ? body.item_ids : [],
+        p_new_status: body.new_status,
+        p_reason: typeof body.reason === "string" ? body.reason : null,
+      });
+      if (rpcErr) throw new Error(rpcErr.message);
+
+      const previous = result?.previous_order_status as string | undefined;
+      const current = result?.order_status as string | undefined;
+      const becamePartial = current === "PRONTO_PARCIAL" && previous === "NA_FILA";
+      const becameReady = current === "PRONTO" && previous !== "PRONTO";
+      if (becamePartial || becameReady) {
+        const { data: orderAfter } = await supabaseAdmin
+          .from("orders")
+          .select("id, daily_number, customer_phone, customer_name, branch_id, branches ( code, name )")
+          .eq("id", body.order_id)
+          .single();
+        if (orderAfter) {
+          await enqueueWhatsAppMessage(supabaseAdmin, {
+            orderId:      orderAfter.id,
+            branchId:     orderAfter.branch_id,
+            eventType:    becameReady ? "order_ready" : "order_partial_ready",
+            phone:        orderAfter.customer_phone,
+            customerName: orderAfter.customer_name,
+            dailyNumber:  orderAfter.daily_number,
+            branchCode:   (orderAfter as any).branches?.code ?? null,
+            branchName:   (orderAfter as any).branches?.name ?? null,
+          });
+          await sendOrderReadyPush(supabaseAdmin, {
+            orderId:     orderAfter.id,
+            dailyNumber: orderAfter.daily_number,
+            partial:     !becameReady,
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, ...result }),
+        { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 200 },
+      );
+    }
+
+    const { order_item_id, new_status, reason } = body;
     if (!order_item_id) throw new Error("order_item_id ausente.");
     if (!new_status || !(new_status in ALLOWED_TRANSITIONS)) {
       throw new Error(`new_status inválido. Permitidos: ${Object.keys(ALLOWED_TRANSITIONS).join(", ")}`);

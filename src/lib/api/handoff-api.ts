@@ -28,36 +28,7 @@ export async function enrichHandoffs(orders: Order[]): Promise<Order[]> {
   }
 }
 
-export type BatchProductionCommand = {
-  p_order_id: string;
-  p_unit_ids?: string[];
-  p_item_ids?: string[];
-  p_new_status: 'PENDING' | 'IN_PREPARATION' | 'READY' | 'DELIVERED' | 'CANCELLED';
-  p_reason?: string | null;
-};
-
 export const handoffApi = {
-  batchUpdateProductionStatus: async (command: BatchProductionCommand) => {
-    const { data, error } = await runWithAbortTimeout(
-      async (signal) => await createClient().rpc('batch_update_production_status', {
-        p_order_id: command.p_order_id,
-        p_unit_ids: command.p_unit_ids ?? [],
-        p_item_ids: command.p_item_ids ?? [],
-        p_new_status: command.p_new_status,
-        p_reason: command.p_reason ?? null,
-      }).abortSignal(signal),
-      12000,
-      'Não foi possível atualizar o status de produção.'
-    );
-    if (error) throw error;
-    return data as {
-      success: boolean;
-      changed_units: number;
-      changed_items: number;
-      order_id: string;
-      order_status: string;
-    };
-  },
   confirm: async (command: HandoffCommand) => {
     const { data, error } = await runWithAbortTimeout(async (signal) => await createClient().rpc('confirm_production_handoff', command).abortSignal(signal), 12000, 'Resultado do repasse não confirmado.');
     if (error) throw error;

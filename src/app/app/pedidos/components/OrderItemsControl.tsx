@@ -17,7 +17,7 @@ const STATUS_META: Record<OrderItemStatus, { label: string; dot: string; pill: s
   CANCELLED:      { label: 'Cancelado',   dot: 'bg-[var(--border-strong)]',  pill: 'bg-[var(--bg-subtle)] text-[var(--text-muted)]', text: 'text-[var(--text-muted)] line-through' },
 };
 
-const NEXT_QUICK: Record<OrderItemStatus, OrderItemStatus | null> = {
+const NEXT_QUICK: Record<OrderItemStatus, 'READY' | 'DELIVERED' | null> = {
   PENDING:        'READY',
   IN_PREPARATION: 'READY',
   READY:          'DELIVERED',
@@ -86,7 +86,7 @@ export function OrderItemsControl({
     }
   };
 
-  const handleAdvanceUnit = async (unitId: string, target: OrderItemStatus) => {
+  const handleAdvanceUnit = async (unitId: string, target: 'IN_PREPARATION' | 'READY' | 'DELIVERED') => {
     setBusyId(unitId);
     setError(null);
     try {

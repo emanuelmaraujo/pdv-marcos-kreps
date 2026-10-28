@@ -9,13 +9,21 @@ aprovação própria.
 ## 1. Como operar no quadro operacional (`/app/pedidos`)
 
 ### Ciclo por unidade
-Para pedidos com múltiplos itens ou quantidades maiores que 1 (`quantity > 1`, ex: 3 crepes):
-- Cada unidade física possui seu próprio controle de preparo (`PENDING` → `IN_PREPARATION` → `READY` → `DELIVERED`).
-- Avançar uma unidade para `READY` ou `DELIVERED` **não altera** as unidades irmãs.
-- O recálculo automático do banco deriva o status do item e do pedido:
-  - Se 1 de 3 unidades estiver pronta, o pedido entra em `PRONTO_PARCIAL`.
-  - Se todas as unidades ativas estiverem prontas, o pedido entra em `PRONTO`.
-  - Se todas as unidades ativas forem entregues, o pedido entra em `ENTREGUE`.
+Para itens com quantidade maior que 1 (ex.: 3 crepes):
+- Cada unidade física tem seu próprio controle de preparo (`PENDING` → `IN_PREPARATION` → `READY` → `DELIVERED`).
+  `PENDING` pode ir direto a `READY`; só unidades `READY` podem ser entregues.
+- Pelo quadro, unidades **só avançam**. Não há retorno de etapa nem cancelamento por unidade:
+  cancelar altera o valor cobrado e continua sendo feito pela linha inteira ou pelo pedido,
+  com as regras atuais de COD (#221).
+- Clique repetido ou de outro operador sobre unidade que já chegou (ou passou) da etapa é
+  ignorado sem erro e sem auditoria duplicada. Seleção inválida (unidade de outro pedido,
+  inexistente ou de item editado) rejeita a operação inteira e pede atualização.
+- Avançar uma unidade **não altera** as unidades irmãs. O banco deriva o status do item e do pedido:
+  - 1 de 3 unidades pronta: pedido em `PRONTO_PARCIAL`.
+  - Todas as unidades ativas prontas: `PRONTO`.
+  - Todas entregues: `ENTREGUE`.
+- WhatsApp/Push de “parte pronta” e “pedido pronto” saem uma vez, apenas quando o pedido entra
+  nesse estado pelo comando. Entrega parcial não gera aviso novo.
 
 ### Visibilidade permanente dos itens
 - **Nenhum item ou unidade desaparece:** mesmo quando uma unidade atinge `DELIVERED`, ela permanece visível com estilo suave (opacidade atenuada, ícone de check verde e horário de entrega `HH:MM`).
@@ -36,27 +44,28 @@ Para pedidos com múltiplos itens ou quantidades maiores que 1 (`quantity > 1`, 
 
 ---
 
-## 2. Garantias Transacionais e Concorrência
+## 2. Garantias transacionais e compatibilidade
 
-1. **RPC Atômica `public.batch_update_production_status`:**
-   - Executada em transação PostgreSQL com `SECURITY DEFINER`.
-   - Lock pessimista determinístico:
-     - `SELECT ... FROM public.orders WHERE id = p_order_id FOR UPDATE;`
-     - `SELECT ... FROM public.order_items WHERE id = ANY(...) FOR UPDATE;` (ordenados por ID).
-     - `SELECT ... FROM public.production_handoff_units WHERE id = ANY(...) FOR UPDATE;` (ordenados por ID).
-   - Previne deadlocks e condições de corrida entre dois operadores concorrentes.
-2. **Prevenção de loops de trigger:**
-   - O gatilho de sincronização detecta profundidade recursiva (`pg_trigger_depth() > 1`) para evitar que a sincronização da unidade para o item reverta ou sobrescreva as demais unidades irmãs.
-3. **Preservação de regras financeiras e COD (#221):**
-   - A tabela `order_items` não é duplicada nem fracionada. `order_items.quantity`, `order_items.total_price`, pagamentos e divisões de conta permanecem 100% íntegros.
-   - Cancelamentos parciais de itens em pedidos `ON_DELIVERY` (COD) continuam estritamente bloqueados.
-   - Pedidos `ENTREGA` não permitem marcação de entregue pelo balcão.
-
----
+1. **Comando único:** o quadro chama a Edge Function `update-order-item-status` em modo `batch`.
+   Ela executa `public.batch_update_production_status` com o JWT do operador (filial, papel e
+   transições validados no banco) e envia notificações conforme a transição devolvida.
+2. **Atomicidade e concorrência:** pedido bloqueado com `FOR UPDATE`, depois itens e unidades em
+   ordem de ID. O recálculo de item e pedido acontece uma única vez no fim do lote.
+3. **Comandos legados:** `update-order-status` e `update-order-item-status` (por linha) continuam
+   válidos. As unidades acompanham a linha sem regredir unidades já entregues; cancelamento do
+   pedido guarda o estado de cada unidade, e a restauração (`restore-cancelled-order`) o devolve.
+4. **Recálculo do pedido:** `recompute_order_status_from_items` mantém a semântica e o
+   `SECURITY INVOKER` anteriores. Pedido `ENTREGUE` volta à operação ao receber acréscimo, e pedido
+   restaurado sai de `CANCELADO`.
+5. **Financeiro e COD (#221):** `order_items` não é duplicado nem fracionado; quantidade, valores,
+   pagamentos e divisão de conta não mudam. Delivery não é entregue pelo balcão.
+6. **Implantação:** migration e Edge Function devem ser publicadas juntas. Com a função antiga, o
+   quadro recebe erro (`order_item_id ausente`) e nada é gravado.
 
 ## 3. Verificação e Testes
 
-- **Testes de Banco descartável:** `npm run test:database` executa a suite de testes pgTAP (`supabase/tests/database/production_unit_lifecycle.test.sql`) validando isolamento de unidades, transições permitidas, recálculo de status e proteção contra deadlocks.
+- **Testes de Banco descartável:** `npm run test:database` executa a suite de testes pgTAP (`supabase/tests/database/production_unit_lifecycle.test.sql`) validando isolamento de unidades, transições, IDs inválidos, idempotência, comandos legados, restauração e acréscimo após entrega.
+- **QA com dois operadores:** `node scripts/test-database.mjs --production-qa` (instância descartável, Edge Functions locais e navegador).
 - **Testes de Componentes:** `npm test -- src/app/app/pedidos/components/OrderCard.test.tsx` valida as ações unitárias, botões em lote e persistência visual dos itens entregues.
 - **Build de Produção:** Validado com Next.js Turbopack e 30 rotas estáticas pré-renderizadas sem erros.
 - [Evidências e resultados da etapa 1B](../evidence/pedidos-229/etapa-1b/relatorio.md).
