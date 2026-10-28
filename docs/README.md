@@ -13,6 +13,7 @@ siga o [procedimento de atualização](development/updates.md).
 | Estrutura e fluxo dos dados | [Arquitetura](architecture/overview.md) |
 | Delivery: implementação e histórico das fases | [Delivery](product/delivery.md) |
 | Quadro de pedidos e repasse à produção | [Repasse — etapa 1A](product/pedidos-repasse.md) |
+| Preparo e entrega por unidade no quadro | [Preparo e entrega por unidade — etapa 1B](product/pedidos-preparo-por-unidade.md) |
 | Linguagem da interface | [Guia de voz](product/guia-de-voz.md) |
 | WhatsApp | [Configuração e diagnóstico](operations/whatsapp-cloud-setup.md) |
 | Deploy automático do backend e migrations | [Supabase no GitHub Actions](operations/supabase-deploy.md) |
