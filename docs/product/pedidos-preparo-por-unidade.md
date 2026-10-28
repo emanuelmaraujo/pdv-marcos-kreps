@@ -57,9 +57,13 @@ Para itens com quantidade maior que 1 (ex.: 3 crepes):
 4. **Recálculo do pedido:** `recompute_order_status_from_items` mantém a semântica e o
    `SECURITY INVOKER` anteriores. Pedido `ENTREGUE` volta à operação ao receber acréscimo, e pedido
    restaurado sai de `CANCELADO`.
-5. **Financeiro e COD (#221):** `order_items` não é duplicado nem fracionado; quantidade, valores,
+5. **Linha com unidade entregue não é cancelada:** a unidade consumida continua cobrável. Isso vale
+   para “Cancelar item” (oculto no detalhe) e para o cancelamento do pedido inteiro, que é recusado
+   com a mensagem. Hoje não há como retirar só as unidades restantes; isso depende da etapa de
+   pagamentos fracionados e é decisão de negócio pendente.
+6. **Financeiro e COD (#221):** `order_items` não é duplicado nem fracionado; quantidade, valores,
    pagamentos e divisão de conta não mudam. Delivery não é entregue pelo balcão.
-6. **Implantação:** migration e Edge Function devem ser publicadas juntas. Com a função antiga, o
+7. **Implantação:** migration e Edge Function devem ser publicadas juntas. Com a função antiga, o
    quadro recebe erro (`order_item_id ausente`) e nada é gravado.
 
 ## 3. Verificação e Testes
