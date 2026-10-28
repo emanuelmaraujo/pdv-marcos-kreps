@@ -64,13 +64,37 @@ const fixtureUnit: HandoffUnit = {
  sector:'KITCHEN',state:'PENDING',confirmed:false,mode:'MANUAL',enabled:true,can_manage:false,
  confirmed_at:null,actor_name:'',printed_at:null,job_status:null,job_id:null,history:[],
 };
-describe('quadro de repasse',()=>{
- it('prioriza nome e mantém controles de repasse no pronto parcial',()=>{
+describe('quadro de repasse e preparo por unidade',()=>{
+ it('prioriza nome e mantém controles de repasse e preparo por unidade no pronto parcial',()=>{
   const html=renderOrder({...baseOrder,customer_name:'Ana',status:'PRONTO_PARCIAL',items:[fixtureItem],handoffs:[fixtureUnit]});
   expect(html.indexOf('Ana</button>')).toBeLessThan(html.indexOf('#012'));
   expect(html).toContain('Anotado e repassado');
-  expect(html).toContain('preparo por linha inteira');
+  expect(html).toContain('Unidade 1/3');
+  expect(html).toContain('Aguardando preparo');
+  expect(html).toContain('Preparar');
+  expect(html).toContain('Marcar pronto');
   expect(html).toContain('Aguardando anotar / repassar');
+  expect(html).toContain('Entregar prontos');
+ });
+ it('oferece botão de entrega individual para unidade pronta no balcão e motoboy na entrega',()=>{
+  const readyUnit = { ...fixtureUnit, prep_status: 'READY' as const };
+  const counterHtml = renderOrder({ ...baseOrder, items: [fixtureItem], handoffs: [readyUnit] });
+  expect(counterHtml).toContain('Entregar unidade');
+
+  const deliveryHtml = renderOrder({ ...baseOrder, type: 'ENTREGA', items: [fixtureItem], handoffs: [readyUnit] });
+  expect(deliveryHtml).toContain('Pronto p/ motoboy');
+  expect(deliveryHtml).not.toContain('Entregar unidade');
+ });
+ it('exibe ações em lote quando há múltiplas unidades',()=>{
+  const unit2 = { ...fixtureUnit, id: 'unit-2', unit_no: 2 };
+  const html = renderOrder({ ...baseOrder, items: [fixtureItem], handoffs: [fixtureUnit, unit2] });
+  expect(html).toContain('Todas prontas (2)');
+ });
+ it('mantém unidade entregue visível no cartão com horário',()=>{
+  const deliveredUnit = { ...fixtureUnit, prep_status: 'DELIVERED' as const, delivered_at: '2026-10-28T12:00:00Z' };
+  const html = renderOrder({ ...baseOrder, items: [fixtureItem], handoffs: [deliveredUnit] });
+  expect(html).toContain('Unidade entregue');
+  expect(html).toContain('Crepe teste');
  });
  it('não oferece confirmação quando a consulta falha e não oculta os itens',()=>{
   const html=renderOrder({...baseOrder,items:[fixtureItem]});

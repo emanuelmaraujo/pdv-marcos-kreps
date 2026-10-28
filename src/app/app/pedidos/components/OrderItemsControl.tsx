@@ -67,10 +67,37 @@ export function OrderItemsControl({
     setBusyId(item.id);
     setError(null);
     try {
-      await pdvApi.updateOrderItemStatus({ orderItemId: item.id, newStatus: target });
+      const itemUnits = (order.handoffs ?? []).filter((u) => u.order_item_id === item.id);
+      if (itemUnits.length > 0) {
+        await pdvApi.batchUpdateProductionStatus({
+          orderId: order.id,
+          unitIds: itemUnits.map((u) => u.id),
+          itemIds: [item.id],
+          newStatus: target,
+        });
+      } else {
+        await pdvApi.updateOrderItemStatus({ orderItemId: item.id, newStatus: target });
+      }
       onMutated?.();
     } catch (e: unknown) {
       setError(getFriendlyErrorMessage(e, 'Não conseguimos atualizar o item.'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleAdvanceUnit = async (unitId: string, target: OrderItemStatus) => {
+    setBusyId(unitId);
+    setError(null);
+    try {
+      await pdvApi.batchUpdateProductionStatus({
+        orderId: order.id,
+        unitIds: [unitId],
+        newStatus: target,
+      });
+      onMutated?.();
+    } catch (e: unknown) {
+      setError(getFriendlyErrorMessage(e, 'Não conseguimos atualizar a unidade.'));
     } finally {
       setBusyId(null);
     }
@@ -95,16 +122,23 @@ export function OrderItemsControl({
 
   const handleDeliverAllReady = async () => {
     setError(null);
-    for (const item of readyItems) {
-      setBusyId(item.id);
-      try {
-        await pdvApi.updateOrderItemStatus({ orderItemId: item.id, newStatus: 'DELIVERED' });
-      } catch (e: unknown) {
-        setError(getFriendlyErrorMessage(e, 'Não conseguimos marcar o item como entregue.'));
-      }
+    setBusyId('batch-deliver');
+    try {
+      const readyUnits = (order.handoffs ?? [])
+        .filter((u) => u.prep_status === 'READY')
+        .map((u) => u.id);
+      await pdvApi.batchUpdateProductionStatus({
+        orderId: order.id,
+        unitIds: readyUnits,
+        itemIds: readyItems.map((i) => i.id),
+        newStatus: 'DELIVERED',
+      });
+      onMutated?.();
+    } catch (e: unknown) {
+      setError(getFriendlyErrorMessage(e, 'Não conseguimos marcar os itens como entregues.'));
+    } finally {
+      setBusyId(null);
     }
-    setBusyId(null);
-    onMutated?.();
   };
 
   return (
@@ -232,6 +266,41 @@ export function OrderItemsControl({
                   </button>
                 )}
               </div>
+
+              {/* Unidades individuais quando o item tem quantidade > 1 e repasse por unidade */}
+              {(() => {
+                const itemUnits = (order.handoffs ?? []).filter((u) => u.order_item_id === item.id);
+                if (itemUnits.length <= 1) return null;
+                return (
+                  <div className="mt-2.5 space-y-1.5 border-t border-[var(--border)] pt-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">Unidades ({itemUnits.length}):</p>
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {itemUnits.map((u) => {
+                        const uPrep = (u.prep_status || 'PENDING') as OrderItemStatus;
+                        const uNext = order.type === 'ENTREGA' && uPrep === 'READY' ? null : NEXT_QUICK[uPrep];
+                        const isUnitBusy = busyId === u.id;
+                        return (
+                          <div key={u.id} className="flex items-center justify-between gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-2 text-xs">
+                            <span className="font-semibold text-[var(--text-primary)]">
+                              Unidade {u.unit_no}/{item.quantity} · <span className={STATUS_META[uPrep]?.text}>{STATUS_META[uPrep]?.label ?? uPrep}</span>
+                            </span>
+                            {uNext && (
+                              <button
+                                type="button"
+                                disabled={isUnitBusy}
+                                onClick={() => handleAdvanceUnit(u.id, uNext)}
+                                className="flex min-h-11 items-center gap-1 rounded-md bg-brand-charcoal px-2.5 py-1 text-[10px] font-black uppercase text-white hover:bg-zinc-700 active:scale-95 disabled:opacity-50"
+                              >
+                                {isUnitBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : NEXT_LABEL[uPrep]}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {item.status !== 'DELIVERED' && item.status !== 'CANCELLED' && (
                 <div className="mt-2 flex items-center justify-end gap-2 border-t border-[var(--border)] pt-2 text-[10px] font-bold text-[var(--text-muted)]">
