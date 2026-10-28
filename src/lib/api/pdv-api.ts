@@ -1,6 +1,7 @@
 import { createClient } from '../supabase/client';
 import { PaymentMethod, OrderStatus, OrderItemStatus, Order, PaymentTransaction, CustomerAddress, DeliveryZone } from '@/types/pdv';
 import { runWithAbortTimeout } from '@/lib/utils/abort-timeout';
+import { handoffApi } from './handoff-api';
 
 export class OrderingClosedError extends Error {
   constructor(message: string) {
@@ -759,6 +760,21 @@ export const pdvApi = {
       order_item_id: payload.orderItemId,
       new_status: payload.newStatus,
       reason: payload.reason,
+    }),
+
+  batchUpdateProductionStatus: (payload: {
+    orderId: string;
+    unitIds?: string[];
+    itemIds?: string[];
+    newStatus: OrderItemStatus;
+    reason?: string;
+  }) =>
+    handoffApi.batchUpdateProductionStatus({
+      p_order_id: payload.orderId,
+      p_unit_ids: payload.unitIds,
+      p_item_ids: payload.itemIds,
+      p_new_status: payload.newStatus,
+      p_reason: payload.reason,
     }),
 
   createAttendantOrder: (payload: Record<string, unknown>) =>
