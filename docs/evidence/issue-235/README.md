@@ -22,6 +22,8 @@ issue. Não comprova a versão publicada nem a fonte web real.
 Na página inteira, a barra fixa do rodapé aparece sobre o endereço; a captura de
 viewport mostra o endereço sem essa sobreposição.
 
+Fase 0 (auditoria, diagnóstico e protótipo para aprovação): [relatório](../../archive/studies/proposta-pedir-issue-235.md) e capturas em [`fase0/`](fase0/).
+
 ## Matriz de QA (360, 390, 430, 768 e 1440 px)
 
 | Critério | Resultado | Evidência |
