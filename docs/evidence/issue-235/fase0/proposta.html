@@ -71,7 +71,7 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
 .thumb{width:104px;height:104px;border-radius:var(--r-md);flex:none;position:relative;background:var(--bg-subtle);display:grid;place-items:center;overflow:visible}
 .thumb img{width:100%;height:100%;object-fit:contain;border-radius:var(--r-md)}
 .fallback{background:radial-gradient(circle at 50% 38%,#FFF9F0 0%,#F6EAD8 60%,#EEDDC5 100%)}
-.fallback svg{position:absolute;left:-10px;top:-12px;width:124px;height:124px}
+.fallback svg{position:absolute;left:-4px;top:-3px;width:112px;height:112px}
 .fallback small{position:absolute;top:8px;left:0;right:0;text-align:center;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9A6B3F}
 .add{position:absolute;right:-6px;bottom:-6px;width:var(--tap);height:var(--tap);border-radius:50%;background:var(--bg-surface);border:1px solid var(--border-strong);box-shadow:var(--shadow-md);display:grid;place-items:center;color:var(--brand);font-size:24px;font-weight:600;line-height:1}
 .qtybadge{position:absolute;right:-6px;bottom:-6px;height:var(--tap);min-width:var(--tap);padding:0 12px;border-radius:var(--r-full);background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;box-shadow:var(--shadow-md)}
@@ -168,6 +168,19 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
 .d-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 32px}
 .aside{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow-sm);align-self:start}
 .d-tabs{display:flex;gap:6px;margin:4px 0 6px}
+.art{position:absolute;left:-4px;top:-3px;width:112px;height:112px}
+.j-laranja{--juice:#F59324;--juice-top:#FBB454;--fruit:#F97316;--fruit-in:#FDBA74}
+.j-maracuja{--juice:#F5C431;--juice-top:#FADB70}
+.j-morango{--juice:#E04A5F;--juice-top:#EF7A8A;--fruit:#DC2F3A}
+.j-limao{--juice:#C9DE7A;--juice-top:#DDEBA6;--fruit:#7CB342;--fruit-in:#DCEDC8}
+.j-manga{--juice:#F7B32B;--juice-top:#FBCB64;--fruit:#F59E0B;--fruit-in:#FDE68A}
+.j-acerola{--juice:#E8552F;--juice-top:#F27F5E;--fruit:#C62828}
+.j-abacaxi{--juice:#F1DC6B;--juice-top:#F7E99E}
+.gallery{display:grid;grid-template-columns:repeat(5,150px);gap:18px;background:var(--bg-base);padding:24px;border-radius:12px;box-shadow:var(--shadow-lg);width:max-content}
+.gallery figure{margin:0}
+.gallery .thumb{width:150px;height:150px}
+.gallery .art,.gallery .fallback svg{left:-6px;top:-4px;width:162px;height:162px}
+.gallery figcaption{font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:8px;text-align:center}
 </style>
 </head>
 <body>
@@ -182,6 +195,9 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
     <linearGradient id="g-choc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6A3418"/><stop offset="1" stop-color="#3B1A0B"/></linearGradient>
     <linearGradient id="g-cheese" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF4D2"/><stop offset="1" stop-color="#F2D891"/></linearGradient>
     <radialGradient id="g-shadow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#1E1008" stop-opacity=".22"/><stop offset="1" stop-color="#1E1008" stop-opacity="0"/></radialGradient>
+    <linearGradient id="g-shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".0"/><stop offset=".18" stop-color="#fff" stop-opacity=".45"/><stop offset=".32" stop-color="#fff" stop-opacity="0"/><stop offset=".85" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".12"/></linearGradient>
+    <linearGradient id="g-fry" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9A93A"/><stop offset=".25" stop-color="#F8D670"/><stop offset="1" stop-color="#F3C653"/></linearGradient>
+    <clipPath id="c-box"><path d="M32 58 L43 106 L77 106 L88 58 C72 65 48 65 32 58 Z"/></clipPath>
   </defs>
   <symbol id="cone" viewBox="0 0 120 120">
     <ellipse cx="60" cy="110" rx="22" ry="4" fill="url(#g-shadow)"/>
@@ -216,6 +232,54 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
     <path d="M74 43 C77 51 81 45 84 50" fill="none" stroke="#3B1A0B" stroke-width="2.4" stroke-linecap="round"/>
     <path d="M29 38 A31 5.5 0 0 0 91 38" fill="none" stroke="url(#g-rim)" stroke-width="3" stroke-linecap="round"/>
   </symbol>
+  <symbol id="glass" viewBox="0 0 120 120">
+    <ellipse cx="60" cy="109" rx="24" ry="3.6" fill="url(#g-shadow)"/>
+    <path d="M71 8 L61 70" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+    <path d="M71 8 L61 70" stroke="#E73335" stroke-width="5" stroke-linecap="butt" stroke-dasharray="5 5"/>
+    <path d="M40.5 46 L45.5 102.5 Q46.3 106 50 106 L70 106 Q73.7 106 74.5 102.5 L79.5 46 Z" fill="var(--juice)"/>
+    <ellipse cx="60" cy="46" rx="19.5" ry="3.2" fill="var(--juice-top)"/>
+    <rect x="47" y="47" width="11" height="10" rx="2.5" fill="#fff" opacity=".42" transform="rotate(-14 52 52)"/>
+    <rect x="61" y="51" width="10" height="9" rx="2.5" fill="#fff" opacity=".35" transform="rotate(12 66 55)"/>
+    <path d="M37 28 L44 103 Q45 108.5 50 108.5 L70 108.5 Q75 108.5 76 103 L83 28 Z" fill="url(#g-shine)" stroke="#D8CDBF" stroke-width="1.4"/>
+    <ellipse cx="60" cy="28" rx="23" ry="3.4" fill="#FFFFFF" fill-opacity=".5" stroke="#D8CDBF" stroke-width="1.4"/>
+  </symbol>
+  <symbol id="g-slice" viewBox="0 0 120 120">
+    <circle cx="84" cy="27" r="13" fill="var(--fruit)"/><circle cx="84" cy="27" r="10" fill="var(--fruit-in)"/>
+    <g stroke="var(--fruit)" stroke-width="1.3" opacity=".8"><path d="M84 17 V37"/><path d="M74 27 H94"/><path d="M77 20 L91 34"/><path d="M91 20 L77 34"/></g>
+    <circle cx="84" cy="27" r="2" fill="var(--fruit)"/>
+  </symbol>
+  <symbol id="g-berry" viewBox="0 0 120 120">
+    <g transform="translate(84 25) rotate(20)"><path d="M0 12 C-9 4 -9 -6 0 -6 C9 -6 9 4 0 12 Z" fill="var(--fruit)"/><path d="M-5 -6 L-1.5 -10 L0 -6 L1.5 -10 L5 -6 Z" fill="#4F7A35"/><circle cx="-3" cy="-1" r=".9" fill="#FFE08A"/><circle cx="2.5" cy="0" r=".9" fill="#FFE08A"/><circle cx="-.5" cy="5" r=".9" fill="#FFE08A"/><circle cx="3" cy="-3.5" r=".8" fill="#FFE08A"/></g>
+  </symbol>
+  <symbol id="g-passion" viewBox="0 0 120 120">
+    <circle cx="84" cy="27" r="13" fill="#7A3E6A"/><circle cx="84" cy="27" r="10.5" fill="#F7C62F"/>
+    <g fill="#3B2410"><circle cx="80" cy="24" r="1.6"/><circle cx="86" cy="22" r="1.6"/><circle cx="88" cy="28" r="1.6"/><circle cx="83" cy="30" r="1.6"/><circle cx="78" cy="29" r="1.4"/><circle cx="85" cy="34" r="1.4"/></g>
+  </symbol>
+  <symbol id="g-mint" viewBox="0 0 120 120">
+    <path d="M74 32 C66 26 68 16 78 14 C81 22 80 29 74 32 Z" fill="#5E9B45"/><path d="M74 32 C76 25 77 19 78 14" stroke="#3F7A2E" stroke-width="1.1" fill="none"/>
+  </symbol>
+  <symbol id="g-mango" viewBox="0 0 120 120">
+    <path d="M73 30 C72 18 84 12 94 18 C99 24 96 36 84 38 C78 38 74 35 73 30 Z" fill="#F59E0B"/>
+    <g stroke="#FDE68A" stroke-width="1.4" fill="none"><path d="M78 20 L92 34"/><path d="M84 16 L96 28"/><path d="M90 18 L76 32"/><path d="M95 22 L81 37"/></g>
+  </symbol>
+  <symbol id="g-acerola" viewBox="0 0 120 120">
+    <circle cx="80" cy="28" r="6.5" fill="#C62828"/><circle cx="90" cy="31" r="5.8" fill="#E53935"/>
+    <circle cx="78" cy="26" r="1.8" fill="#fff" opacity=".55"/><circle cx="88" cy="29" r="1.6" fill="#fff" opacity=".55"/>
+    <path d="M83 21 C86 16 92 15 96 18 C92 22 87 22 83 21 Z" fill="#4F7A35"/>
+  </symbol>
+  <symbol id="g-pineapple" viewBox="0 0 120 120">
+    <path d="M72 34 L92 16 L98 36 Z" fill="#F7D74A"/><path d="M92 16 L98 36 L101 35 L95 14 Z" fill="#B7791F"/>
+    <g stroke="#E3B62F" stroke-width="1"><path d="M80 31 L95 22"/><path d="M84 34 L96 27"/></g>
+  </symbol>
+  <symbol id="batata" viewBox="0 0 120 120">
+    <ellipse cx="60" cy="109" rx="28" ry="4" fill="url(#g-shadow)"/>
+    <g transform="rotate(-16 39.5 64.0)"><rect x="36" y="24" width="7" height="44" rx="2" fill="url(#g-fry)"/><rect x="36" y="24" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(-9 47.5 59.0)"><rect x="44" y="16" width="7" height="50" rx="2" fill="url(#g-fry)"/><rect x="44" y="16" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(-3 55.5 55.0)"><rect x="52" y="8" width="7" height="58" rx="2" fill="url(#g-fry)"/><rect x="52" y="8" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(4 63.5 57.5)"><rect x="60" y="13" width="7" height="53" rx="2" fill="url(#g-fry)"/><rect x="60" y="13" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(8 71.5 55.5)"><rect x="68" y="9" width="7" height="57" rx="2" fill="url(#g-fry)"/><rect x="68" y="9" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(15 79.5 61.0)"><rect x="76" y="20" width="7" height="46" rx="2" fill="url(#g-fry)"/><rect x="76" y="20" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(-22 51.25 64.0)"><rect x="48" y="26" width="6.5" height="40" rx="2" fill="url(#g-fry)"/><rect x="48" y="26" width="6.5" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(19 67.25 62.0)"><rect x="64" y="22" width="6.5" height="44" rx="2" fill="url(#g-fry)"/><rect x="64" y="22" width="6.5" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(-12 59.25 60.0)"><rect x="56" y="18" width="6.5" height="48" rx="2" fill="url(#g-fry)"/><rect x="56" y="18" width="6.5" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(26 74.25 65.0)"><rect x="71" y="28" width="6.5" height="38" rx="2" fill="url(#g-fry)"/><rect x="71" y="28" width="6.5" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g>
+    <path d="M32 58 L43 106 L77 106 L88 58 C72 65 48 65 32 58 Z" fill="#FFFFFF"/>
+    <g clip-path="url(#c-box)" fill="#E73335"><path d="M35.0 58 L39.4 58 L45.6 106 L43.4 106 Z"/><path d="M46.6 58 L51.0 58 L52.4 106 L50.2 106 Z"/><path d="M58.2 58 L62.6 58 L59.2 106 L57.0 106 Z"/><path d="M69.8 58 L74.2 58 L66.0 106 L63.8 106 Z"/><path d="M81.4 58 L85.8 58 L72.8 106 L70.6 106 Z"/></g>
+    <path d="M32 58 C48 65 72 65 88 58 L87 62 C72 69 48 69 33 62 Z" fill="#F1E8DC"/>
+    <path d="M32 58 L43 106 L77 106 L88 58" fill="none" stroke="#D8CBBB" stroke-width="1.2"/>
+    <path d="M32 58 C48 65 72 65 88 58" fill="none" stroke="#C9B9A6" stroke-width="1.6"/>
+  </symbol>
 </svg>
 
 <!-- ───────────── MOBILE ───────────── -->
@@ -246,7 +310,7 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
     <div class="sec">
       <div class="t-h2">Bebidas</div>
       <div class="list">
-        <div class="item"><div class="txt"><div class="nm">Suco de Laranja</div><div class="ds">Natural, 400 ml.</div><div class="pr price">R$ 9,90</div></div><div class="thumb"><img src="../../../../public/cardapio/bebidas/suco-laranja.svg" alt=""><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Suco de Laranja</div><div class="ds">Natural, 400 ml.</div><div class="pr price">R$ 9,90</div></div><div class="thumb fallback"><svg class="art j-laranja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-slice"/></svg><span class="add">+</span></div></div>
       </div>
     </div>
   </div>
@@ -392,6 +456,22 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
 </div>
 
 <!-- ───────────── DESKTOP ───────────── -->
+<section id="galeria" style="margin-bottom:40px">
+<p class="caption">9 · Ilustrações de fallback (sem foto cadastrada)</p>
+<div class="gallery">
+  <figure><div class="thumb fallback"><svg class="art" viewBox="0 0 120 120"><use href="#crepe"/></svg></div><figcaption>Krep salgado</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art" viewBox="0 0 120 120"><use href="#crepe-sweet"/></svg></div><figcaption>Krep doce</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art" viewBox="0 0 120 120"><use href="#batata"/></svg></div><figcaption>Porção de batata</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-laranja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-slice"/></svg></div><figcaption>Suco de laranja</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-maracuja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-passion"/></svg></div><figcaption>Suco de maracujá</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-morango" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-berry"/></svg></div><figcaption>Suco de morango</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-limao" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-slice"/></svg></div><figcaption>Suco de limão</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-manga" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-mango"/></svg></div><figcaption>Suco de manga</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-acerola" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-acerola"/></svg></div><figcaption>Suco de acerola</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-abacaxi" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-pineapple"/><use href="#g-mint"/></svg></div><figcaption>Abacaxi com hortelã</figcaption></figure>
+</div>
+</section>
+
 <section id="d-menu" style="margin-bottom:40px">
 <p class="caption">7 · Vitrine desktop (1440)</p>
 <div class="desk">
@@ -403,21 +483,21 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
   </div>
   <div class="d-wrap">
     <div>
-      <div class="d-tabs"><span class="tab on">Kreps salgados</span><span class="tab">Kreps doces</span><span class="tab">Bebidas</span></div>
+      <div class="d-tabs"><span class="tab on">Kreps salgados</span><span class="tab">Kreps doces</span><span class="tab">Porções</span><span class="tab">Bebidas</span></div>
       <div class="t-h2" style="margin-top:14px;font-size:20px">Kreps salgados</div>
       <div class="d-grid">
         <div class="item"><div class="txt"><div class="nm">Krep Frango com Catupiry</div><div class="ds">Frango desfiado, catupiry e muçarela.</div><div class="pr price">R$ 24,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add">+</span></div></div>
         <div class="item"><div class="txt"><div class="nm">Krep Calabresa</div><div class="ds">Calabresa, cebola e muçarela.</div><div class="pr price">R$ 22,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="qtybadge">1</span></div></div>
-        <div class="item"><div class="txt"><div class="nm">Krep Quatro Queijos com nome bem comprido para testar quebra</div><div class="ds">Muçarela, provolone, parmesão e catupiry.</div><div class="pr price">R$ 27,50</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add">+</span></div></div>
-      </div>
-      <div class="t-h2" style="margin-top:22px;font-size:20px">Kreps doces</div>
+        </div>
+      <div class="t-h2" style="margin-top:22px;font-size:20px">Kreps doces e porções</div>
       <div class="d-grid">
         <div class="item"><div class="txt"><div class="nm">Krep Nutella com Morango</div><div class="ds">Creme de avelã e morangos frescos.</div><div class="pr price">R$ 26,90</div></div><div class="thumb fallback"><svg><use href="#crepe-sweet"/></svg><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Porção de Batata</div><div class="ds">Batata frita crocante. Adicione cheddar, bacon ou batata palha.</div><div class="pr price">R$ 22,00</div></div><div class="thumb fallback"><svg class="art" viewBox="0 0 120 120"><use href="#batata"/></svg><span class="add">+</span></div></div>
       </div>
       <div class="t-h2" style="margin-top:22px;font-size:20px">Bebidas</div>
       <div class="d-grid">
-        <div class="item"><div class="txt"><div class="nm">Suco de Laranja</div><div class="ds">Natural, 400 ml.</div><div class="pr price">R$ 9,90</div></div><div class="thumb"><img src="../../../../public/cardapio/bebidas/suco-laranja.svg" alt=""><span class="qtybadge">1</span></div></div>
-        <div class="item"><div class="txt"><div class="nm">Refrigerante lata</div><div class="ds">350 ml.</div><div class="pr price">R$ 6,50</div></div><div class="thumb"><img src="../../../../public/cardapio/bebidas/refri-cola-lata.svg" alt=""><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Suco de Laranja</div><div class="ds">Natural, 400 ml.</div><div class="pr price">R$ 9,90</div></div><div class="thumb fallback"><svg class="art j-laranja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-slice"/></svg><span class="qtybadge">1</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Suco de Maracujá</div><div class="ds">Natural, 400 ml.</div><div class="pr price">R$ 9,90</div></div><div class="thumb fallback"><svg class="art j-maracuja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-passion"/></svg><span class="add">+</span></div></div>
       </div>
     </div>
     <aside class="aside">

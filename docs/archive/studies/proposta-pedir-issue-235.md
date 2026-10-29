@@ -168,6 +168,12 @@ Ajustes pedidos pelo operador nesta rodada (29/10):
   “(obrigatório)/(opcional)” nem texto de ajuda. Já aplicado no código (PR #239). Em ENTREGA,
   continuar sem número válido ainda mostra o erro acima do botão e não cria o pedido.
 - **Ilustração do krep** redesenhada (cone com luva de papel), no lugar do triângulo simples.
+- **Família de ilustrações** ([galeria](../../evidence/issue-235/fase0/proposta-ilustracoes.png)):
+  krep salgado, krep doce, porção de batata (caixa de papel com listras da marca) e sucos
+  num copo único com canudo listrado. A cor do suco e a fruta da borda mudam por sabor:
+  laranja, maracujá, morango, limão, manga, acerola e abacaxi com hortelã. São vetores
+  (SVG) feitos para o protótipo; na implementação viram arquivos em `public/cardapio/` e só
+  aparecem quando o produto não tem foto cadastrada.
 
 Os textos de status da confirmação são exemplos; na implementação vêm dos status reais
 (`order-tracking-helpers.ts`). Valores e horários vêm sempre do servidor e da filial.
@@ -185,6 +191,9 @@ Os textos de status da confirmação são exemplos; na implementação vêm dos 
    é intencional? (Configuração, fora do código.)
 7. **“+” adiciona direto** produtos sem adicionais obrigatórios (tocar no card abre a
    personalização); com adicionais obrigatórios, o “+” abre a folha.
+8. **Ilustrações**: aprovar a família nova e decidir se ela substitui as artes atuais de
+   bebidas em `public/cardapio/bebidas/` (usadas hoje nos sucos e refrigerantes) ou só
+   cobre produtos sem imagem. Sabores sem arte própria usariam a cor genérica do copo.
 
 ## Plano após aprovação (sem backend/migrations)
 
