@@ -670,6 +670,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             currentName: customerNameRef.current,
             nameSource: nameSourceRef.current,
             profileName: saved.name,
+            completePartial: true,
           }),
           formatWhatsAppInput(saved.phone_e164),
         );
@@ -723,6 +724,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               currentName: customerNameRef.current,
               nameSource: nameSourceRef.current,
               profileName: response.profile.name,
+              completePartial: true,
             }),
             formatWhatsAppInput(normalizedPhone),
           );
@@ -2451,8 +2453,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
             {/* Ordem pedida na #235: nome primeiro, WhatsApp depois. A busca do
                 perfil continua disparando pelo WhatsApp e nunca sobrescreve um
-                nome digitado à mão (ver resolveNameFromLookup) — no máximo
-                oferece a sugestão logo abaixo do WhatsApp. */}
+                nome diferente digitado à mão; nome que é o começo do salvo
+                ("Ana" → "Ana Souza") é completado (completePartial). */}
             <FloatingInput
               label="Nome (opcional)"
               name="name"
@@ -2461,6 +2463,27 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               onChange={(v) => applyResolvedName(resolveNameFromInput(v), customerPhone)}
               placeholder="Como podemos te chamar?"
             />
+
+            {/* Nome digitado diferente do salvo para este WhatsApp: nunca trocamos
+                sozinhos, mas a sugestão fica logo abaixo do campo, com ação explícita. */}
+            {nameSuggestion && (
+              <div className="-mt-1 flex items-center gap-3 rounded-xl bg-[var(--bg-subtle)] px-3 py-1" role="status">
+                <p className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
+                  Nome salvo neste WhatsApp: <strong className="text-[var(--text-primary)]">{nameSuggestion}</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => applyResolvedName(
+                    { name: nameSuggestion, source: "LOOKUP", suggestion: null },
+                    customerPhone,
+                  )}
+                  aria-label={`Usar o nome ${nameSuggestion}`}
+                  className="inline-flex min-h-11 shrink-0 items-center text-sm font-semibold text-[var(--text-primary)] underline underline-offset-4"
+                >
+                  Usar
+                </button>
+              </div>
+            )}
 
             <FloatingInput
               // Sem aviso de obrigatoriedade no campo (pedido do operador, #235). Em
@@ -2503,18 +2526,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   </p>
                 )}
 
-                {nameSuggestion && (
-                  <button
-                    type="button"
-                    onClick={() => applyResolvedName(
-                      { name: nameSuggestion, source: "LOOKUP", suggestion: null },
-                      customerPhone,
-                    )}
-                    className="min-h-11 w-full rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-left text-xs font-medium text-[var(--text-secondary)]"
-                  >
-                    Salvamos <strong>{nameSuggestion}</strong> para este WhatsApp. Tocar aqui usa esse nome.
-                  </button>
-                )}
 
                 {/* E-mail continua opcional (#235): recolhido para não competir com o essencial. */}
                 {isEmailOpen || customerEmail ? (
