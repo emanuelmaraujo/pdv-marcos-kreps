@@ -1,9 +1,13 @@
 # #235 — Fase 0: auditoria e proposta visual do cardápio e checkout público
 
-Data: 29/10/2026. Branch `cez/26179825` (PR #239, rascunho). **Proposta para aprovação, não
-implementação.** Nada aqui foi publicado; as telas `proposta-*` são de um HTML estático
-ilustrativo. A implementação ampla (Fases 1–3) só começa após a decisão do operador sobre a
-seção [Decisões para aprovação](#decisões-para-aprovação).
+Data: 29/10/2026. Branch `cez/26179825` (PR #239, rascunho).
+
+**Status: aprovada pelo operador em 29/10/2026 e implementada na mesma branch.** Decisões:
+direção visual aprovada; “Cancelamento fácil” removido já; ilustrações substituem todas as
+artes de bebidas; “+” adiciona direto; hub de filiais mantido (filial padrão fora da lista é
+intencional). Comportamento vigente em [delivery.md](../../product/delivery.md#jornada-do-checkout-público-235);
+QA em [`redesign/`](../../evidence/issue-235/redesign/README.md). O texto abaixo preserva a
+proposta como foi apresentada.
 
 Evidências: [`docs/evidence/issue-235/fase0/`](../../evidence/issue-235/fase0/) —
 `publicado-*` (site real, só leitura), `atual-*` (código atual com catálogo sintético),

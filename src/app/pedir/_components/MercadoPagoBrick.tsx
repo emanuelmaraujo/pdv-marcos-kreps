@@ -66,7 +66,7 @@ export function MercadoPagoBrick({
                   .then((response) => {
                     setNotice("");
                     if (!response.success) {
-                      setError(response.error || "Nao foi possivel processar o pagamento.");
+                      setError(response.error || "Não foi possível processar o pagamento.");
                       reject();
                       return;
                     }
@@ -113,7 +113,7 @@ export function MercadoPagoBrick({
             },
             onError: (err: unknown) => {
               console.error("[MercadoPagoBrick] error", JSON.stringify(err, null, 2), err);
-              setError("O checkout do Mercado Pago nao carregou corretamente.");
+              setError("O checkout do Mercado Pago não carregou corretamente.");
             },
           },
         });
@@ -155,7 +155,7 @@ export function MercadoPagoBrick({
           <p className="text-sm font-black">Pagamento protegido pelo Mercado Pago</p>
         </div>
         <p className="mt-1 text-xs font-semibold leading-relaxed opacity-80">
-          Cartao de credito, debito e outros meios aparecem conforme disponibilidade do Mercado Pago.
+          Cartão de crédito, débito e outros meios aparecem conforme a disponibilidade do Mercado Pago.
         </p>
       </div>
       {!isReady && !error && (

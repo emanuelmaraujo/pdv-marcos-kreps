@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FloatingInput } from "./FloatingInput";
 import { QrCode, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { pdvApi, CreatePublicOrderResponse, MercadoPagoPaymentResponse } from "@/lib/api/pdv-api";
@@ -78,7 +79,7 @@ export function PixCheckout({
       setWaitExpiresAt(response.transaction?.expires_at ?? null);
 
       if (!response.success) {
-        setError(response.error || "Nao foi possivel gerar o Pix.");
+        setError(response.error || "Não foi possível gerar o Pix.");
         setPixIdempotencyKey(crypto.randomUUID());
         return;
       }
@@ -94,33 +95,38 @@ export function PixCheckout({
 
   return (
     <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-sm">
-      <div className="rounded-2xl border p-4" style={{ borderColor: "var(--status-info)", backgroundColor: "var(--status-info-bg)", color: "var(--status-info)" }}>
-        <div className="flex items-center gap-2">
-          <QrCode className="h-5 w-5" />
-          <p className="text-sm font-black">Pix copia e cola</p>
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-[var(--text-primary)]">
+          <QrCode className="h-5 w-5" strokeWidth={1.75} />
+        </span>
+        <div>
+          <p className="text-sm font-bold text-[var(--text-primary)]">Pix copia e cola</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-secondary)]">
+            Gere o código, pague pelo app do banco e deixe esta tela aberta. A confirmação aparece automaticamente.
+          </p>
         </div>
-        <p className="mt-1 text-xs font-semibold leading-relaxed opacity-90">
-          Gere o codigo, pague pelo banco e deixe esta tela aberta. A confirmacao aparece automaticamente.
-        </p>
       </div>
 
-      <input
-        value={payerEmail}
-        onChange={(event) => onPayerEmailChange(event.target.value)}
-        onBlur={(event) => onPayerEmailCommit?.(event.target.value)}
-        placeholder="E-mail exigido pelo Mercado Pago para Pix"
+      <FloatingInput
+        label="E-mail para o Pix"
+        name="email"
+        autoComplete="email"
         type="email"
+        inputMode="email"
+        value={payerEmail}
+        onChange={onPayerEmailChange}
+        onBlur={() => onPayerEmailCommit?.(payerEmail)}
         disabled={!!payment}
-        className="h-12 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 text-base font-bold text-[var(--text-primary)] outline-none focus:border-brand-red disabled:opacity-60"
+        help="O Mercado Pago exige um e-mail para gerar o Pix."
       />
-      <input
-        value={payerCpf}
-        onChange={(event) => setPayerCpf(formatCpfInput(event.target.value))}
-        placeholder="CPF opcional, usado se o Mercado Pago exigir"
-        type="text"
+      <FloatingInput
+        label="CPF (opcional)"
+        name="cpf"
         inputMode="numeric"
+        value={payerCpf}
+        onChange={(value) => setPayerCpf(formatCpfInput(value))}
         disabled={!!payment}
-        className="h-12 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-4 text-base font-bold text-[var(--text-primary)] outline-none focus:border-brand-red disabled:opacity-60"
+        help="Só é usado se o Mercado Pago pedir."
       />
 
       {!payment && (

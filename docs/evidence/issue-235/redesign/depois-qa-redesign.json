@@ -1,0 +1,142 @@
+[
+  {
+    "width": 360,
+    "overflow": {
+      "menu": false,
+      "sacola": false,
+      "dados": false,
+      "pagamento": false,
+      "confirmacao": false
+    },
+    "checks": {
+      "firstProductTop": 308,
+      "quickAdd": true,
+      "requiredOpensSheet": true,
+      "addonCount": 8,
+      "baconQty": "3",
+      "bagText": "Sua sacola\nAdicionar itens\n1\nSacola\n2\nDados\n3\nPagamento\n\nComer aqui · Unidade fixture\n\nConsumo no local.\n\nAlterar\n\nKrep Frango com Catupiry\n\nR$ 24,90\n\n1\nEditar\nRemover\n\nKrep Calabresa\n\n+ 3× Bacon extra\n\nSem Cebola\n\nR$ 34,90\n\n1\nEditar\nRemover\nItens e adicionais\nR$ 59,80\nEmbalagem\nR$ 0,00\nEntrega\nNão se aplica\nTotal estimado\nR$ 59,80\n\nValores confirmados pelo sistema ao enviar o pedido, antes do pagamento.\n\nTenho um cupom\nContinuar para seus dados",
+      "bagAfterEdit": "Krep Frango com Catupiry R$ 49,80 2 Editar Remover Krep Calabresa + 2× Bacon extra Sem Cebola R$ 30,90 1 Editar Remover",
+      "paymentHasSeal": false,
+      "createdOrder": {
+        "customer_name": "Ana Fixture",
+        "order_type": "ENTREGA",
+        "items": 2
+      },
+      "thanks": "Obrigado, Ana!"
+    },
+    "errors": [],
+    "blocked": []
+  },
+  {
+    "width": 390,
+    "overflow": {
+      "menu": false,
+      "sacola": false,
+      "dados": false,
+      "pagamento": false,
+      "confirmacao": false
+    },
+    "checks": {
+      "firstProductTop": 308,
+      "quickAdd": true,
+      "requiredOpensSheet": true,
+      "addonCount": 8,
+      "baconQty": "3",
+      "bagText": "Sua sacola\nAdicionar itens\n1\nSacola\n2\nDados\n3\nPagamento\n\nComer aqui · Unidade fixture\n\nConsumo no local.\n\nAlterar\n\nKrep Frango com Catupiry\n\nR$ 24,90\n\n1\nEditar\nRemover\n\nKrep Calabresa\n\n+ 3× Bacon extra\n\nSem Cebola\n\nR$ 34,90\n\n1\nEditar\nRemover\nItens e adicionais\nR$ 59,80\nEmbalagem\nR$ 0,00\nEntrega\nNão se aplica\nTotal estimado\nR$ 59,80\n\nValores confirmados pelo sistema ao enviar o pedido, antes do pagamento.\n\nTenho um cupom\nContinuar para seus dados",
+      "bagAfterEdit": "Krep Frango com Catupiry R$ 49,80 2 Editar Remover Krep Calabresa + 2× Bacon extra Sem Cebola R$ 30,90 1 Editar Remover",
+      "paymentHasSeal": false,
+      "createdOrder": {
+        "customer_name": "Ana Fixture",
+        "order_type": "ENTREGA",
+        "items": 2
+      },
+      "thanks": "Obrigado, Ana!"
+    },
+    "errors": [],
+    "blocked": []
+  },
+  {
+    "width": 430,
+    "overflow": {
+      "menu": false,
+      "sacola": false,
+      "dados": false,
+      "pagamento": false,
+      "confirmacao": false
+    },
+    "checks": {
+      "firstProductTop": 308,
+      "quickAdd": true,
+      "requiredOpensSheet": true,
+      "addonCount": 8,
+      "baconQty": "3",
+      "bagText": "Sua sacola\nAdicionar itens\n1\nSacola\n2\nDados\n3\nPagamento\n\nComer aqui · Unidade fixture\n\nConsumo no local.\n\nAlterar\n\nKrep Frango com Catupiry\n\nR$ 24,90\n\n1\nEditar\nRemover\n\nKrep Calabresa\n\n+ 3× Bacon extra\n\nSem Cebola\n\nR$ 34,90\n\n1\nEditar\nRemover\nItens e adicionais\nR$ 59,80\nEmbalagem\nR$ 0,00\nEntrega\nNão se aplica\nTotal estimado\nR$ 59,80\n\nValores confirmados pelo sistema ao enviar o pedido, antes do pagamento.\n\nTenho um cupom\nContinuar para seus dados",
+      "bagAfterEdit": "Krep Frango com Catupiry R$ 49,80 2 Editar Remover Krep Calabresa + 2× Bacon extra Sem Cebola R$ 30,90 1 Editar Remover",
+      "paymentHasSeal": false,
+      "createdOrder": {
+        "customer_name": "Ana Fixture",
+        "order_type": "ENTREGA",
+        "items": 2
+      },
+      "thanks": "Obrigado, Ana!"
+    },
+    "errors": [],
+    "blocked": []
+  },
+  {
+    "width": 768,
+    "overflow": {
+      "menu": false,
+      "sacola": false,
+      "dados": false,
+      "pagamento": false,
+      "confirmacao": false
+    },
+    "checks": {
+      "firstProductTop": 312,
+      "quickAdd": true,
+      "requiredOpensSheet": true,
+      "addonCount": 8,
+      "baconQty": "3",
+      "bagText": "Sua sacola\nAdicionar itens\n1\nSacola\n2\nDados\n3\nPagamento\n\nComer aqui · Unidade fixture\n\nConsumo no local.\n\nAlterar\n\nKrep Frango com Catupiry\n\nR$ 24,90\n\n1\nEditar\nRemover\n\nKrep Calabresa\n\n+ 3× Bacon extra\n\nSem Cebola\n\nR$ 34,90\n\n1\nEditar\nRemover\nItens e adicionais\nR$ 59,80\nEmbalagem\nR$ 0,00\nEntrega\nNão se aplica\nTotal estimado\nR$ 59,80\n\nValores confirmados pelo sistema ao enviar o pedido, antes do pagamento.\n\nTenho um cupom\nContinuar para seus dados",
+      "bagAfterEdit": "Krep Frango com Catupiry R$ 49,80 2 Editar Remover Krep Calabresa + 2× Bacon extra Sem Cebola R$ 30,90 1 Editar Remover",
+      "paymentHasSeal": false,
+      "createdOrder": {
+        "customer_name": "Ana Fixture",
+        "order_type": "ENTREGA",
+        "items": 2
+      },
+      "thanks": "Obrigado, Ana!"
+    },
+    "errors": [],
+    "blocked": []
+  },
+  {
+    "width": 1440,
+    "overflow": {
+      "menu": false,
+      "sacola": false,
+      "dados": false,
+      "pagamento": false,
+      "confirmacao": false
+    },
+    "checks": {
+      "firstProductTop": 312,
+      "quickAdd": true,
+      "requiredOpensSheet": true,
+      "addonCount": 8,
+      "baconQty": "3",
+      "bagText": "Sua sacola\nAdicionar itens\n1\nSacola\n2\nDados\n3\nPagamento\n\nComer aqui · Unidade fixture\n\nConsumo no local.\n\nAlterar\n\nKrep Frango com Catupiry\n\nR$ 24,90\n\n1\nEditar\nRemover\n\nKrep Calabresa\n\n+ 3× Bacon extra\n\nSem Cebola\n\nR$ 34,90\n\n1\nEditar\nRemover\nItens e adicionais\nR$ 59,80\nEmbalagem\nR$ 0,00\nEntrega\nNão se aplica\nTotal estimado\nR$ 59,80\n\nValores confirmados pelo sistema ao enviar o pedido, antes do pagamento.\n\nTenho um cupom\nContinuar para seus dados",
+      "bagAfterEdit": "Krep Frango com Catupiry R$ 49,80 2 Editar Remover Krep Calabresa + 2× Bacon extra Sem Cebola R$ 30,90 1 Editar Remover",
+      "paymentHasSeal": false,
+      "createdOrder": {
+        "customer_name": "Ana Fixture",
+        "order_type": "ENTREGA",
+        "items": 2
+      },
+      "thanks": "Obrigado, Ana!"
+    },
+    "errors": [],
+    "blocked": []
+  }
+]

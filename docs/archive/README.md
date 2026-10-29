@@ -22,7 +22,7 @@ Para os guias mantidos, volte ao [índice principal](../README.md).
 - [Operação de pedidos #229 — proposta de cancelar só as unidades restantes](studies/pedidos-229/proposta-cancelamento-parcial.md) (aguarda aprovação)
 
 - [Cardápio e checkout público — diagnóstico da issue #221](studies/auditoria-pedir-issue-221.md)
-- [Cardápio e checkout público — Fase 0 da issue #235](studies/proposta-pedir-issue-235.md) (aguarda aprovação da proposta visual)
+- [Cardápio e checkout público — Fase 0 da issue #235](studies/proposta-pedir-issue-235.md) (aprovada e implementada em 29/10/2026)
 
 - [Configurações, usuários, filiais e taxas](studies/estudo-configuracoes-usuarios-filiais-taxas.md)
 - [Estética de checkout e pedidos](studies/estudo-estetico-checkout-pedidos.md)

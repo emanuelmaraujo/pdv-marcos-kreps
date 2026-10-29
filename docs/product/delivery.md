@@ -14,12 +14,40 @@ O servidor continua validando preços, descontos e disponibilidade ao enviar o p
 antes do pagamento. O WhatsApp é obrigatório para entrega e opcional nas outras
 modalidades; não é necessário criar conta.
 
-## Ordem dos dados do cliente no checkout público
+## Jornada do checkout público (#235)
 
-Na etapa “Seus dados” de `/pedir` (#235), a ordem é: **Nome** (opcional),
-**WhatsApp com DDD** (obrigatório só em ENTREGA), **E-mail** (opcional, usado no
-pagamento online), modalidade, endereço (somente ENTREGA: CEP → rua/bairro
-derivados do CEP → número do imóvel → complemento → referência), observações e
+Redesign aprovado pelo operador em 29/10/2026 ([relatório](../archive/studies/proposta-pedir-issue-235.md),
+[evidências](../evidence/issue-235/redesign/README.md)). Nada disso altera preço,
+validação, criação de pedido ou pagamento: o servidor continua recalculando tudo.
+
+- **Cardápio:** cabeçalho com unidade e horário reais, “Trocar” e atalho para acompanhar
+  pedido; modalidade (Comer aqui/Para levar/Entrega) escolhida uma vez, logo abaixo.
+  Produtos em lista, com foto à direita ou, sem foto, a ilustração da categoria
+  (`public/cardapio/fallback/`: krep salgado, krep doce, batata; sucos sem foto usam o
+  copo genérico). “Mais pedido” só aparece com a estatística real da filial.
+- **“+” no card:** adiciona 1 unidade direto e soma no item já existente sem
+  personalização; produto com adicional obrigatório (`product_addons.is_required`) abre a
+  personalização. Tocar no card sempre abre a personalização.
+- **Personalização:** ingredientes como lista marcável (desmarcar retira) e todos os
+  adicionais vinculados ao produto visíveis, com preço e contador **sem limite**.
+- **Sacola:** cada item mostra adicionais, ingredientes retirados e observação, com três
+  ações explícitas: quantidade, **Editar** (reabre a personalização; botão “Salvar”) e
+  **Remover**. Modalidade aparece como resumo com “Alterar”; cupom fica recolhido em
+  “Tenho um cupom”.
+- **Progresso:** 3 passos (Sacola, Dados, Pagamento); a confirmação não mostra progresso.
+- **Pagamento:** total e nº do pedido; Pix ou cartão; só fatos (“processado pelo Mercado
+  Pago; o preparo começa após a aprovação”). O selo “Cancelamento fácil” foi removido por
+  não haver cancelamento pelo cliente.
+- **Confirmação (pagamento aprovado):** “Pagamento aprovado”, “Obrigado, {primeiro nome}!”
+  (ou “Obrigado!”), aviso pelo WhatsApp só se informado, nº do pedido secundário e “Copiar
+  link”. Pagamento na entrega continua indo para `/pedido/[token]`.
+
+### Dados do cliente
+
+Na etapa “Seus dados”, a ordem é: **Nome** (opcional), **WhatsApp com DDD**
+(obrigatório só em ENTREGA), **E-mail** (opcional, recolhido em “Adicionar e-mail”; o Pix
+pede e-mail no próprio formulário), resumo da modalidade, endereço (somente ENTREGA: CEP →
+rua/bairro derivados do CEP → número do imóvel → complemento → referência), observações e
 consentimentos. As obrigações de preenchimento não mudaram. O campo mostra só
 “WhatsApp com DDD”, sem aviso de obrigatório/opcional (decisão do operador); em ENTREGA,
 continuar sem número válido mostra “Informe um WhatsApp válido com DDD para pedidos de
@@ -29,9 +57,13 @@ A busca de perfil salvo continua disparando pelo WhatsApp, mesmo com o nome acim
 nome digitado à mão nunca é sobrescrito; o nome salvo aparece como sugestão
 tocável logo abaixo do WhatsApp, e “Não é você?” segue disponível. Os campos usam
 `autocomplete` (`name`, `tel`, `email`, `postal-code`) e o aviso de telefone
-incompleto fica ligado ao campo por `aria-describedby`. O redesign visual amplo
-da vitrine e do checkout previsto na #235 depende da aprovação da proposta visual
-(Fase 0) e não faz parte desta alteração.
+incompleto fica ligado ao campo por `aria-describedby`.
+
+### Ilustrações
+
+`node scripts/gerar-arte-bebidas.mjs` regera `public/cardapio/bebidas/` (mesmos nomes
+gravados em `products.image_url` pela migration de 05/09, então não mexe no banco) e
+`public/cardapio/fallback/`. Foto cadastrada no produto sempre tem prioridade.
 
 ## Pagamento na entrega (COD)
 

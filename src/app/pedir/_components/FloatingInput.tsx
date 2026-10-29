@@ -19,6 +19,7 @@ export function FloatingInput({
   name,
   help,
   error,
+  disabled,
 }: {
   label: string;
   value: string;
@@ -31,6 +32,7 @@ export function FloatingInput({
   name?: string;
   help?: string;
   error?: string | null;
+  disabled?: boolean;
 }) {
   const id = useId();
   const helpId = `${id}-help`;
@@ -50,9 +52,10 @@ export function FloatingInput({
           type={type}
           inputMode={inputMode}
           autoComplete={autoComplete}
+          disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
-          className={`peer w-full rounded-xl border bg-[var(--bg-subtle)] px-4 pt-6 pb-2 text-sm font-medium text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10 ${
+          className={`peer w-full rounded-xl border bg-[var(--bg-subtle)] px-4 pt-6 pb-2 text-sm font-medium text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10 disabled:opacity-60 ${
             error ? "border-[var(--status-danger)]" : "border-[var(--border)]"
           }`}
           style={{ height: 56 }}
