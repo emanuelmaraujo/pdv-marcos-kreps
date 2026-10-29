@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proposta #235 — cardápio e checkout público (protótipo ilustrativo)</title>
+<!--
+  Protótipo estático da Fase 0 da #235. NÃO é implementação nem página publicada.
+  Tokens copiados de src/app/globals.css ([data-context="public"]); fonte Plus
+  Jakarta Sans quando instalada localmente (sem busca externa). Dados sintéticos;
+  bebidas usam as artes do próprio app em public/cardapio. Nenhuma foto, avaliação,
+  prazo, desconto ou popularidade inventados.
+-->
+<style>
+:root{
+  --brand:#E73335;--brand-hover:#C62020;--brand-light:#FFF0F0;
+  --bg-base:#FAF5EE;--bg-surface:#FFFFFF;--bg-subtle:#F3EDE4;--bg-inverse:#1E1008;
+  --text-primary:#1A0F0A;--text-secondary:#6B5B4E;--text-muted:#786754;
+  --border:rgba(30,16,8,.08);--border-strong:rgba(30,16,8,.16);
+  --accent:#F5A623;--success:#16A34A;--success-bg:#ECFDF3;--warning:#B45309;--warning-bg:#FEF6E4;
+  --shadow-sm:0 1px 3px rgba(30,16,8,.08);--shadow-md:0 4px 12px rgba(30,16,8,.10);--shadow-lg:0 8px 24px rgba(30,16,8,.12);
+  /* Mini design system proposto */
+  --r-sm:10px;--r-md:14px;--r-lg:20px;--r-full:999px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
+  --tap:44px;
+}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Plus Jakarta Sans",system-ui,-apple-system,sans-serif;background:#E9E2D8;color:var(--text-primary);-webkit-font-smoothing:antialiased;padding:32px}
+h1.doc{font-size:20px;margin-bottom:4px}
+p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:900px}
+.row{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start;margin-bottom:40px}
+.caption{font-size:12px;font-weight:700;color:var(--text-secondary);margin:0 0 8px;text-transform:uppercase;letter-spacing:.06em}
+/* Frames */
+.phone{width:390px;height:844px;background:var(--bg-base);border-radius:28px;overflow:hidden;position:relative;box-shadow:var(--shadow-lg);display:flex;flex-direction:column}
+.desk{width:1440px;height:900px;background:var(--bg-base);overflow:hidden;position:relative;box-shadow:var(--shadow-lg);border-radius:12px;display:flex;flex-direction:column}
+.scroll{flex:1;overflow:hidden}
+/* Tipografia */
+.t-title{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.t-h2{font-size:17px;font-weight:700}
+.t-body{font-size:14px;line-height:1.45}
+.t-sm{font-size:13px;line-height:1.4;color:var(--text-secondary)}
+.t-xs{font-size:12px;line-height:1.35;color:var(--text-muted)}
+.price{font-weight:700;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+/* Cabeçalho */
+.top{background:var(--bg-surface);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:10px}
+.logo{width:36px;height:36px;border-radius:50%;background:url(../../../../public/logo.png) center/cover,var(--bg-subtle);flex:none;border:1px solid var(--border)}
+.top .who{min-width:0;flex:1}
+.top .name{font-weight:700;font-size:15px}
+.status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex:none}
+.link{color:var(--text-primary);font-weight:600;font-size:13px;text-decoration:underline;text-underline-offset:3px;min-height:var(--tap);display:inline-flex;align-items:center}
+.iconbtn{width:var(--tap);height:var(--tap);border-radius:var(--r-full);display:grid;place-items:center;border:1px solid var(--border);background:var(--bg-surface);flex:none}
+/* Modalidade */
+.seg{display:flex;background:var(--bg-subtle);border-radius:var(--r-full);padding:3px;gap:2px}
+.seg span{flex:1;height:38px;display:grid;place-items:center;border-radius:var(--r-full);font-size:13px;font-weight:600;color:var(--text-secondary)}
+.seg .on{background:var(--bg-inverse);color:#fff;box-shadow:var(--shadow-sm)}
+.modal-bar{padding:10px 16px 12px;background:var(--bg-surface)}
+/* Tabs */
+.tabs{display:flex;gap:6px;padding:8px 16px;background:var(--bg-surface);border-bottom:1px solid var(--border);box-shadow:0 2px 6px rgba(30,16,8,.04)}
+.tab{height:36px;padding:0 14px;border-radius:var(--r-full);display:grid;place-items:center;font-size:13px;font-weight:600;color:var(--text-secondary);white-space:nowrap}
+.tab.on{background:var(--text-primary);color:#fff}
+/* Lista de produtos */
+.sec{padding:18px 16px 4px}
+.list{display:flex;flex-direction:column}
+.item{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.item .txt{flex:1;min-width:0}
+.item .nm{font-size:15px;font-weight:700;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.item .ds{margin-top:3px;font-size:13px;color:var(--text-secondary);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.item .pr{margin-top:8px;font-size:15px}
+.thumb{width:104px;height:104px;border-radius:var(--r-md);flex:none;position:relative;background:var(--bg-subtle);display:grid;place-items:center;overflow:visible}
+.thumb img{width:100%;height:100%;object-fit:contain;border-radius:var(--r-md)}
+.fallback{background:radial-gradient(circle at 50% 38%,#FFF9F0 0%,#F6EAD8 60%,#EEDDC5 100%)}
+.fallback svg{position:absolute;left:-4px;top:-3px;width:112px;height:112px}
+.fallback small{position:absolute;top:8px;left:0;right:0;text-align:center;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9A6B3F}
+.add{position:absolute;right:-6px;bottom:-6px;width:var(--tap);height:var(--tap);border-radius:50%;background:var(--bg-surface);border:1px solid var(--border-strong);box-shadow:var(--shadow-md);display:grid;place-items:center;color:var(--brand);font-size:24px;font-weight:600;line-height:1}
+.qtybadge{position:absolute;right:-6px;bottom:-6px;height:var(--tap);min-width:var(--tap);padding:0 12px;border-radius:var(--r-full);background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;box-shadow:var(--shadow-md)}
+/* Barra de sacola */
+.bag{position:absolute;left:12px;right:12px;bottom:16px;height:56px;border-radius:var(--r-full);background:var(--brand);color:#fff;display:flex;align-items:center;padding:0 8px 0 18px;gap:10px;box-shadow:0 8px 20px rgba(231,51,53,.30);font-weight:700;font-size:15px}
+.bag .cnt{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:13px}
+.bag .go{margin-left:auto;background:rgba(0,0,0,.14);border-radius:var(--r-full);height:40px;padding:0 14px;display:flex;align-items:center;gap:6px}
+/* Folha do produto */
+.dim{position:absolute;inset:0;background:rgba(30,16,8,.45)}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:56px;background:var(--bg-surface);border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden}
+.grab{width:40px;height:4px;border-radius:4px;background:var(--border-strong);margin:8px auto 0}
+.hero{height:132px;margin:12px 16px 0;border-radius:var(--r-lg);display:grid;place-items:center;position:relative}
+.hero svg{width:150px;height:150px;margin-top:-6px}
+.close{position:absolute;right:10px;top:10px;width:var(--tap);height:var(--tap);border-radius:50%;background:rgba(255,255,255,.9);display:grid;place-items:center;font-size:18px;box-shadow:var(--shadow-sm)}
+.sheet .body{padding:14px 16px;flex:1;overflow:hidden;-webkit-mask-image:linear-gradient(#000 88%,transparent);mask-image:linear-gradient(#000 88%,transparent)}
+.grp{margin-top:18px}
+.grp-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.grp-h b{font-size:15px}
+.pill{font-size:11px;font-weight:700;padding:3px 8px;border-radius:var(--r-full);background:var(--bg-subtle);color:var(--text-secondary)}
+.opt{display:flex;align-items:center;gap:12px;min-height:52px;border-bottom:1px solid var(--border)}
+.opt .l{flex:1}
+.opt .l b{display:block;font-size:14px;font-weight:600}
+.chk{width:22px;height:22px;border-radius:6px;border:2px solid var(--border-strong);flex:none;display:grid;place-items:center}
+.chk.on{background:var(--text-primary);border-color:var(--text-primary);color:#fff;font-size:13px}
+.step{display:flex;align-items:center;border:1px solid var(--border-strong);border-radius:var(--r-full);height:var(--tap)}
+.step span{width:40px;text-align:center;font-weight:700}
+.step i{font-style:normal;width:40px;height:40px;display:grid;place-items:center;font-size:20px;color:var(--brand)}
+.step i.off{color:var(--text-muted)}
+.foot{border-top:1px solid var(--border);padding:12px 16px 20px;display:flex;gap:10px;align-items:center;background:var(--bg-surface)}
+.cta{flex:1;height:52px;border-radius:var(--r-full);background:var(--brand);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:var(--shadow-sm)}
+.cta.ghost{background:transparent;color:var(--text-primary);border:1px solid var(--border-strong);box-shadow:none}
+/* Checkout */
+.bar{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg-surface);border-bottom:1px solid var(--border)}
+.bar .ttl{font-weight:700;font-size:16px;flex:1}
+.prog{display:flex;gap:4px;padding:0 16px 10px;background:var(--bg-surface)}
+.prog i{flex:1;height:4px;border-radius:4px;background:var(--bg-subtle)}
+.prog i.on{background:var(--brand)}
+.prog-l{display:flex;justify-content:space-between;padding:8px 16px 6px;background:var(--bg-surface);font-size:12px;color:var(--text-muted);font-weight:600}
+.prog-l b{color:var(--text-primary)}
+.card{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin:12px 16px 0}
+.card h3{font-size:15px;font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.line{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:4px 0}
+.line span:first-child{color:var(--text-secondary)}
+.line.total{border-top:1px solid var(--border);margin-top:8px;padding-top:10px;font-size:17px;font-weight:700}
+.line.total span:first-child{color:var(--text-primary)}
+.bitem{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.bitem:last-of-type{border-bottom:0}
+.bitem .l{flex:1;min-width:0}
+.bitem b{font-size:14px;font-weight:700;display:block}
+.bitem .t-xs{margin-top:2px}
+.edit{font-size:13px;font-weight:600;color:var(--text-primary);text-decoration:underline;text-underline-offset:3px;min-height:32px;display:inline-flex;align-items:center}
+.field{position:relative;height:56px;border:1px solid var(--border-strong);border-radius:var(--r-md);background:var(--bg-surface);padding:8px 14px 0;margin-top:10px}
+.field label{display:block;font-size:12px;color:var(--text-secondary);font-weight:600}
+.field div{font-size:15px;font-weight:500;margin-top:2px}
+.field.ph div{color:var(--text-muted)}
+.field.focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(231,51,53,.14)}
+.help{font-size:12px;color:var(--text-muted);margin-top:5px;line-height:1.4}
+.hint{display:flex;align-items:center;gap:10px;margin-top:6px;padding:0 12px;border-radius:var(--r-md);background:var(--bg-subtle);font-size:13px;color:var(--text-secondary)}
+.hint b{color:var(--text-primary)}
+.hint .use{margin-left:auto;font-weight:700;color:var(--text-primary);text-decoration:underline;text-underline-offset:3px;white-space:nowrap;min-height:var(--tap);display:flex;align-items:center}
+.ok{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--success);font-weight:600}
+.ok a{margin-left:auto;color:var(--text-muted);font-weight:500;text-decoration:underline;min-height:var(--tap);display:flex;align-items:center}
+.more{display:flex;align-items:center;gap:8px;min-height:var(--tap);font-size:14px;font-weight:600;color:var(--text-primary);margin-top:6px}
+.more::before{content:"+";width:22px;height:22px;border-radius:50%;background:var(--bg-subtle);display:grid;place-items:center;font-size:16px}
+.mrow{display:flex;align-items:center;gap:10px}
+.mrow .l{flex:1}
+.mrow .l b{display:block;font-size:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cbx{display:flex;gap:10px;align-items:flex-start;min-height:var(--tap);padding-top:10px;font-size:13px;color:var(--text-secondary)}
+.cbx .chk{width:20px;height:20px}
+.sticky{position:absolute;left:0;right:0;bottom:0;background:var(--bg-surface);border-top:1px solid var(--border);padding:10px 16px 22px}
+.sticky .sum{display:flex;justify-content:space-between;font-size:13px;color:var(--text-secondary);margin-bottom:8px}
+.sticky .sum b{color:var(--text-primary);font-size:15px}
+.pay{display:flex;align-items:center;gap:12px;min-height:64px;border:1px solid var(--border-strong);border-radius:var(--r-md);padding:0 14px;margin-top:10px}
+.pay.on{border:2px solid var(--text-primary)}
+.radio{width:22px;height:22px;border-radius:50%;border:2px solid var(--border-strong);flex:none}
+.radio.on{border:7px solid var(--text-primary)}
+.pay .l{flex:1}
+.pay .l b{display:block;font-size:15px}
+.badge{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--r-full);font-size:12px;font-weight:700}
+.badge.ok{background:var(--success-bg);color:var(--success);margin:0}
+.badge.wait{background:var(--warning-bg);color:var(--warning)}
+.copy{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;padding:12px 14px;border-radius:var(--r-md);background:var(--bg-subtle)}
+.tl{margin-top:4px}
+.tl div{display:flex;gap:12px;align-items:flex-start;padding:8px 0;font-size:14px}
+.tl i{width:14px;height:14px;border-radius:50%;border:2px solid var(--border-strong);margin-top:3px;flex:none}
+.tl i.done{background:var(--success);border-color:var(--success)}
+.tl i.now{border-color:var(--brand);box-shadow:0 0 0 4px rgba(231,51,53,.15)}
+.muted{color:var(--text-muted)}
+/* Desktop */
+.d-top{height:72px;background:var(--bg-surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 max(32px,calc((1440px - 1200px)/2))}
+.d-top .logo{width:44px;height:44px}
+.d-wrap{width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 360px;gap:32px;padding-top:24px}
+.d-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 32px}
+.aside{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow-sm);align-self:start}
+.d-tabs{display:flex;gap:6px;margin:4px 0 6px}
+.art{position:absolute;left:-4px;top:-3px;width:112px;height:112px}
+.j-laranja{--juice:#F59324;--juice-top:#FBB454;--fruit:#F97316;--fruit-in:#FDBA74}
+.j-maracuja{--juice:#F5C431;--juice-top:#FADB70}
+.j-morango{--juice:#E04A5F;--juice-top:#EF7A8A;--fruit:#DC2F3A}
+.j-limao{--juice:#C9DE7A;--juice-top:#DDEBA6;--fruit:#7CB342;--fruit-in:#DCEDC8}
+.j-manga{--juice:#F7B32B;--juice-top:#FBCB64;--fruit:#F59E0B;--fruit-in:#FDE68A}
+.j-acerola{--juice:#E8552F;--juice-top:#F27F5E;--fruit:#C62828}
+.j-abacaxi{--juice:#F1DC6B;--juice-top:#F7E99E}
+.gallery{display:grid;grid-template-columns:repeat(5,150px);gap:18px;background:var(--bg-base);padding:24px;border-radius:12px;box-shadow:var(--shadow-lg);width:max-content}
+.gallery figure{margin:0}
+.gallery .thumb{width:150px;height:150px}
+.gallery .art,.gallery .fallback svg{left:-6px;top:-4px;width:162px;height:162px}
+.gallery figcaption{font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:8px;text-align:center}
+</style>
+</head>
+<body>
+<h1 class="doc">#235 · Proposta visual — cardápio e checkout público (Fase 0)</h1>
+<p class="doc">Protótipo ilustrativo para aprovação. Não é a página publicada nem código do produto. Dados sintéticos; kreps sem foto usam o fallback desenhado; bebidas usam as artes existentes do app. Valores, horários e status são exemplos — na implementação, vêm sempre do servidor e da configuração da filial.</p>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-crepe" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#D9A055"/><stop offset=".45" stop-color="#F6D597"/><stop offset="1" stop-color="#CE9147"/></linearGradient>
+    <linearGradient id="g-rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9B66A"/><stop offset="1" stop-color="#B97B36"/></linearGradient>
+    <linearGradient id="g-paper" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#EFE6DA"/><stop offset=".45" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E6DACB"/></linearGradient>
+    <linearGradient id="g-choc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6A3418"/><stop offset="1" stop-color="#3B1A0B"/></linearGradient>
+    <linearGradient id="g-cheese" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF4D2"/><stop offset="1" stop-color="#F2D891"/></linearGradient>
+    <radialGradient id="g-shadow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#1E1008" stop-opacity=".22"/><stop offset="1" stop-color="#1E1008" stop-opacity="0"/></radialGradient>
+    <linearGradient id="g-shine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".0"/><stop offset=".18" stop-color="#fff" stop-opacity=".45"/><stop offset=".32" stop-color="#fff" stop-opacity="0"/><stop offset=".85" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".12"/></linearGradient>
+    <linearGradient id="g-fry" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9A93A"/><stop offset=".25" stop-color="#F8D670"/><stop offset="1" stop-color="#F3C653"/></linearGradient>
+    <clipPath id="c-box"><path d="M32 58 L43 106 L77 106 L88 58 C72 65 48 65 32 58 Z"/></clipPath>
+  </defs>
+  <symbol id="cone" viewBox="0 0 120 120">
+    <ellipse cx="60" cy="110" rx="22" ry="4" fill="url(#g-shadow)"/>
+    <path d="M29 38 L60 108 L91 38 Z" fill="url(#g-crepe)"/>
+    <path d="M33 46 C48 52 70 50 86 44" fill="none" stroke="#B97B36" stroke-width="1.3" opacity=".5"/>
+    <path d="M38 57 C52 62 68 61 81 55" fill="none" stroke="#B97B36" stroke-width="1.2" opacity=".45"/>
+    <circle cx="47" cy="49" r="2.2" fill="#B97B36" opacity=".28"/><circle cx="72" cy="52" r="1.8" fill="#B97B36" opacity=".28"/><circle cx="58" cy="44" r="1.5" fill="#B97B36" opacity=".25"/>
+    <path d="M41 64 L60 108 L79 64 C67 69 53 69 41 64 Z" fill="url(#g-paper)"/>
+    <path d="M44.5 72 C55 76 65 76 75.5 72 L73.6 76.4 C64 80 56 80 46.4 76.4 Z" fill="#E73335"/>
+    <path d="M49 84 C56 86.5 64 86.5 71 84" fill="none" stroke="#E73335" stroke-width="1.2" opacity=".55"/>
+    <path d="M41 64 C53 69 67 69 79 64" fill="none" stroke="#D8CBBB" stroke-width="1"/>
+  </symbol>
+  <symbol id="crepe" viewBox="0 0 120 120">
+    <path d="M29 38 A31 5.5 0 0 1 91 38" fill="#C98A40" stroke="#B97B36" stroke-width="2"/>
+    <path d="M30 38 C34 22 50 18 60 22 C70 17 87 22 90 38 Z" fill="url(#g-cheese)"/>
+    <path d="M38 30 c2-5 9-5 10 0" fill="#F2D891"/><path d="M66 27 c3-5 10-4 10 1" fill="#F2D891"/>
+    <ellipse cx="45" cy="31" rx="5.2" ry="4" fill="#B23A2B"/><ellipse cx="45" cy="31" rx="2.6" ry="1.8" fill="#D2604E"/>
+    <ellipse cx="63" cy="26" rx="5.2" ry="4" fill="#B23A2B"/><ellipse cx="63" cy="26" rx="2.6" ry="1.8" fill="#D2604E"/>
+    <ellipse cx="78" cy="33" rx="4.6" ry="3.6" fill="#B23A2B"/>
+    <path d="M53 33 q3-4 6 0" stroke="#4F7A35" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M70 36 q2-3 5 0" stroke="#4F7A35" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <use href="#cone"/>
+    <path d="M29 38 A31 5.5 0 0 0 91 38" fill="none" stroke="url(#g-rim)" stroke-width="3" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="crepe-sweet" viewBox="0 0 120 120">
+    <path d="M29 38 A31 5.5 0 0 1 91 38" fill="#C98A40" stroke="#B97B36" stroke-width="2"/>
+    <path d="M30 38 C33 24 47 19 60 23 C73 18 88 24 90 38 Z" fill="url(#g-choc)"/>
+    <g transform="translate(48 20) rotate(-18)"><path d="M0 9 C-7 3 -7 -5 0 -5 C7 -5 7 3 0 9 Z" fill="#DC2F3A"/><path d="M-4 -5 L-1 -8 L0 -5 L1 -8 L4 -5 Z" fill="#4F7A35"/><circle cx="-2.5" cy="-1" r=".7" fill="#FFE08A"/><circle cx="2" cy="0" r=".7" fill="#FFE08A"/><circle cx="-.5" cy="3.5" r=".7" fill="#FFE08A"/><circle cx="2.5" cy="-3" r=".6" fill="#FFE08A"/></g>
+    <g transform="translate(70 20) rotate(16)"><path d="M0 9 C-7 3 -7 -5 0 -5 C7 -5 7 3 0 9 Z" fill="#DC2F3A"/><path d="M-4 -5 L-1 -8 L0 -5 L1 -8 L4 -5 Z" fill="#4F7A35"/><circle cx="-2.5" cy="-1" r=".7" fill="#FFE08A"/><circle cx="2" cy="0" r=".7" fill="#FFE08A"/><circle cx="-.5" cy="3.5" r=".7" fill="#FFE08A"/><circle cx="2.5" cy="-3" r=".6" fill="#FFE08A"/></g>
+    <circle cx="55" cy="30" r="1.1" fill="#FFF"/><circle cx="74" cy="31" r="1.1" fill="#FFF"/><circle cx="40" cy="33" r="1.1" fill="#FFF"/><circle cx="62" cy="34" r="1.1" fill="#FFF"/>
+    <use href="#cone"/>
+    <path d="M33 42 C36 50 40 44 43 51 C46 57 49 47 52 52" fill="none" stroke="#3B1A0B" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M74 43 C77 51 81 45 84 50" fill="none" stroke="#3B1A0B" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M29 38 A31 5.5 0 0 0 91 38" fill="none" stroke="url(#g-rim)" stroke-width="3" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="glass" viewBox="0 0 120 120">
+    <ellipse cx="60" cy="109" rx="24" ry="3.6" fill="url(#g-shadow)"/>
+    <path d="M71 8 L61 70" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+    <path d="M71 8 L61 70" stroke="#E73335" stroke-width="5" stroke-linecap="butt" stroke-dasharray="5 5"/>
+    <path d="M40.5 46 L45.5 102.5 Q46.3 106 50 106 L70 106 Q73.7 106 74.5 102.5 L79.5 46 Z" fill="var(--juice)"/>
+    <ellipse cx="60" cy="46" rx="19.5" ry="3.2" fill="var(--juice-top)"/>
+    <rect x="47" y="47" width="11" height="10" rx="2.5" fill="#fff" opacity=".42" transform="rotate(-14 52 52)"/>
+    <rect x="61" y="51" width="10" height="9" rx="2.5" fill="#fff" opacity=".35" transform="rotate(12 66 55)"/>
+    <path d="M37 28 L44 103 Q45 108.5 50 108.5 L70 108.5 Q75 108.5 76 103 L83 28 Z" fill="url(#g-shine)" stroke="#D8CDBF" stroke-width="1.4"/>
+    <ellipse cx="60" cy="28" rx="23" ry="3.4" fill="#FFFFFF" fill-opacity=".5" stroke="#D8CDBF" stroke-width="1.4"/>
+  </symbol>
+  <symbol id="g-slice" viewBox="0 0 120 120">
+    <circle cx="84" cy="27" r="13" fill="var(--fruit)"/><circle cx="84" cy="27" r="10" fill="var(--fruit-in)"/>
+    <g stroke="var(--fruit)" stroke-width="1.3" opacity=".8"><path d="M84 17 V37"/><path d="M74 27 H94"/><path d="M77 20 L91 34"/><path d="M91 20 L77 34"/></g>
+    <circle cx="84" cy="27" r="2" fill="var(--fruit)"/>
+  </symbol>
+  <symbol id="g-berry" viewBox="0 0 120 120">
+    <g transform="translate(84 25) rotate(20)"><path d="M0 12 C-9 4 -9 -6 0 -6 C9 -6 9 4 0 12 Z" fill="var(--fruit)"/><path d="M-5 -6 L-1.5 -10 L0 -6 L1.5 -10 L5 -6 Z" fill="#4F7A35"/><circle cx="-3" cy="-1" r=".9" fill="#FFE08A"/><circle cx="2.5" cy="0" r=".9" fill="#FFE08A"/><circle cx="-.5" cy="5" r=".9" fill="#FFE08A"/><circle cx="3" cy="-3.5" r=".8" fill="#FFE08A"/></g>
+  </symbol>
+  <symbol id="g-passion" viewBox="0 0 120 120">
+    <circle cx="84" cy="27" r="13" fill="#7A3E6A"/><circle cx="84" cy="27" r="10.5" fill="#F7C62F"/>
+    <g fill="#3B2410"><circle cx="80" cy="24" r="1.6"/><circle cx="86" cy="22" r="1.6"/><circle cx="88" cy="28" r="1.6"/><circle cx="83" cy="30" r="1.6"/><circle cx="78" cy="29" r="1.4"/><circle cx="85" cy="34" r="1.4"/></g>
+  </symbol>
+  <symbol id="g-mint" viewBox="0 0 120 120">
+    <path d="M74 32 C66 26 68 16 78 14 C81 22 80 29 74 32 Z" fill="#5E9B45"/><path d="M74 32 C76 25 77 19 78 14" stroke="#3F7A2E" stroke-width="1.1" fill="none"/>
+  </symbol>
+  <symbol id="g-mango" viewBox="0 0 120 120">
+    <path d="M73 30 C72 18 84 12 94 18 C99 24 96 36 84 38 C78 38 74 35 73 30 Z" fill="#F59E0B"/>
+    <g stroke="#FDE68A" stroke-width="1.4" fill="none"><path d="M78 20 L92 34"/><path d="M84 16 L96 28"/><path d="M90 18 L76 32"/><path d="M95 22 L81 37"/></g>
+  </symbol>
+  <symbol id="g-acerola" viewBox="0 0 120 120">
+    <circle cx="80" cy="28" r="6.5" fill="#C62828"/><circle cx="90" cy="31" r="5.8" fill="#E53935"/>
+    <circle cx="78" cy="26" r="1.8" fill="#fff" opacity=".55"/><circle cx="88" cy="29" r="1.6" fill="#fff" opacity=".55"/>
+    <path d="M83 21 C86 16 92 15 96 18 C92 22 87 22 83 21 Z" fill="#4F7A35"/>
+  </symbol>
+  <symbol id="g-pineapple" viewBox="0 0 120 120">
+    <path d="M72 34 L92 16 L98 36 Z" fill="#F7D74A"/><path d="M92 16 L98 36 L101 35 L95 14 Z" fill="#B7791F"/>
+    <g stroke="#E3B62F" stroke-width="1"><path d="M80 31 L95 22"/><path d="M84 34 L96 27"/></g>
+  </symbol>
+  <symbol id="batata" viewBox="0 0 120 120">
+    <ellipse cx="60" cy="109" rx="28" ry="4" fill="url(#g-shadow)"/>
+    <g transform="rotate(-16 39.5 64.0)"><rect x="36" y="24" width="7" height="44" rx="2" fill="url(#g-fry)"/><rect x="36" y="24" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(-9 47.5 59.0)"><rect x="44" y="16" width="7" height="50" rx="2" fill="url(#g-fry)"/><rect x="44" y="16" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(-3 55.5 55.0)"><rect x="52" y="8" width="7" height="58" rx="2" fill="url(#g-fry)"/><rect x="52" y="8" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(4 63.5 57.5)"><rect x="60" y="13" width="7" height="53" rx="2" fill="url(#g-fry)"/><rect x="60" y="13" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(8 71.5 55.5)"><rect x="68" y="9" width="7" height="57" rx="2" fill="url(#g-fry)"/><rect x="68" y="9" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(15 79.5 61.0)"><rect x="76" y="20" width="7" height="46" rx="2" fill="url(#g-fry)"/><rect x="76" y="20" width="7" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(-22 51.25 64.0)"><rect x="48" y="26" width="6.5" height="40" rx="2" fill="url(#g-fry)"/><rect x="48" y="26" width="6.5" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(19 67.25 62.0)"><rect x="64" y="22" width="6.5" height="44" rx="2" fill="url(#g-fry)"/><rect x="64" y="22" width="6.5" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(-12 59.25 60.0)"><rect x="56" y="18" width="6.5" height="48" rx="2" fill="url(#g-fry)"/><rect x="56" y="18" width="6.5" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g><g transform="rotate(26 74.25 65.0)"><rect x="71" y="28" width="6.5" height="38" rx="2" fill="url(#g-fry)"/><rect x="71" y="28" width="6.5" height="3.5" rx="1.5" fill="#D99A2B" opacity=".75"/></g>
+    <path d="M32 58 L43 106 L77 106 L88 58 C72 65 48 65 32 58 Z" fill="#FFFFFF"/>
+    <g clip-path="url(#c-box)" fill="#E73335"><path d="M35.0 58 L39.4 58 L45.6 106 L43.4 106 Z"/><path d="M46.6 58 L51.0 58 L52.4 106 L50.2 106 Z"/><path d="M58.2 58 L62.6 58 L59.2 106 L57.0 106 Z"/><path d="M69.8 58 L74.2 58 L66.0 106 L63.8 106 Z"/><path d="M81.4 58 L85.8 58 L72.8 106 L70.6 106 Z"/></g>
+    <path d="M32 58 C48 65 72 65 88 58 L87 62 C72 69 48 69 33 62 Z" fill="#F1E8DC"/>
+    <path d="M32 58 L43 106 L77 106 L88 58" fill="none" stroke="#D8CBBB" stroke-width="1.2"/>
+    <path d="M32 58 C48 65 72 65 88 58" fill="none" stroke="#C9B9A6" stroke-width="1.6"/>
+  </symbol>
+</svg>
+
+<!-- ───────────── MOBILE ───────────── -->
+<div class="row">
+
+<section id="m-menu">
+<p class="caption">1 · Vitrine (390)</p>
+<div class="phone">
+  <div class="top">
+    <div class="logo" role="img" aria-label="Marcos Krep's"></div>
+    <div class="who"><div class="name">Marcos Krep's</div><div class="status"><span class="dot"></span>Feira · Aberto até 22:00</div></div>
+    <a class="link">Trocar</a>
+    <span class="iconbtn" aria-label="Acompanhar pedido" title="Acompanhar pedido">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg>
+    </span>
+  </div>
+  <div class="modal-bar"><div class="seg" role="radiogroup" aria-label="Como quer receber"><span>Comer aqui</span><span class="on">Para levar</span><span>Entrega</span></div></div>
+  <div class="tabs"><span class="tab on">Kreps salgados</span><span class="tab">Kreps doces</span><span class="tab">Bebidas</span></div>
+  <div class="scroll">
+    <div class="sec">
+      <div class="t-h2">Kreps salgados</div>
+      <div class="list">
+        <div class="item"><div class="txt"><div class="nm">Krep Frango com Catupiry</div><div class="ds">Frango desfiado, catupiry e muçarela.</div><div class="pr price">R$ 24,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add" aria-label="Adicionar Krep Frango com Catupiry">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Calabresa</div><div class="ds">Calabresa, cebola e muçarela. Personalize ingredientes e adicionais.</div><div class="pr price">R$ 22,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="qtybadge" aria-label="1 no pedido">1</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Quatro Queijos com nome bem comprido para testar quebra</div><div class="ds">Muçarela, provolone, parmesão e catupiry.</div><div class="pr price">R$ 27,50</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add">+</span></div></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="t-h2">Bebidas</div>
+      <div class="list">
+        <div class="item"><div class="txt"><div class="nm">Suco de Laranja</div><div class="ds">Natural, 400 ml.</div><div class="pr price">R$ 9,90</div></div><div class="thumb fallback"><svg class="art j-laranja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-slice"/></svg><span class="add">+</span></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="bag"><span class="cnt">1</span>Ver sacola<span class="go num">R$ 26,90 ›</span></div>
+</div>
+</section>
+
+<section id="m-produto">
+<p class="caption">2 · Personalização (390)</p>
+<div class="phone">
+  <div class="top" style="opacity:.6"><div class="logo"></div><div class="who"><div class="name">Marcos Krep's</div></div></div>
+  <div class="dim"></div>
+  <div class="sheet" role="dialog" aria-label="Krep Calabresa">
+    <div class="grab"></div>
+    <div class="hero fallback"><svg><use href="#crepe"/></svg><span class="close" aria-label="Fechar">✕</span></div>
+    <div class="body">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline"><div class="t-title">Krep Calabresa</div><div class="price" style="font-size:17px">R$ 22,90</div></div>
+      <p class="t-sm" style="margin-top:4px">Calabresa, cebola e muçarela.</p>
+      <div class="grp"><div class="grp-h"><b>Ingredientes</b><span class="t-xs">Desmarque para retirar</span></div>
+        <div class="opt"><span class="chk on">✓</span><div class="l"><b>Cebola</b></div></div>
+        <div class="opt"><span class="chk on">✓</span><div class="l"><b>Muçarela</b></div></div>
+      </div>
+      <div class="grp"><div class="grp-h"><b>Adicionais</b><span class="pill">Opcional</span></div>
+        <div class="opt"><div class="l"><b>Bacon extra</b><span class="t-xs">+ R$ 4,00</span></div><div class="step"><i>−</i><span>1</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Catupiry extra</b><span class="t-xs">+ R$ 3,50</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Cheddar</b><span class="t-xs">+ R$ 3,50</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Milho</b><span class="t-xs">+ R$ 2,00</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Ovo</b><span class="t-xs">+ R$ 2,50</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Azeitona</b><span class="t-xs">+ R$ 2,00</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Tomate</b><span class="t-xs">+ R$ 2,00</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+      </div>
+      <div class="more">Observação para a cozinha</div>
+    </div>
+    <div class="foot"><div class="step"><i>−</i><span>1</span><i>+</i></div><div class="cta">Adicionar · <span class="num">R$ 26,90</span></div></div>
+  </div>
+</div>
+</section>
+
+<section id="m-sacola">
+<p class="caption">3 · Sacola e revisão (390)</p>
+<div class="phone">
+  <div class="bar"><span class="iconbtn" aria-label="Voltar ao cardápio">‹</span><span class="ttl">Sua sacola</span><a class="link" style="padding-right:8px">Adicionar itens</a></div>
+  <div class="prog-l"><b>1 Sacola</b><span>2 Dados</span><span>3 Pagamento</span></div>
+  <div class="prog"><i class="on"></i><i></i><i></i></div>
+  <div class="scroll">
+    <div class="card" style="padding-top:12px">
+      <div class="mrow" style="padding-bottom:10px;border-bottom:1px solid var(--border)"><div class="l"><b>Para levar · Feira</b><span class="t-xs">Retirada no balcão da unidade</span></div><a class="link">Alterar</a></div>
+      <div class="bitem"><div class="l"><b>Krep Calabresa</b><div class="t-xs">+ Bacon extra · sem cebola</div><a class="edit">Editar</a></div><div style="text-align:right"><div class="price">R$ 26,90</div><div class="step" style="margin-top:6px;height:36px"><i style="height:34px">−</i><span>1</span><i style="height:34px">+</i></div></div></div>
+      <div class="bitem"><div class="l"><b>Suco de Laranja</b><div class="t-xs">Natural, 400 ml</div></div><div style="text-align:right"><div class="price">R$ 9,90</div><div class="step" style="margin-top:6px;height:36px"><i style="height:34px">−</i><span>1</span><i style="height:34px">+</i></div></div></div>
+    </div>
+    <div class="card">
+      <h3>Resumo</h3>
+      <div class="line"><span>Itens e adicionais</span><span class="num">R$ 36,80</span></div>
+      <div class="line"><span>Embalagem para viagem</span><span class="num">R$ 2,00</span></div>
+      <div class="line"><span>Entrega</span><span>Não se aplica</span></div>
+      <div class="line total"><span>Total estimado</span><span class="num">R$ 38,80</span></div>
+      <p class="t-xs" style="margin-top:6px">Valores confirmados pelo sistema ao enviar o pedido, antes do pagamento.</p>
+      <div class="more" style="margin-top:10px">Tenho um cupom</div>
+    </div>
+  </div>
+  <div class="sticky"><div class="cta">Continuar para seus dados</div></div>
+</div>
+</section>
+
+<section id="m-dados">
+<p class="caption">4 · Seus dados — entrega (390)</p>
+<div class="phone">
+  <div class="bar"><span class="iconbtn" aria-label="Voltar para a sacola">‹</span><span class="ttl">Seus dados</span></div>
+  <div class="prog-l"><span>1 Sacola</span><b>2 Dados</b><span>3 Pagamento</span></div>
+  <div class="prog"><i class="on"></i><i class="on"></i><i></i></div>
+  <div class="scroll">
+    <div class="card">
+      <h3>Quem vai receber</h3>
+      <div class="field"><label>Nome</label><div>Ana Fixture</div></div>
+      <div class="field focus"><label>WhatsApp com DDD</label><div class="num">(61) 99999-0000</div></div>
+            <div class="ok">✓ Dados salvos encontrados <a>Não é você?</a></div>
+      <div class="hint">Nome salvo: <b>Ana F.</b><span class="use">Usar</span></div>
+      <div class="more">Adicionar e-mail (opcional)</div>
+    </div>
+    <div class="card">
+      <h3>Entrega <a class="link" style="font-size:13px">Mudar para retirada</a></h3>
+      <div class="field"><label>CEP</label><div class="num">70000-000</div></div>
+      <p class="help" style="color:var(--text-secondary)">Rua Fixture · Bairro Fixture — Brasília/DF</p>
+      <div class="grid2"><div class="field ph"><label>Nº do imóvel</label><div>Ex.: 120</div></div><div class="field ph"><label>Complemento</label><div>Apto, bloco</div></div></div>
+      <div class="field ph"><label>Ponto de referência (opcional)</label><div>Perto de…</div></div>
+      <div class="line" style="margin-top:8px"><span>Taxa de entrega</span><b class="num">R$ 5,00</b></div>
+    </div>
+  </div>
+  <div class="sticky"><div class="sum"><span>Total estimado · 2 itens</span><b class="num">R$ 41,80</b></div><div class="cta">Continuar para pagamento</div></div>
+</div>
+</section>
+
+<section id="m-pagamento">
+<p class="caption">5 · Pagamento (390)</p>
+<div class="phone">
+  <div class="bar"><span class="iconbtn" aria-label="Voltar">‹</span><span class="ttl">Pagamento</span></div>
+  <div class="prog-l"><span>1 Sacola</span><span>2 Dados</span><b>3 Pagamento</b></div>
+  <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+  <div class="scroll">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end"><div><div class="t-xs">Total a pagar</div><div class="price" style="font-size:28px">R$ 41,80</div></div><div style="text-align:right"><div class="t-xs">Pedido</div><div class="num" style="font-weight:700">nº 042</div></div></div>
+      <p class="t-sm" style="margin-top:8px">Ana Fixture · Entrega em Rua Fixture, 120</p>
+    </div>
+    <div class="card">
+      <h3>Como quer pagar?</h3>
+      <div class="pay on"><span class="radio on"></span><div class="l"><b>Pix</b><span class="t-xs">Código copia e cola ou QR Code</span></div></div>
+      <div class="pay"><span class="radio"></span><div class="l"><b>Cartão de crédito ou débito</b><span class="t-xs">Dados digitados no formulário do Mercado Pago</span></div></div>
+      <p class="t-xs" style="margin-top:12px">Pagamento processado pelo Mercado Pago. O pedido só vai para o preparo depois da aprovação.</p>
+    </div>
+  </div>
+  <div class="sticky"><div class="cta">Gerar Pix · <span class="num">R$ 41,80</span></div></div>
+</div>
+</section>
+
+<section id="m-confirmacao">
+<p class="caption">6 · Confirmação (390)</p>
+<div class="phone">
+  <div class="top"><div class="logo"></div><div class="who"><div class="name">Marcos Krep's</div><div class="status">Feira</div></div></div>
+  <div class="scroll">
+    <div class="card" style="margin-top:16px;text-align:left">
+      <span class="badge ok">✓ Pagamento aprovado</span>
+      <div class="t-title" style="font-size:26px;margin-top:12px">Obrigado, Ana!</div>
+      <p class="t-sm" style="margin-top:4px">Seu pedido está na fila da cozinha. Avisaremos pelo WhatsApp (61) 99999-0000 quando mudar de status.</p>
+      <div class="copy"><div><div class="t-xs">Número do pedido</div><div class="num" style="font-weight:700;font-size:18px">042</div></div><a class="link">Copiar link</a></div>
+    </div>
+    <div class="card">
+      <h3>Acompanhamento</h3>
+      <div class="tl">
+        <div><i class="done"></i><span>Pagamento aprovado</span></div>
+        <div><i class="now"></i><b>Na fila de preparo</b></div>
+        <div><i></i><span class="muted">Saiu para entrega</span></div>
+        <div><i></i><span class="muted">Entregue</span></div>
+      </div>
+    </div>
+    <div class="card"><div class="line"><span>2 itens</span><span class="num">R$ 41,80</span></div><a class="link">Ver detalhes do pedido</a></div>
+    <div class="card" style="background:var(--warning-bg);border-color:transparent">
+      <span class="badge wait">Variação · pagamento na entrega</span>
+      <p class="t-sm" style="margin-top:8px;color:var(--text-primary)"><b>Pedido enviado, Ana.</b> A unidade precisa confirmar antes do preparo; você paga ao receber.</p>
+    </div>
+  </div>
+</div>
+</section>
+</div>
+
+<!-- ───────────── DESKTOP ───────────── -->
+<section id="galeria" style="margin-bottom:40px">
+<p class="caption">9 · Ilustrações de fallback (sem foto cadastrada)</p>
+<div class="gallery">
+  <figure><div class="thumb fallback"><svg class="art" viewBox="0 0 120 120"><use href="#crepe"/></svg></div><figcaption>Krep salgado</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art" viewBox="0 0 120 120"><use href="#crepe-sweet"/></svg></div><figcaption>Krep doce</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art" viewBox="0 0 120 120"><use href="#batata"/></svg></div><figcaption>Porção de batata</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-laranja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-slice"/></svg></div><figcaption>Suco de laranja</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-maracuja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-passion"/></svg></div><figcaption>Suco de maracujá</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-morango" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-berry"/></svg></div><figcaption>Suco de morango</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-limao" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-slice"/></svg></div><figcaption>Suco de limão</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-manga" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-mango"/></svg></div><figcaption>Suco de manga</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-acerola" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-acerola"/></svg></div><figcaption>Suco de acerola</figcaption></figure>
+  <figure><div class="thumb fallback"><svg class="art j-abacaxi" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-pineapple"/><use href="#g-mint"/></svg></div><figcaption>Abacaxi com hortelã</figcaption></figure>
+</div>
+</section>
+
+<section id="d-menu" style="margin-bottom:40px">
+<p class="caption">7 · Vitrine desktop (1440)</p>
+<div class="desk">
+  <div class="d-top">
+    <div class="logo"></div>
+    <div style="flex:1"><div style="font-weight:700;font-size:17px">Marcos Krep's</div><div class="status"><span class="dot"></span>Feira · Aberto até 22:00 · <a class="link" style="min-height:0">Trocar unidade</a></div></div>
+    <div class="seg" style="width:380px"><span>Comer aqui</span><span class="on">Para levar</span><span>Entrega</span></div>
+    <a class="link" style="margin-left:16px">Acompanhar pedido</a>
+  </div>
+  <div class="d-wrap">
+    <div>
+      <div class="d-tabs"><span class="tab on">Kreps salgados</span><span class="tab">Kreps doces</span><span class="tab">Porções</span><span class="tab">Bebidas</span></div>
+      <div class="t-h2" style="margin-top:14px;font-size:20px">Kreps salgados</div>
+      <div class="d-grid">
+        <div class="item"><div class="txt"><div class="nm">Krep Frango com Catupiry</div><div class="ds">Frango desfiado, catupiry e muçarela.</div><div class="pr price">R$ 24,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Calabresa</div><div class="ds">Calabresa, cebola e muçarela.</div><div class="pr price">R$ 22,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="qtybadge">1</span></div></div>
+        </div>
+      <div class="t-h2" style="margin-top:22px;font-size:20px">Kreps doces e porções</div>
+      <div class="d-grid">
+        <div class="item"><div class="txt"><div class="nm">Krep Nutella com Morango</div><div class="ds">Creme de avelã e morangos frescos.</div><div class="pr price">R$ 26,90</div></div><div class="thumb fallback"><svg><use href="#crepe-sweet"/></svg><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Porção de Batata</div><div class="ds">Batata frita crocante. Adicione cheddar, bacon ou batata palha.</div><div class="pr price">R$ 22,00</div></div><div class="thumb fallback"><svg class="art" viewBox="0 0 120 120"><use href="#batata"/></svg><span class="add">+</span></div></div>
+      </div>
+      <div class="t-h2" style="margin-top:22px;font-size:20px">Bebidas</div>
+      <div class="d-grid">
+        <div class="item"><div class="txt"><div class="nm">Suco de Laranja</div><div class="ds">Natural, 400 ml.</div><div class="pr price">R$ 9,90</div></div><div class="thumb fallback"><svg class="art j-laranja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-slice"/></svg><span class="qtybadge">1</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Suco de Maracujá</div><div class="ds">Natural, 400 ml.</div><div class="pr price">R$ 9,90</div></div><div class="thumb fallback"><svg class="art j-maracuja" viewBox="0 0 120 120"><use href="#glass"/><use href="#g-passion"/></svg><span class="add">+</span></div></div>
+      </div>
+    </div>
+    <aside class="aside">
+      <div style="display:flex;justify-content:space-between;align-items:center"><div class="t-h2">Sua sacola</div><span class="t-xs">Para levar · Feira</span></div>
+      <div class="bitem" style="margin-top:8px"><div class="l"><b>Krep Calabresa</b><div class="t-xs">+ Bacon extra · sem cebola</div><a class="edit">Editar</a></div><div class="price">R$ 26,90</div></div>
+      <div class="bitem"><div class="l"><b>Suco de Laranja</b><div class="t-xs">1 unidade</div></div><div class="price">R$ 9,90</div></div>
+      <div class="line" style="margin-top:6px"><span>Itens e adicionais</span><span class="num">R$ 36,80</span></div>
+      <div class="line"><span>Embalagem para viagem</span><span class="num">R$ 2,00</span></div>
+      <div class="line total"><span>Total estimado</span><span class="num">R$ 38,80</span></div>
+      <div class="cta" style="margin-top:14px">Continuar</div>
+      <p class="t-xs" style="margin-top:8px">Valores confirmados pelo sistema ao enviar o pedido.</p>
+    </aside>
+  </div>
+</div>
+</section>
+
+<section id="d-checkout">
+<p class="caption">8 · Dados + resumo desktop (1440)</p>
+<div class="desk">
+  <div class="d-top"><div class="logo"></div><div style="flex:1"><div style="font-weight:700;font-size:17px">Marcos Krep's</div><div class="status">Feira</div></div>
+    <div style="display:flex;gap:28px;font-size:14px;font-weight:600"><span class="muted">1 Sacola ✓</span><span>2 Seus dados</span><span class="muted">3 Pagamento</span></div></div>
+  <div class="d-wrap" style="grid-template-columns:1fr 380px">
+    <div>
+      <a class="link">‹ Voltar para a sacola</a>
+      <div class="card" style="margin:8px 0 0">
+        <h3>Quem vai retirar</h3>
+        <div class="grid2"><div class="field"><label>Nome (opcional)</label><div>Ana Fixture</div></div><div class="field"><label>WhatsApp com DDD</label><div class="num">(61) 99999-0000</div></div></div>
+                <div class="ok">✓ Dados salvos encontrados <a>Não é você?</a></div>
+        <div class="more">Adicionar e-mail (opcional)</div>
+      </div>
+      <div class="card" style="margin:12px 0 0"><div class="mrow"><div class="l"><b>Para levar · Feira</b><span class="t-xs">Retirada no balcão da unidade · Embalagem para viagem R$ 2,00</span></div><a class="link">Alterar</a></div></div>
+      <div class="card" style="margin:12px 0 0">
+        <h3>Observações (opcional)</h3>
+        <div class="field ph" style="height:72px"><label>Para a equipe</label><div>Ex.: sem talheres</div></div>
+        <div class="cbx"><span class="chk on">✓</span>Salvar meus dados neste WhatsApp para próximos pedidos e selos de fidelidade</div>
+        <div class="cbx"><span class="chk"></span>Receber novidades pelo WhatsApp</div>
+      </div>
+    </div>
+    <aside class="aside">
+      <div class="t-h2">Resumo</div>
+      <div class="bitem" style="margin-top:6px"><div class="l"><b>1× Krep Calabresa</b><div class="t-xs">+ Bacon extra · sem cebola</div></div><div class="price">R$ 26,90</div></div>
+      <div class="bitem"><div class="l"><b>1× Suco de Laranja</b></div><div class="price">R$ 9,90</div></div>
+      <div class="line"><span>Itens e adicionais</span><span class="num">R$ 36,80</span></div>
+      <div class="line"><span>Embalagem para viagem</span><span class="num">R$ 2,00</span></div>
+      <div class="line total"><span>Total estimado</span><span class="num">R$ 38,80</span></div>
+      <div class="cta" style="margin-top:14px">Continuar para pagamento</div>
+      <p class="t-xs" style="margin-top:8px">O pedido é criado ao continuar; o preparo começa após a aprovação do pagamento.</p>
+    </aside>
+  </div>
+</div>
+</section>
+</body>
+</html>

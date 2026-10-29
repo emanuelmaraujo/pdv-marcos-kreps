@@ -52,7 +52,7 @@ export function PixResult({
         </span>
       </div>
       <p className="text-sm font-semibold leading-relaxed text-[var(--text-secondary)]">
-        Copie o codigo Pix ou escaneie o QR Code. Mantenha esta tela aberta enquanto conferimos a aprovacao.
+        Copie o código Pix ou escaneie o QR Code. Mantenha esta tela aberta enquanto conferimos a aprovação.
       </p>
       {qrBase64 && (
         // eslint-disable-next-line @next/next/no-img-element

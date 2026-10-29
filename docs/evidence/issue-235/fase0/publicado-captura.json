@@ -1,0 +1,9 @@
+{
+  "nota": "Acessos somente leitura em 2026-10-29 (UTC). Depois dos primeiros acessos, a Vercel passou a responder 'Failed to verify your browser — Code 21' ao Chromium headless em todas as rotas; o desafio não foi contornado.",
+  "observacoes": [
+    { "rota": "/pedir", "largura": 390, "utc": "2026-10-29T19:47Z", "resultado": "Filial Núcleo Bandeirante: 'Pedidos pausados — Os pedidos online foram pausados pelo administrador.' Captura: publicado-inicio-390.png" },
+    { "rota": "/pedir/filiais", "largura": 390, "utc": "2026-10-29T19:48Z", "resultado": "Lista com 1 unidade: 'Feira · 17:00–22:00'. Núcleo Bandeirante, aberta por padrão em /pedir, não aparece na lista." },
+    { "rota": "/pedir/feira-candangolandia", "largura": 390, "utc": "2026-10-29T19:49Z", "resultado": "BLOCKED: Vercel Security Checkpoint (Code 21)." },
+    { "rota": "bundle JS publicado", "utc": "2026-10-29T19:47Z", "resultado": "Contém textos do PR #234 ('Valores confirmados pelo sistema', 'Embalagem para viagem', 'Quando pagar', 'Como quer receber?'); 'WhatsApp com DDD' aparece antes de 'Nome (opcional)'; não contém 'Como podemos te chamar' (PR #239)." }
+  ]
+}

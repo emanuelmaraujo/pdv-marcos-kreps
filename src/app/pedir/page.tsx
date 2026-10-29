@@ -5,13 +5,11 @@ import Image from "next/image";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
-  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
   CreditCard,
-  Flame,
   Leaf,
   Loader2,
   LocateFixed,
@@ -21,11 +19,8 @@ import {
   Pencil,
   Plus,
   QrCode,
-  RefreshCw,
   Search,
-  ShieldCheck,
   Share2,
-  Sparkles,
   ShoppingCart,
   Tag,
   Trash2,
@@ -51,6 +46,14 @@ import { PixCheckout } from "./_components/PixCheckout";
 import { ProgressSteps } from "./_components/ProgressSteps";
 import { CheckoutSummary } from "./_components/CheckoutSummary";
 import { FloatingInput } from "./_components/FloatingInput";
+import {
+  countProductInCart,
+  findPlainCartItem,
+  getCartItemTotal,
+  getFallbackArt,
+  getFirstName,
+  getProductsRequiringChoice,
+} from "@/lib/menu/public-menu-ui";
 import { TimelineStep } from "./_components/TimelineStep";
 import { PAYMENT_METHOD_CODE, isValidEmail } from "./_components/payment-helpers";
 import { formatCep, onlyCepDigits, isValidCepFormat } from "@/lib/utils/cep";
@@ -75,7 +78,6 @@ import { BRANCHES_PAGE_PATH, DEFAULT_BRANCH_SLUG } from "@/lib/constants/branche
 import {
   ALL_FILTER,
   buildMenuIndexes,
-  getCategoryKind,
   getProductSummary,
   getProductTags,
   resolveInitialCategoryId,
@@ -356,6 +358,12 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [removedIngredientIds, setRemovedIngredientIds] = useState<Set<string>>(new Set());
   const [selectedAddons, setSelectedAddons] = useState<Map<string, number>>(new Map());
+  // clearCart() zera nome e WhatsApp ao aprovar o pagamento; a confirmação
+  // guarda só o primeiro nome e o número para agradecer e dizer onde avisamos.
+  const [paidCustomer, setPaidCustomer] = useState<{ firstName: string; phone: string } | null>(null);
+  const [isEditingOrderType, setIsEditingOrderType] = useState(false);
+  const [isCouponOpen, setIsCouponOpen] = useState(false);
+  const [isEmailOpen, setIsEmailOpen] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [itemNotes, setItemNotes] = useState("");
   const [step, setStep] = useState<"MENU" | "REVIEW" | "INFO" | "PAYMENT" | "PAID">("MENU");
@@ -369,7 +377,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const [rememberCheckoutData, setRememberCheckoutData] = useState(false);
   const [profileLookupState, setProfileLookupState] = useState<"idle" | "checking" | "found" | "not_found">("idle");
   const [profileNotice, setProfileNotice] = useState("");
-  const [addonsExpanded, setAddonsExpanded] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const submitLockRef = useRef(false);
   const { consent: analyticsConsent, setConsent: setAnalyticsConsent, track: trackFunnel, context: analyticsContext } = usePublicFunnel(branchSlug, orderType, !!branchId && branchConfigLoaded);
@@ -1047,7 +1054,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       return;
     }
     setSelectedProduct(product);
-    setAddonsExpanded(false);
     if (existingItem) {
       setEditingCartItemId(existingItem.id);
       setRemovedIngredientIds(new Set(existingItem.removed_ingredients));
@@ -1066,13 +1072,68 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   // Histórico do navegador: enquanto o modal de personalização está aberto,
   // o botão Voltar fecha o modal em vez de sair da página — pusha uma
   // entrada extra no histórico ao abrir e a consome no popstate.
+  // history.back() é assíncrono. Se a próxima tela fizer pushState antes de ele
+  // terminar (fechar a folha e tocar logo em "Ver sacola"), o back desfaz a
+  // entrada nova e o checkout volta sozinho ao cardápio. Enquanto houver um back
+  // pendente, nenhum pushState acontece; o popstate libera e o efeito refaz.
+  const pendingHistoryBackRef = useRef(0);
+  const [historyTick, setHistoryTick] = useState(0);
+  const historyBack = useCallback(() => {
+    pendingHistoryBackRef.current += 1;
+    window.history.back();
+  }, []);
+  useEffect(() => {
+    const onPopState = () => {
+      if (pendingHistoryBackRef.current > 0) {
+        pendingHistoryBackRef.current -= 1;
+        setHistoryTick((tick) => tick + 1);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  // Histórico do navegador: sair do cardápio (REVIEW/INFO/PAYMENT/PAID) pusha
+  // UMA entrada (não uma por passo — trocar de passo dentro do checkout não
+  // pusha de novo, só a entrada e saída do fluxo). O botão Voltar do
+  // navegador fecha o checkout inteiro e volta pro cardápio em vez de sair
+  // de /pedir — e sair pelo botão "Cardápio"/"Voltar ao cardápio" da própria
+  // UI consome essa entrada (history.back()), então também não sobra uma
+  // entrada "fantasma" exigindo um Voltar extra depois.
+  // Declarado antes do efeito do modal: com um back pendente liberado, os dois
+  // efeitos rodam no mesmo commit e a entrada do checkout precisa vir primeiro
+  // na pilha, senão fechar a folha desfaz a entrada do checkout.
+  const wizardHistoryPushedRef = useRef(false);
+  useEffect(() => {
+    if (pendingHistoryBackRef.current > 0) return;
+    if (step !== "MENU" && !wizardHistoryPushedRef.current) {
+      window.history.pushState({ pedirWizard: true }, "");
+      wizardHistoryPushedRef.current = true;
+    } else if (step === "MENU" && wizardHistoryPushedRef.current) {
+      wizardHistoryPushedRef.current = false;
+      historyBack();
+    }
+  }, [step, historyTick, historyBack]);
+
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      const state = event.state as { pedirWizard?: boolean } | null;
+      if (!state?.pedirWizard && wizardHistoryPushedRef.current) {
+        wizardHistoryPushedRef.current = false;
+        setStep("MENU");
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   const modalHistoryPushedRef = useRef(false);
   useEffect(() => {
-    if (selectedProduct && !modalHistoryPushedRef.current) {
+    if (selectedProduct && !modalHistoryPushedRef.current && pendingHistoryBackRef.current === 0) {
       window.history.pushState({ pedirModal: true }, "");
       modalHistoryPushedRef.current = true;
     }
-  }, [selectedProduct]);
+  }, [selectedProduct, historyTick]);
 
   useEffect(() => {
     const onPopState = () => {
@@ -1090,42 +1151,34 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     if (modalHistoryPushedRef.current) {
       // Consome a entrada extra do histórico — o listener de popstate acima
       // termina de limpar o estado quando o evento disparar.
-      window.history.back();
+      historyBack();
     } else {
       setSelectedProduct(null);
       setEditingCartItemId(null);
     }
-  }, []);
+  }, [historyBack]);
 
-  // Histórico do navegador: sair do cardápio (REVIEW/INFO/PAYMENT/PAID) pusha
-  // UMA entrada (não uma por passo — trocar de passo dentro do checkout não
-  // pusha de novo, só a entrada e saída do fluxo). O botão Voltar do
-  // navegador fecha o checkout inteiro e volta pro cardápio em vez de sair
-  // de /pedir — e sair pelo botão "Cardápio"/"Voltar ao cardápio" da própria
-  // UI consome essa entrada (history.back()), então também não sobra uma
-  // entrada "fantasma" exigindo um Voltar extra depois.
-  const wizardHistoryPushedRef = useRef(false);
-  useEffect(() => {
-    if (step !== "MENU" && !wizardHistoryPushedRef.current) {
-      window.history.pushState({ pedirWizard: true }, "");
-      wizardHistoryPushedRef.current = true;
-    } else if (step === "MENU" && wizardHistoryPushedRef.current) {
-      wizardHistoryPushedRef.current = false;
-      window.history.back();
+  const productsRequiringChoice = useMemo(
+    () => getProductsRequiringChoice(menuData?.productAddons ?? []),
+    [menuData],
+  );
+
+  /** "+" do cardápio (#235): adiciona direto; com adicional obrigatório abre a folha. */
+  const handleQuickAdd = useCallback((product: Product) => {
+    if (branchDraftMismatch) {
+      addToast("error", "Resolva o pedido em aberto de outra unidade antes de continuar.");
+      return;
     }
-  }, [step]);
-
-  useEffect(() => {
-    const onPopState = (event: PopStateEvent) => {
-      const state = event.state as { pedirWizard?: boolean } | null;
-      if (!state?.pedirWizard && wizardHistoryPushedRef.current) {
-        wizardHistoryPushedRef.current = false;
-        setStep("MENU");
-      }
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+    if (productsRequiringChoice.has(product.id)) {
+      openCustomization(product);
+      return;
+    }
+    trackFunnel("add_to_cart", { product_id: product.id });
+    const plain = findPlainCartItem(items, product.id);
+    if (plain) updateItem(plain.id, { quantity: plain.quantity + 1 });
+    else addItem({ product, quantity: 1, removed_ingredients: [], addons: [], is_takeout: orderType === "VIAGEM" });
+    addToast("success", `${splitProductName(product.name).title} adicionado à sacola`);
+  }, [addItem, addToast, branchDraftMismatch, items, openCustomization, orderType, productsRequiringChoice, trackFunnel, updateItem]);
 
   const handleAddToCart = useCallback(() => {
     if (!selectedProduct) return;
@@ -1149,7 +1202,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
     addToast("success", editingCartItemId
       ? `${splitProductName(selectedProduct.name).title} atualizado`
-      : `${splitProductName(selectedProduct.name).title} adicionado ao pedido`);
+      : `${splitProductName(selectedProduct.name).title} adicionado à sacola`);
     closeCustomization();
   }, [
     addItem,
@@ -1631,6 +1684,67 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     );
   }
 
+  const orderTypeLabel = orderType === "ENTREGA" ? "Entrega" : orderType === "VIAGEM" ? "Para levar" : "Comer aqui";
+
+  const selectOrderType = (next: "BALCAO" | "VIAGEM" | "ENTREGA") => {
+    hasManuallySelectedOrderTypeRef.current = true;
+    if (next !== "ENTREGA" && appliedCoupon?.discount_type === "FREE_DELIVERY") {
+      setAppliedCoupon(null);
+      setCouponMessage("Cupom de entrega removido ao mudar a modalidade.");
+    }
+    setOrderType(next);
+  };
+
+  /** Seletor único de modalidade (#235); a mesma peça no cardápio, na sacola e nos dados. */
+  const renderOrderTypeOptions = (onPicked?: () => void) => (
+    <div role="radiogroup" aria-label="Como quer receber" className="flex gap-0.5 rounded-full bg-[var(--bg-subtle)] p-1 md:max-w-md">
+      {([{ type: "BALCAO", label: "Comer aqui" }, { type: "VIAGEM", label: "Para levar" }, ...(deliveryEnabled ? [{ type: "ENTREGA", label: "Entrega" }] as const : [])] as const).map((option) => (
+        <button
+          type="button"
+          role="radio"
+          key={option.type}
+          aria-checked={orderType === option.type}
+          className={`min-h-11 flex-1 rounded-full px-3 text-sm font-semibold transition-colors motion-reduce:transition-none ${orderType === option.type ? "bg-[var(--bg-inverse)] text-white shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+          onClick={() => {
+            selectOrderType(option.type);
+            onPicked?.();
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  /** Resumo "Para levar · Unidade [Alterar]" usado depois do cardápio. */
+  const renderOrderTypeSummary = () => (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-[var(--text-primary)]">
+            {orderTypeLabel}{branchName ? ` · ${branchName}` : ""}
+          </p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            {orderType === "ENTREGA"
+              ? "Entregamos no endereço informado nos seus dados."
+              : orderType === "VIAGEM"
+                ? "Retirada no balcão, embalado para viagem."
+                : "Consumo no local."}
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-expanded={isEditingOrderType}
+          onClick={() => setIsEditingOrderType((current) => !current)}
+          className="inline-flex min-h-11 shrink-0 items-center text-sm font-semibold text-[var(--text-primary)] underline underline-offset-4"
+        >
+          {isEditingOrderType ? "Fechar" : "Alterar"}
+        </button>
+      </div>
+      {isEditingOrderType && renderOrderTypeOptions(() => setIsEditingOrderType(false))}
+    </div>
+  );
+
   return (
     <div className="min-h-screen pb-32 text-[var(--text-primary)]" style={{ backgroundColor: "var(--bg-base)" }}>
       {/* Header sticky. Fundo sólido (não translúcido) + transform: translateZ(0)
@@ -1652,12 +1766,41 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             />
             <div className="min-w-0">
               <h1 className="text-base font-bold text-[var(--text-primary)] truncate">Marcos Krep&apos;s</h1>
-              <p className="text-xs font-medium text-[var(--text-secondary)] truncate">
-                {branchName ? `Pedido online · ${branchName}` : "Pedido online"}
+              <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                <span
+                  aria-hidden
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: onlineOrderingEnabled ? "var(--status-success)" : "var(--text-muted)" }}
+                />
+                <span className="truncate">
+                  {branchName ?? "Pedido online"}
+                  {" · "}
+                  {onlineOrderingEnabled ? `Aberto até ${orderingSchedule.end}` : `Atendimento das ${orderingSchedule.start} às ${orderingSchedule.end}`}
+                </span>
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
+            {step === "MENU" && (
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-[var(--text-primary)] underline underline-offset-4"
+                onClick={() => router.push(BRANCHES_PAGE_PATH)}
+              >
+                Trocar<span className="sr-only"> unidade</span>
+              </button>
+            )}
+            {step === "MENU" && !orderData && (
+              <button
+                type="button"
+                aria-label="Acompanhar pedido"
+                title="Acompanhar pedido"
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]"
+                onClick={() => document.getElementById("acompanhar-pedido")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+              >
+                <Package className="h-5 w-5" strokeWidth={1.75} />
+              </button>
+            )}
             {orderData && step === "MENU" && (
               <button
                 type="button"
@@ -1671,7 +1814,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             {step !== "MENU" && (
               <Button variant="ghost" size="sm" className="min-h-11 gap-1" onClick={handleBackToMenu}>
                 <ChevronLeft className="h-4 w-4" />
-                Cardapio
+                Cardápio
               </Button>
             )}
           </div>
@@ -1758,38 +1901,18 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             </section>
           )}
 
-          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4" aria-label="Unidade e atendimento">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">{branchName ?? "Escolha seu krep"}</h2>
-                {branchAddress && <p className="mt-1 text-sm text-[var(--text-secondary)]">{branchAddress}</p>}
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">{onlineOrderingEnabled ? `Aberto agora · até ${orderingSchedule.end}` : orderingClosedReason || `Atendimento das ${orderingSchedule.start} às ${orderingSchedule.end}`}</p>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">Pix e cartão online{codEnabled ? " · Pagamento na entrega sujeito à confirmação" : ""}</p>
-              </div>
-              <button type="button" className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-sm font-semibold" onClick={() => router.push(BRANCHES_PAGE_PATH)}>Trocar unidade</button>
-            </div>
-            <fieldset className="mt-3 flex flex-wrap gap-2">
-              <legend className="mb-2 text-sm font-semibold">Como quer receber?</legend>
-              {([{type:"BALCAO",label:"Comer aqui"},{type:"VIAGEM",label:"Para levar"},...(deliveryEnabled ? [{type:"ENTREGA",label:"Entrega"}] : [])] as const).map(option => (
-                <button type="button" key={option.type} aria-pressed={orderType===option.type} className={`min-h-11 rounded-xl border border-[var(--border)] px-4 text-sm font-semibold ${orderType===option.type ? "bg-[var(--bg-inverse)] text-white" : "bg-[var(--bg-subtle)]"}`} onClick={() => {
-                  hasManuallySelectedOrderTypeRef.current=true;
-                  setOrderType(option.type as "BALCAO" | "VIAGEM" | "ENTREGA");
-                  if (option.type !== "ENTREGA" && appliedCoupon?.discount_type === "FREE_DELIVERY") { setAppliedCoupon(null); setCouponMessage("Cupom de entrega removido ao mudar a modalidade."); }
-                }}>{option.label}</button>
-              ))}
-            </fieldset>
+          {/* Modalidade única (#235): escolhida aqui e mostrada como resumo nos dados. */}
+          <section aria-label="Como quer receber" className="space-y-1.5">
+            {!onlineOrderingEnabled && orderingClosedReason && (
+              <p className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">{orderingClosedReason}</p>
+            )}
+            {renderOrderTypeOptions()}
+            <p className="px-1 text-xs text-[var(--text-muted)]">
+              {orderType === "ENTREGA"
+                ? `Pix e cartão online${codEnabled ? " · pagamento na entrega sujeito à confirmação da unidade" : ""}`
+                : branchAddress ? `Retirada: ${branchAddress}` : "Pix e cartão online"}
+            </p>
           </section>
-
-          <details className="text-xs text-[var(--text-muted)]">
-            <summary className="min-h-11 cursor-pointer py-3">Privacidade e medição de navegação</summary>
-            <label className="flex min-h-11 items-start gap-2 py-2"><input type="checkbox" className="mt-1" checked={analyticsConsent} onChange={event => setAnalyticsConsent(event.target.checked)} />Permitir métricas de navegação para melhorar o cardápio. Sem nome, telefone, endereço ou token do pedido. Você pode desmarcar a qualquer momento.</label>
-          </details>
-
-          {/* Acompanhar pedido — recolhido pra não competir com o cardápio.
-             Precisa existir aqui, e não só no hub /pedir/filiais: o QR Code
-             leva direto pra esta tela, então quem perdeu o link do pedido
-             não tinha por onde voltar sem sair da filial. */}
-          <AcompanharPedido variant="collapsed" />
 
           {/* Tabs sticky — colado abaixo do header do /pedir.
              Header h-11 logo + py-3 = ~68px no mobile, sm:h-12 = ~72px no sm+.
@@ -1809,9 +1932,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     key={category.id}
                     ref={(el) => { tabRefs.current[category.id] = el; }}
                     onClick={() => scrollToCategory(category.id)}
-                    className={`h-8 shrink-0 rounded-full px-3 text-[13px] font-semibold ${
+                    className={`h-9 shrink-0 rounded-full px-3.5 text-[13px] font-semibold ${
                       isActive
-                        ? "bg-brand-red text-white shadow-[var(--shadow-sm)]"
+                        ? "bg-[var(--text-primary)] text-white shadow-[var(--shadow-sm)]"
                         : "text-[var(--text-secondary)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]"
                     }`}
                   >
@@ -1880,69 +2003,71 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 {visibleProducts.length === 0 ? (
                   <p className="text-sm text-[var(--text-muted)] py-2">Nenhum item para esse filtro.</p>
                 ) : (
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8 2xl:grid-cols-3">
                     {visibleProducts.map((product) => {
                       const { code, title } = splitProductName(product.name);
                       const tags = getProductTags(product, category.name, menuIndexes);
                       const summary = getProductSummary(product, category.name, menuIndexes);
-                      const categoryKind = getCategoryKind(category.name);
                       const isMostOrdered = publicStats.topByCategory[product.category_id ?? ""] === product.id;
+                      const inCart = countProductInCart(items, product.id);
+                      const fallbackArt = getFallbackArt(category.name, product.name);
+                      const tag = tags[0] && tags[0] !== "Outros" ? tags[0] : null;
 
                       return (
-                        <button
-                          key={product.id}
-                          type="button"
-                          onClick={() => openCustomization(product)}
-                          className="group relative flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-left shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] hover:border-[var(--border-strong)] active:scale-[0.98]"
-                        >
-                          {isMostOrdered && (
-                            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-micro font-semibold text-[var(--accent)]">
-                              🔥 Mais pedido
-                            </span>
-                          )}
-                          <div className="flex items-start gap-3">
+                        <div key={product.id} className="relative border-b border-[var(--border)]">
+                          <button
+                            type="button"
+                            onClick={() => openCustomization(product)}
+                            className="focus-ring flex w-full items-start gap-4 rounded-xl py-4 text-left"
+                          >
+                            <div className="min-w-0 flex-1">
+                              {(code || isMostOrdered || tag) && (
+                                <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                                  {code && <span className="text-caption font-medium tabular-nums text-[var(--text-muted)]">#{code}</span>}
+                                  {/* "Mais pedido" vem da estatística real da filial (get-public-branch-stats). */}
+                                  {isMostOrdered && (
+                                    <span className="rounded-full bg-[var(--bg-subtle)] px-2 py-0.5 text-micro font-semibold text-[var(--text-secondary)]">Mais pedido</span>
+                                  )}
+                                  {tag && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-subtle)] px-2 py-0.5 text-micro font-semibold text-[var(--text-secondary)]">
+                                      {tag === "Vegetariano" && <Leaf className="h-2.5 w-2.5" strokeWidth={1.75} />}
+                                      {tag}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              <h3 className="line-clamp-2 text-[15px] font-bold leading-snug text-[var(--text-primary)]">{title}</h3>
+                              <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-[var(--text-secondary)]">{summary}</p>
+                              <p className="mt-2 text-[15px] font-bold tabular-nums text-[var(--text-primary)]">{currency.format(product.price)}</p>
+                            </div>
                             <ProductImage
                               src={product.image_url}
-                              width={88}
-                              height={88}
-                              sizes="88px"
-                              className="h-22 w-22 shrink-0 rounded-xl object-cover bg-[var(--bg-subtle)]"
-                              fallback={
-                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-brand-red">
-                                  {categoryKind === "SAVORY" ? <Flame className="h-6 w-6" strokeWidth={1.75} />
-                                  : categoryKind === "SWEET" ? <Sparkles className="h-6 w-6" strokeWidth={1.75} />
-                                  : categoryKind === "DRINK" ? <Package className="h-6 w-6" strokeWidth={1.75} />
-                                  : <Utensils className="h-6 w-6" strokeWidth={1.75} />}
+                              width={104}
+                              height={104}
+                              sizes="104px"
+                              className="h-26 w-26 shrink-0 rounded-2xl object-cover bg-[var(--bg-subtle)]"
+                              fallback={fallbackArt ? (
+                                <Image src={fallbackArt} alt="" width={104} height={104} unoptimized className="h-26 w-26 shrink-0 rounded-2xl object-cover" />
+                              ) : (
+                                <div className="flex h-26 w-26 shrink-0 items-center justify-center rounded-2xl bg-[var(--bg-subtle)] text-[var(--text-muted)]">
+                                  <Utensils className="h-7 w-7" strokeWidth={1.5} />
                                 </div>
-                              }
+                              )}
                             />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {code && (
-                                  <span className="text-caption font-medium text-[var(--text-muted)] tabular-nums">#{code}</span>
-                                )}
-                                {tags[0] && tags[0] !== "Outros" && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-light)] px-2 py-0.5 text-micro font-semibold text-brand-red">
-                                    {tags[0] === "Vegetariano" ? <Leaf className="h-2.5 w-2.5" strokeWidth={1.75} /> : <Flame className="h-2.5 w-2.5" strokeWidth={1.75} />}
-                                    {tags[0]}
-                                  </span>
-                                )}
-                              </div>
-                              <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-tight text-[var(--text-primary)]">{title}</h3>
-                              <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-[var(--text-secondary)]">{summary}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between mt-auto">
-                            <p className="text-lg font-bold text-brand-red tabular-nums">
-                              <span className="text-xs mr-0.5 font-medium opacity-70">R$</span>
-                              {product.price.toFixed(2).replace(".", ",")}
-                            </p>
-                            <span className="flex h-11 items-center gap-1 rounded-full bg-brand-red px-4 text-sm font-semibold text-white shadow-[var(--shadow-sm)] group-hover:bg-brand-red-dark">
-                              <Plus className="h-4 w-4" strokeWidth={2} />
-                              Montar
-                            </span>
-                          </div>
-                        </button>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickAdd(product)}
+                            aria-label={inCart > 0 ? `Adicionar mais um ${title} (${inCart} na sacola)` : `Adicionar ${title}`}
+                            className={`focus-ring absolute bottom-2 right-0 flex h-11 min-w-11 items-center justify-center rounded-full px-3 text-base font-bold shadow-[var(--shadow-md)] transition-transform active:scale-95 motion-reduce:transition-none ${
+                              inCart > 0
+                                ? "bg-brand-red text-white"
+                                : "border border-[var(--border-strong)] bg-[var(--bg-surface)] text-brand-red"
+                            }`}
+                          >
+                            {inCart > 0 ? <span className="tabular-nums">{inCart}</span> : <Plus className="h-5 w-5" strokeWidth={2.25} />}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -1955,38 +2080,41 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             </div>
 
             <aside className="hidden xl:block">
-              <div className="sticky top-24 space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-md)]">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-[var(--text-muted)]">Seu pedido</p>
-                    <h2 className="text-lg font-semibold text-[var(--text-primary)]">Carrinho</h2>
-                  </div>
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--bg-subtle)] text-[var(--text-primary)]">
-                    <ShoppingCart className="h-5 w-5" strokeWidth={1.75} />
-                  </div>
+              <div className="sticky top-24 space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-[var(--shadow-sm)]">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 className="text-lg font-bold text-[var(--text-primary)]">Sua sacola</h2>
+                  <p className="truncate text-xs text-[var(--text-muted)]">
+                    {orderType === "ENTREGA" ? "Entrega" : orderType === "VIAGEM" ? "Para levar" : "Comer aqui"}
+                    {branchName ? ` · ${branchName}` : ""}
+                  </p>
                 </div>
 
                 {items.length === 0 || branchDraftMismatch ? (
                   <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-subtle)] p-5 text-center">
                     <p className="text-sm text-[var(--text-secondary)]">
-                      {branchDraftMismatch ? "Resolva o pedido em aberto de outra unidade acima." : "Escolha um krep para montar seu pedido."}
+                      {branchDraftMismatch ? "Resolva o pedido em aberto de outra unidade acima." : "Sua sacola está vazia. Toque em + para adicionar."}
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <div className="max-h-[44vh] space-y-2 overflow-y-auto pr-1">
                       {items.map((item) => (
-                        <div key={item.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] p-3">
+                        <div key={item.id} className="border-b border-[var(--border)] pb-2 last:border-b-0">
                           <div className="flex items-start gap-2">
-                            <span className="rounded-md bg-[var(--bg-surface)] px-2 py-0.5 text-xs font-semibold text-[var(--text-primary)]">{item.quantity}×</span>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-[var(--text-primary)]">{item.product.name}</p>
+                              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                                <span className="tabular-nums">{item.quantity}×</span> {splitProductName(item.product.name).title}
+                              </p>
                               {item.addons.length > 0 && (
-                                <p className="mt-0.5 truncate text-xs text-[var(--status-success)]">
-                                  + {item.addons.map((addon) => `${addon.quantity}× ${addon.addon_name}`).join(", ")}
+                                <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                                  + {item.addons.map((addon) => `${addon.quantity > 1 ? `${addon.quantity}× ` : ""}${addon.addon_name}`).join(", ")}
                                 </p>
                               )}
+                              <button type="button" onClick={() => openCustomization(item.product, item)} className="mt-0.5 min-h-8 text-xs font-semibold text-[var(--text-primary)] underline underline-offset-4">
+                                Editar
+                              </button>
                             </div>
+                            <span className="shrink-0 text-sm font-semibold tabular-nums">{currency.format(getCartItemTotal(item))}</span>
                             <button
                               className="focus-ring relative rounded-lg bg-[var(--bg-surface)] p-1.5 text-[var(--status-danger)] hover:bg-[var(--status-danger-bg)] after:absolute after:inset-[-8px] after:content-['']"
                               onClick={() => removeItem(item.id)}
@@ -1998,25 +2126,38 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                         </div>
                       ))}
                     </div>
-                    <div className="rounded-2xl bg-[var(--bg-subtle)] p-4">
-                      <div className="flex items-center justify-between text-sm font-semibold text-[var(--text-primary)]">
+                    <div className="border-t border-[var(--border)] pt-3">
+                      <div className="flex items-center justify-between text-base font-bold text-[var(--text-primary)]">
                         <span>Total estimado</span>
-                        <span className="text-xl tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(estimatedTotal)}</span>
+                        <span className="tabular-nums">{currency.format(estimatedTotal)}</span>
                       </div>
                       <button
                         type="button"
                         onClick={() => setStep("REVIEW")}
-                        className="mt-3 flex w-full h-12 items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
+                        className="mt-3 flex h-12 w-full items-center justify-center rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
                       >
-                        <CreditCard className="h-4 w-4" strokeWidth={1.75} />
-                        Fechar pedido
+                        Continuar
                       </button>
+                      <p className="mt-2 text-xs text-[var(--text-muted)]">Valores confirmados pelo sistema ao enviar o pedido.</p>
                     </div>
                   </div>
                 )}
               </div>
             </aside>
           </div>
+
+          <footer className="space-y-3 pt-2">
+            <details className="text-xs text-[var(--text-muted)]">
+              <summary className="min-h-11 cursor-pointer py-3">Privacidade e medição de navegação</summary>
+              <label className="flex min-h-11 items-start gap-2 py-2"><input type="checkbox" className="mt-1" checked={analyticsConsent} onChange={event => setAnalyticsConsent(event.target.checked)} />Permitir métricas de navegação para melhorar o cardápio. Sem nome, telefone, endereço ou token do pedido. Você pode desmarcar a qualquer momento.</label>
+            </details>
+
+            {/* Acompanhar pedido — recolhido pra não competir com o cardápio.
+               Precisa existir aqui, e não só no hub /pedir/filiais: o QR Code
+               leva direto pra esta tela, então quem perdeu o link do pedido
+               não tinha por onde voltar sem sair da filial. */}
+            <div id="acompanhar-pedido" className="scroll-mt-24"><AcompanharPedido variant="collapsed" /></div>
+          </footer>
 
           {/* Sticky bottom cart bar — só mobile/tablet (sidebar cobre desktop) */}
           {items.length > 0 && !branchDraftMismatch && (
@@ -2027,25 +2168,15 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               <button
                 type="button"
                 onClick={() => setStep("REVIEW")}
-                className="w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 shadow-[var(--shadow-lg)] active:scale-[0.98]"
-                style={{ backgroundColor: "var(--bg-inverse)" }}
+                className="flex h-14 w-full items-center gap-3 rounded-full bg-brand-red pl-4 pr-2 text-white shadow-[0_8px_20px_rgba(231,51,53,0.30)] active:scale-[0.98] motion-reduce:transform-none"
               >
-                <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-red text-white">
-                  <ShoppingCart className="h-5 w-5" strokeWidth={1.75} />
-                  <span className="absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-micro font-semibold text-brand-red ring-2 ring-[var(--bg-inverse)]">
-                    {items.length}
-                  </span>
-                </div>
-                <div className="flex-1 text-left leading-tight">
-                  <p className="text-caption text-white/60">{items.length === 1 ? "1 item no pedido" : `${items.length} itens no pedido`}</p>
-                  <p className="text-base font-semibold text-white tabular-nums">
-                    <span className="text-xs text-white/60 mr-0.5 font-medium">R$</span>
-                    {estimatedTotal.toFixed(2).replace(".", ",")}
-                  </p>
-                </div>
-                <span className="flex items-center gap-1 text-xs font-semibold text-white/80 shrink-0 pr-2">
-                  Ver carrinho
-                  <ChevronRight className="h-4 w-4" strokeWidth={2} />
+                <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-white/20 px-1.5 text-sm font-bold tabular-nums">
+                  {items.reduce((total, item) => total + item.quantity, 0)}
+                </span>
+                <span className="text-[15px] font-bold">Ver sacola</span>
+                <span className="ml-auto flex h-10 items-center gap-1 rounded-full bg-black/15 px-4 text-[15px] font-bold tabular-nums">
+                  {currency.format(estimatedTotal)}
+                  <ChevronRight className="h-4 w-4" strokeWidth={2.25} />
                 </span>
               </button>
             </div>
@@ -2056,86 +2187,130 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       {/* ── Tela 3: REVIEW — só a revisão dos itens do pedido ──────────── */}
       {step === "REVIEW" && (
         <main className="mx-auto max-w-2xl space-y-4 p-4">
-          <ProgressSteps current={1} />
-
-          <section className="rounded-2xl px-5 py-4 text-white shadow-[var(--shadow-sm)]" style={{ backgroundColor: "var(--bg-inverse)" }}>
-            <h2 className="text-lg font-semibold tracking-tight md:text-xl">Confira seu pedido</h2>
-            <p className="mt-1 text-sm leading-relaxed text-white/65">
-              Revise os itens. Em seguida você informa seus dados e paga.
-            </p>
-          </section>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setStep("MENU")}
+              aria-label="Voltar ao cardápio"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+            >
+              <ChevronLeft className="h-5 w-5" strokeWidth={1.75} />
+            </button>
+            <h2 className="flex-1 text-xl font-bold tracking-tight text-[var(--text-primary)]">Sua sacola</h2>
+            <button
+              type="button"
+              onClick={() => setStep("MENU")}
+              className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-[var(--text-primary)] underline underline-offset-4"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              Adicionar itens
+            </button>
+          </div>
+          <ProgressSteps current={0} />
 
           <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
-            <div className="flex items-start justify-between gap-3">
-              <h2 className="text-base font-semibold text-[var(--text-primary)]">Seus itens</h2>
-              <button
-                type="button"
-                onClick={() => setStep("MENU")}
-                className="text-xs font-semibold text-brand-red hover:text-brand-red-dark"
-              >
-                + Adicionar mais
-              </button>
-            </div>
+            <div className="border-b border-[var(--border)] pb-3">{renderOrderTypeSummary()}</div>
 
             {items.length === 0 ? (
               <div className="mt-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-subtle)] p-6 text-center">
                 <ShoppingCart className="mx-auto h-6 w-6 text-[var(--text-muted)]" strokeWidth={1.5} />
-                <p className="mt-2 text-sm text-[var(--text-secondary)]">Seu carrinho está vazio.</p>
+                <p className="mt-2 text-sm text-[var(--text-secondary)]">Sua sacola está vazia.</p>
                 <button
                   type="button"
                   onClick={() => setStep("MENU")}
-                  className="mt-3 text-sm font-semibold text-brand-red hover:text-brand-red-dark"
+                  className="mt-3 min-h-11 text-sm font-semibold text-brand-red hover:text-brand-red-dark"
                 >
                   Ver cardápio
                 </button>
               </div>
             ) : (
             <>
-            <div className="mt-3 divide-y divide-[var(--border)]">
-              {items.map((item) => (
-                <div key={item.id} className="flex items-start gap-3 py-3">
-                  <span className="rounded-md bg-[var(--bg-inverse)] px-2 py-0.5 text-xs font-semibold text-white shrink-0 tabular-nums">{item.quantity}×</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-[var(--text-primary)]">{item.product.name}</p>
-                    {item.addons.length > 0 && (
-                      <p className="mt-0.5 text-xs text-[var(--status-success)]">
-                        + {item.addons.map((addon) => `${addon.quantity}× ${addon.addon_name}`).join(", ")}
-                      </p>
-                    )}
-                    {item.notes && <p className="mt-0.5 text-xs italic text-[var(--text-muted)]">{item.notes}</p>}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-sm font-semibold text-[var(--text-primary)] tabular-nums">
-                      {currency.format((item.product.price + item.addons.reduce((s, a) => s + a.price * a.quantity, 0)) * item.quantity)}
-                    </span>
-                    <button
-                      type="button"
-                      className="rounded-lg bg-[var(--bg-subtle)] p-2.5 text-[var(--text-secondary)] hover:bg-[var(--border)] ml-2"
-                      onClick={() => openCustomization(item.product, item)}
-                      aria-label="Editar item"
-                    >
-                      <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg bg-[var(--status-danger-bg)] p-2.5 text-[var(--status-danger)] hover:opacity-80"
-                      onClick={() => removeItem(item.id)}
-                      aria-label="Remover item"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* Cada item: o que vai no krep, preço da linha e três ações explícitas
+               (#235): quantidade, "Editar" (reabre a personalização) e "Remover". */}
+            <ul className="divide-y divide-[var(--border)]">
+              {items.map((item) => {
+                const removedNames = item.removed_ingredients
+                  .map((id) => menuIndexes?.ingredientsById.get(id)?.name)
+                  .filter(Boolean);
+                const title = splitProductName(item.product.name).title;
+                return (
+                  <li key={item.id} className="py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-bold leading-snug text-[var(--text-primary)]">{title}</p>
+                        {item.addons.length > 0 && (
+                          <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                            + {item.addons.map((addon) => `${addon.quantity > 1 ? `${addon.quantity}× ` : ""}${addon.addon_name}`).join(", ")}
+                          </p>
+                        )}
+                        {removedNames.length > 0 && (
+                          <p className="mt-0.5 text-xs text-[var(--text-secondary)]">Sem {removedNames.join(", ")}</p>
+                        )}
+                        {item.notes && <p className="mt-0.5 text-xs italic text-[var(--text-muted)]">“{item.notes}”</p>}
+                      </div>
+                      <p className="shrink-0 text-[15px] font-bold tabular-nums text-[var(--text-primary)]">{currency.format(getCartItemTotal(item))}</p>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <div className="flex h-11 items-center rounded-full border border-[var(--border-strong)]" role="group" aria-label={`Quantidade de ${title}`}>
+                        <button
+                          type="button"
+                          className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-brand-red disabled:text-[var(--text-muted)]"
+                          aria-label={`Diminuir ${title}`}
+                          disabled={item.quantity === 1}
+                          onClick={() => updateItem(item.id, { quantity: item.quantity - 1 })}
+                        >
+                          <Minus className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                        <span className="w-6 text-center text-sm font-bold tabular-nums" aria-live="polite">{item.quantity}</span>
+                        <button
+                          type="button"
+                          className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-brand-red"
+                          aria-label={`Aumentar ${title}`}
+                          onClick={() => updateItem(item.id, { quantity: item.quantity + 1 })}
+                        >
+                          <Plus className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openCustomization(item.product, item)}
+                        aria-label={`Editar ${title}: ingredientes, adicionais e observação`}
+                        className="inline-flex h-11 items-center gap-1.5 rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface)] px-4 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]"
+                      >
+                        <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.id)}
+                        aria-label={`Remover ${title} da sacola`}
+                        className="inline-flex h-11 items-center px-2 text-sm font-semibold text-[var(--status-danger)] underline-offset-4 hover:underline"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
 
             <div className="mt-4">{checkoutSummary}</div>
 
-            <div className="mt-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-3">
-              <div className="flex items-center gap-2">
-                <Tag className="h-4 w-4 shrink-0 text-brand-red" />
-                <p className="text-sm font-semibold text-[var(--text-primary)]">Tem cupom de desconto?</p>
-              </div>
+            {!(isCouponOpen || couponInput || appliedCoupon) ? (
+              <button
+                type="button"
+                onClick={() => setIsCouponOpen(true)}
+                className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--text-primary)]"
+              >
+                <Tag className="h-4 w-4 text-[var(--text-secondary)]" strokeWidth={1.75} />
+                Tenho um cupom
+              </button>
+            ) : (
+            <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
+              <label htmlFor="coupon-code" className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                <Tag className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" strokeWidth={1.75} />
+                Cupom de desconto
+              </label>
               {couponInput.trim().toUpperCase() === "FERIADOU" && orderType !== "ENTREGA" && deliveryEnabled && (
                 <p className="mt-2 text-xs text-[var(--text-secondary)]">
                   O FERIADOU oferece frete grátis. Ao aplicar, você seleciona Entrega para continuar.
@@ -2151,9 +2326,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       setCouponMessage("");
                     }
                   }}
-                  placeholder="Digite o código"
+                  id="coupon-code"
+                  placeholder="Código do cupom"
                   autoCapitalize="characters"
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)] outline-none focus:border-brand-red"
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)] outline-none placeholder:normal-case placeholder:font-normal placeholder:tracking-normal focus:border-brand-red"
                 />
                 <button
                   type="button"
@@ -2173,24 +2349,26 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <p className="mt-1 text-xs text-[var(--text-muted)]">{appliedCoupon.description}</p>
               )}
             </div>
+            )}
             </>
             )}
           </section>
 
           {items.length > 0 && upsellSuggestions.length > 0 && (
             <section>
-              <h3 className="mb-2 px-1 text-sm font-semibold text-[var(--text-primary)]">Complete seu pedido</h3>
+              <h3 className="mb-2 px-1 text-sm font-semibold text-[var(--text-primary)]">Mais pedidos nesta unidade</h3>
               <div className="flex gap-2.5 overflow-x-auto pb-1 hide-scrollbar">
                 {upsellSuggestions.map((product) => (
                   <button
                     key={product.id}
                     type="button"
-                    onClick={() => openCustomization(product)}
+                    onClick={() => handleQuickAdd(product)}
+                    aria-label={`Adicionar ${splitProductName(product.name).title}`}
                     className="flex w-36 shrink-0 flex-col gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 text-left shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] active:scale-[0.98]"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent)]/15 px-1.5 py-0.5 text-micro font-semibold text-[var(--accent)]">
-                        🔥 Popular
+                      <span className="rounded-full bg-[var(--bg-subtle)] px-1.5 py-0.5 text-micro font-semibold text-[var(--text-secondary)]">
+                        Mais pedido
                       </span>
                       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-red text-white">
                         <Plus className="h-3.5 w-3.5" strokeWidth={2} />
@@ -2199,7 +2377,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     <p className="line-clamp-2 text-xs font-semibold leading-tight text-[var(--text-primary)]">
                       {splitProductName(product.name).title}
                     </p>
-                    <p className="text-sm font-bold text-brand-red tabular-nums">{currency.format(product.price)}</p>
+                    <p className="text-sm font-bold tabular-nums text-[var(--text-primary)]">{currency.format(product.price)}</p>
                   </button>
                 ))}
               </div>
@@ -2242,7 +2420,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-sm)] hover:bg-brand-red-dark active:scale-[0.98]"
               style={{ height: 52 }}
             >
-              Continuar
+              Continuar para seus dados
               <ChevronRight className="h-5 w-5" strokeWidth={2} />
             </button>
           ) : null}
@@ -2258,74 +2436,72 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               type="button"
               onClick={() => setStep("REVIEW")}
               className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              aria-label="Voltar para itens"
+              aria-label="Voltar para a sacola"
             >
               <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
               <span className="hidden sm:inline">Voltar</span>
             </button>
             <div className="flex-1 min-w-0">
-              <ProgressSteps current={2} />
+              <ProgressSteps current={1} />
             </div>
           </div>
 
-          <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)]">
-            <h2 className="text-base font-semibold text-[var(--text-primary)]">Seus dados</h2>
+          <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">Seus dados</h2>
+
+            {/* Ordem pedida na #235: nome primeiro, WhatsApp depois. A busca do
+                perfil continua disparando pelo WhatsApp e nunca sobrescreve um
+                nome digitado à mão (ver resolveNameFromLookup) — no máximo
+                oferece a sugestão logo abaixo do WhatsApp. */}
+            <FloatingInput
+              label="Nome (opcional)"
+              name="name"
+              autoComplete="name"
+              value={customerName}
+              onChange={(v) => applyResolvedName(resolveNameFromInput(v), customerPhone)}
+              placeholder="Como podemos te chamar?"
+            />
 
             <FloatingInput
-              label={orderType === "ENTREGA" ? "WhatsApp com DDD (obrigatório)" : "WhatsApp com DDD (opcional)"}
+              // Sem aviso de obrigatoriedade no campo (pedido do operador, #235). Em
+              // ENTREGA o envio continua bloqueado com mensagem se faltar o número.
+              label="WhatsApp com DDD"
+              name="tel"
+              autoComplete="tel"
               value={customerPhone}
               onChange={(v) => setCustomerInfo(customerName, formatWhatsAppInput(v))}
               onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
-              placeholder="(11) 99999-9999"
+              placeholder="(61) 99999-9999"
               type="tel"
               inputMode="tel"
-              help={orderType === "ENTREGA" ? "Obrigatório para contato sobre a entrega." : "Opcional. Usamos o WhatsApp para enviar atualizações do pedido."}
+              // Número pela metade avisa aqui, e não só quando o pedido é enviado.
+              error={customerPhoneWarning}
             />
 
-            {/* Número pela metade avisa aqui, e não só quando o pedido é enviado. */}
-            {customerPhoneWarning && (
-              <p className="text-xs font-semibold text-[var(--status-danger)]" role="alert">
-                {customerPhoneWarning}
-              </p>
-            )}
-
-            <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">
-              {orderType === "ENTREGA"
-                ? "Para entrega, precisamos de um WhatsApp com DDD e do endereço. Não é necessário criar uma conta."
-                : "Você pode comprar sem preencher seus dados. Se informar o WhatsApp, ele será usado para avisos de status do pedido."}
-            </div>
-
             {isProfileChecking && (
-              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]" role="status">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-red" />
                 Buscando dados salvos...
               </div>
             )}
 
                 {profileNotice && (
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2" role="status">
                     <p className="text-xs font-medium text-[var(--status-success)]">{profileNotice}</p>
                     <button
                       type="button"
                       onClick={handleForgetSavedProfile}
-                      className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline hover:text-[var(--text-secondary)]"
+                      className="inline-flex min-h-11 shrink-0 items-center text-xs font-medium text-[var(--text-muted)] underline hover:text-[var(--text-secondary)]"
                     >
                       Não é você?
                     </button>
                   </div>
                 )}
                 {checkoutPhone && profileLookupState === "not_found" && (
-                  <p className="text-xs font-medium text-[var(--status-warning)]">
-                    Não encontrei dados salvos. Complete abaixo.
+                  <p className="text-xs font-medium text-[var(--text-secondary)]" role="status">
+                    Não encontramos dados salvos para este WhatsApp.
                   </p>
                 )}
-
-                <FloatingInput
-                  label="Nome (opcional)"
-                  value={customerName}
-                  onChange={(v) => applyResolvedName(resolveNameFromInput(v), customerPhone)}
-                  placeholder="Como te chamar?"
-                />
 
                 {nameSuggestion && (
                   <button
@@ -2334,52 +2510,37 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       { name: nameSuggestion, source: "LOOKUP", suggestion: null },
                       customerPhone,
                     )}
-                    className="w-full rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-left text-xs font-medium text-[var(--text-secondary)]"
+                    className="min-h-11 w-full rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-left text-xs font-medium text-[var(--text-secondary)]"
                   >
                     Salvamos <strong>{nameSuggestion}</strong> para este WhatsApp. Tocar aqui usa esse nome.
                   </button>
                 )}
 
-                <FloatingInput
-                  label="E-mail (opcional)"
-                  value={customerEmail}
-                  onChange={setCustomerEmail}
-                  placeholder="usado no PIX"
-                  type="email"
-                />
+                {/* E-mail continua opcional (#235): recolhido para não competir com o essencial. */}
+                {isEmailOpen || customerEmail ? (
+                  <FloatingInput
+                    label="E-mail (opcional)"
+                    name="email"
+                    autoComplete="email"
+                    value={customerEmail}
+                    onChange={setCustomerEmail}
+                    placeholder="voce@exemplo.com"
+                    type="email"
+                    inputMode="email"
+                    help="Usado no pagamento online (Pix ou cartão)."
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsEmailOpen(true)}
+                    className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--text-primary)]"
+                  >
+                    <Plus className="h-4 w-4 text-[var(--text-secondary)]" strokeWidth={2} />
+                    Adicionar e-mail (opcional)
+                  </button>
+                )}
 
-                <div>
-                  <p className="mb-1 text-caption font-medium text-[var(--text-muted)]">Modalidade</p>
-                  <div className="flex rounded-xl bg-[var(--bg-subtle)] p-0.5">
-                    {([
-                      { v: "BALCAO", label: "Comer aqui" },
-                      { v: "VIAGEM", label: "Para levar" },
-                      ...(deliveryEnabled ? [{ v: "ENTREGA", label: "Entrega" }] as const : []),
-                    ] as const).map((opt) => {
-                      const isActive = orderType === opt.v;
-                      return (
-                        <button
-                          key={opt.v}
-                          type="button"
-                          onClick={() => {
-                            hasManuallySelectedOrderTypeRef.current = true;
-                            if (opt.v !== "ENTREGA" && appliedCoupon?.discount_type === "FREE_DELIVERY") {
-                              setAppliedCoupon(null);
-                              setCouponMessage("O FERIADOU só vale para entrega. Cupom removido.");
-                            }
-                            setOrderType(opt.v);
-                          }}
-                          className={`flex-1 h-11 rounded-lg text-sm font-semibold ${
-                            isActive ? "text-white shadow-[var(--shadow-sm)]" : "text-[var(--text-secondary)]"
-                          }`}
-                          style={isActive ? { backgroundColor: "var(--bg-inverse)" } : undefined}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <div className="rounded-xl border border-[var(--border)] px-3 py-2">{renderOrderTypeSummary()}</div>
 
                 {orderType === "ENTREGA" && (
                   <div className="space-y-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)]/40 p-3">
@@ -2456,8 +2617,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     {selectedAddressId === null && (
                       <div className="grid grid-cols-2 gap-2">
                         <input
-                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          className="col-span-2 min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
                           placeholder="CEP *"
+                          aria-label="CEP (obrigatório)"
+                          name="postal-code"
+                          autoComplete="postal-code"
                           inputMode="numeric"
                           maxLength={9}
                           value={deliveryAddress.postal_code}
@@ -2472,28 +2636,37 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           </p>
                         )}
                         {cepStatus === "resolved" && (
-                          <p className="col-span-2 text-xs text-[var(--text-secondary)]">
+                          <p className="col-span-2 text-xs text-[var(--text-secondary)]" role="status">
                             {deliveryAddress.street}, {deliveryAddress.neighborhood} — {deliveryAddress.city}/{deliveryAddress.state}
                           </p>
                         )}
                         <input
-                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
-                          placeholder="Número"
+                          className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
+                          placeholder="Nº do imóvel"
+                          aria-label="Número do imóvel (casa, prédio ou lote)"
+                          name="address-number"
+                          autoComplete="off"
                           inputMode="numeric"
                           disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.number}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, number: e.target.value }))}
                         />
                         <input
-                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
+                          className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
                           placeholder="Complemento"
+                          aria-label="Complemento (apto, bloco, quadra)"
+                          name="address-complement"
+                          autoComplete="address-line2"
                           disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.complement}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, complement: e.target.value }))}
                         />
                         <input
-                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
+                          className="col-span-2 min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
                           placeholder="Ponto de referência (opcional)"
+                          aria-label="Ponto de referência (opcional)"
+                          name="address-reference"
+                          autoComplete="off"
                           disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.reference}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, reference: e.target.value }))}
@@ -2543,7 +2716,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <textarea
                   value={orderNotes}
                   onChange={(event) => setOrderNotes(event.target.value)}
-                  placeholder="Alguma observação para a equipe?"
+                  aria-label="Observações para a equipe (opcional)"
+                  placeholder="Alguma observação para a equipe? (opcional)"
                   className="h-14 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
                 />
 
@@ -2596,22 +2770,16 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           {/* Barra fixa no rodapé — resumo + CTA sempre na zona do polegar,
              mesmo em formulários longos (endereço de entrega). */}
           <div
-            className="fixed inset-x-0 bottom-0 z-40 -mx-3 space-y-2 border-t border-[var(--border)] px-3 pt-3 sm:mx-0 sm:px-4 lg:static lg:mx-0 lg:border-0 lg:p-0"
-            style={{ backgroundColor: "var(--bg-base)", paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
+            className="fixed inset-x-0 bottom-0 z-40 space-y-2 border-t border-[var(--border)] bg-[var(--bg-surface)] px-3 pt-3 sm:px-4 lg:static lg:border-0 lg:bg-transparent lg:p-0"
+            style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
           >
             <div className="mx-auto max-w-2xl space-y-2">
-              <div
-                className="flex items-center justify-between rounded-xl px-4 py-2.5 text-white"
-                style={{ backgroundColor: "var(--bg-inverse)" }}
-              >
-                <span className="text-sm text-white/75">
-                  {items.length} {items.length === 1 ? "item" : "itens"}
+              <div className="flex items-baseline justify-between px-1 lg:hidden">
+                <span className="text-sm text-[var(--text-secondary)]">
+                  {deliveryFeeKnown ? "Total estimado" : "Total parcial"} · {items.reduce((total, item) => total + item.quantity, 0)} {items.reduce((total, item) => total + item.quantity, 0) === 1 ? "item" : "itens"}
                 </span>
-                <span className="flex items-baseline gap-1">
-                  <span className="text-caption text-white/60">{deliveryFeeKnown ? "Total estimado" : "Total parcial"}</span>
-                  <span className="text-base font-semibold tabular-nums" style={{ color: "var(--accent)" }}>
-                    {currency.format(checkoutPreviewTotal)}
-                  </span>
+                <span className="text-lg font-bold tabular-nums text-[var(--text-primary)]">
+                  {currency.format(checkoutPreviewTotal)}
                 </span>
               </div>
 
@@ -2639,50 +2807,37 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
       {step === "PAYMENT" && orderData && (
         <main className="mx-auto max-w-3xl space-y-4 p-4">
-          {/* Progress indicator — step 3 (Pagamento) */}
-          <ProgressSteps current={3} />
+          <ProgressSteps current={2} />
 
-          {/* Selos de confiança — obrigatórios no topo */}
-          <section
-            className="flex flex-wrap items-center justify-around gap-2 rounded-xl px-3 py-2 text-xs font-medium"
-            style={{
-              backgroundColor: "var(--status-success-bg)",
-              color: "var(--status-success)",
-              border: "1px solid rgba(22, 163, 74, 0.18)",
-            }}
-          >
-            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.75} /> Pagamento seguro</span>
-            <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" strokeWidth={1.75} /> Dados protegidos</span>
-            <span className="inline-flex items-center gap-1.5"><RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} /> Cancelamento fácil</span>
-          </section>
-
-          {/* Resumo (sempre visível, compacto) */}
-          <section className="rounded-2xl px-5 py-4 text-white shadow-[var(--shadow-sm)]" style={{ backgroundColor: "var(--bg-inverse)" }}>
+          {/* Resumo do que será cobrado. Sem selos de confiança genéricos (#235):
+             "Cancelamento fácil" não tinha fluxo de cancelamento pelo cliente. */}
+          <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="text-caption font-medium text-white/60">Pedido</p>
-                <h2 className="text-2xl font-bold leading-tight tabular-nums">#{String(orderData.daily_number).padStart(3, "0")}</h2>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>{currency.format(orderData.total_amount)}</p>
+                <p className="text-xs font-medium text-[var(--text-muted)]">Total a pagar</p>
+                <p className="text-3xl font-bold leading-tight tabular-nums text-[var(--text-primary)]">{currency.format(orderData.total_amount)}</p>
                 {orderData.coupon_code && Number(orderData.discount_amount ?? 0) > 0 && (
-                  <p className="mt-1 text-xs font-semibold text-white/70">
+                  <p className="mt-1 text-xs font-semibold text-[var(--status-success)]">
                     Cupom {orderData.coupon_code} · -{currency.format(Number(orderData.discount_amount ?? 0))}
                   </p>
                 )}
               </div>
+              <div className="text-right">
+                <p className="text-xs font-medium text-[var(--text-muted)]">Pedido</p>
+                <p className="text-base font-bold tabular-nums text-[var(--text-primary)]">nº {String(orderData.daily_number).padStart(3, "0")}</p>
+              </div>
             </div>
           </section>
 
-          {/* Cards de método — grandes, com ícone + label + descrição */}
           <section className="space-y-2">
-            <p className="text-xs font-semibold text-[var(--text-muted)] px-1">Forma de pagamento</p>
+            <h2 className="px-1 text-base font-semibold text-[var(--text-primary)]">Como quer pagar?</h2>
             <button
               type="button"
               onClick={() => { setPaymentMode("PIX"); trackFunnel("payment_option_select", {payment_option:"PIX"}); }}
-              className={`w-full flex items-center gap-3 rounded-xl p-4 text-left ${
+              aria-pressed={paymentMode === "PIX"}
+              className={`w-full flex min-h-16 items-center gap-3 rounded-2xl p-4 text-left ${
                 paymentMode === "PIX"
-                  ? "border-2 border-brand-red bg-[var(--brand-light)]"
+                  ? "border-2 border-[var(--text-primary)] bg-[var(--bg-surface)]"
                   : "border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)]"
               }`}
             >
@@ -2690,18 +2845,19 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <QrCode className="h-5 w-5" strokeWidth={1.75} />
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[var(--text-primary)]">PIX</p>
-                <p className="text-xs text-[var(--text-secondary)]">Aprovação imediata</p>
+                <p className="text-sm font-semibold text-[var(--text-primary)]">Pix</p>
+                <p className="text-xs text-[var(--text-secondary)]">QR Code ou código copia e cola</p>
               </div>
-              {paymentMode === "PIX" && <CheckCircle2 className="h-5 w-5 text-brand-red shrink-0" strokeWidth={2} />}
+              {paymentMode === "PIX" && <CheckCircle2 className="h-5 w-5 text-[var(--text-primary)] shrink-0" strokeWidth={2} />}
             </button>
 
             <button
               type="button"
               onClick={() => { setPaymentMode("CARD"); trackFunnel("payment_option_select", {payment_option:"CARD"}); }}
-              className={`w-full flex items-center gap-3 rounded-xl p-4 text-left ${
+              aria-pressed={paymentMode === "CARD"}
+              className={`w-full flex min-h-16 items-center gap-3 rounded-2xl p-4 text-left ${
                 paymentMode === "CARD"
-                  ? "border-2 border-brand-red bg-[var(--brand-light)]"
+                  ? "border-2 border-[var(--text-primary)] bg-[var(--bg-surface)]"
                   : "border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--border-strong)]"
               }`}
             >
@@ -2710,10 +2866,13 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">Cartão de crédito ou débito</p>
-                <p className="text-xs text-[var(--text-secondary)]">Parcelamento disponível</p>
+                <p className="text-xs text-[var(--text-secondary)]">Dados digitados no formulário do Mercado Pago</p>
               </div>
-              {paymentMode === "CARD" && <CheckCircle2 className="h-5 w-5 text-brand-red shrink-0" strokeWidth={2} />}
+              {paymentMode === "CARD" && <CheckCircle2 className="h-5 w-5 text-[var(--text-primary)] shrink-0" strokeWidth={2} />}
             </button>
+            <p className="px-1 pt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+              Pagamento processado pelo Mercado Pago. O pedido vai para o preparo depois da aprovação.
+            </p>
           </section>
 
           <button
@@ -2734,6 +2893,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               onPayerEmailChange={setCustomerEmail}
               onPayerEmailCommit={(email) => savePublicOrderSession(orderData, email, branchSlug)}
               onPaid={() => {
+                setPaidCustomer({ firstName: getFirstName(customerName), phone: normalizeBrazilPhone(customerPhone) ? customerPhone : "" });
                 clearCart();
                 clearSavedPublicOrderSession();
                 setStep("PAID");
@@ -2743,6 +2903,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <MercadoPagoBrick
               order={orderData}
               onPaid={() => {
+                setPaidCustomer({ firstName: getFirstName(customerName), phone: normalizeBrazilPhone(customerPhone) ? customerPhone : "" });
                 clearCart();
                 clearSavedPublicOrderSession();
                 setStep("PAID");
@@ -2783,26 +2944,43 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
         return (
           <main className="mx-auto flex max-w-md flex-col gap-5 px-4 py-8">
-            {/* Progress final — step 4 (Pronto) */}
-            <ProgressSteps current={4} />
-
-            {/* Ícone confirmação */}
-            <div className="flex flex-col items-center text-center gap-3 mt-2">
-              <div className="relative flex h-20 w-20 items-center justify-center">
-                <div className="absolute inset-0 rounded-full animate-ping opacity-20" style={{ backgroundColor: "var(--status-success)" }} />
-                <div className="relative flex h-20 w-20 items-center justify-center rounded-full shadow-[var(--shadow-md)]" style={{ backgroundColor: "var(--status-success)" }}>
-                  <CheckCircle2 className="h-10 w-10 text-white" strokeWidth={1.75} />
+            <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-5 shadow-[var(--shadow-sm)]">
+              <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-[var(--status-success-bg)] px-3 text-xs font-bold text-[var(--status-success)]">
+                <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
+                Pagamento aprovado
+              </span>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight text-[var(--text-primary)]">
+                {paidCustomer?.firstName ? `Obrigado, ${paidCustomer.firstName}!` : "Obrigado!"}
+              </h2>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+                {paidCustomer?.phone
+                  ? `Seu pedido entrou na fila da unidade. Avisaremos pelo WhatsApp ${paidCustomer.phone} quando o status mudar.`
+                  : "Seu pedido entrou na fila da unidade. Acompanhe o status pelo link abaixo."}
+              </p>
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-[var(--bg-subtle)] px-4 py-3">
+                <div>
+                  <p className="text-xs text-[var(--text-muted)]">Número do pedido</p>
+                  <p className="text-lg font-bold tabular-nums text-[var(--text-primary)]">{orderNum}</p>
                 </div>
+                {trackingUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(trackingUrl);
+                      addToast("success", "Link do pedido copiado.");
+                    }}
+                    className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] underline underline-offset-4"
+                  >
+                    <ClipboardCopy className="h-4 w-4" strokeWidth={1.75} />
+                    Copiar link
+                  </button>
+                )}
               </div>
-              <div className="space-y-0.5">
-                <p className="text-sm font-semibold" style={{ color: "var(--status-success)" }}>Pedido confirmado</p>
-                <h2 className="text-3xl font-bold text-[var(--text-primary)] tabular-nums">#{orderNum}</h2>
-              </div>
-            </div>
+            </section>
 
             {/* Timeline de status */}
             <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 shadow-[var(--shadow-sm)]">
-              <p className="text-xs font-semibold text-[var(--text-muted)] mb-3">Status do pedido</p>
+              <h3 className="mb-3 text-base font-semibold text-[var(--text-primary)]">Acompanhamento</h3>
               <ol className="space-y-3">
                 {(() => {
                   const stage = getOrderProgressStage(liveOrderStatus);
@@ -2825,30 +3003,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 })()}
               </ol>
             </section>
-
-            {/* Notificação WhatsApp */}
-            <div className="rounded-xl px-3 py-2.5 text-sm" style={{ backgroundColor: "var(--status-success-bg)", color: "var(--status-success)" }}>
-              Se voce informou WhatsApp, enviaremos uma mensagem quando seu pedido estiver pronto.
-            </div>
-
-            {/* Link de acompanhamento */}
-            {trackingUrl && (
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3">
-                <p className="text-xs text-[var(--text-muted)] mb-1.5">Link de acompanhamento</p>
-                <div className="flex items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-3 py-2">
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--text-secondary)]">{trackingUrl}</span>
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard?.writeText(trackingUrl)}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]"
-                    title="Copiar link"
-                    aria-label="Copiar link de acompanhamento"
-                  >
-                    <ClipboardCopy className="h-4 w-4" strokeWidth={1.75} />
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Ações */}
             <div className="grid w-full gap-2">
@@ -2902,20 +3056,20 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             style={{ backgroundColor: "var(--bg-surface)", paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
           >
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 rounded-full bg-[var(--bg-subtle)] p-1 h-12">
+              <div className="flex h-[52px] shrink-0 items-center rounded-full border border-[var(--border-strong)]">
                 <button
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--bg-surface)] text-[var(--text-secondary)] shadow-sm disabled:opacity-40"
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-brand-red disabled:text-[var(--text-muted)]"
                   disabled={quantity <= 1}
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  aria-label="Diminuir"
+                  aria-label="Diminuir quantidade"
                 >
                   <Minus className="h-4 w-4" strokeWidth={2} />
                 </button>
-                <span className="w-7 text-center text-base font-bold text-[var(--text-primary)] tabular-nums">{quantity}</span>
+                <span className="w-6 text-center text-base font-bold text-[var(--text-primary)] tabular-nums" aria-live="polite">{quantity}</span>
                 <button
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-red text-white shadow-sm"
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-brand-red"
                   onClick={() => setQuantity(quantity + 1)}
-                  aria-label="Aumentar"
+                  aria-label="Aumentar quantidade"
                 >
                   <Plus className="h-4 w-4" strokeWidth={2} />
                 </button>
@@ -2923,7 +3077,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               <button
                 type="button"
                 onClick={handleAddToCart}
-                className="flex-1 flex items-center justify-center gap-2 rounded-full bg-brand-red text-sm font-semibold text-white shadow-[var(--shadow-md)] hover:bg-brand-red-dark active:scale-[0.98]"
+                className="flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-brand-red px-3 text-sm font-semibold text-white shadow-[var(--shadow-md)] hover:bg-brand-red-dark active:scale-[0.98]"
                 style={{ height: 52 }}
               >
                 <span>{editingCartItemId ? "Salvar" : "Adicionar"}</span>
@@ -2935,186 +3089,142 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       >
         {selectedProduct && (
           <div className="pb-4">
-            {/* Hero — foto (ou gradiente com ícone da categoria) com tags e preço flutuando por cima */}
+            {/* Hero (#235): foto quando houver; sem foto, a ilustração inteira da categoria
+               sobre o bege da marca (object-contain para não cortar o desenho). */}
             {(() => {
-              const categoryKind = getCategoryKind(selectedProductCategory?.name);
-              const HeroIcon = categoryKind === "SAVORY" ? Flame
-                : categoryKind === "SWEET" ? Sparkles
-                : categoryKind === "DRINK" ? Package
-                : Utensils;
-              const tags = getProductTags(selectedProduct, selectedProductCategory?.name, menuIndexes).filter((t) => t !== "Outros");
+              const fallbackArt = getFallbackArt(selectedProductCategory?.name, selectedProduct.name);
+              const isArt = !selectedProduct.image_url || selectedProduct.image_url.startsWith("/cardapio/");
               return (
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-[var(--bg-inverse)]">
+                <div className="mx-5 mt-2 flex h-44 items-center justify-center overflow-hidden rounded-2xl bg-[var(--bg-subtle)]">
                   <ProductImage
                     src={selectedProduct.image_url}
                     width={480}
                     height={360}
                     sizes="(max-width: 448px) 100vw, 448px"
-                    className="h-full w-full object-cover"
+                    className={isArt ? "h-44 w-44 object-cover" : "h-full w-full object-cover"}
                     priority
-                    fallback={
-                      <div
-                        className="flex h-full w-full items-center justify-center"
-                        style={{ background: "linear-gradient(135deg, var(--bg-inverse), var(--brand-red-dark))" }}
-                      >
-                        <HeroIcon className="h-16 w-16 text-white/20" strokeWidth={1.25} />
-                      </div>
-                    }
+                    fallback={fallbackArt ? (
+                      <Image src={fallbackArt} alt="" width={176} height={176} unoptimized className="h-44 w-44 object-cover" />
+                    ) : (
+                      <Utensils className="h-12 w-12 text-[var(--text-muted)]" strokeWidth={1.25} />
+                    )}
                   />
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
-                  {tags.length > 0 && (
-                    <div className="absolute left-4 top-4 flex flex-wrap gap-1.5">
-                      {tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-micro font-bold uppercase tracking-wide text-brand-red shadow-sm backdrop-blur-sm"
-                        >
-                          {tag === "Vegetariano" ? <Leaf className="h-3 w-3" strokeWidth={2} /> : <Flame className="h-3 w-3" strokeWidth={2} />}
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <p className="absolute bottom-3 left-4 right-4 text-lg font-bold leading-tight text-white drop-shadow-sm">
-                    {splitProductName(selectedProduct.name).title}
-                  </p>
                 </div>
               );
             })()}
 
             <div className="px-5 pt-4">
-              <div className="flex items-start justify-between gap-3">
-                <p className="flex-1 text-sm leading-relaxed text-[var(--text-secondary)]">
-                  {getProductSummary(selectedProduct, selectedProductCategory?.name, menuIndexes)}
-                </p>
-                <p className="shrink-0 rounded-xl bg-[var(--brand-light)] px-3 py-1.5 text-lg font-bold text-brand-red tabular-nums">
-                  <span className="text-xs mr-0.5 font-semibold opacity-70">R$</span>
-                  {selectedProduct.price.toFixed(2).replace(".", ",")}
-                </p>
+              <div className="flex items-baseline justify-between gap-3">
+                <h3 className="text-xl font-bold leading-tight tracking-tight text-[var(--text-primary)]">
+                  {splitProductName(selectedProduct.name).title}
+                </h3>
+                <p className="shrink-0 text-lg font-bold tabular-nums text-[var(--text-primary)]">{currency.format(selectedProduct.price)}</p>
               </div>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+                {getProductSummary(selectedProduct, selectedProductCategory?.name, menuIndexes)}
+              </p>
             </div>
 
-            {/* Ingredientes — chips tocáveis, risca quando removido */}
+            {/* Ingredientes — desmarcar retira do krep */}
             {productDefaultIngredients.length > 0 && (
-              <section className="mt-6 space-y-2 px-5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Ingredientes</p>
-                <div className="flex flex-wrap gap-2">
+              <section className="mt-5 px-5" aria-labelledby="sheet-ingredients">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h4 id="sheet-ingredients" className="text-[15px] font-bold text-[var(--text-primary)]">Ingredientes</h4>
+                  <span className="text-xs text-[var(--text-muted)]">Desmarque para retirar</span>
+                </div>
+                <ul className="mt-1 divide-y divide-[var(--border)]">
                   {productDefaultIngredients.map((ingredient) => {
                     const isIncluded = !removedIngredientIds.has(ingredient.id);
                     return (
-                      <button
-                        key={ingredient.id}
-                        type="button"
-                        onClick={() => {
-                          setRemovedIngredientIds((current) => {
-                            const next = new Set(current);
-                            if (next.has(ingredient.id)) next.delete(ingredient.id);
-                            else next.add(ingredient.id);
-                            return next;
-                          });
-                        }}
-                        className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-medium transition-all active:scale-[0.97] ${
-                          isIncluded
-                            ? "border-[var(--status-success)]/30 bg-[var(--status-success-bg)] text-[var(--status-success)]"
-                            : "border-[var(--border)] bg-[var(--bg-subtle)] text-[var(--text-muted)] line-through"
-                        }`}
-                      >
-                        {isIncluded && <Check className="h-3.5 w-3.5" strokeWidth={2.5} />}
-                        {ingredient.name}
-                      </button>
+                      <li key={ingredient.id}>
+                        <label className="flex min-h-12 cursor-pointer items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isIncluded}
+                            onChange={() => {
+                              setRemovedIngredientIds((current) => {
+                                const next = new Set(current);
+                                if (next.has(ingredient.id)) next.delete(ingredient.id);
+                                else next.add(ingredient.id);
+                                return next;
+                              });
+                            }}
+                            className="h-5 w-5 shrink-0 accent-[var(--text-primary)]"
+                          />
+                          <span className={`text-sm font-semibold ${isIncluded ? "text-[var(--text-primary)]" : "text-[var(--text-muted)] line-through"}`}>
+                            {ingredient.name}
+                          </span>
+                        </label>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               </section>
             )}
 
-            {/* Adicionais — card destacado, "Quer deixar ainda melhor?" */}
+            {/* Adicionais — todos os vinculados ao produto, sem limite de quantidade. */}
             {productAddons.length > 0 && (
-              <section
-                className="mx-5 mt-6 rounded-2xl border-2 border-dashed p-3"
-                style={{ borderColor: "rgba(231, 51, 53, 0.25)", backgroundColor: "var(--brand-light)" }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setAddonsExpanded((current) => !current)}
-                  className="flex w-full items-center justify-between gap-3 text-left"
-                >
-                  <div>
-                    <p className="text-caption font-semibold text-brand-red">Adicionais</p>
-                    <h3 className="mt-0.5 text-base font-semibold text-[var(--text-primary)]">Quer deixar ainda melhor?</h3>
-                    <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                      {selectedAddonCount > 0
-                        ? `${selectedAddonCount} ${selectedAddonCount === 1 ? "selecionado" : "selecionados"}`
-                        : `${productAddons.length} opções para turbinar`}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-brand-red px-3 py-1.5 text-xs font-semibold text-white">
-                    {addonsExpanded ? "Fechar" : "Ver"}
+              <section className="mt-5 px-5" aria-labelledby="sheet-addons">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h4 id="sheet-addons" className="text-[15px] font-bold text-[var(--text-primary)]">Adicionais</h4>
+                  <span className="rounded-full bg-[var(--bg-subtle)] px-2 py-0.5 text-micro font-semibold text-[var(--text-secondary)]">
+                    {selectedAddonCount > 0 ? `${selectedAddonCount} ${selectedAddonCount === 1 ? "escolhido" : "escolhidos"}` : "Opcional"}
                   </span>
-                </button>
-
-                {addonsExpanded && (
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {productAddons.map((addon) => {
-                      const qty = selectedAddons.get(addon.id) || 0;
-                      const isSelected = qty > 0;
-                      return (
-                        <div
-                          key={addon.id}
-                          className={`rounded-xl border p-3 ${
-                            isSelected ? "bg-[var(--status-success-bg)] border-[var(--status-success)]/30" : "bg-[var(--bg-surface)] border-[var(--border)]"
-                          }`}
-                        >
+                </div>
+                <ul className="mt-1 divide-y divide-[var(--border)]">
+                  {productAddons.map((addon) => {
+                    const qty = selectedAddons.get(addon.id) || 0;
+                    return (
+                      <li key={addon.id} className="flex min-h-14 items-center gap-3 py-1">
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-[var(--text-primary)]">{addon.name}</p>
-                          <p className={`text-xs font-semibold tabular-nums ${isSelected ? "text-[var(--status-success)]" : "text-brand-red"}`}>
-                            +{currency.format(addon.price)}
-                          </p>
-                          <div className="mt-2 flex items-center justify-between rounded-lg bg-[var(--bg-subtle)] p-1">
-                            <button
-                              type="button"
-                              className="focus-ring relative rounded-md bg-[var(--bg-surface)] p-1.5 text-[var(--text-secondary)] disabled:opacity-40 after:absolute after:inset-[-6px] after:content-['']"
-                              disabled={qty === 0}
-                              aria-label={`Diminuir ${addon.name}`}
-                              onClick={() => {
-                                setSelectedAddons((current) => {
-                                  const next = new Map(current);
-                                  const nextQty = Math.max(0, qty - 1);
-                                  if (nextQty === 0) next.delete(addon.id);
-                                  else next.set(addon.id, nextQty);
-                                  return next;
-                                });
-                              }}
-                            >
-                              <Minus className="h-4 w-4" strokeWidth={2} />
-                            </button>
-                            <span className="font-semibold text-sm text-[var(--text-primary)] tabular-nums">{qty}</span>
-                            <button
-                              type="button"
-                              className="focus-ring relative rounded-md bg-[var(--bg-surface)] p-1.5 text-brand-red after:absolute after:inset-[-6px] after:content-['']"
-                              aria-label={`Aumentar ${addon.name}`}
-                              onClick={() => {
-                                setSelectedAddons((current) => {
-                                  const next = new Map(current);
-                                  next.set(addon.id, qty + 1);
-                                  return next;
-                                });
-                              }}
-                            >
-                              <Plus className="h-4 w-4" strokeWidth={2} />
-                            </button>
-                          </div>
+                          <p className="text-xs tabular-nums text-[var(--text-secondary)]">+ {currency.format(addon.price)}</p>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div className="flex h-11 items-center rounded-full border border-[var(--border-strong)]">
+                          <button
+                            type="button"
+                            className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-brand-red disabled:text-[var(--text-muted)]"
+                            disabled={qty === 0}
+                            aria-label={`Diminuir ${addon.name}`}
+                            onClick={() => {
+                              setSelectedAddons((current) => {
+                                const next = new Map(current);
+                                const nextQty = Math.max(0, qty - 1);
+                                if (nextQty === 0) next.delete(addon.id);
+                                else next.set(addon.id, nextQty);
+                                return next;
+                              });
+                            }}
+                          >
+                            <Minus className="h-4 w-4" strokeWidth={2} />
+                          </button>
+                          <span className="w-6 text-center text-sm font-bold tabular-nums text-[var(--text-primary)]" aria-live="polite">{qty}</span>
+                          <button
+                            type="button"
+                            className="focus-ring flex h-11 w-11 items-center justify-center rounded-full text-brand-red"
+                            aria-label={`Aumentar ${addon.name}`}
+                            onClick={() => {
+                              setSelectedAddons((current) => {
+                                const next = new Map(current);
+                                next.set(addon.id, qty + 1);
+                                return next;
+                              });
+                            }}
+                          >
+                            <Plus className="h-4 w-4" strokeWidth={2} />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               </section>
             )}
 
             {/* Observação */}
-            <section className="mt-6 px-5">
+            <section className="mt-5 px-5">
               <FloatingInput
-                label="Observação"
+                label="Observação para a cozinha (opcional)"
                 value={itemNotes}
                 onChange={setItemNotes}
                 placeholder="Ex: sem sal, bem passado..."

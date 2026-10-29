@@ -30,6 +30,8 @@ Compare com código, migrations e testes antes de planejar trabalho novo.
 - [Planos e relatórios](archive/plans/): correções do PDV, UX, checkout,
   fidelização e estabilidade de pedidos.
 - [Diagnóstico local e proposta do checkout #221](archive/studies/auditoria-pedir-issue-221.md): evidências com fixtures e pendências, sem validação de produção.
+- [Checkout público #235 — dados do cliente](evidence/issue-235/README.md): antes/depois com fixtures da ordem nome → WhatsApp.
+- [Checkout público #235 — Fase 0](archive/studies/proposta-pedir-issue-235.md): auditoria, diagnóstico e protótipo, aprovados e implementados; QA em [evidence/issue-235/redesign](evidence/issue-235/redesign/README.md).
 - [Operação de pedidos #229 — proposta local para revisão](archive/studies/pedidos-229/estudo.md): estudo, contratos pendentes e protótipo sem serviços reais.
 - [Estudos](archive/studies/): configurações, usuários, filiais, taxas e pedidos mobile.
 - [Prompts de tarefas anteriores](archive/prompts/): contexto histórico, sem autorização para executar suas instruções.

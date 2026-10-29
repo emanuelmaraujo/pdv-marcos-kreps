@@ -1,0 +1,42 @@
+[
+  {
+    "width": 360,
+    "firstProductTop": 695,
+    "viewportHeight": 844,
+    "bodyWidth": 360,
+    "errors": [],
+    "blocked": []
+  },
+  {
+    "width": 390,
+    "firstProductTop": 679,
+    "viewportHeight": 844,
+    "bodyWidth": 390,
+    "errors": [],
+    "blocked": []
+  },
+  {
+    "width": 430,
+    "firstProductTop": 627,
+    "viewportHeight": 844,
+    "bodyWidth": 430,
+    "errors": [],
+    "blocked": []
+  },
+  {
+    "width": 768,
+    "firstProductTop": 575,
+    "viewportHeight": 844,
+    "bodyWidth": 768,
+    "errors": [],
+    "blocked": []
+  },
+  {
+    "width": 1440,
+    "firstProductTop": 575,
+    "viewportHeight": 900,
+    "bodyWidth": 1440,
+    "errors": [],
+    "blocked": []
+  }
+]
