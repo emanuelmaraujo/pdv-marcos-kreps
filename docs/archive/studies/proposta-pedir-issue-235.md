@@ -57,7 +57,7 @@ P0 = confiança/dado incorreto; P1 = conversão/clareza/acessibilidade; P2 = aca
 | 5 | P1 | Modalidade escolhida duas vezes (vitrine e dados) | `page.tsx:1771`, `:2355` | Escolha única na vitrine; nos dados vira resumo “Para levar · Feira [Alterar]” |
 | 6 | P1 | CTA “Montar” igual para kreps e bebidas; botões vermelhos grandes em todo card competem com o preço | `page.tsx:1942` | Botão “+” 44 px na foto (`aria-label="Adicionar {produto}"`); vermelho reservado ao CTA principal |
 | 7 | P1 | Fallback sem foto usa ícone de chama (sugere “picante”) e a folha do produto abre com faixa escura de ~300 px sem informação | `page.tsx:1912`, `:2957` | Fallback desenhado (ilustração de krep + “Salgado/Doce”), hero de 150 px |
-| 8 | P1 | Adicionais escondidos atrás de “Ver” em caixa tracejada com copy de marketing (“Quer deixar ainda melhor?”, “turbinar”) | `page.tsx:3047-3064` | Lista visível com preço “+ R$ 4,00” e contador; total atualizado no botão |
+| 8 | P1 | Adicionais escondidos atrás de “Ver” em caixa tracejada com copy de marketing (“Quer deixar ainda melhor?”, “turbinar”) | `page.tsx:3047-3064` | Lista visível com todos os adicionais vinculados ao produto, preço “+ R$ 4,00” e contador sem teto; total atualizado no botão |
 | 9 | P1 | Toast “adicionado ao pedido” cobre o título da revisão; título em card escuro gasta espaço | `page.tsx:2062`, captura `atual-revisao-390` | Toast curto acima da barra da sacola; título simples na barra |
 | 10 | P2 | Nome do item espremido entre preço e dois ícones na revisão (“Krep / Calabresa”) | captura `atual-revisao-390` | Linha: nome + modificadores à esquerda; preço e contador à direita; “Editar” como link |
 | 11 | P2 | Textos sem acento: “Cardapio” no cabeçalho; “Cartao de credito, debito” | `page.tsx:1674`, `_components/MercadoPagoBrick.tsx:158` | Corrigir (pode entrar já na Fase 1) |
@@ -135,7 +135,9 @@ vermelho `#E73335`, bege `#FAF5EE`/`#F3EDE4`, marrom `#1E1008`, Plus Jakarta San
 | Movimento | 150–200 ms, `ease-out`; desligado em `prefers-reduced-motion` | folha, toast, contador |
 
 Sem selos, depoimentos, “mais pedidos”, avaliações, prazos ou descontos inventados. Fotos reais
-quando houver `image_url`; fallback desenhado quando não houver.
+quando houver `image_url`; quando não houver, ilustração vetorial do krep no cone com luva de
+papel nas cores da marca (versões salgada e doce), sobre fundo bege radial. É uma ilustração,
+não uma foto: não representa um produto específico.
 
 ## 7. Telas propostas
 
@@ -154,6 +156,18 @@ Comparação direta: atual [cardápio 390](../../evidence/issue-235/fase0/atual-
 [revisão](../../evidence/issue-235/fase0/atual-revisao-390.png),
 [dados](../../evidence/issue-235/fase0/atual-dados-390.png),
 [cardápio 1440](../../evidence/issue-235/fase0/atual-menu-1440.png).
+
+Ajustes pedidos pelo operador nesta rodada (29/10):
+
+- **Adicionais sem limite**: a personalização mostra todos os adicionais vinculados ao produto
+  e o contador não tem teto. O código atual já funciona assim (`page.tsx`, contador de
+  adicionais sem máximo; `create-public-order` não limita quantidade); o “até 2 de cada” e as
+  duas opções eram só do protótipo. Quais adicionais aparecem em cada krep depende do cadastro
+  do cardápio.
+- **WhatsApp sem avisos de obrigatoriedade**: o campo mostra só “WhatsApp com DDD”, sem
+  “(obrigatório)/(opcional)” nem texto de ajuda. Já aplicado no código (PR #239). Em ENTREGA,
+  continuar sem número válido ainda mostra o erro acima do botão e não cria o pedido.
+- **Ilustração do krep** redesenhada (cone com luva de papel), no lugar do triângulo simples.
 
 Os textos de status da confirmação são exemplos; na implementação vêm dos status reais
 (`order-tracking-helpers.ts`). Valores e horários vêm sempre do servidor e da filial.

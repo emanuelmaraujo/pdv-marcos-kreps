@@ -20,7 +20,10 @@ Na etapa “Seus dados” de `/pedir` (#235), a ordem é: **Nome** (opcional),
 **WhatsApp com DDD** (obrigatório só em ENTREGA), **E-mail** (opcional, usado no
 pagamento online), modalidade, endereço (somente ENTREGA: CEP → rua/bairro
 derivados do CEP → número do imóvel → complemento → referência), observações e
-consentimentos. As obrigações de preenchimento não mudaram.
+consentimentos. As obrigações de preenchimento não mudaram. O campo mostra só
+“WhatsApp com DDD”, sem aviso de obrigatório/opcional (decisão do operador); em ENTREGA,
+continuar sem número válido mostra “Informe um WhatsApp válido com DDD para pedidos de
+entrega.” acima do botão e o pedido não é criado.
 
 A busca de perfil salvo continua disparando pelo WhatsApp, mesmo com o nome acima:
 nome digitado à mão nunca é sobrescrito; o nome salvo aparece como sugestão

@@ -2285,7 +2285,9 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             />
 
             <FloatingInput
-              label={orderType === "ENTREGA" ? "WhatsApp com DDD (obrigatório)" : "WhatsApp com DDD (opcional)"}
+              // Sem aviso de obrigatoriedade no campo (pedido do operador, #235). Em
+              // ENTREGA o envio continua bloqueado com mensagem se faltar o número.
+              label="WhatsApp com DDD"
               name="tel"
               autoComplete="tel"
               value={customerPhone}
@@ -2296,9 +2298,6 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               inputMode="tel"
               // Número pela metade avisa aqui, e não só quando o pedido é enviado.
               error={customerPhoneWarning}
-              help={orderType === "ENTREGA"
-                ? "Obrigatório na entrega, para falarmos com você sobre o pedido. Não precisa criar conta."
-                : "Se informar, enviamos as atualizações do pedido e recuperamos seus dados salvos. Não precisa criar conta."}
             />
 
             {isProfileChecking && (

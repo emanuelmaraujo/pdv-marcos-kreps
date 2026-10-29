@@ -19,6 +19,9 @@ issue. Não comprova a versão publicada nem a fonte web real.
 | Endereço, 390 px (viewport) | [antes](antes-endereco-390.png) | [depois](depois-endereco-390.png) |
 | ENTREGA, 1440 px | [antes](antes-dados-entrega-1440.png) | [depois](depois-dados-entrega-1440.png) |
 
+Depois destas capturas, o rótulo do WhatsApp perdeu “(obrigatório)/(opcional)” e o texto de
+ajuda, a pedido do operador; a validação no envio não mudou.
+
 Na página inteira, a barra fixa do rodapé aparece sobre o endereço; a captura de
 viewport mostra o endereço sem essa sobreposição.
 

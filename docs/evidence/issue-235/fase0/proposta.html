@@ -70,8 +70,8 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
 .item .pr{margin-top:8px;font-size:15px}
 .thumb{width:104px;height:104px;border-radius:var(--r-md);flex:none;position:relative;background:var(--bg-subtle);display:grid;place-items:center;overflow:visible}
 .thumb img{width:100%;height:100%;object-fit:contain;border-radius:var(--r-md)}
-.fallback{background:linear-gradient(145deg,#F6E9D7,#EFDCC3)}
-.fallback svg{width:54px;height:54px;margin-top:10px}
+.fallback{background:radial-gradient(circle at 50% 38%,#FFF9F0 0%,#F6EAD8 60%,#EEDDC5 100%)}
+.fallback svg{position:absolute;left:-10px;top:-12px;width:124px;height:124px}
 .fallback small{position:absolute;top:8px;left:0;right:0;text-align:center;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9A6B3F}
 .add{position:absolute;right:-6px;bottom:-6px;width:var(--tap);height:var(--tap);border-radius:50%;background:var(--bg-surface);border:1px solid var(--border-strong);box-shadow:var(--shadow-md);display:grid;place-items:center;color:var(--brand);font-size:24px;font-weight:600;line-height:1}
 .qtybadge{position:absolute;right:-6px;bottom:-6px;height:var(--tap);min-width:var(--tap);padding:0 12px;border-radius:var(--r-full);background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;box-shadow:var(--shadow-md)}
@@ -83,10 +83,10 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
 .dim{position:absolute;inset:0;background:rgba(30,16,8,.45)}
 .sheet{position:absolute;left:0;right:0;bottom:0;top:56px;background:var(--bg-surface);border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden}
 .grab{width:40px;height:4px;border-radius:4px;background:var(--border-strong);margin:8px auto 0}
-.hero{height:150px;margin:12px 16px 0;border-radius:var(--r-lg);display:grid;place-items:center;position:relative}
-.hero svg{width:88px;height:88px}
+.hero{height:132px;margin:12px 16px 0;border-radius:var(--r-lg);display:grid;place-items:center;position:relative}
+.hero svg{width:150px;height:150px;margin-top:-6px}
 .close{position:absolute;right:10px;top:10px;width:var(--tap);height:var(--tap);border-radius:50%;background:rgba(255,255,255,.9);display:grid;place-items:center;font-size:18px;box-shadow:var(--shadow-sm)}
-.sheet .body{padding:14px 16px;flex:1;overflow:hidden}
+.sheet .body{padding:14px 16px;flex:1;overflow:hidden;-webkit-mask-image:linear-gradient(#000 88%,transparent);mask-image:linear-gradient(#000 88%,transparent)}
 .grp{margin-top:18px}
 .grp-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
 .grp-h b{font-size:15px}
@@ -174,9 +174,48 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
 <h1 class="doc">#235 · Proposta visual — cardápio e checkout público (Fase 0)</h1>
 <p class="doc">Protótipo ilustrativo para aprovação. Não é a página publicada nem código do produto. Dados sintéticos; kreps sem foto usam o fallback desenhado; bebidas usam as artes existentes do app. Valores, horários e status são exemplos — na implementação, vêm sempre do servidor e da configuração da filial.</p>
 
-<svg width="0" height="0" style="position:absolute">
-  <symbol id="crepe" viewBox="0 0 64 64"><path d="M8 50 L32 10 L56 50 Z" fill="#F2C27B" stroke="#9A6B3F" stroke-width="2.5" stroke-linejoin="round"/><path d="M14 48 C24 40 40 40 50 48" fill="none" stroke="#9A6B3F" stroke-width="2.5" stroke-linecap="round"/><circle cx="26" cy="36" r="2.4" fill="#C0392B"/><circle cx="36" cy="30" r="2.4" fill="#5B8C3A"/><circle cx="38" cy="40" r="2.4" fill="#C0392B"/></symbol>
-  <symbol id="crepe-sweet" viewBox="0 0 64 64"><path d="M8 50 L32 10 L56 50 Z" fill="#F2C27B" stroke="#9A6B3F" stroke-width="2.5" stroke-linejoin="round"/><path d="M14 48 C24 40 40 40 50 48" fill="none" stroke="#6B3A1E" stroke-width="3" stroke-linecap="round"/><path d="M22 38 C28 32 36 32 42 38" fill="none" stroke="#6B3A1E" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="27" r="3" fill="#E73335"/></symbol>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-crepe" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#D9A055"/><stop offset=".45" stop-color="#F6D597"/><stop offset="1" stop-color="#CE9147"/></linearGradient>
+    <linearGradient id="g-rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E9B66A"/><stop offset="1" stop-color="#B97B36"/></linearGradient>
+    <linearGradient id="g-paper" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#EFE6DA"/><stop offset=".45" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E6DACB"/></linearGradient>
+    <linearGradient id="g-choc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6A3418"/><stop offset="1" stop-color="#3B1A0B"/></linearGradient>
+    <linearGradient id="g-cheese" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF4D2"/><stop offset="1" stop-color="#F2D891"/></linearGradient>
+    <radialGradient id="g-shadow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#1E1008" stop-opacity=".22"/><stop offset="1" stop-color="#1E1008" stop-opacity="0"/></radialGradient>
+  </defs>
+  <symbol id="cone" viewBox="0 0 120 120">
+    <ellipse cx="60" cy="110" rx="22" ry="4" fill="url(#g-shadow)"/>
+    <path d="M29 38 L60 108 L91 38 Z" fill="url(#g-crepe)"/>
+    <path d="M33 46 C48 52 70 50 86 44" fill="none" stroke="#B97B36" stroke-width="1.3" opacity=".5"/>
+    <path d="M38 57 C52 62 68 61 81 55" fill="none" stroke="#B97B36" stroke-width="1.2" opacity=".45"/>
+    <circle cx="47" cy="49" r="2.2" fill="#B97B36" opacity=".28"/><circle cx="72" cy="52" r="1.8" fill="#B97B36" opacity=".28"/><circle cx="58" cy="44" r="1.5" fill="#B97B36" opacity=".25"/>
+    <path d="M41 64 L60 108 L79 64 C67 69 53 69 41 64 Z" fill="url(#g-paper)"/>
+    <path d="M44.5 72 C55 76 65 76 75.5 72 L73.6 76.4 C64 80 56 80 46.4 76.4 Z" fill="#E73335"/>
+    <path d="M49 84 C56 86.5 64 86.5 71 84" fill="none" stroke="#E73335" stroke-width="1.2" opacity=".55"/>
+    <path d="M41 64 C53 69 67 69 79 64" fill="none" stroke="#D8CBBB" stroke-width="1"/>
+  </symbol>
+  <symbol id="crepe" viewBox="0 0 120 120">
+    <path d="M29 38 A31 5.5 0 0 1 91 38" fill="#C98A40" stroke="#B97B36" stroke-width="2"/>
+    <path d="M30 38 C34 22 50 18 60 22 C70 17 87 22 90 38 Z" fill="url(#g-cheese)"/>
+    <path d="M38 30 c2-5 9-5 10 0" fill="#F2D891"/><path d="M66 27 c3-5 10-4 10 1" fill="#F2D891"/>
+    <ellipse cx="45" cy="31" rx="5.2" ry="4" fill="#B23A2B"/><ellipse cx="45" cy="31" rx="2.6" ry="1.8" fill="#D2604E"/>
+    <ellipse cx="63" cy="26" rx="5.2" ry="4" fill="#B23A2B"/><ellipse cx="63" cy="26" rx="2.6" ry="1.8" fill="#D2604E"/>
+    <ellipse cx="78" cy="33" rx="4.6" ry="3.6" fill="#B23A2B"/>
+    <path d="M53 33 q3-4 6 0" stroke="#4F7A35" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M70 36 q2-3 5 0" stroke="#4F7A35" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <use href="#cone"/>
+    <path d="M29 38 A31 5.5 0 0 0 91 38" fill="none" stroke="url(#g-rim)" stroke-width="3" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="crepe-sweet" viewBox="0 0 120 120">
+    <path d="M29 38 A31 5.5 0 0 1 91 38" fill="#C98A40" stroke="#B97B36" stroke-width="2"/>
+    <path d="M30 38 C33 24 47 19 60 23 C73 18 88 24 90 38 Z" fill="url(#g-choc)"/>
+    <g transform="translate(48 20) rotate(-18)"><path d="M0 9 C-7 3 -7 -5 0 -5 C7 -5 7 3 0 9 Z" fill="#DC2F3A"/><path d="M-4 -5 L-1 -8 L0 -5 L1 -8 L4 -5 Z" fill="#4F7A35"/><circle cx="-2.5" cy="-1" r=".7" fill="#FFE08A"/><circle cx="2" cy="0" r=".7" fill="#FFE08A"/><circle cx="-.5" cy="3.5" r=".7" fill="#FFE08A"/><circle cx="2.5" cy="-3" r=".6" fill="#FFE08A"/></g>
+    <g transform="translate(70 20) rotate(16)"><path d="M0 9 C-7 3 -7 -5 0 -5 C7 -5 7 3 0 9 Z" fill="#DC2F3A"/><path d="M-4 -5 L-1 -8 L0 -5 L1 -8 L4 -5 Z" fill="#4F7A35"/><circle cx="-2.5" cy="-1" r=".7" fill="#FFE08A"/><circle cx="2" cy="0" r=".7" fill="#FFE08A"/><circle cx="-.5" cy="3.5" r=".7" fill="#FFE08A"/><circle cx="2.5" cy="-3" r=".6" fill="#FFE08A"/></g>
+    <circle cx="55" cy="30" r="1.1" fill="#FFF"/><circle cx="74" cy="31" r="1.1" fill="#FFF"/><circle cx="40" cy="33" r="1.1" fill="#FFF"/><circle cx="62" cy="34" r="1.1" fill="#FFF"/>
+    <use href="#cone"/>
+    <path d="M33 42 C36 50 40 44 43 51 C46 57 49 47 52 52" fill="none" stroke="#3B1A0B" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M74 43 C77 51 81 45 84 50" fill="none" stroke="#3B1A0B" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M29 38 A31 5.5 0 0 0 91 38" fill="none" stroke="url(#g-rim)" stroke-width="3" stroke-linecap="round"/>
+  </symbol>
 </svg>
 
 <!-- ───────────── MOBILE ───────────── -->
@@ -199,9 +238,9 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
     <div class="sec">
       <div class="t-h2">Kreps salgados</div>
       <div class="list">
-        <div class="item"><div class="txt"><div class="nm">Krep Frango com Catupiry</div><div class="ds">Frango desfiado, catupiry e muçarela.</div><div class="pr price">R$ 24,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><small>Salgado</small><span class="add" aria-label="Adicionar Krep Frango com Catupiry">+</span></div></div>
-        <div class="item"><div class="txt"><div class="nm">Krep Calabresa</div><div class="ds">Calabresa, cebola e muçarela. Personalize ingredientes e adicionais.</div><div class="pr price">R$ 22,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><small>Salgado</small><span class="qtybadge" aria-label="1 no pedido">1</span></div></div>
-        <div class="item"><div class="txt"><div class="nm">Krep Quatro Queijos com nome bem comprido para testar quebra</div><div class="ds">Muçarela, provolone, parmesão e catupiry.</div><div class="pr price">R$ 27,50</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><small>Salgado</small><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Frango com Catupiry</div><div class="ds">Frango desfiado, catupiry e muçarela.</div><div class="pr price">R$ 24,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add" aria-label="Adicionar Krep Frango com Catupiry">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Calabresa</div><div class="ds">Calabresa, cebola e muçarela. Personalize ingredientes e adicionais.</div><div class="pr price">R$ 22,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="qtybadge" aria-label="1 no pedido">1</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Quatro Queijos com nome bem comprido para testar quebra</div><div class="ds">Muçarela, provolone, parmesão e catupiry.</div><div class="pr price">R$ 27,50</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add">+</span></div></div>
       </div>
     </div>
     <div class="sec">
@@ -230,9 +269,14 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
         <div class="opt"><span class="chk on">✓</span><div class="l"><b>Cebola</b></div></div>
         <div class="opt"><span class="chk on">✓</span><div class="l"><b>Muçarela</b></div></div>
       </div>
-      <div class="grp"><div class="grp-h"><b>Adicionais</b><span class="pill">Opcional · até 2 de cada</span></div>
+      <div class="grp"><div class="grp-h"><b>Adicionais</b><span class="pill">Opcional</span></div>
         <div class="opt"><div class="l"><b>Bacon extra</b><span class="t-xs">+ R$ 4,00</span></div><div class="step"><i>−</i><span>1</span><i>+</i></div></div>
         <div class="opt"><div class="l"><b>Catupiry extra</b><span class="t-xs">+ R$ 3,50</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Cheddar</b><span class="t-xs">+ R$ 3,50</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Milho</b><span class="t-xs">+ R$ 2,00</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Ovo</b><span class="t-xs">+ R$ 2,50</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Azeitona</b><span class="t-xs">+ R$ 2,00</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
+        <div class="opt"><div class="l"><b>Tomate</b><span class="t-xs">+ R$ 2,00</span></div><div class="step"><i class="off">−</i><span>0</span><i>+</i></div></div>
       </div>
       <div class="more">Observação para a cozinha</div>
     </div>
@@ -277,9 +321,8 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
     <div class="card">
       <h3>Quem vai receber</h3>
       <div class="field"><label>Nome</label><div>Ana Fixture</div></div>
-      <div class="field focus"><label>WhatsApp com DDD (obrigatório)</label><div class="num">(61) 99999-0000</div></div>
-      <p class="help">Para falarmos com você sobre a entrega. Não precisa criar conta.</p>
-      <div class="ok">✓ Dados salvos encontrados <a>Não é você?</a></div>
+      <div class="field focus"><label>WhatsApp com DDD</label><div class="num">(61) 99999-0000</div></div>
+            <div class="ok">✓ Dados salvos encontrados <a>Não é você?</a></div>
       <div class="hint">Nome salvo: <b>Ana F.</b><span class="use">Usar</span></div>
       <div class="more">Adicionar e-mail (opcional)</div>
     </div>
@@ -363,13 +406,13 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
       <div class="d-tabs"><span class="tab on">Kreps salgados</span><span class="tab">Kreps doces</span><span class="tab">Bebidas</span></div>
       <div class="t-h2" style="margin-top:14px;font-size:20px">Kreps salgados</div>
       <div class="d-grid">
-        <div class="item"><div class="txt"><div class="nm">Krep Frango com Catupiry</div><div class="ds">Frango desfiado, catupiry e muçarela.</div><div class="pr price">R$ 24,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><small>Salgado</small><span class="add">+</span></div></div>
-        <div class="item"><div class="txt"><div class="nm">Krep Calabresa</div><div class="ds">Calabresa, cebola e muçarela.</div><div class="pr price">R$ 22,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><small>Salgado</small><span class="qtybadge">1</span></div></div>
-        <div class="item"><div class="txt"><div class="nm">Krep Quatro Queijos com nome bem comprido para testar quebra</div><div class="ds">Muçarela, provolone, parmesão e catupiry.</div><div class="pr price">R$ 27,50</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><small>Salgado</small><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Frango com Catupiry</div><div class="ds">Frango desfiado, catupiry e muçarela.</div><div class="pr price">R$ 24,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Calabresa</div><div class="ds">Calabresa, cebola e muçarela.</div><div class="pr price">R$ 22,90</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="qtybadge">1</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Quatro Queijos com nome bem comprido para testar quebra</div><div class="ds">Muçarela, provolone, parmesão e catupiry.</div><div class="pr price">R$ 27,50</div></div><div class="thumb fallback"><svg><use href="#crepe"/></svg><span class="add">+</span></div></div>
       </div>
       <div class="t-h2" style="margin-top:22px;font-size:20px">Kreps doces</div>
       <div class="d-grid">
-        <div class="item"><div class="txt"><div class="nm">Krep Nutella com Morango</div><div class="ds">Creme de avelã e morangos frescos.</div><div class="pr price">R$ 26,90</div></div><div class="thumb fallback"><svg><use href="#crepe-sweet"/></svg><small>Doce</small><span class="add">+</span></div></div>
+        <div class="item"><div class="txt"><div class="nm">Krep Nutella com Morango</div><div class="ds">Creme de avelã e morangos frescos.</div><div class="pr price">R$ 26,90</div></div><div class="thumb fallback"><svg><use href="#crepe-sweet"/></svg><span class="add">+</span></div></div>
       </div>
       <div class="t-h2" style="margin-top:22px;font-size:20px">Bebidas</div>
       <div class="d-grid">
@@ -401,9 +444,8 @@ p.doc{color:var(--text-secondary);font-size:13px;margin-bottom:24px;max-width:90
       <a class="link">‹ Voltar para a sacola</a>
       <div class="card" style="margin:8px 0 0">
         <h3>Quem vai retirar</h3>
-        <div class="grid2"><div class="field"><label>Nome (opcional)</label><div>Ana Fixture</div></div><div class="field"><label>WhatsApp com DDD (opcional)</label><div class="num">(61) 99999-0000</div></div></div>
-        <p class="help">Com o WhatsApp, enviamos as atualizações do pedido e recuperamos seus dados salvos. Não precisa criar conta.</p>
-        <div class="ok">✓ Dados salvos encontrados <a>Não é você?</a></div>
+        <div class="grid2"><div class="field"><label>Nome (opcional)</label><div>Ana Fixture</div></div><div class="field"><label>WhatsApp com DDD</label><div class="num">(61) 99999-0000</div></div></div>
+                <div class="ok">✓ Dados salvos encontrados <a>Não é você?</a></div>
         <div class="more">Adicionar e-mail (opcional)</div>
       </div>
       <div class="card" style="margin:12px 0 0"><div class="mrow"><div class="l"><b>Para levar · Feira</b><span class="t-xs">Retirada no balcão da unidade · Embalagem para viagem R$ 2,00</span></div><a class="link">Alterar</a></div></div>
