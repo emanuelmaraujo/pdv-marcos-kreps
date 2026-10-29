@@ -14,6 +14,22 @@ O servidor continua validando preços, descontos e disponibilidade ao enviar o p
 antes do pagamento. O WhatsApp é obrigatório para entrega e opcional nas outras
 modalidades; não é necessário criar conta.
 
+## Ordem dos dados do cliente no checkout público
+
+Na etapa “Seus dados” de `/pedir` (#235), a ordem é: **Nome** (opcional),
+**WhatsApp com DDD** (obrigatório só em ENTREGA), **E-mail** (opcional, usado no
+pagamento online), modalidade, endereço (somente ENTREGA: CEP → rua/bairro
+derivados do CEP → número do imóvel → complemento → referência), observações e
+consentimentos. As obrigações de preenchimento não mudaram.
+
+A busca de perfil salvo continua disparando pelo WhatsApp, mesmo com o nome acima:
+nome digitado à mão nunca é sobrescrito; o nome salvo aparece como sugestão
+tocável logo abaixo do WhatsApp, e “Não é você?” segue disponível. Os campos usam
+`autocomplete` (`name`, `tel`, `email`, `postal-code`) e o aviso de telefone
+incompleto fica ligado ao campo por `aria-describedby`. O redesign visual amplo
+da vitrine e do checkout previsto na #235 depende da aprovação da proposta visual
+(Fase 0) e não faz parte desta alteração.
+
 ## Pagamento na entrega (COD)
 
 Contrato implementado pela migration `20261025212158_public_delivery_payment_contract.sql`,

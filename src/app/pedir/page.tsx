@@ -2271,61 +2271,60 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 shadow-[var(--shadow-sm)]">
             <h2 className="text-base font-semibold text-[var(--text-primary)]">Seus dados</h2>
 
+            {/* Ordem pedida na #235: nome primeiro, WhatsApp depois. A busca do
+                perfil continua disparando pelo WhatsApp e nunca sobrescreve um
+                nome digitado à mão (ver resolveNameFromLookup) — no máximo
+                oferece a sugestão logo abaixo do WhatsApp. */}
+            <FloatingInput
+              label="Nome (opcional)"
+              name="name"
+              autoComplete="name"
+              value={customerName}
+              onChange={(v) => applyResolvedName(resolveNameFromInput(v), customerPhone)}
+              placeholder="Como podemos te chamar?"
+            />
+
             <FloatingInput
               label={orderType === "ENTREGA" ? "WhatsApp com DDD (obrigatório)" : "WhatsApp com DDD (opcional)"}
+              name="tel"
+              autoComplete="tel"
               value={customerPhone}
               onChange={(v) => setCustomerInfo(customerName, formatWhatsAppInput(v))}
               onBlur={() => setCustomerInfo(customerName, formatWhatsAppInput(customerPhone))}
-              placeholder="(11) 99999-9999"
+              placeholder="(61) 99999-9999"
               type="tel"
               inputMode="tel"
-              help={orderType === "ENTREGA" ? "Obrigatório para contato sobre a entrega." : "Opcional. Usamos o WhatsApp para enviar atualizações do pedido."}
+              // Número pela metade avisa aqui, e não só quando o pedido é enviado.
+              error={customerPhoneWarning}
+              help={orderType === "ENTREGA"
+                ? "Obrigatório na entrega, para falarmos com você sobre o pedido. Não precisa criar conta."
+                : "Se informar, enviamos as atualizações do pedido e recuperamos seus dados salvos. Não precisa criar conta."}
             />
 
-            {/* Número pela metade avisa aqui, e não só quando o pedido é enviado. */}
-            {customerPhoneWarning && (
-              <p className="text-xs font-semibold text-[var(--status-danger)]" role="alert">
-                {customerPhoneWarning}
-              </p>
-            )}
-
-            <div className="rounded-xl bg-[var(--status-warning-bg)] px-3 py-2 text-xs font-medium text-[var(--status-warning)]">
-              {orderType === "ENTREGA"
-                ? "Para entrega, precisamos de um WhatsApp com DDD e do endereço. Não é necessário criar uma conta."
-                : "Você pode comprar sem preencher seus dados. Se informar o WhatsApp, ele será usado para avisos de status do pedido."}
-            </div>
-
             {isProfileChecking && (
-              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]" role="status">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-red" />
                 Buscando dados salvos...
               </div>
             )}
 
                 {profileNotice && (
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2" role="status">
                     <p className="text-xs font-medium text-[var(--status-success)]">{profileNotice}</p>
                     <button
                       type="button"
                       onClick={handleForgetSavedProfile}
-                      className="shrink-0 text-xs font-medium text-[var(--text-muted)] underline hover:text-[var(--text-secondary)]"
+                      className="inline-flex min-h-11 shrink-0 items-center text-xs font-medium text-[var(--text-muted)] underline hover:text-[var(--text-secondary)]"
                     >
                       Não é você?
                     </button>
                   </div>
                 )}
                 {checkoutPhone && profileLookupState === "not_found" && (
-                  <p className="text-xs font-medium text-[var(--status-warning)]">
-                    Não encontrei dados salvos. Complete abaixo.
+                  <p className="text-xs font-medium text-[var(--text-secondary)]" role="status">
+                    Não encontramos dados salvos para este WhatsApp.
                   </p>
                 )}
-
-                <FloatingInput
-                  label="Nome (opcional)"
-                  value={customerName}
-                  onChange={(v) => applyResolvedName(resolveNameFromInput(v), customerPhone)}
-                  placeholder="Como te chamar?"
-                />
 
                 {nameSuggestion && (
                   <button
@@ -2334,7 +2333,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       { name: nameSuggestion, source: "LOOKUP", suggestion: null },
                       customerPhone,
                     )}
-                    className="w-full rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-left text-xs font-medium text-[var(--text-secondary)]"
+                    className="min-h-11 w-full rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-left text-xs font-medium text-[var(--text-secondary)]"
                   >
                     Salvamos <strong>{nameSuggestion}</strong> para este WhatsApp. Tocar aqui usa esse nome.
                   </button>
@@ -2342,10 +2341,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
                 <FloatingInput
                   label="E-mail (opcional)"
+                  name="email"
+                  autoComplete="email"
                   value={customerEmail}
                   onChange={setCustomerEmail}
-                  placeholder="usado no PIX"
+                  placeholder="voce@exemplo.com"
                   type="email"
+                  inputMode="email"
+                  help="Usado no pagamento online (Pix ou cartão)."
                 />
 
                 <div>
@@ -2456,8 +2459,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     {selectedAddressId === null && (
                       <div className="grid grid-cols-2 gap-2">
                         <input
-                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
+                          className="col-span-2 min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red"
                           placeholder="CEP *"
+                          aria-label="CEP (obrigatório)"
+                          name="postal-code"
+                          autoComplete="postal-code"
                           inputMode="numeric"
                           maxLength={9}
                           value={deliveryAddress.postal_code}
@@ -2472,28 +2478,37 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           </p>
                         )}
                         {cepStatus === "resolved" && (
-                          <p className="col-span-2 text-xs text-[var(--text-secondary)]">
+                          <p className="col-span-2 text-xs text-[var(--text-secondary)]" role="status">
                             {deliveryAddress.street}, {deliveryAddress.neighborhood} — {deliveryAddress.city}/{deliveryAddress.state}
                           </p>
                         )}
                         <input
-                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
-                          placeholder="Número"
+                          className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
+                          placeholder="Nº do imóvel"
+                          aria-label="Número do imóvel (casa, prédio ou lote)"
+                          name="address-number"
+                          autoComplete="off"
                           inputMode="numeric"
                           disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.number}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, number: e.target.value }))}
                         />
                         <input
-                          className="rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
+                          className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
                           placeholder="Complemento"
+                          aria-label="Complemento (apto, bloco, quadra)"
+                          name="address-complement"
+                          autoComplete="address-line2"
                           disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.complement}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, complement: e.target.value }))}
                         />
                         <input
-                          className="col-span-2 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
+                          className="col-span-2 min-h-11 rounded-lg border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red disabled:opacity-50"
                           placeholder="Ponto de referência (opcional)"
+                          aria-label="Ponto de referência (opcional)"
+                          name="address-reference"
+                          autoComplete="off"
                           disabled={cepStatus !== "resolved"}
                           value={deliveryAddress.reference}
                           onChange={(e) => setDeliveryAddress((p) => ({ ...p, reference: e.target.value }))}
@@ -2543,7 +2558,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <textarea
                   value={orderNotes}
                   onChange={(event) => setOrderNotes(event.target.value)}
-                  placeholder="Alguma observação para a equipe?"
+                  aria-label="Observações para a equipe (opcional)"
+                  placeholder="Alguma observação para a equipe? (opcional)"
                   className="h-14 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
                 />
 
