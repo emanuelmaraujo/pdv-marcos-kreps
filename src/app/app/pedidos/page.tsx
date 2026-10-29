@@ -693,17 +693,23 @@ function PedidosWorkspace() {
           setSelectedOrder(order);
           return;
         }
-        // Entrega só os itens prontos. O trigger derivará o status do pedido.
+        // Entrega atômica das unidades e itens prontos via batchUpdateProductionStatus:
+        const readyUnits = (order.handoffs ?? [])
+          .filter((u) => u.prep_status === "READY")
+          .map((u) => u.id);
         const readyItemIds = (order.items ?? [])
           .filter((i) => i.status === "READY")
           .map((i) => i.id);
-        if (readyItemIds.length === 0) {
+        if (readyUnits.length === 0 && readyItemIds.length === 0) {
           window.alert("Nenhum item pronto pra entregar ainda.");
           return;
         }
-        for (const id of readyItemIds) {
-          await pdvApi.updateOrderItemStatus({ orderItemId: id, newStatus: "DELIVERED" });
-        }
+        await pdvApi.batchUpdateProductionStatus({
+          orderId: order.id,
+          unitIds: readyUnits,
+          itemIds: readyItemIds,
+          newStatus: "DELIVERED",
+        });
       } else if (order.status === "PRONTO" && order.type !== "ENTREGA") {
         await pdvApi.updateOrderStatus({ orderId: order.id, newStatus: "ENTREGUE" });
       }

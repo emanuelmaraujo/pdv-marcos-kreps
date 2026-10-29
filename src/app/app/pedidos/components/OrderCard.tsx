@@ -5,6 +5,7 @@ import { Bike, CheckCircle2, Clock, CreditCard, Loader2, MapPin, Package, Shoppi
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { PaymentStatusBadge } from "./PaymentStatusBadge";
 import { CategoryLookup } from "./order-item-presentation";
+import { productionProgress } from "./production-progress";
 import { deliveryNumberLabel, deliveryStreetName } from "@/lib/utils/order-delivery";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -36,18 +37,24 @@ export function OrderCard({ order, onClick, now, onQuickAction, onMarkDelivered,
   const elapsed = since ? Math.floor((now - new Date(since).getTime()) / 60_000) : 0;
   const urgent = active && elapsed >= 20;
   const activeItems = (order.items ?? []).filter((item) => item.status !== "CANCELLED");
-  const readyItems = activeItems.filter((item) => ["READY", "DELIVERED"].includes(item.status)).length;
+  const progress = productionProgress(order);
+  // Parcial só por entregas já feitas não tem o que entregar: sem botão que só mostraria alerta.
+  const hasReadyToDeliver = activeItems.some((item) => item.status === "READY")
+    || (order.handoffs ?? []).some((u) => u.prep_status === "READY" && activeItems.some((item) => item.id === u.order_item_id));
+  const progressText = `${progress.done}/${progress.total} ${progress.total === 1 ? "unidade pronta" : "unidades prontas"}`;
   const nextAction = order.status === "AGUARDANDO_CONFIRMACAO"
     ? { label: "Confirmar pedido", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90", run: () => onQuickAction?.(order) }
     : order.status === "NA_FILA"
       ? { label: "Marcar pronto", Icon: Package, color: "bg-brand-amber text-brand-charcoal hover:bg-brand-amber/90", run: () => onQuickAction?.(order) }
-      : order.status === "PRONTO_PARCIAL"
+      : order.status === "PRONTO_PARCIAL" && order.type === "ENTREGA"
         ? { label: "Ver itens prontos", Icon: Package, color: "bg-[var(--status-warning)] text-white hover:opacity-90", run: () => onClick(order) }
-        : order.status === "PRONTO" && order.type === "ENTREGA"
-          ? { label: "Despachar", Icon: Bike, color: "bg-blue-500 text-white hover:bg-blue-600", run: () => onClick(order) }
-          : order.status === "PRONTO"
-            ? { label: "Entregar", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90", run: () => onQuickAction?.(order) }
-            : null;
+        : order.status === "PRONTO_PARCIAL" && hasReadyToDeliver
+          ? { label: "Entregar prontos", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90", run: () => onQuickAction?.(order) }
+          : order.status === "PRONTO" && order.type === "ENTREGA"
+            ? { label: "Despachar", Icon: Bike, color: "bg-blue-500 text-white hover:bg-blue-600", run: () => onClick(order) }
+            : order.status === "PRONTO"
+              ? { label: "Entregar", Icon: CheckCircle2, color: "bg-[var(--status-success)] text-white hover:opacity-90", run: () => onQuickAction?.(order) }
+              : null;
   const awaitingCourier = order.status === "SAIU_PARA_ENTREGA";
   const canDeliverFromQueue = !!onMarkDelivered && order.status === "NA_FILA" && order.type !== "ENTREGA";
   const triggerAction = async (event: React.MouseEvent) => { event.stopPropagation(); if (!nextAction || loading) return; setLoading(true); try { await nextAction.run(); } finally { setLoading(false); } };
@@ -62,7 +69,7 @@ export function OrderCard({ order, onClick, now, onQuickAction, onMarkDelivered,
       {pendingPayment && <div className="flex items-center justify-between gap-2 rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-xs font-bold text-[var(--text-primary)]"><span>{reopenedComanda ? "Adicional a receber" : `Pagamento ${order.payment_status === "PARTIAL" ? "parcial" : "pendente"}`}</span><span className="tabular-nums">{currency.format(pendingAmount || order.total_amount)}</span></div>}
       {awaitingCourier && <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-700"><Bike className="h-3.5 w-3.5" /><span className="truncate">Aguardando confirmação de {order.courier_name || "motoboy"}</span></div>}
       {(order.items ?? []).length > 0 && <ProductionHandoff order={order} onChanged={onHandoffChanged} offline={handoffOffline} />}
-      {activeItems.length > 1 && <div className="flex items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5"><span className="text-[11px] font-semibold text-[var(--text-secondary)]">{readyItems}/{activeItems.length} linhas prontas</span><div className="flex flex-1 flex-wrap gap-1">{activeItems.map((item) => <span key={item.id} className={`h-2 w-2 rounded-full ${ITEM_DOT[item.status]}`} />)}</div></div>}
+      {progress.total > 1 && <div className="flex items-center gap-2 rounded-lg bg-[var(--bg-subtle)] px-2.5 py-1.5"><span className="text-[11px] font-semibold text-[var(--text-secondary)]">{progressText}</span><div className="flex flex-1 flex-wrap gap-1">{activeItems.map((item) => <span key={item.id} className={`h-2 w-2 rounded-full ${ITEM_DOT[item.status]}`} />)}</div></div>}
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-2.5"><div><p className="text-[10px] font-medium text-[var(--text-muted)]">Total do pedido</p><p className="text-base font-black tabular-nums text-[var(--text-primary)]">{currency.format(order.total_amount)}</p></div><div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">{pendingPayment && onPay && <button type="button" onClick={triggerPayment} className="flex h-11 items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 text-xs font-black text-[var(--text-primary)] active:scale-95"><CreditCard className="h-3.5 w-3.5" />Receber</button>}{canDeliverFromQueue && <button type="button" onClick={triggerDeliver} className="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--status-success)] px-3 text-xs font-black text-white shadow-sm active:scale-95">{delivering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}Entregar</button>}{nextAction && <button type="button" onClick={triggerAction} className={`flex h-11 max-w-[210px] items-center gap-1.5 rounded-xl px-3 text-xs font-black shadow-sm active:scale-95 ${nextAction.color}`}>{loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <nextAction.Icon className="h-3.5 w-3.5" />}{nextAction.label}</button>}</div></footer>
     </div>
   </article>;

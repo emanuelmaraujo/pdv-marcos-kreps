@@ -761,6 +761,31 @@ export const pdvApi = {
       reason: payload.reason,
     }),
 
+  // Lote por unidade/linha (#229 / 1B). Passa pela Edge Function para que o
+  // WhatsApp/Push de "pronto" saia na mesma transição do quadro.
+  batchUpdateProductionStatus: (payload: {
+    orderId: string;
+    unitIds?: string[];
+    itemIds?: string[];
+    newStatus: 'IN_PREPARATION' | 'READY' | 'DELIVERED';
+    reason?: string;
+  }) =>
+    invokeEdgeFunction<{
+      success: boolean;
+      changed_units: number;
+      changed_items: number;
+      skipped: number;
+      previous_order_status: OrderStatus;
+      order_status: OrderStatus;
+    }>('update-order-item-status', {
+      mode: 'batch',
+      order_id: payload.orderId,
+      unit_ids: payload.unitIds ?? [],
+      item_ids: payload.itemIds ?? [],
+      new_status: payload.newStatus,
+      reason: payload.reason,
+    }),
+
   createAttendantOrder: (payload: Record<string, unknown>) =>
     invokeEdgeFunction<CreateAttendantOrderResponse>('create-attendant-order', payload),
 

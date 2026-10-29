@@ -19,6 +19,7 @@ Para os guias mantidos, volte ao [índice principal](../README.md).
 - [Operação de pedidos #229 — estudo e protótipo local](studies/pedidos-229/estudo.md)
 - [Operação de pedidos #229 — revisão dos contratos e proposta da etapa 1](studies/pedidos-229/continuacao-etapa-1.md)
 - [Operação de pedidos #229 — planejamento e proposta da etapa 1B](studies/pedidos-229/proposta-etapa-1b.md)
+- [Operação de pedidos #229 — proposta de cancelar só as unidades restantes](studies/pedidos-229/proposta-cancelamento-parcial.md) (aguarda aprovação)
 
 - [Cardápio e checkout público — diagnóstico da issue #221](studies/auditoria-pedir-issue-221.md)
 

@@ -138,6 +138,12 @@ export interface HandoffUnit {
   job_status: 'PENDING' | 'PROCESSING' | 'PRINTED' | 'FAILED' | 'SKIPPED' | null;
   job_id: string | null;
   history: { origin: string; actor_name: string | null; reason: string | null; created_at: string }[];
+  prep_status?: OrderItemStatus;
+  prep_started_at?: string | null;
+  ready_at?: string | null;
+  delivered_at?: string | null;
+  cancelled_at?: string | null;
+  prep_version?: number;
 }
 
 export interface OrderItem {
