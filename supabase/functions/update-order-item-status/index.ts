@@ -33,6 +33,66 @@ const ALLOWED_TRANSITIONS: Record<ItemStatus, ItemStatus[]> = {
   CANCELLED:      [],
 };
 
+// Reivindica (lease atômico), envia e marca os avisos pendentes do pedido.
+// Pedido já encerrado não recebe aviso tardio; com "pronto" pendente, o
+// "parcial" deixa de fazer sentido e é descartado.
+async function flushProductionNotifications(supabaseAdmin: any, orderId: string): Promise<string[]> {
+  const { data: claimed, error } = await supabaseAdmin.rpc("claim_production_notifications", { p_order_id: orderId });
+  if (error) {
+    console.error("[update-order-item-status] fila de avisos indisponível", error.message);
+    return [];
+  }
+  if (!claimed?.length) return [];
+
+  const { data: order } = await supabaseAdmin
+    .from("orders")
+    .select("id, status, daily_number, customer_phone, customer_name, branch_id, branches ( code, name )")
+    .eq("id", orderId)
+    .single();
+  const hasReady = claimed.some((row: any) => row.event_type === "order_ready");
+  const sent: string[] = [];
+
+  for (const row of claimed) {
+    let outcome: string;
+    if (!order || ["ENTREGUE", "CANCELADO", "EXPIRADO"].includes(order.status)) outcome = "skipped_closed";
+    // "Parte pronta" só faz sentido enquanto o pedido está em PRONTO_PARCIAL; nunca depois de "pronto".
+    else if (row.event_type === "order_partial_ready" && (hasReady || order.status !== "PRONTO_PARCIAL")) outcome = "skipped_superseded";
+    else {
+      const whatsapp = await enqueueWhatsAppMessage(supabaseAdmin, {
+        orderId:      order.id,
+        branchId:     order.branch_id,
+        eventType:    row.event_type,
+        phone:        order.customer_phone,
+        customerName: order.customer_name,
+        dailyNumber:  order.daily_number,
+        branchCode:   order.branches?.code ?? null,
+        branchName:   order.branches?.name ?? null,
+      });
+      if (!whatsapp.enqueued && ["insert_error", "exception"].includes(whatsapp.reason ?? "")) {
+        // Falha transitória: devolve o aviso à fila para a próxima chamada (sem push, para não duplicar).
+        await supabaseAdmin.from("production_notification_outbox").update({ claimed_at: null })
+          .eq("order_id", orderId).eq("event_type", row.event_type).eq("claimed_at", row.claimed_at);
+        continue;
+      }
+      await sendOrderReadyPush(supabaseAdmin, {
+        orderId:     order.id,
+        dailyNumber: order.daily_number,
+        partial:     row.event_type === "order_partial_ready",
+      });
+      outcome = whatsapp.enqueued ? "sent" : `sent_push_whatsapp_${whatsapp.reason}`;
+      sent.push(row.event_type);
+    }
+    const { error: markErr } = await supabaseAdmin
+      .from("production_notification_outbox")
+      .update({ processed_at: new Date().toISOString(), outcome })
+      .eq("order_id", orderId)
+      .eq("event_type", row.event_type)
+      .eq("claimed_at", row.claimed_at);
+    if (markErr) console.error("[update-order-item-status] aviso enviado sem marcação", row.event_type, markErr.message);
+  }
+  return sent;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(req) });
 
@@ -70,49 +130,38 @@ serve(async (req) => {
 
     // Modo lote (#229 / 1B): avanço por unidade/linha numa única transação no
     // banco (batch_update_production_status valida filial, papel e transições
-    // com o JWT do próprio usuário). Aqui só notificamos o cliente, e apenas
-    // quando o pedido realmente entrou em PRONTO_PARCIAL/PRONTO neste comando.
+    // com o JWT do próprio usuário). Repetir o mesmo comando é seguro: o que já
+    // atingiu a etapa é ignorado. Deadlock com comando legado simultâneo desfaz a
+    // transação inteira e é repetido aqui.
     if (body?.mode === "batch") {
-      const { data: result, error: rpcErr } = await supabaseClientAuth.rpc("batch_update_production_status", {
-        p_order_id: body.order_id,
-        p_unit_ids: Array.isArray(body.unit_ids) ? body.unit_ids : [],
-        p_item_ids: Array.isArray(body.item_ids) ? body.item_ids : [],
-        p_new_status: body.new_status,
-        p_reason: typeof body.reason === "string" ? body.reason : null,
-      });
-      if (rpcErr) throw new Error(rpcErr.message);
-
-      const previous = result?.previous_order_status as string | undefined;
-      const current = result?.order_status as string | undefined;
-      const becamePartial = current === "PRONTO_PARCIAL" && previous === "NA_FILA";
-      const becameReady = current === "PRONTO" && previous !== "PRONTO";
-      if (becamePartial || becameReady) {
-        const { data: orderAfter } = await supabaseAdmin
-          .from("orders")
-          .select("id, daily_number, customer_phone, customer_name, branch_id, branches ( code, name )")
-          .eq("id", body.order_id)
-          .single();
-        if (orderAfter) {
-          await enqueueWhatsAppMessage(supabaseAdmin, {
-            orderId:      orderAfter.id,
-            branchId:     orderAfter.branch_id,
-            eventType:    becameReady ? "order_ready" : "order_partial_ready",
-            phone:        orderAfter.customer_phone,
-            customerName: orderAfter.customer_name,
-            dailyNumber:  orderAfter.daily_number,
-            branchCode:   (orderAfter as any).branches?.code ?? null,
-            branchName:   (orderAfter as any).branches?.name ?? null,
-          });
-          await sendOrderReadyPush(supabaseAdmin, {
-            orderId:     orderAfter.id,
-            dailyNumber: orderAfter.daily_number,
-            partial:     !becameReady,
-          });
-        }
+      let result: any = null;
+      let rpcErr: any = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        ({ data: result, error: rpcErr } = await supabaseClientAuth.rpc("batch_update_production_status", {
+          p_order_id: body.order_id,
+          p_unit_ids: Array.isArray(body.unit_ids) ? body.unit_ids : [],
+          p_item_ids: Array.isArray(body.item_ids) ? body.item_ids : [],
+          p_new_status: body.new_status,
+          p_reason: typeof body.reason === "string" ? body.reason : null,
+        }));
+        if (rpcErr?.code !== "40P01") break;
+        await new Promise((r) => setTimeout(r, 120 * attempt));
+      }
+      if (rpcErr) {
+        // Deadlock esgotado ou falha sem código (transporte): resultado incerto → repetir é seguro.
+        const transient = rpcErr.code === "40P01" || !rpcErr.code;
+        return new Response(
+          JSON.stringify({ success: false, error: rpcErr.code === "40P01" ? "Outro operador alterou o pedido ao mesmo tempo. Repita a ação." : rpcErr.message, code: rpcErr.code ?? null }),
+          { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: transient ? 503 : 400 },
+        );
       }
 
+      // Avisos saem da fila gravada na mesma transação da mudança de status.
+      // Pendências de uma chamada anterior que caiu após o commit também saem aqui.
+      const notified = await flushProductionNotifications(supabaseAdmin, body.order_id);
+
       return new Response(
-        JSON.stringify({ success: true, ...result }),
+        JSON.stringify({ success: true, ...result, notified }),
         { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }, status: 200 },
       );
     }

@@ -9,9 +9,10 @@
 --     do pedido (update-order-status), que já tratam COD (#221) e snapshot.
 --   * Comandos legados por linha/pedido continuam válidos e são espelhados nas
 --     unidades sem regredir unidades já entregues.
---   * Notificações WhatsApp/Push não saem do banco: a Edge Function
---     update-order-item-status (modo lote) chama esta RPC e notifica somente na
---     transição real do pedido para PRONTO_PARCIAL/PRONTO.
+--   * Notificações WhatsApp/Push não saem do banco: a transição para
+--     PRONTO_PARCIAL/PRONTO grava um pedido de aviso na fila
+--     production_notification_outbox, na mesma transação; a Edge Function
+--     update-order-item-status (modo lote) reivindica, envia e marca.
 
 -- 1. Colunas de ciclo de produção nas unidades existentes
 ALTER TABLE public.production_handoff_units
@@ -292,7 +293,37 @@ CREATE TRIGGER handoff_unit_prep_status_trigger
 AFTER UPDATE OF prep_status ON public.production_handoff_units
 FOR EACH ROW EXECUTE FUNCTION handoff_private.trg_unit_prep_update();
 
--- 5. RPC atômica para avanço de unidades e itens em lote.
+-- 5. Fila transacional de avisos ao cliente. A linha nasce na MESMA transação que
+--    leva o pedido a PRONTO_PARCIAL/PRONTO; a Edge Function reivindica, envia e marca.
+--    Se a função cair depois do commit, a repetição do comando reenvia o pendente.
+--    PK (pedido, evento) impede segundo aviso do mesmo tipo.
+CREATE TABLE IF NOT EXISTS public.production_notification_outbox (
+  order_id uuid NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+  event_type text NOT NULL CHECK (event_type IN ('order_partial_ready', 'order_ready')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  claimed_at timestamptz,
+  processed_at timestamptz,
+  outcome text,
+  PRIMARY KEY (order_id, event_type)
+);
+ALTER TABLE public.production_notification_outbox ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.production_notification_outbox FROM PUBLIC, anon, authenticated;
+GRANT SELECT, UPDATE ON public.production_notification_outbox TO service_role;
+
+-- Reivindicação atômica (lease de 30 s): chamadas concorrentes não enviam o mesmo aviso; se a
+-- função cair após reivindicar, o próximo comando no pedido depois do prazo reenvia.
+CREATE OR REPLACE FUNCTION public.claim_production_notifications(p_order_id uuid)
+RETURNS SETOF public.production_notification_outbox
+LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
+  UPDATE public.production_notification_outbox SET claimed_at = now()
+  WHERE order_id = p_order_id AND processed_at IS NULL
+    AND (claimed_at IS NULL OR claimed_at < now() - interval '30 seconds')
+  RETURNING *;
+$$;
+REVOKE ALL ON FUNCTION public.claim_production_notifications(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_production_notifications(uuid) TO service_role;
+
+-- 6. RPC atômica para avanço de unidades e itens em lote.
 --    Idempotente: alvo já atingido (ou ultrapassado) é ignorado sem auditoria.
 --    Qualquer alvo inválido rejeita o lote inteiro (nada é gravado).
 CREATE OR REPLACE FUNCTION handoff_private.batch_update_production(
@@ -466,6 +497,14 @@ BEGIN
   PERFORM public.recompute_order_status_from_items(p_order_id);
 
   SELECT * INTO o FROM public.orders WHERE id = p_order_id;
+
+  IF o.status = 'PRONTO' AND v_prev_status IS DISTINCT FROM 'PRONTO' THEN
+    INSERT INTO public.production_notification_outbox(order_id, event_type)
+    VALUES (p_order_id, 'order_ready') ON CONFLICT DO NOTHING;
+  ELSIF o.status = 'PRONTO_PARCIAL' AND v_prev_status = 'NA_FILA' THEN
+    INSERT INTO public.production_notification_outbox(order_id, event_type)
+    VALUES (p_order_id, 'order_partial_ready') ON CONFLICT DO NOTHING;
+  END IF;
 
   RETURN jsonb_build_object(
     'success', true,

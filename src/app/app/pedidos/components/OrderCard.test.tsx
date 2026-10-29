@@ -66,7 +66,7 @@ const fixtureUnit: HandoffUnit = {
 };
 describe('quadro de repasse e preparo por unidade',()=>{
  it('prioriza nome e mantém controles de repasse e preparo por unidade no pronto parcial',()=>{
-  const html=renderOrder({...baseOrder,customer_name:'Ana',status:'PRONTO_PARCIAL',items:[fixtureItem],handoffs:[fixtureUnit]});
+  const html=renderOrder({...baseOrder,customer_name:'Ana',status:'PRONTO_PARCIAL',items:[fixtureItem],handoffs:[fixtureUnit,{...fixtureUnit,id:'u-ready',unit_no:2,prep_status:'READY' as const}]});
   expect(html.indexOf('Ana</button>')).toBeLessThan(html.indexOf('#012'));
   expect(html).toContain('Anotado e repassado');
   expect(html).toContain('Unidade 1/3');
@@ -93,8 +93,21 @@ describe('quadro de repasse e preparo por unidade',()=>{
  it('mantém unidade entregue visível no cartão com horário',()=>{
   const deliveredUnit = { ...fixtureUnit, prep_status: 'DELIVERED' as const, delivered_at: '2026-10-28T12:00:00Z' };
   const html = renderOrder({ ...baseOrder, items: [fixtureItem], handoffs: [deliveredUnit] });
-  expect(html).toContain('Unidade entregue');
+  // Recolhida num resumo expansível: sem botões, com horário e histórico acessíveis.
+  expect(html).toMatch(/<details[^>]*>[\s\S]*Entregue[\s\S]*Unidade 1\/3[\s\S]*entregue \d{2}:\d{2}/);
+  expect(html).not.toContain('Entregar unidade');
   expect(html).toContain('Crepe teste');
+ });
+ it('não repete entrega no cartão nem libera ações após despacho',()=>{
+  const ready = (n:number)=>({ ...fixtureUnit, id:`u${n}`, unit_no:n, prep_status:'READY' as const });
+  const parcial = renderOrder({ ...baseOrder, status:'PRONTO_PARCIAL', items:[fixtureItem], handoffs:[ready(1),ready(2)] });
+  expect(parcial.match(/Entregar prontas/g) ?? []).toHaveLength(0);
+  expect(parcial.match(/Entregar prontos/g) ?? []).toHaveLength(1);
+  const soEntregues = renderOrder({ ...baseOrder, status:'PRONTO_PARCIAL', items:[fixtureItem], handoffs:[{ ...ready(1), prep_status:'DELIVERED' as const }, { ...ready(2), prep_status:'PENDING' as const }] });
+  expect(soEntregues).not.toContain('Entregar prontos');
+  const despachado = renderOrder({ ...baseOrder, type:'ENTREGA', status:'SAIU_PARA_ENTREGA', items:[fixtureItem], handoffs:[ready(1)] });
+  expect(despachado).not.toMatch(/Marcar pronto|Preparar|Anotado e repassado|Todas prontas/);
+  expect(despachado).toContain('Crepe teste');
  });
  it('não oferece confirmação quando a consulta falha e não oculta os itens',()=>{
   const html=renderOrder({...baseOrder,items:[fixtureItem]});

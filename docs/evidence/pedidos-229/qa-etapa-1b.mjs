@@ -101,6 +101,23 @@ const legacyDone = await request('/functions/v1/update-order-status', { order_id
 assert(legacyDone.ok && legacyDone.data.order.status === 'ENTREGUE', 'legado: entregar pedido conclui unidades');
 console.log('PASS: update-order-status/update-order-item-status compatíveis com o ciclo por unidade.');
 
+// 4b. Função cai depois do commit: o aviso fica na fila e sai na repetição do comando
+const orderD = 'b229b000-0000-4000-8000-000000000044';
+sql(`INSERT INTO orders(id,branch_id,daily_number,status,total_amount,type,customer_name,customer_phone,confirmed_at) VALUES('${orderD}','${b}',34,'NA_FILA',40,'BALCAO','Duda · queda','61999990001',now());
+INSERT INTO order_items(id,order_id,product_id,product_name_snapshot,product_price_snapshot,production_sector,quantity,total_price,status) VALUES ${item('b229b000-0000-4000-8000-000000000057', orderD, 'Crepe misto', 'KITCHEN', 2)};`);
+const crepeD = unitsOf('b229b000-0000-4000-8000-000000000057');
+const direct = await request('/rest/v1/rpc/batch_update_production_status', { p_order_id: orderD, p_unit_ids: [crepeD[0]], p_item_ids: [], p_new_status: 'READY' }, maria.token);
+assert(direct.ok && direct.data.order_status === 'PRONTO_PARCIAL', 'commit sem passar pela função');
+assert.equal(events(orderD), '', 'sem aviso enquanto a função não roda');
+assert.equal(sql(`SELECT count(*) FROM production_notification_outbox WHERE order_id='${orderD}' AND processed_at IS NULL`), '1', 'aviso pendente na fila');
+const replay = await Promise.all([batch(maria, orderD, [crepeD[0]], 'READY'), batch(joao, orderD, [crepeD[0]], 'READY')]);
+assert(replay.every((r) => r.ok && r.data.changed_units === 0), 'repetição não altera unidades');
+assert.equal(events(orderD), 'order_partial_ready:1', 'repetição envia o aviso pendente uma vez');
+assert.equal(sql(`SELECT outcome FROM production_notification_outbox WHERE order_id='${orderD}'`), 'sent_push_whatsapp_opt_out', 'resultado real registrado (fixture com opt-out)');
+const blocked = await fetch(`${api}/rest/v1/production_notification_outbox?select=*`, { headers: { apikey: anon, Authorization: `Bearer ${maria.token}` } });
+assert(!blocked.ok, 'operador não lê a fila de avisos');
+console.log('PASS: aviso sobrevive a queda após commit e sai uma vez na repetição; fila fora do alcance do operador.');
+
 // 5. Navegador: dois operadores, ações parciais e em lote, offline
 const fonts = path.join(mkdtempSync(path.join(tmpdir(), 'production-qa-')), 'fonts.cjs');
 writeFileSync(fonts, "module.exports = new Proxy({}, { get: () => `@font-face {font-family: 'Inter';src: local('Arial');}` });\n");
@@ -116,7 +133,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' }); contexts.push(context);
     await context.addInitScript(() => { sessionStorage.setItem('pdv_biometric_prompt_dismissed', '1'); });
     await context.route('**/*', (route) => { const u = new URL(route.request().url()); return ['127.0.0.1', 'localhost'].includes(u.hostname) ? route.continue() : route.abort(); });
-    const page = await context.newPage(); lastPage = page; pages.push(page); page.on('pageerror', (e) => errors.push(e.message));
+    const page = await context.newPage(); lastPage ??= page; pages.push(page); page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(app + '/login', { waitUntil: 'networkidle', timeout: 240000 });
     await page.locator('#login-email').fill(account.email); await page.locator('#login-password').fill(account.password);
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
@@ -131,17 +148,20 @@ try {
   const banana = card(p1).locator('div.rounded-xl.border.p-3').filter({ hasText: 'Crepe de banana' });
   await banana.getByRole('button', { name: /Marcar pronto/ }).first().click();
   await banana.getByText('Todas prontas (2)').waitFor({ timeout: 15000 });
-  await card(p2).getByText('Entregar prontas (1)').first().waitFor({ timeout: 30000 });
+  await card(p2).getByText('1/5 unidades prontas').waitFor({ timeout: 30000 });
   // Operador 2, sem recarregar, conclui o restante do item em lote.
   await card(p2).getByRole('button', { name: 'Todas prontas (2)' }).click();
-  await card(p1).getByText('3 unidades prontas').waitFor({ timeout: 30000 });
+  await card(p1).getByText('3/5 unidades prontas').waitFor({ timeout: 30000 });
+  assert.equal(await card(p1).getByText(/Entregar prontas/).count(), 0, 'sem lote repetido do rodapé');
   await card(p1).screenshot({ path: path.join(out, 'card-390-parcial.png') });
   // Operador 1 entrega apenas as prontas: a unidade de carne e a água seguem visíveis.
-  await card(p1).getByRole('button', { name: 'Entregar prontas (3)' }).first().click();
-  await card(p1).getByText('Unidade entregue').nth(2).waitFor({ timeout: 15000 });
+  await card(p1).getByRole('button', { name: 'Entregar prontos' }).click();
+  await card(p1).getByText('Todas as 3 entregues').waitFor({ timeout: 15000 });
+  await card(p1).getByRole('button', { name: 'Entregar prontos' }).waitFor({ state: 'detached', timeout: 15000 });
   assert.equal(await card(p1).getByText('Crepe de carne').count() > 0, true, 'item restante continua visível');
   assert.equal(await card(p1).getByText('Água sem gás').count() > 0, true, 'item sem repasse continua visível');
-  await card(p2).getByText('Unidade entregue').nth(2).waitFor({ timeout: 30000 });
+  await card(p2).getByText('Todas as 3 entregues').waitFor({ timeout: 30000 });
+  await card(p1).screenshot({ path: path.join(out, 'card-390-entregues.png') });
   assert.equal(sql(`SELECT string_agg(prep_status, ',' ORDER BY unit_no) FROM production_handoff_units WHERE order_item_id='b229b000-0000-4000-8000-000000000054' AND state<>'SUPERSEDED'`), 'DELIVERED,DELIVERED,DELIVERED');
   assert.equal(sql(`SELECT status FROM orders WHERE id='${orderC}'`), 'PRONTO_PARCIAL');
   const smallTargets = await card(p1).locator('section[aria-label="Repasse e preparo dos itens"] button').evaluateAll((bs) => bs.filter((x) => { const r = x.getBoundingClientRect(); return r.height > 0 && r.height < 44; }).length);
@@ -160,8 +180,12 @@ try {
   await p1.setViewportSize({ width: 390, height: 844 });
   await contexts[0].setOffline(true);
   await card(p1).getByText(/Sem conexão. Dados da última atualização/).waitFor({ timeout: 10000 });
-  const carne = card(p1).locator('div.rounded-xl.border.p-3').filter({ hasText: 'Crepe de carne' });
-  assert(await carne.getByRole('button', { name: /Marcar pronto/ }).first().isDisabled(), 'sem rede o preparo fica bloqueado');
+  // Sem rede, nenhuma ação de preparo fica disponível (desabilitada, ou oculta se o repasse não pôde ser relido).
+  const enabledPrep = await card(p1).locator('section[aria-label="Repasse e preparo dos itens"] button')
+    .filter({ hasText: /Marcar pronto|Preparar|Entregar|Todas prontas/ })
+    .evaluateAll((bs) => bs.filter((b) => !b.disabled).length);
+  assert.equal(enabledPrep, 0, 'sem rede o preparo fica bloqueado');
+  assert.equal(await card(p1).getByText('Crepe de carne').count() > 0, true, 'itens continuam visíveis sem rede');
   await card(p1).screenshot({ path: path.join(out, 'offline-390.png') });
   await contexts[0].setOffline(false);
   await card(p1).getByText(/Sem conexão. Dados da última atualização/).waitFor({ state: 'hidden', timeout: 15000 });

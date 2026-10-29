@@ -51,6 +51,17 @@ const eventLabels: Record<string, string> = {
   PRINT: 'Impresso',
 };
 
+type PrepCommand = {
+  unitIds?: string[];
+  itemIds?: string[];
+  newStatus: 'IN_PREPARATION' | 'READY' | 'DELIVERED';
+};
+
+/** Resposta 4xx da Edge Function: a transação foi desfeita e nada mudou. */
+export function isDefinitivePrepError(error: unknown) {
+  return error instanceof Error && /Status: 4\d\d/.test(error.message);
+}
+
 const time = (value: string) => new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
 export function ProductionHandoff({
@@ -68,7 +79,8 @@ export function ProductionHandoff({
   const pending = useRef<HandoffCommand | null>(null);
   const [retrying, setRetrying] = useState(false);
 
-  const disabledOrder = ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_PAGAMENTO', 'CANCELADO', 'EXPIRADO', 'ENTREGUE'].includes(order.status);
+  // Despachado: produção encerrada; só a confirmação do motoboy conclui o pedido.
+  const disabledOrder = ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_PAGAMENTO', 'CANCELADO', 'EXPIRADO', 'ENTREGUE', 'SAIU_PARA_ENTREGA'].includes(order.status);
   const units = order.handoffs;
   const items = (order.items ?? [])
     .filter((i) => i.status !== 'CANCELLED')
@@ -119,30 +131,45 @@ export function ProductionHandoff({
     }
   };
 
-  const handlePrepUpdate = async (params: {
-    unitIds?: string[];
-    itemIds?: string[];
-    newStatus: 'IN_PREPARATION' | 'READY' | 'DELIVERED';
-    reasonText?: string;
-  }) => {
-    if (busy || offline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
-      setMessage('Sem conexão. Reconecte e atualize antes de alterar o preparo.');
+  // Comando de preparo cujo resultado não chegou (rede/5xx). Repetir é seguro: a RPC
+  // ignora unidades que já atingiram a etapa e os avisos saem de uma fila transacional.
+  const unconfirmedPrep = useRef<PrepCommand | null>(null);
+  const [prepUnconfirmed, setPrepUnconfirmed] = useState(false);
+
+  const handlePrepUpdate = async (params?: PrepCommand) => {
+    const command = params ?? unconfirmedPrep.current;
+    if (!command) return;
+    if (busy || retrying || offline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      setMessage(retrying
+        ? 'Conclua a verificação do repasse pendente antes de alterar o preparo.'
+        : 'Sem conexão. Reconecte e atualize antes de alterar o preparo.');
       return;
     }
     setBusy(true);
     setMessage('');
     try {
-      await pdvApi.batchUpdateProductionStatus({
+      const result = await pdvApi.batchUpdateProductionStatus({
         orderId: order.id,
-        unitIds: params.unitIds,
-        itemIds: params.itemIds,
-        newStatus: params.newStatus,
-        reason: params.reasonText,
+        unitIds: command.unitIds,
+        itemIds: command.itemIds,
+        newStatus: command.newStatus,
       });
-      setMessage(`Status atualizado para ${prepLabels[params.newStatus]}.`);
+      unconfirmedPrep.current = null;
+      setPrepUnconfirmed(false);
+      setMessage(result.changed_units + result.changed_items > 0
+        ? `Status atualizado para ${prepLabels[command.newStatus]}.`
+        : 'Nada a alterar: outro operador já registrou esta etapa.');
       onChanged?.(order.id);
     } catch (e) {
-      setMessage(getFriendlyErrorMessage(e, 'Erro ao atualizar produção. Tente novamente.'));
+      if (isDefinitivePrepError(e)) {
+        unconfirmedPrep.current = null;
+        setPrepUnconfirmed(false);
+        setMessage('Não registrado: ' + getFriendlyErrorMessage(e, 'atualize e revise o pedido.'));
+      } else {
+        unconfirmedPrep.current = command;
+        setPrepUnconfirmed(true);
+        setMessage('Resultado não confirmado. Repita a mesma ação: o que já foi registrado não muda de novo.');
+      }
       onChanged?.(order.id);
     } finally {
       setBusy(false);
@@ -176,23 +203,6 @@ export function ProductionHandoff({
         </p>
       )}
 
-      {allReadyUnitsInOrder.length > 0 && order.type !== 'ENTREGA' && !disabledOrder && (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-[var(--status-success)]/40 bg-[var(--status-success-bg)] p-2.5 text-xs">
-          <span className="font-bold text-[var(--status-success)]">
-            {allReadyUnitsInOrder.length} {allReadyUnitsInOrder.length === 1 ? 'unidade pronta' : 'unidades prontas'}
-          </span>
-          <button
-            type="button"
-            disabled={busy || offline}
-            onClick={() => void handlePrepUpdate({ unitIds: allReadyUnitsInOrder.map((u) => u.id), newStatus: 'DELIVERED' })}
-            className="flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--status-success)] px-3 py-2 text-xs font-black uppercase tracking-wide text-white shadow-sm hover:opacity-95 active:scale-95 disabled:opacity-50"
-          >
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <Package size={14} />}
-            Entregar prontas ({allReadyUnitsInOrder.length})
-          </button>
-        </div>
-      )}
-
       {items.map((item) => {
         const itemUnits = (units ?? []).filter((u) => u.order_item_id === item.id);
         const outstanding = itemUnits.some((u) => !u.confirmed);
@@ -206,6 +216,12 @@ export function ProductionHandoff({
 
         const unreadyUnits = itemUnits.filter((u) => !['READY', 'DELIVERED', 'CANCELLED'].includes(u.prep_status || 'PENDING'));
         const readyUnits = itemUnits.filter((u) => (u.prep_status || 'PENDING') === 'READY');
+        const deliveredUnits = itemUnits.filter((u) => u.prep_status === 'DELIVERED');
+        const openUnits = itemUnits.filter((u) => u.prep_status !== 'DELIVERED');
+        // Lote do item só quando difere do botão da unidade e do "Entregar prontos" do rodapé.
+        const showReadyBatch = unreadyUnits.length > 1;
+        const showDeliverBatch = order.type !== 'ENTREGA' && readyUnits.length > 1 && allReadyUnitsInOrder.length > readyUnits.length;
+        const lastDelivered = deliveredUnits.map((u) => u.delivered_at).filter(Boolean).sort().at(-1);
 
         return (
           <div key={item.id} className={`rounded-xl border p-3 ${surface}`}>
@@ -240,12 +256,12 @@ export function ProductionHandoff({
             {item.observation && <p className="mt-1 break-words text-xs text-[var(--text-secondary)]">{item.observation}</p>}
 
             {/* Ações em lote por item */}
-            {itemUnits.length > 1 && !disabledOrder && (
+            {(showReadyBatch || showDeliverBatch) && !disabledOrder && (
               <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
-                {unreadyUnits.length > 0 && (
+                {showReadyBatch && (
                   <button
                     type="button"
-                    disabled={busy || offline}
+                    disabled={busy || retrying || offline}
                     onClick={() => void handlePrepUpdate({ unitIds: unreadyUnits.map((u) => u.id), newStatus: 'READY' })}
                     className="flex min-h-11 items-center gap-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-2.5 py-1 text-[11px] font-bold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] active:scale-95 disabled:opacity-50"
                   >
@@ -253,10 +269,10 @@ export function ProductionHandoff({
                     Todas prontas ({unreadyUnits.length})
                   </button>
                 )}
-                {readyUnits.length > 0 && order.type !== 'ENTREGA' && (
+                {showDeliverBatch && (
                   <button
                     type="button"
-                    disabled={busy || offline}
+                    disabled={busy || retrying || offline}
                     onClick={() => void handlePrepUpdate({ unitIds: readyUnits.map((u) => u.id), newStatus: 'DELIVERED' })}
                     className="flex min-h-11 items-center gap-1 rounded-lg border border-[var(--status-success)]/40 bg-[var(--status-success-bg)] px-2.5 py-1 text-[11px] font-black text-[var(--status-success)] hover:bg-[var(--status-success-bg)]/80 active:scale-95 disabled:opacity-50"
                   >
@@ -276,7 +292,7 @@ export function ProductionHandoff({
                     {item.status === 'PENDING' && (
                       <button
                         type="button"
-                        disabled={busy || offline}
+                        disabled={busy || retrying || offline}
                         onClick={() => void handlePrepUpdate({ itemIds: [item.id], newStatus: 'IN_PREPARATION' })}
                         className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs font-bold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] active:scale-95 disabled:opacity-50"
                       >
@@ -286,7 +302,7 @@ export function ProductionHandoff({
                     {(item.status === 'PENDING' || item.status === 'IN_PREPARATION') && (
                       <button
                         type="button"
-                        disabled={busy || offline}
+                        disabled={busy || retrying || offline}
                         onClick={() => void handlePrepUpdate({ itemIds: [item.id], newStatus: 'READY' })}
                         className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl bg-brand-charcoal px-2.5 py-1.5 text-xs font-black uppercase text-white hover:bg-zinc-700 active:scale-95 disabled:opacity-50"
                       >
@@ -296,7 +312,7 @@ export function ProductionHandoff({
                     {item.status === 'READY' && order.type !== 'ENTREGA' && (
                       <button
                         type="button"
-                        disabled={busy || offline}
+                        disabled={busy || retrying || offline}
                         onClick={() => void handlePrepUpdate({ itemIds: [item.id], newStatus: 'DELIVERED' })}
                         className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--status-success)] px-3 py-2 text-xs font-black uppercase text-white hover:opacity-90 active:scale-95 disabled:opacity-50"
                       >
@@ -323,7 +339,32 @@ export function ProductionHandoff({
             )}
 
             {/* Lista individual de unidades com ciclo completo de preparo e entrega */}
-            {itemUnits.map((u) => {
+            {deliveredUnits.length > 0 && (
+              <details className="mt-3 rounded-xl border border-[var(--status-success)]/30 bg-[var(--status-success-bg)]/30 text-xs">
+                <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 px-2.5 font-bold text-[var(--status-success)]">
+                  <span className="flex items-center gap-1.5">
+                    <CheckCheck size={16} />
+                    {deliveredUnits.length === itemUnits.length
+                      ? `${deliveredUnits.length === 1 ? 'Entregue' : `Todas as ${deliveredUnits.length} entregues`}`
+                      : `${deliveredUnits.length} de ${itemUnits.length} entregues`}
+                  </span>
+                  {lastDelivered && <span className="text-[11px] font-normal">{time(lastDelivered)}</span>}
+                </summary>
+                <ul className="space-y-1 border-t border-[var(--status-success)]/20 px-2.5 py-2">
+                  {deliveredUnits.map((u) => (
+                    <li key={u.id} className="text-[11px] text-[var(--text-secondary)]">
+                      <span className="font-semibold text-[var(--text-primary)]">Unidade {u.unit_no}/{item.quantity}</span>
+                      {u.delivered_at && ` · entregue ${time(u.delivered_at)}`} · {handoffLabel(u)}
+                      {u.history.length > 0 && (
+                        <span> · {u.history.map((h) => `${eventLabels[h.origin] || 'Registro de repasse'} (${h.actor_name || 'Impressora'} ${time(h.created_at)})`).join(', ')}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
+            {openUnits.map((u) => {
               const uPrep = u.prep_status || 'PENDING';
               return (
                 <div
@@ -383,7 +424,7 @@ export function ProductionHandoff({
                         <>
                           <button
                             type="button"
-                            disabled={busy || offline}
+                            disabled={busy || retrying || offline}
                             onClick={() => void handlePrepUpdate({ unitIds: [u.id], newStatus: 'IN_PREPARATION' })}
                             className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-2.5 py-1.5 font-bold text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] active:scale-95 disabled:opacity-50"
                           >
@@ -391,7 +432,7 @@ export function ProductionHandoff({
                           </button>
                           <button
                             type="button"
-                            disabled={busy || offline}
+                            disabled={busy || retrying || offline}
                             onClick={() => void handlePrepUpdate({ unitIds: [u.id], newStatus: 'READY' })}
                             className="flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl bg-brand-charcoal px-2.5 py-1.5 font-black uppercase text-white hover:bg-zinc-700 active:scale-95 disabled:opacity-50"
                           >
@@ -403,7 +444,7 @@ export function ProductionHandoff({
                       {uPrep === 'IN_PREPARATION' && (
                         <button
                           type="button"
-                          disabled={busy || offline}
+                          disabled={busy || retrying || offline}
                           onClick={() => void handlePrepUpdate({ unitIds: [u.id], newStatus: 'READY' })}
                           className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-brand-charcoal px-3 py-2 font-black uppercase text-white hover:bg-zinc-700 active:scale-95 disabled:opacity-50"
                         >
@@ -414,7 +455,7 @@ export function ProductionHandoff({
                       {uPrep === 'READY' && order.type !== 'ENTREGA' && (
                         <button
                           type="button"
-                          disabled={busy || offline}
+                          disabled={busy || retrying || offline}
                           onClick={() => void handlePrepUpdate({ unitIds: [u.id], newStatus: 'DELIVERED' })}
                           className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--status-success)] px-3 py-2 font-black uppercase text-white hover:opacity-90 active:scale-95 disabled:opacity-50"
                         >
@@ -428,14 +469,6 @@ export function ProductionHandoff({
                         </span>
                       )}
 
-                      {uPrep === 'DELIVERED' && (
-                        <div className="flex min-h-11 w-full items-center justify-between rounded-xl bg-[var(--status-success-bg)] px-3 py-2 font-bold text-[var(--status-success)]">
-                          <span className="flex items-center gap-1.5">
-                            <CheckCheck size={16} /> Unidade entregue
-                          </span>
-                          {u.delivered_at && <span className="text-[11px] font-normal">{time(u.delivered_at)}</span>}
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -496,6 +529,17 @@ export function ProductionHandoff({
             className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] px-3 text-base text-[var(--text-primary)]"
           />
         </label>
+      )}
+
+      {prepUnconfirmed && (
+        <button
+          type="button"
+          disabled={busy || retrying || offline}
+          onClick={() => void handlePrepUpdate()}
+          className="min-h-11 w-full rounded-xl border border-[var(--border)] px-3 text-sm font-semibold"
+        >
+          Repetir a última ação de preparo
+        </button>
       )}
 
       {retrying && (

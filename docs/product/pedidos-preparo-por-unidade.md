@@ -22,11 +22,26 @@ Para itens com quantidade maior que 1 (ex.: 3 crepes):
   - 1 de 3 unidades pronta: pedido em `PRONTO_PARCIAL`.
   - Todas as unidades ativas prontas: `PRONTO`.
   - Todas entregues: `ENTREGUE`.
-- WhatsApp/Push de “parte pronta” e “pedido pronto” saem uma vez, apenas quando o pedido entra
-  nesse estado pelo comando. Entrega parcial não gera aviso novo.
+- WhatsApp/Push de “parte pronta” e “pedido pronto” saem uma vez, quando o pedido entra nesse
+  estado pelo quadro. O pedido de aviso é gravado na mesma transação (`production_notification_outbox`);
+  se a função cair antes de enviar, repetir a ação envia o aviso pendente (se cair no meio do envio,
+  o próximo comando no pedido após 30 s reenvia; o WhatsApp não duplica, o Push pode duplicar nesse caso
+  raro). Falha transitória ao enfileirar o WhatsApp devolve o aviso à fila. Entrega parcial não gera
+  aviso novo; pedido já encerrado não recebe aviso tardio.
+
+### Leitura do cartão
+- Progresso “x/y unidades prontas” conta unidades de todos os setores (itens sem repasse, como
+  bebidas, contam pela quantidade) e ignora linhas e unidades canceladas.
+- Unidades entregues ficam recolhidas num resumo (“Todas as 3 entregues · 19:33”); ao abrir, cada
+  unidade mostra horário de entrega e histórico de repasse.
+- Entregar tudo o que está pronto fica só no rodapé (“Entregar prontos”). O lote por item aparece
+  apenas quando há prontas em mais de um item; “Todas prontas” só quando há mais de uma unidade a avançar.
+- Pedido despachado (`SAIU_PARA_ENTREGA`) não mostra ações de preparo nem de repasse.
+- Falha de conexão ou resposta não confirmada mostra “Repetir a última ação de preparo”: repetir é
+  seguro, o que já foi registrado não muda de novo. Erro do servidor (4xx) é definitivo e nada mudou.
 
 ### Visibilidade permanente dos itens
-- **Nenhum item ou unidade desaparece:** mesmo quando uma unidade atinge `DELIVERED`, ela permanece visível com estilo suave (opacidade atenuada, ícone de check verde e horário de entrega `HH:MM`).
+- **Nenhum item ou unidade desaparece:** unidades entregues ficam no resumo recolhido do item, com horário de entrega e histórico ao expandir.
 - A comanda completa pode ser conferida a qualquer momento pelo operador do balcão ou da cozinha.
 
 ### Ações rápidas no cartão (Touch target ≥ 44 px)
@@ -50,7 +65,10 @@ Para itens com quantidade maior que 1 (ex.: 3 crepes):
    Ela executa `public.batch_update_production_status` com o JWT do operador (filial, papel e
    transições validados no banco) e envia notificações conforme a transição devolvida.
 2. **Atomicidade e concorrência:** pedido bloqueado com `FOR UPDATE`, depois itens e unidades em
-   ordem de ID. O recálculo de item e pedido acontece uma única vez no fim do lote.
+   ordem de ID — a mesma ordem do pagamento por itens. O recálculo de item e pedido acontece uma
+   única vez no fim do lote. Os comandos legados travam a linha antes do pedido; se coincidirem no
+   mesmo item, o Postgres desfaz uma das transações (`40P01`) e a Edge Function repete o lote até
+   3 vezes antes de pedir nova tentativa ao operador.
 3. **Comandos legados:** `update-order-status` e `update-order-item-status` (por linha) continuam
    válidos. As unidades acompanham a linha sem regredir unidades já entregues; cancelamento do
    pedido guarda o estado de cada unidade, e a restauração (`restore-cancelled-order`) o devolve.
@@ -60,7 +78,8 @@ Para itens com quantidade maior que 1 (ex.: 3 crepes):
 5. **Linha com unidade entregue não é cancelada:** a unidade consumida continua cobrável. Isso vale
    para “Cancelar item” (oculto no detalhe) e para o cancelamento do pedido inteiro, que é recusado
    com a mensagem. Hoje não há como retirar só as unidades restantes; isso depende da etapa de
-   pagamentos fracionados e é decisão de negócio pendente.
+   pagamentos fracionados e é decisão de negócio pendente
+   ([proposta](../archive/studies/pedidos-229/proposta-cancelamento-parcial.md)).
 6. **Financeiro e COD (#221):** `order_items` não é duplicado nem fracionado; quantidade, valores,
    pagamentos e divisão de conta não mudam. Delivery não é entregue pelo balcão.
 7. **Implantação:** migration e Edge Function devem ser publicadas juntas. Com a função antiga, o

@@ -246,5 +246,18 @@ SELECT throws_ok(
 -- Segurança: recálculo legado segue SECURITY INVOKER
 SELECT is((SELECT prosecdef FROM pg_proc WHERE oid='public.recompute_order_status_from_items(uuid)'::regprocedure), false, 'recompute_order_status_from_items permanece SECURITY INVOKER');
 
+-- Fila transacional de avisos (#229 / 1B)
+SELECT is((SELECT string_agg(event_type, ',' ORDER BY event_type) FROM public.production_notification_outbox WHERE order_id='b2290000-0000-4000-8000-000000000041'),
+  'order_partial_ready,order_ready', 'Transições NA_FILA→PRONTO_PARCIAL e →PRONTO gravam um aviso cada');
+SELECT is((SELECT count(*)::int FROM public.production_notification_outbox WHERE order_id='b2290000-0000-4000-8000-000000000044' AND event_type='order_partial_ready'), 1,
+  'Replays e reaberturas não duplicam aviso');
+SELECT is((SELECT count(*)::int FROM public.production_notification_outbox WHERE order_id='b2290000-0000-4000-8000-000000000043'), 0,
+  'Lote rejeitado não grava aviso');
+SELECT ok(NOT has_table_privilege('authenticated', 'public.production_notification_outbox', 'SELECT'), 'Operador não lê a fila de avisos');
+SELECT ok(NOT has_table_privilege('anon', 'public.production_notification_outbox', 'SELECT'), 'Anon não lê a fila de avisos');
+SELECT ok(NOT has_function_privilege('authenticated', 'public.claim_production_notifications(uuid)', 'EXECUTE'), 'Operador não reivindica avisos');
+SELECT is((SELECT count(*)::int FROM public.claim_production_notifications('b2290000-0000-4000-8000-000000000041')), 2, 'Reivindicação devolve os avisos pendentes');
+SELECT is((SELECT count(*)::int FROM public.claim_production_notifications('b2290000-0000-4000-8000-000000000041')), 0, 'Segunda reivindicação dentro do prazo não devolve nada');
+
 SELECT * FROM finish();
 ROLLBACK;
