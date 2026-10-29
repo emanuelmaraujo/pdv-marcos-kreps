@@ -53,7 +53,7 @@ do mesmo pedido (sem rotina periódica).
 | Verificação | Comando | Resultado |
 | --- | --- | --- |
 | Documentação, tipos, lint, Vitest afetados | `docs:check`, `typecheck`, `eslint` (pedidos, api), `npm test -- src/app/app/pedidos src/lib/api` | PASS — 49 Markdown; 6 arquivos/25 testes (rodada de 2026-10-29; suíte completa da rodada anterior: 310) |
-| Build padrão | `npm run build` (Turbopack, ambiente loopback do CI) | PASS — 30 páginas |
+| Build padrão | `npm run build` (Turbopack, ambiente loopback do CI) | PASS — 30 páginas (rodada de 2026-10-28; não repetido em 2026-10-29, só typecheck/lint) |
 | pgTAP descartável | `node scripts/test-database.mjs` | PASS — 10 arquivos/205 testes (inclui fila de avisos e permissões) |
 | Dois operadores HTTP + legado + navegador | `--production-qa` (`docs/evidence/pedidos-229/qa-etapa-1b.mjs`) | PASS — 4 blocos (corrida HTTP, legado, queda após commit, navegador com 12 capturas) |
 | Regressão COD (#221) | `--cod-e2e` (`scripts/cod-e2e-flow.mjs`) | PASS — 46 verificações |
