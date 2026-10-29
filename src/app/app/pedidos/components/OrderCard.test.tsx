@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { Order } from "@/types/pdv";
+import type { Order, OrderItem, HandoffUnit } from "@/types/pdv";
 import { OrderCard } from "./OrderCard";
 
 const baseOrder: Order = {
@@ -52,4 +52,48 @@ describe("OrderCard actions", () => {
     expect(markup).not.toContain("Entregar");
     expect(markup).toContain("Marcar pronto");
   });
+});
+
+const fixtureItem: OrderItem = {
+ id:'item-1',order_id:'order-1',product_id:'product',product_name_snapshot:'Crepe teste',
+ product_price_snapshot:25,quantity:3,total_price:75,production_sector:'KITCHEN',
+ status:'PENDING',payment_status:'PENDING',payment_method:'PENDING',
+};
+const fixtureUnit: HandoffUnit = {
+ id:'unit-1',order_id:'order-1',order_item_id:'item-1',unit_no:1,version:1,revision:1,
+ sector:'KITCHEN',state:'PENDING',confirmed:false,mode:'MANUAL',enabled:true,can_manage:false,
+ confirmed_at:null,actor_name:'',printed_at:null,job_status:null,job_id:null,history:[],
+};
+describe('quadro de repasse',()=>{
+ it('prioriza nome e mantém controles de repasse no pronto parcial',()=>{
+  const html=renderOrder({...baseOrder,customer_name:'Ana',status:'PRONTO_PARCIAL',items:[fixtureItem],handoffs:[fixtureUnit]});
+  expect(html.indexOf('Ana</button>')).toBeLessThan(html.indexOf('#012'));
+  expect(html).toContain('Anotado e repassado');
+  expect(html).toContain('preparo por linha inteira');
+  expect(html).toContain('Aguardando anotar / repassar');
+ });
+ it('não oferece confirmação quando a consulta falha e não oculta os itens',()=>{
+  const html=renderOrder({...baseOrder,items:[fixtureItem]});
+  expect(html).toContain('Não foi possível consultar o repasse');
+  expect(html).toContain('Crepe teste');
+  expect(html).not.toContain('Anotado e repassado');
+ });
+ it('separa recuperação manual de falha do job',()=>{
+  const html=renderOrder({...baseOrder,items:[fixtureItem],handoffs:[{...fixtureUnit,state:'CONFIRMED',mode:'PRINTER',confirmed:true,confirmed_at:'2026-10-27T12:00:00Z',actor_name:'Maria',job_status:'FAILED'}]});
+  expect(html).toContain('Recuperação manual confirmada');
+  expect(html).toContain('Falha no job mais recente');
+ });
+});
+
+it('não reatribui confirmação manual quando o setor muda para impressora',()=>{
+ const html=renderOrder({...baseOrder,items:[fixtureItem],handoffs:[{...fixtureUnit,state:'CONFIRMED',confirmed:true,mode:'PRINTER',confirmation_origin:'MANUAL'}]});
+ expect(html).toContain('Anotado e repassado');
+ expect(html).not.toContain('Recuperação manual confirmada');
+});
+
+it('bloqueia repasse offline e mantém os itens carregados visíveis',()=>{
+ const html=renderToStaticMarkup(<OrderCard order={{...baseOrder,items:[fixtureItem],handoffs:[fixtureUnit]}} now={0} onClick={vi.fn()} handoffOffline />);
+ expect(html).toContain('confirmação de repasse bloqueada');
+ expect(html).toContain('Crepe teste');
+ expect(html).toMatch(/disabled=""[^>]*>Anotado e repassado/);
 });

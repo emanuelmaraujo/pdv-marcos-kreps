@@ -81,6 +81,17 @@ try {
   }
   const output = supabase('Executando testes SQL...', 'test', 'db');
   console.log(output.split(/\r?\n/).filter((line) => /All tests|Files=|Result:/.test(line)).join('\n'));
+  if (process.argv.includes('--handoff-qa')) {
+    const status = Object.fromEntries(supabase('Lendo configuração exclusiva da instância de teste...', 'status', '-o', 'env')
+      .split(/\r?\n/).map((line) => line.match(/^([A-Z_]+)="?(.*?)"?$/)).filter(Boolean).map((m) => [m[1], m[2]]));
+    const qa = spawnSync(process.execPath, [path.join(root, 'docs/evidence/pedidos-229/qa-etapa-1a.mjs')], {
+      cwd: root, env: { ...process.env, API_URL: status.API_URL, ANON_KEY: status.ANON_KEY, SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY, DB_CONTAINER: container },
+      encoding: 'utf8', timeout: 900_000,
+    });
+    appendFileSync(log, `\nQA repasse #229\n${qa.stdout ?? ''}\n${qa.stderr ?? ''}`);
+    console.log((qa.stdout ?? '').trim());
+    if (qa.status !== 0) throw new Error(`QA repasse falhou. ${(qa.stderr ?? '').slice(0, 2000)}`);
+  }
   if (process.argv.includes('--cod-e2e')) {
     // Edge Functions servidas pela mesma instância; chaves locais da CLI, nunca do .env.
     const status = Object.fromEntries(supabase('Lendo chaves locais da instância...', 'status', '-o', 'env')

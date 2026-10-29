@@ -1,3 +1,4 @@
+import { productionHandoffMetadata } from '../_shared/production-handoff.ts';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
@@ -65,7 +66,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
   const { data: items } = await supabaseAdmin
     .from("order_items")
     .select(`
-      id, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector,
+      id, handoff_revision, status, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector,
       order_item_removed_ingredients ( ingredient_name_snapshot ),
       order_item_addons ( addon_name_snapshot, quantity, addon_price_snapshot )
     `)
@@ -91,7 +92,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       order_id: orderId,
       branch_id: order.branch_id,
       sector: "KITCHEN",
-      content: {
+      content: { ...productionHandoffMetadata(items, 'KITCHEN'),
         text: buildProductionReceipt({ ...order, source: "APP" }, items, "KITCHEN", {
           timestamp: timestampNow,
           title: "KREPS",
@@ -106,7 +107,7 @@ async function autoConfirmOnlinePaidOrder(supabaseAdmin: any, orderId: string) {
       order_id: orderId,
       branch_id: order.branch_id,
       sector: "JUICE_POTATO",
-      content: {
+      content: { ...productionHandoffMetadata(items, 'JUICE_POTATO'),
         text: buildProductionReceipt({ ...order, source: "APP" }, items, "JUICE_POTATO", {
           timestamp: timestampNow,
           title: "COZINHA",

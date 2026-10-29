@@ -1,3 +1,4 @@
+import { productionHandoffMetadata } from '../_shared/production-handoff.ts';
 // Edge function: mark-payment
 //
 // Marca pagamento de um pedido (ou de itens específicos dele).
@@ -140,7 +141,7 @@ serve(async (req) => {
       // Busca itens e settings para montar as vias
       const [{ data: items }, { data: settingsData }] = await Promise.all([
         supabaseAdmin.from("order_items").select(`
-          id, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector, sequence_no,
+          id, handoff_revision, status, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector, sequence_no,
           order_item_removed_ingredients(ingredient_name_snapshot),
           order_item_addons(addon_name_snapshot, quantity, addon_price_snapshot)
         `).eq("order_id", order.id),
@@ -166,12 +167,12 @@ serve(async (req) => {
         if (kitchen.length > 0 && shouldPrint(settingBoolFn(find("print_kitchen_copy"), true), branchCfg, "kitchen", orderAfter.type, orderAfter.source)) {
           const { buildProductionReceipt } = await import("../_shared/print-format.ts");
           const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes };
-          printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "KITCHEN", content: { text: buildProductionReceipt(orderObj, items, "KITCHEN", { timestamp: ts, title: "KREPS", branchCode, branchName }) } });
+          printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "KITCHEN", content: { ...productionHandoffMetadata(items, 'KITCHEN'), text: buildProductionReceipt(orderObj, items, "KITCHEN", { timestamp: ts, title: "KREPS", branchCode, branchName }) } });
         }
         if (juice.length > 0 && shouldPrint(settingBoolFn(find("print_juice_potato_copy"), true), branchCfg, "juice", orderAfter.type, orderAfter.source)) {
           const { buildProductionReceipt } = await import("../_shared/print-format.ts");
           const orderObj = { ...orderAfter, daily_number: orderAfter.daily_number, type: order.type, customer_name: order.customer_name, customer_phone: order.customer_phone, notes: order.notes };
-          printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "JUICE_POTATO", content: { text: buildProductionReceipt(orderObj, items, "JUICE_POTATO", { timestamp: ts, title: "COZINHA", branchCode, branchName }) } });
+          printerJobs.push({ order_id: order.id, branch_id: order.branch_id, sector: "JUICE_POTATO", content: { ...productionHandoffMetadata(items, 'JUICE_POTATO'), text: buildProductionReceipt(orderObj, items, "JUICE_POTATO", { timestamp: ts, title: "COZINHA", branchCode, branchName }) } });
         }
         if (shouldPrint(settingBoolFn(find("print_customer_copy")), branchCfg, "customer", orderAfter.type, orderAfter.source)) {
           const { buildCustomerReceipt } = await import("../_shared/print-format.ts");

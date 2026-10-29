@@ -1,3 +1,4 @@
+import { productionHandoffMetadata } from '../_shared/production-handoff.ts';
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { buildCustomerReceipt, buildProductionReceipt, resolveProductionSector, settingBool } from "../_shared/print-format.ts";
@@ -122,7 +123,7 @@ serve(async (req) => {
     const { data: items, error: itemsErr } = await supabaseAdmin
       .from('order_items')
       .select(`
-        id, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector,
+        id, handoff_revision, status, quantity, observation, product_name_snapshot, product_price_snapshot, total_price, production_sector,
         product:products(name, sector, category:categories(name)),
         order_item_removed_ingredients ( ingredient_name_snapshot ),
         order_item_addons ( addon_name_snapshot, quantity, addon_price_snapshot )
@@ -184,7 +185,7 @@ serve(async (req) => {
         ...reprintOpts,
         title: 'KREPS',
       });
-      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'KITCHEN', content: { ...productionHandoffMetadata(items, 'KITCHEN'), text: content } });
     }
 
     // Montar via JUICE_POTATO
@@ -209,7 +210,7 @@ serve(async (req) => {
         ...reprintOpts,
         title: 'COZINHA',
       });
-      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { text: content } });
+      printerJobsToInsert.push({ order_id: order.id, branch_id: order.branch_id, sector: 'JUICE_POTATO', content: { ...productionHandoffMetadata(items, 'JUICE_POTATO'), text: content } });
     }
 
     // Montar via CUSTOMER

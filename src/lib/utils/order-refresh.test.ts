@@ -85,3 +85,7 @@ describe("mergeRefreshedOrders", () => {
     expect(result.map((order) => order.id)[0]).toBe("pedido-3");
   });
 });
+
+it('reconcilia repasse mesmo sem mudança no updated_at do pedido',()=>{
+ expect(hasOrderBoardChanged([{id:'o',updated_at:'same',handoff_signature:'pending'}],[{id:'o',updated_at:'same',handoff_signature:'confirmed'}])).toBe(true);
+});
