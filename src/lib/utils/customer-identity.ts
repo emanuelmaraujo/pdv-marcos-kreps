@@ -111,6 +111,18 @@ function sameName(a: string, b: string): boolean {
   return a.trim().toLowerCase().replace(/\s+/g, " ") === b.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+const nameWords = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim().split(/\s+/).filter(Boolean);
+
+/** "ana" é o começo de "Ana Souza"; "an" ou "Ana da mesa 4" não são. Ignora acento e caixa. */
+function isLeadingWords(typed: string, saved: string): boolean {
+  const typedWords = nameWords(typed);
+  const savedWords = nameWords(saved);
+  return typedWords.length > 0
+    && typedWords.length < savedWords.length
+    && typedWords.every((word, index) => word === savedWords[index]);
+}
+
 /** Origem do nome depois de o campo ser editado à mão. */
 export function resolveNameFromInput(value: string): ResolvedCustomerName {
   return {
@@ -130,6 +142,13 @@ export function resolveNameFromLookup(input: {
   currentName: string;
   nameSource: CustomerNameSource;
   profileName?: string | null;
+  /**
+   * Checkout público (#235): o nome vem antes do WhatsApp, então quase sempre já
+   * há algo digitado quando a consulta volta. Com esta opção, um nome digitado
+   * que é o começo do nome salvo, palavra por palavra ("Ana" → "Ana Souza"),
+   * é completado. Nome diferente continua preservado, com o salvo como sugestão.
+   */
+  completePartial?: boolean;
 }): ResolvedCustomerName {
   const profileName = (input.profileName ?? "").trim();
   const currentName = input.currentName ?? "";
@@ -144,6 +163,9 @@ export function resolveNameFromLookup(input: {
     return { name: profileName, source: "LOOKUP", suggestion: null };
   }
   if (sameName(currentName, profileName)) {
+    return { name: profileName, source: "LOOKUP", suggestion: null };
+  }
+  if (input.completePartial && isLeadingWords(currentName, profileName)) {
     return { name: profileName, source: "LOOKUP", suggestion: null };
   }
   return { ...keep, suggestion: profileName };
