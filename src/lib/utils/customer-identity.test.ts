@@ -115,6 +115,25 @@ describe("resolveNameFromInput", () => {
 });
 
 describe("resolveNameFromLookup", () => {
+  it("no checkout público, completa um nome digitado que é o começo do salvo", () => {
+    expect(resolveNameFromLookup({ currentName: "ana", nameSource: "MANUAL", profileName: "Ana Souza", completePartial: true }))
+      .toEqual({ name: "Ana Souza", source: "LOOKUP", suggestion: null });
+    expect(resolveNameFromLookup({ currentName: "José Carlos", nameSource: "MANUAL", profileName: "Jose Carlos Lima", completePartial: true }))
+      .toEqual({ name: "Jose Carlos Lima", source: "LOOKUP", suggestion: null });
+  });
+
+  it("no checkout público, preserva nome diferente ou palavra incompleta e sugere o salvo", () => {
+    for (const currentName of ["Ana da mesa 4", "An", "Bruno"]) {
+      expect(resolveNameFromLookup({ currentName, nameSource: "MANUAL", profileName: "Ana Souza", completePartial: true }))
+        .toEqual({ name: currentName, source: "MANUAL", suggestion: "Ana Souza" });
+    }
+  });
+
+  it("sem a opção (atendente), mantém o nome digitado mesmo sendo o começo do salvo", () => {
+    expect(resolveNameFromLookup({ currentName: "Ana", nameSource: "MANUAL", profileName: "Ana Souza" }))
+      .toEqual({ name: "Ana", source: "MANUAL", suggestion: "Ana Souza" });
+  });
+
   it("preenche campo vazio com o nome do perfil", () => {
     expect(resolveNameFromLookup({ currentName: "", nameSource: "NONE", profileName: "Ana" }))
       .toMatchObject({ name: "Ana", source: "LOOKUP", suggestion: null });

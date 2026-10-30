@@ -74,7 +74,7 @@ export function PixResult({
           }}
         >
           <Copy className="h-4 w-4" />
-          {copied ? "Codigo copiado" : "Copiar Pix copia e cola"}
+          {copied ? "Código copiado!" : "Copiar Pix copia e cola"}
         </Button>
       )}
       {ticketUrl && (

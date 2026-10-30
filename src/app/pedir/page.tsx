@@ -495,7 +495,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setLoading(true);
         setBranchConfigLoaded(false);
         const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
-        if (!config.success) throw new Error(config.error || "Erro ao carregar configuracoes de pedido.");
+        if (!config.success) throw new Error(config.error || "Não conseguimos abrir esta unidade agora. Tente de novo em instantes.");
 
         // Slug que não existe (QR antigo, link com typo): a config volta global,
         // e `getMenuData(null)` não filtraria por filial — o cliente veria o
@@ -670,6 +670,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             currentName: customerNameRef.current,
             nameSource: nameSourceRef.current,
             profileName: saved.name,
+            completePartial: true,
           }),
           formatWhatsAppInput(saved.phone_e164),
         );
@@ -687,7 +688,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         }
         lastAutofilledPhoneRef.current = saved.phone_e164;
         setProfileLookupState("found");
-        setProfileNotice("Dados salvos neste dispositivo encontrados.");
+        setProfileNotice("Encontramos seus dados salvos neste aparelho.");
       }, 0);
       return () => {
         window.clearTimeout(optOutTimer);
@@ -723,6 +724,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               currentName: customerNameRef.current,
               nameSource: nameSourceRef.current,
               profileName: response.profile.name,
+              completePartial: true,
             }),
             formatWhatsAppInput(normalizedPhone),
           );
@@ -740,7 +742,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           setRememberCheckoutData(true);
           lastAutofilledPhoneRef.current = normalizedPhone;
           setProfileLookupState("found");
-          setProfileNotice("Encontrei seus dados salvos pelo WhatsApp.");
+          setProfileNotice("Encontramos seus dados pelo WhatsApp.");
         } else {
           setProfileLookupState("not_found");
           setProfileNotice("");
@@ -771,7 +773,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       if (stepRef.current === "PAYMENT" || stepRef.current === "PAID") return;
       try {
         const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
-        if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
+        if (!config.success) throw new Error(config.error || "Não conseguimos confirmar o horário de atendimento.");
         const settings = config.settings;
         const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
         const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
@@ -1050,7 +1052,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   const openCustomization = useCallback((product: Product, existingItem?: CartItem) => {
     trackFunnel("product_view", { product_id: product.id });
     if (branchDraftMismatch) {
-      addToast("error", "Resolva o pedido em aberto de outra unidade antes de continuar.");
+      addToast("error", "Você tem uma sacola aberta em outra unidade. Finalize ou comece uma nova para continuar.");
       return;
     }
     setSelectedProduct(product);
@@ -1166,7 +1168,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
   /** "+" do cardápio (#235): adiciona direto; com adicional obrigatório abre a folha. */
   const handleQuickAdd = useCallback((product: Product) => {
     if (branchDraftMismatch) {
-      addToast("error", "Resolva o pedido em aberto de outra unidade antes de continuar.");
+      addToast("error", "Você tem uma sacola aberta em outra unidade. Finalize ou comece uma nova para continuar.");
       return;
     }
     if (productsRequiringChoice.has(product.id)) {
@@ -1232,7 +1234,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     setSelectedAddressId(null);
     setProfileNotice("");
     setProfileLookupState("not_found");
-    addToast("success", "Dados salvos neste dispositivo foram apagados.");
+    addToast("success", "Pronto! Apagamos os dados salvos neste aparelho.");
   }, [addToast, applyResolvedName, customerPhone]);
 
   // CEP é a fonte de verdade pra rua/bairro/cidade/UF — bloqueia digitar um
@@ -1313,7 +1315,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     const code = couponInput.trim().toUpperCase();
     if (!code) {
       setAppliedCoupon(null);
-      setCouponMessage("Digite um cupom.");
+      setCouponMessage("Digite o código do cupom.");
       return;
     }
 
@@ -1323,7 +1325,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     const wantsFeriadouDelivery = code === "FERIADOU" && orderType !== "ENTREGA";
     if (wantsFeriadouDelivery && (!branchConfigLoaded || !deliveryEnabled)) {
       setAppliedCoupon(null);
-      setCouponMessage("O FERIADOU exige entrega disponível nesta unidade.");
+      setCouponMessage("O FERIADOU vale só para entrega, que não está disponível nesta unidade.");
       return;
     }
     const couponOrderType = wantsFeriadouDelivery ? "ENTREGA" : orderType;
@@ -1340,7 +1342,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
       if (!result.valid || !result.coupon) {
         setAppliedCoupon(null);
-        setCouponMessage(result.error || "Cupom inválido.");
+        setCouponMessage(result.error || "Esse cupom não é válido. Confira o código.");
         return;
       }
 
@@ -1351,11 +1353,11 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setCouponInput(result.coupon.code);
       setAppliedCoupon({ ...result.coupon, cart_signature: cartSignature });
       setCouponMessage(wantsFeriadouDelivery
-        ? "Frete grátis ativado! Entrega selecionada. Continue para informar o endereço."
-        : "Cupom aplicado.");
+        ? "Frete grátis aplicado! Mudamos para entrega: informe o endereço na próxima etapa."
+        : "Cupom aplicado!");
     } catch (error) {
       setAppliedCoupon(null);
-      setCouponMessage(getFriendlyErrorMessage(error, "Não foi possível validar o cupom."));
+      setCouponMessage(getFriendlyErrorMessage(error, "Não conseguimos validar o cupom agora. Tente de novo."));
     } finally {
       setCouponLoading(false);
     }
@@ -1375,7 +1377,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     // pelo servidor — e o catch de OrderingClosedError apaga o carrinho.
     try {
       const config = await pdvApi.getPublicCheckoutConfig(branchSlug);
-      if (!config.success) throw new Error(config.error || "Erro ao validar horario.");
+      if (!config.success) throw new Error(config.error || "Não conseguimos confirmar o horário de atendimento.");
       const settings = config.settings;
       const start = settings.public_ordering_start_time ?? DEFAULT_ORDERING_START;
       const end = settings.public_ordering_end_time ?? DEFAULT_ORDERING_END;
@@ -1385,7 +1387,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       setOrderingClosedReason(config.ordering_closed_reason);
 
       if (!config.online_ordering_enabled) {
-        const reason = config.ordering_closed_reason || "No momento nao estamos recebendo pedidos.";
+        const reason = config.ordering_closed_reason || "No momento não estamos recebendo pedidos.";
         setCheckoutError(reason);
         return;
       }
@@ -1394,7 +1396,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       return;
     }
     if (items.length === 0) {
-      setCheckoutError("Seu carrinho esta vazio.");
+      setCheckoutError("Sua sacola está vazia.");
       return;
     }
     const normalizedPhone = normalizeBrazilPhone(customerPhone);
@@ -1402,14 +1404,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     // falta, e a entrega é a única modalidade que exige contato.
     const identityError = validateCustomerIdentity(customerPhone, {
       requirePhone: orderType === "ENTREGA",
-      requiredMessage: "Informe um WhatsApp válido com DDD para pedidos de entrega.",
+      requiredMessage: "Para entrega, informe um WhatsApp com DDD para falarmos com você.",
     });
     if (identityError) {
       setCheckoutError(identityError);
       return;
     }
     if (customerEmail.trim() && !isValidEmail(customerEmail)) {
-      setCheckoutError("Se informar e-mail, use um endereco valido.");
+      setCheckoutError("Confira o e-mail informado. Ele parece incompleto.");
       return;
     }
     if (orderType === "ENTREGA") {
@@ -1419,7 +1421,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           return;
         }
         if (cepStatus !== "resolved") {
-          setCheckoutError(cepStatus === "error" ? (cepError || "CEP não encontrado.") : "Aguarde a confirmação do CEP.");
+          setCheckoutError(cepStatus === "error" ? (cepError || "CEP não encontrado.") : "Só um instante: ainda estamos conferindo o CEP.");
           return;
         }
         if (!deliveryAddress.street.trim() || !deliveryAddress.neighborhood.trim()) {
@@ -1428,7 +1430,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         }
       }
       if (deliveryBlocked) {
-        setCheckoutError("Não realizamos entregas nesse bairro no momento.");
+        setCheckoutError("Ainda não entregamos nesse bairro.");
         return;
       }
     }
@@ -1436,10 +1438,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     const changeValue = useCod && expectedMethod === "CASH" && cashChangeFor.trim()
       ? Number(cashChangeFor.replace(",", ".")) : undefined;
     if (useCod && (!isDeliveryPaymentMethod(expectedMethod) || !codMethods.includes(expectedMethod))) {
-      setCheckoutError("Selecione como pretende pagar na entrega."); return;
+      setCheckoutError("Escolha como vai pagar na entrega."); return;
     }
     if (changeValue !== undefined && (!Number.isFinite(changeValue) || changeValue < estimatedTotal)) {
-      setCheckoutError("Informe um valor para troco igual ou maior que o total."); return;
+      setCheckoutError("O troco precisa ser para um valor igual ou maior que o total."); return;
     }
 
     setIsSubmittingOrder(true);
@@ -1501,7 +1503,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
       clearPublicOrderAttempt(sessionStorage, branchSlug);
       if (["EXPIRADO", "CANCELADO"].includes(response.order.status)) {
         orderIdempotencyKeyRef.current = null;
-        setCheckoutError("A tentativa anterior foi encerrada. Revise os dados antes de enviar um novo pedido.");
+        setCheckoutError("O envio anterior não foi concluído. Confira os dados e envie de novo.");
         return;
       }
       // Pedido saiu: a próxima compra é outro pedido, logo outra chave.
@@ -1533,7 +1535,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
         setOnlineOrderingEnabled(false);
         setOrderingClosedReason(err.message);
       } else {
-        setCheckoutError(getFriendlyErrorMessage(err, "Não conseguimos criar o pedido. Tente novamente."));
+        setCheckoutError(getFriendlyErrorMessage(err, "Não conseguimos enviar seu pedido. Tente de novo em instantes."));
       }
     } finally {
       setIsSubmittingOrder(false);
@@ -1690,7 +1692,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
     hasManuallySelectedOrderTypeRef.current = true;
     if (next !== "ENTREGA" && appliedCoupon?.discount_type === "FREE_DELIVERY") {
       setAppliedCoupon(null);
-      setCouponMessage("Cupom de entrega removido ao mudar a modalidade.");
+      setCouponMessage("O cupom de frete grátis vale só para entrega e foi removido.");
     }
     setOrderType(next);
   };
@@ -1726,10 +1728,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           </p>
           <p className="text-xs text-[var(--text-secondary)]">
             {orderType === "ENTREGA"
-              ? "Entregamos no endereço informado nos seus dados."
+              ? "Entregamos no endereço que você informar."
               : orderType === "VIAGEM"
-                ? "Retirada no balcão, embalado para viagem."
-                : "Consumo no local."}
+                ? "Você retira no balcão, embalado para viagem."
+                : "Para comer aqui na unidade."}
           </p>
         </div>
         <button
@@ -1909,8 +1911,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             {renderOrderTypeOptions()}
             <p className="px-1 text-xs text-[var(--text-muted)]">
               {orderType === "ENTREGA"
-                ? `Pix e cartão online${codEnabled ? " · pagamento na entrega sujeito à confirmação da unidade" : ""}`
-                : branchAddress ? `Retirada: ${branchAddress}` : "Pix e cartão online"}
+                ? `Pague online com Pix ou cartão${codEnabled ? ", ou na entrega após a unidade confirmar" : ""}`
+                : branchAddress ? `Retire em ${branchAddress}` : "Pague online com Pix ou cartão"}
             </p>
           </section>
 
@@ -1951,7 +1953,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-surface)] p-8 text-center">
               <PackageX className="mx-auto h-8 w-8 text-[var(--text-muted)]" strokeWidth={1.5} />
               <p className="mt-3 text-sm font-semibold text-[var(--text-primary)]">Cardápio indisponível no momento</p>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">Esta unidade ainda não cadastrou itens pra pedido online. Volte mais tarde.</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Esta unidade ainda não tem itens para pedido online. Volte mais tarde ou escolha outra unidade.</p>
             </div>
           ) : (
           <>
@@ -2001,7 +2003,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 )}
 
                 {visibleProducts.length === 0 ? (
-                  <p className="text-sm text-[var(--text-muted)] py-2">Nenhum item para esse filtro.</p>
+                  <p className="text-sm text-[var(--text-muted)] py-2">Nenhum item com esse filtro.</p>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8 2xl:grid-cols-3">
                     {visibleProducts.map((product) => {
@@ -2092,7 +2094,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 {items.length === 0 || branchDraftMismatch ? (
                   <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-subtle)] p-5 text-center">
                     <p className="text-sm text-[var(--text-secondary)]">
-                      {branchDraftMismatch ? "Resolva o pedido em aberto de outra unidade acima." : "Sua sacola está vazia. Toque em + para adicionar."}
+                      {branchDraftMismatch ? "Finalize ou descarte a sacola da outra unidade, no aviso acima." : "Sua sacola está vazia. Toque em + para escolher."}
                     </p>
                   </div>
                 ) : (
@@ -2138,7 +2140,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                       >
                         Continuar
                       </button>
-                      <p className="mt-2 text-xs text-[var(--text-muted)]">Valores confirmados pelo sistema ao enviar o pedido.</p>
+                      <p className="mt-2 text-xs text-[var(--text-muted)]">O valor final é confirmado quando você envia o pedido.</p>
                     </div>
                   </div>
                 )}
@@ -2148,8 +2150,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
           <footer className="space-y-3 pt-2">
             <details className="text-xs text-[var(--text-muted)]">
-              <summary className="min-h-11 cursor-pointer py-3">Privacidade e medição de navegação</summary>
-              <label className="flex min-h-11 items-start gap-2 py-2"><input type="checkbox" className="mt-1" checked={analyticsConsent} onChange={event => setAnalyticsConsent(event.target.checked)} />Permitir métricas de navegação para melhorar o cardápio. Sem nome, telefone, endereço ou token do pedido. Você pode desmarcar a qualquer momento.</label>
+              <summary className="min-h-11 cursor-pointer py-3">Privacidade</summary>
+              <label className="flex min-h-11 items-start gap-2 py-2"><input type="checkbox" className="mt-1" checked={analyticsConsent} onChange={event => setAnalyticsConsent(event.target.checked)} />Permitir que a gente meça a navegação para melhorar o cardápio. Não usamos seu nome, telefone, endereço nem os dados do pedido. Você pode desmarcar quando quiser.</label>
             </details>
 
             {/* Acompanhar pedido — recolhido pra não competir com o cardápio.
@@ -2337,7 +2339,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                   disabled={couponLoading || !couponInput.trim()}
                   className="h-11 shrink-0 rounded-xl bg-[var(--bg-inverse)] px-4 text-sm font-semibold text-white disabled:opacity-45"
                 >
-                  {couponLoading ? "Validando..." : couponIsCurrent ? "Reaplicar" : "Aplicar"}
+                  {couponLoading ? "Validando…" : couponIsCurrent ? "Reaplicar" : "Aplicar"}
                 </button>
               </div>
               {couponMessage && (
@@ -2356,7 +2358,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
           {items.length > 0 && upsellSuggestions.length > 0 && (
             <section>
-              <h3 className="mb-2 px-1 text-sm font-semibold text-[var(--text-primary)]">Mais pedidos nesta unidade</h3>
+              <h3 className="mb-2 px-1 text-sm font-semibold text-[var(--text-primary)]">Os mais pedidos daqui</h3>
               <div className="flex gap-2.5 overflow-x-auto pb-1 hide-scrollbar">
                 {upsellSuggestions.map((product) => (
                   <button
@@ -2393,7 +2395,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
           {items.length > 0 && canExpressCheckout ? (
             <div className="space-y-2">
               <div className="rounded-xl bg-[var(--status-success-bg)] px-3 py-2 text-xs font-semibold text-[var(--status-success)]">
-                Reconhecemos você, {customerName.trim().split(" ")[0]} — pode confirmar direto.
+                Olá, {getFirstName(customerName)}! Seus dados já estão salvos.
               </div>
               <button
                 type="button"
@@ -2403,14 +2405,14 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 style={{ height: 52 }}
               >
                 {isSubmittingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" strokeWidth={1.75} />}
-                Confirmar e pagar
+                Ir para o pagamento
               </button>
               <button
                 type="button"
                 onClick={() => setStep("INFO")}
                 className="flex w-full items-center justify-center gap-1 py-2 text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
-                Revisar meus dados antes de continuar
+                Revisar meus dados
               </button>
             </div>
           ) : items.length > 0 ? (
@@ -2451,8 +2453,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
 
             {/* Ordem pedida na #235: nome primeiro, WhatsApp depois. A busca do
                 perfil continua disparando pelo WhatsApp e nunca sobrescreve um
-                nome digitado à mão (ver resolveNameFromLookup) — no máximo
-                oferece a sugestão logo abaixo do WhatsApp. */}
+                nome diferente digitado à mão; nome que é o começo do salvo
+                ("Ana" → "Ana Souza") é completado (completePartial). */}
             <FloatingInput
               label="Nome (opcional)"
               name="name"
@@ -2461,6 +2463,27 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               onChange={(v) => applyResolvedName(resolveNameFromInput(v), customerPhone)}
               placeholder="Como podemos te chamar?"
             />
+
+            {/* Nome digitado diferente do salvo para este WhatsApp: nunca trocamos
+                sozinhos, mas a sugestão fica logo abaixo do campo, com ação explícita. */}
+            {nameSuggestion && (
+              <div className="-mt-1 flex items-center gap-3 rounded-xl bg-[var(--bg-subtle)] px-3 py-1" role="status">
+                <p className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
+                  Nome salvo neste WhatsApp: <strong className="text-[var(--text-primary)]">{nameSuggestion}</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => applyResolvedName(
+                    { name: nameSuggestion, source: "LOOKUP", suggestion: null },
+                    customerPhone,
+                  )}
+                  aria-label={`Usar o nome ${nameSuggestion}`}
+                  className="inline-flex min-h-11 shrink-0 items-center text-sm font-semibold text-[var(--text-primary)] underline underline-offset-4"
+                >
+                  Usar
+                </button>
+              </div>
+            )}
 
             <FloatingInput
               // Sem aviso de obrigatoriedade no campo (pedido do operador, #235). Em
@@ -2481,7 +2504,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
             {isProfileChecking && (
               <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]" role="status">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-red" />
-                Buscando dados salvos...
+                Buscando seus dados…
               </div>
             )}
 
@@ -2499,22 +2522,10 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 )}
                 {checkoutPhone && profileLookupState === "not_found" && (
                   <p className="text-xs font-medium text-[var(--text-secondary)]" role="status">
-                    Não encontramos dados salvos para este WhatsApp.
+                    Não encontramos dados salvos com este WhatsApp.
                   </p>
                 )}
 
-                {nameSuggestion && (
-                  <button
-                    type="button"
-                    onClick={() => applyResolvedName(
-                      { name: nameSuggestion, source: "LOOKUP", suggestion: null },
-                      customerPhone,
-                    )}
-                    className="min-h-11 w-full rounded-xl bg-[var(--bg-subtle)] px-3 py-2 text-left text-xs font-medium text-[var(--text-secondary)]"
-                  >
-                    Salvamos <strong>{nameSuggestion}</strong> para este WhatsApp. Tocar aqui usa esse nome.
-                  </button>
-                )}
 
                 {/* E-mail continua opcional (#235): recolhido para não competir com o essencial. */}
                 {isEmailOpen || customerEmail ? (
@@ -2527,7 +2538,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     placeholder="voce@exemplo.com"
                     type="email"
                     inputMode="email"
-                    help="Usado no pagamento online (Pix ou cartão)."
+                    help="Usado no pagamento online, com Pix ou cartão."
                   />
                 ) : (
                   <button
@@ -2606,8 +2617,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           <LocateFixed size={14} className={locationStatus === "resolved" ? "text-emerald-600" : undefined} />
                         )}
                         {locationStatus === "resolved"
-                          ? "Localização marcada — toque para remarcar"
-                          : "Marcar minha localização atual (opcional)"}
+                          ? "Localização marcada. Toque para atualizar"
+                          : "Usar minha localização atual (opcional)"}
                       </button>
                       {locationStatus === "error" && (
                         <p className="text-[11px] text-[var(--text-secondary)]">{locationError}</p>
@@ -2695,7 +2706,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                           onClick={() => {
                             if (appliedCoupon?.discount_type === "FREE_DELIVERY") {
                               setAppliedCoupon(null);
-                              setCouponMessage("O FERIADOU só vale para entrega. Cupom removido.");
+                              setCouponMessage("O cupom de frete grátis vale só para entrega e foi removido.");
                             }
                             hasManuallySelectedOrderTypeRef.current = true;
                             setOrderType("VIAGEM");
@@ -2716,8 +2727,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <textarea
                   value={orderNotes}
                   onChange={(event) => setOrderNotes(event.target.value)}
-                  aria-label="Observações para a equipe (opcional)"
-                  placeholder="Alguma observação para a equipe? (opcional)"
+                  aria-label="Observações para a unidade (opcional)"
+                  placeholder="Observações para a unidade (opcional)"
                   className="h-14 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-brand-red focus:bg-[var(--bg-surface)] focus:ring-2 focus:ring-brand-red/10"
                 />
 
@@ -2757,7 +2768,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 <p className="text-sm text-[var(--text-secondary)]">A unidade precisa confirmar o pedido antes do preparo. O pagamento será feito ao receber a entrega.</p>
                 <label className="block text-sm">Forma de pagamento esperada
                   <select className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-2" value={expectedMethod} onChange={event => { setExpectedMethod(isDeliveryPaymentMethod(event.target.value) ? event.target.value : ""); setCheckoutError(""); }}>
-                    <option value="">Selecione</option>
+                    <option value="">Escolha</option>
                     {codMethods.map(method => <option key={method} value={method}>{DELIVERY_PAYMENT_LABELS[method]}</option>)}
                   </select>
                 </label>
@@ -2954,8 +2965,8 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
               </h2>
               <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
                 {paidCustomer?.phone
-                  ? `Seu pedido entrou na fila da unidade. Avisaremos pelo WhatsApp ${paidCustomer.phone} quando o status mudar.`
-                  : "Seu pedido entrou na fila da unidade. Acompanhe o status pelo link abaixo."}
+                  ? `Seu pedido já está com a unidade. Vamos avisar pelo WhatsApp ${paidCustomer.phone} quando ele estiver pronto.`
+                  : "Seu pedido já está com a unidade. Acompanhe o andamento pelo link abaixo."}
               </p>
               <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-[var(--bg-subtle)] px-4 py-3">
                 <div>
@@ -2967,7 +2978,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                     type="button"
                     onClick={() => {
                       void navigator.clipboard?.writeText(trackingUrl);
-                      addToast("success", "Link do pedido copiado.");
+                      addToast("success", "Link copiado!");
                     }}
                     className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[var(--text-primary)] underline underline-offset-4"
                   >
@@ -3227,7 +3238,7 @@ function PedirBranchPage({ branchSlug }: { branchSlug: string }) {
                 label="Observação para a cozinha (opcional)"
                 value={itemNotes}
                 onChange={setItemNotes}
-                placeholder="Ex: sem sal, bem passado..."
+                placeholder="Ex.: bem passado, pouco queijo"
               />
             </section>
           </div>

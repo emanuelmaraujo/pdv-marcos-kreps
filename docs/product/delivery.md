@@ -50,12 +50,14 @@ pede e-mail no próprio formulário), resumo da modalidade, endereço (somente E
 rua/bairro derivados do CEP → número do imóvel → complemento → referência), observações e
 consentimentos. As obrigações de preenchimento não mudaram. O campo mostra só
 “WhatsApp com DDD”, sem aviso de obrigatório/opcional (decisão do operador); em ENTREGA,
-continuar sem número válido mostra “Informe um WhatsApp válido com DDD para pedidos de
-entrega.” acima do botão e o pedido não é criado.
+continuar sem número válido mostra “Para entrega, informe um WhatsApp com DDD para falarmos com você.” acima do botão e o pedido não é criado.
 
-A busca de perfil salvo continua disparando pelo WhatsApp, mesmo com o nome acima:
-nome digitado à mão nunca é sobrescrito; o nome salvo aparece como sugestão
-tocável logo abaixo do WhatsApp, e “Não é você?” segue disponível. Os campos usam
+A busca de perfil salvo continua disparando pelo WhatsApp, mesmo com o nome acima.
+Campo vazio recebe o nome salvo. Nome digitado que é o começo do salvo, palavra por
+palavra e sem diferença de acento/caixa (“ana” → “Ana Souza”), é completado. Nome
+diferente nunca é trocado: o salvo aparece logo abaixo do campo Nome, com o botão
+“Usar”. “Não é você?” segue disponível. O checkout do atendente mantém a regra
+anterior (sem completar). Os campos usam
 `autocomplete` (`name`, `tel`, `email`, `postal-code`) e o aviso de telefone
 incompleto fica ligado ao campo por `aria-describedby`.
 
