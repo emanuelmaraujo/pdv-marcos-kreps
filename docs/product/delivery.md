@@ -50,8 +50,7 @@ pede e-mail no próprio formulário), resumo da modalidade, endereço (somente E
 rua/bairro derivados do CEP → número do imóvel → complemento → referência), observações e
 consentimentos. As obrigações de preenchimento não mudaram. O campo mostra só
 “WhatsApp com DDD”, sem aviso de obrigatório/opcional (decisão do operador); em ENTREGA,
-continuar sem número válido mostra “Informe um WhatsApp válido com DDD para pedidos de
-entrega.” acima do botão e o pedido não é criado.
+continuar sem número válido mostra “Para entrega, informe um WhatsApp com DDD para falarmos com você.” acima do botão e o pedido não é criado.
 
 A busca de perfil salvo continua disparando pelo WhatsApp, mesmo com o nome acima.
 Campo vazio recebe o nome salvo. Nome digitado que é o começo do salvo, palavra por

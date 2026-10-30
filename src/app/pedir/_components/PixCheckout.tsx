@@ -44,11 +44,11 @@ export function PixCheckout({
     if (isGenerating || hasActivePix) return;
     setError("");
     if (!isValidEmail(payerEmail)) {
-      setError("Informe um e-mail valido para gerar o Pix pelo Mercado Pago.");
+      setError("Informe um e-mail válido para gerar o Pix.");
       return;
     }
     if (payerCpf.trim() && !isValidCpf(payerCpf)) {
-      setError("Informe um CPF valido para gerar o Pix pelo Mercado Pago.");
+      setError("Confira o CPF: ele parece incorreto.");
       return;
     }
 

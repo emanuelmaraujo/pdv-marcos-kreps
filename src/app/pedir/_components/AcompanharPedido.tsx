@@ -23,10 +23,10 @@ import { extractOrderToken, looksLikePhone } from "./order-tracking-helpers";
 
 const STATUS_LABEL: Record<string, string> = {
   AGUARDANDO_PAGAMENTO: "Aguardando pagamento",
-  AGUARDANDO_CONFIRMACAO: "Em confirmação",
+  AGUARDANDO_CONFIRMACAO: "Aguardando a unidade",
   NA_FILA: "Em preparo",
-  PRONTO_PARCIAL: "Pronto parcial",
-  PRONTO: "Pronto pra retirada",
+  PRONTO_PARCIAL: "Parte pronta",
+  PRONTO: "Pronto para retirada",
 };
 
 /** Rota de acompanhamento, preservando a filial quando o lookup a conhece. */
@@ -70,11 +70,11 @@ export function AcompanharPedido({
       try {
         const res = await pdvApi.lookupPublicOrdersByPhone(value);
         if (!res.success) {
-          setError(res.error || "WhatsApp inválido. Use DDD + número.");
+          setError(res.error || "Confira o WhatsApp: informe DDD e número.");
           return;
         }
         if (res.orders.length === 0) {
-          setError("Nenhum pedido ativo encontrado nas últimas 4h para esse WhatsApp.");
+          setError("Não encontramos pedidos em andamento nas últimas 4 horas com esse WhatsApp.");
           return;
         }
         if (res.orders.length === 1) {
@@ -94,7 +94,7 @@ export function AcompanharPedido({
       return;
     }
 
-    setError("Use o WhatsApp (DDD + número) ou cole o link do pedido.");
+    setError("Informe seu WhatsApp com DDD ou cole o link do pedido.");
   }
 
   const body = matches ? (

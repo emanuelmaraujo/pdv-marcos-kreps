@@ -68,7 +68,7 @@ try {
   const phoneField = fields.nth(fieldOrder.findIndex(f => /^WhatsApp/.test(f.label)));
   await nameField.fill(typedName);
   await phoneField.fill('61999990000');
-  await page.getByText(/dados salvos pelo WhatsApp/).waitFor({ timeout:15000 });
+  await page.getByText(/seus dados pelo WhatsApp/).waitFor({ timeout:15000 });
   const nameAfterLookup = await nameField.inputValue();
   const suggestionVisible = await page.getByText(fixtureName).count() > 0;
 
