@@ -46,7 +46,7 @@ export function CheckoutSummary(props: CheckoutSummaryProps) {
           <dd className="text-right text-lg tabular-nums">{currency.format(props.total)}</dd>
         </div>
       </dl>
-      <p className="mt-2 text-xs text-[var(--text-muted)]">Valores confirmados pelo sistema ao enviar o pedido, antes do pagamento.</p>
+      <p className="mt-2 text-xs text-[var(--text-muted)]">O valor final é confirmado quando você envia o pedido, antes de pagar.</p>
     </section>
   );
 }

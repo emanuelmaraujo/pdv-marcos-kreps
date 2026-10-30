@@ -100,8 +100,8 @@ export function getProductSummary(product: Product, categoryName: string | undef
     return ingredients.map((ingredient) => ingredient.name).join(", ");
   }
   if (getCategoryKind(categoryName) === "DRINK") return "Bebida preparada para acompanhar seu pedido.";
-  if (getCategoryKind(categoryName) === "POTATO") return "Porcao para dividir ou acompanhar seu krep.";
-  return "Item do cardapio Marcos Krep's.";
+  if (getCategoryKind(categoryName) === "POTATO") return "Porção para dividir ou acompanhar seu krep.";
+  return "Do cardápio do Marcos Krep's.";
 }
 
 /**

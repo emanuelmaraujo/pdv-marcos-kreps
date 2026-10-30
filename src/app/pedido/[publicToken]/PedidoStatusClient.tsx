@@ -105,8 +105,8 @@ const STATE_CONFIG: Record<StateKey, StateConfig> = {
 
 const STEPS: Array<{ icon: LucideIcon; label: string; subtitle: string }> = [
   { icon: CreditCard,  label: "Pagamento",   subtitle: "Aguardando confirmação" },
-  { icon: CircleCheck, label: "Confirmação", subtitle: "Loja recebe seu pedido" },
-  { icon: ChefHat,     label: "Em preparo",  subtitle: "Estão fazendo seu krep" },
+  { icon: CircleCheck, label: "Confirmação", subtitle: "A unidade recebe seu pedido" },
+  { icon: ChefHat,     label: "Em preparo",  subtitle: "Seu krep está sendo preparado" },
   { icon: Bell,        label: "Pronto",      subtitle: "Pode retirar no balcão" },
   { icon: Check,       label: "Entregue",    subtitle: "Bom apetite!" },
 ];
@@ -203,7 +203,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
   const fetchStatus = useCallback(async (showLoading = false) => {
     if (!canFetch) {
       setIsLoading(false);
-      setError("Link de acompanhamento inválido.");
+      setError("Não encontramos esse pedido. Confira o link.");
       return;
     }
     if (showLoading) setIsRefreshing(true);
@@ -278,7 +278,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
   } : stateKey ? STATE_CONFIG[stateKey] : null;
   const steps = isCod ? [
     { icon: CircleCheck, label: "Pedido recebido", subtitle: "Aguardando análise da unidade" },
-    { icon: CircleCheck, label: "Confirmação da unidade", subtitle: "Pagamento permanece pendente até o recebimento" },
+    { icon: CircleCheck, label: "Confirmação da unidade", subtitle: "Você paga ao receber o pedido" },
     ...STEPS.slice(2),
   ] : STEPS;
   const displayNumber = order ? String(order.daily_number).padStart(3, "0") : "---";
@@ -347,7 +347,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
             <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" strokeWidth={1.75} />
             <div>
               <p className="text-sm font-semibold">{error}</p>
-              <p className="mt-1 text-xs opacity-80">Confira se você abriu o link gerado no checkout.</p>
+              <p className="mt-1 text-xs opacity-80">Confira se você abriu o link completo recebido ao fazer o pedido.</p>
             </div>
           </div>
         )}
@@ -387,7 +387,7 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
 
             {isCod && <section className="rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 text-sm" aria-label="Pagamento na entrega">
               <h2 className="font-semibold">{(order?.status === "CANCELADO" || order?.status === "EXPIRADO") && ["PARTIAL", "PAID"].includes(order?.payment_status ?? "") ? "Pedido cancelado após recebimento" : order?.status === "CANCELADO" || order?.status === "EXPIRADO" ? "Pedido encerrado sem cobrança" : order?.payment_status === "REFUNDED" ? "Pagamento estornado" : order?.payment_status === "PAID" ? "Pago na entrega" : order?.payment_status === "PARTIAL" ? "Pagamento na entrega parcialmente recebido" : "Pagamento na entrega pendente"}</h2>
-              <p className="mt-1 text-[var(--text-secondary)]">{(order?.status === "CANCELADO" || order?.status === "EXPIRADO") && ["PARTIAL", "PAID"].includes(order?.payment_status ?? "") ? "Já houve recebimento neste pedido. Fale com a unidade sobre a devolução." : order?.status === "CANCELADO" || order?.status === "EXPIRADO" ? "Nada será cobrado por este pedido." : "O status financeiro só muda após a unidade registrar o recebimento efetivo."}</p>
+              <p className="mt-1 text-[var(--text-secondary)]">{(order?.status === "CANCELADO" || order?.status === "EXPIRADO") && ["PARTIAL", "PAID"].includes(order?.payment_status ?? "") ? "Já houve recebimento neste pedido. Fale com a unidade sobre a devolução." : order?.status === "CANCELADO" || order?.status === "EXPIRADO" ? "Nada será cobrado por este pedido." : "O pagamento aparece como recebido assim que a unidade registrar."}</p>
             </section>}
 
             {/* ── 3. Andamento (timeline vertical) ─────────────────── */}
@@ -594,12 +594,12 @@ export function PedidoStatusClient({ publicToken }: { publicToken: string }) {
                 <Bell className="h-4 w-4 shrink-0" strokeWidth={1.75} style={{ color: pushState === "enabled" ? "var(--status-success, #16A34A)" : "var(--text-muted)" }} />
                 <span className="text-caption leading-relaxed text-[var(--text-secondary)]">
                   {pushState === "enabled"
-                    ? "Notificações ativadas neste dispositivo."
+                    ? "Notificações ativadas neste aparelho."
                     : pushState === "requesting"
-                      ? "Ativando..."
+                      ? "Ativando…"
                       : pushState === "error"
                         ? "Não foi possível ativar. Toque para tentar de novo."
-                        : "Também avisar por notificação neste dispositivo"}
+                        : "Avisar também por notificação neste aparelho"}
                 </span>
               </button>
             )}

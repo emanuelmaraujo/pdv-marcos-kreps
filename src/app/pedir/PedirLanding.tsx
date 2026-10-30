@@ -203,7 +203,7 @@ export function PedirLanding() {
         {/* ── Bullet de ajuda ─────────────────────────────────────── */}
         <p className="px-2 pt-2 text-center text-caption text-[var(--text-muted)] leading-relaxed">
           <ShoppingBag className="inline h-3 w-3 mr-1 align-text-bottom" strokeWidth={1.75} />
-          Pagamento seguro via PIX ou cartão. Notificação por WhatsApp quando o pedido ficar pronto.
+          Pague com Pix ou cartão. Se informar seu WhatsApp, avisamos quando o pedido ficar pronto.
         </p>
       </main>
     </div>
